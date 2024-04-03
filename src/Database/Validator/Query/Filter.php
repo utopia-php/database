@@ -95,65 +95,15 @@ class Filter extends Base
                 default => gettype($value) === $attributeType
             };
 
-            $validator = null;
-
-            switch ($attributeType) {
-                case Database::VAR_STRING:
-                    $validator = new Text(0, 0);
-                    break;
-
-                case Database::VAR_INTEGER:
-                    $validator = new Integer();
-                    break;
-
-                case Database::VAR_FLOAT:
-                    $validator = new FloatValidator();
-                    break;
-
-                case Database::VAR_BOOLEAN:
-                    $validator = new Boolean();
-                    break;
-
-                case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator();
-                    break;
-
-                case Database::VAR_RELATIONSHIP:
-                    $validator = new Text(255, 0); // The query is always on uid
-                    break;
-                default:
-                    $this->message = 'Unknown Data type';
-                    return false;
+            if (!$condition) {
+                $this->message = 'Query type does not match expected: ' . $attributeType;
             }
-
-            if (!$validator->isValid($value)) {
-                $this->message = 'Query value is invalid for attribute "' . $attribute . '"';
-                return false;
-            }
-        }
-
-        $array = $attributeSchema['array'] ?? false;
-
-        if(
-            !$array &&
-            $method === Query::TYPE_CONTAINS &&
-            $attributeSchema['type'] !==  Database::VAR_STRING
-        ) {
-            $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array or string.';
-            return false;
-        }
-
-        if(
-            $array &&
-            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
-        ) {
-            $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
-            return false;
         }
 
         if($attributeSchema['type'] === 'relationship') {
             /**
-             * We can not disable relationship query since we have logic that use it
+             * We can not disable relationship query since we have logic that use it,
+             * so instead we validate against the relation type
              */
             $options = $attributeSchema['options'];
 

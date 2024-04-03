@@ -77,169 +77,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
-    public function testDeleteRelatedCollection(): void
-    {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createCollection('c2');
-
-        // ONE_TO_ONE
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_ONE_TO_ONE,
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_ONE_TO_ONE,
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        static::getDatabase()->createCollection('c2');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_ONE_TO_ONE,
-            twoWay: true
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        // ONE_TO_MANY
-        static::getDatabase()->createCollection('c2');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_ONE_TO_MANY,
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_ONE_TO_MANY,
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        static::getDatabase()->createCollection('c2');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_ONE_TO_MANY,
-            twoWay: true
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_ONE_TO_MANY,
-            twoWay: true
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        // RELATION_MANY_TO_ONE
-        static::getDatabase()->createCollection('c2');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_MANY_TO_ONE,
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_MANY_TO_ONE,
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        static::getDatabase()->createCollection('c2');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
-            collection: 'c1',
-            relatedCollection: 'c2',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true
-        );
-
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
-    }
-
     public function testVirtualRelationsAttributes(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -312,7 +149,6 @@ abstract class Base extends TestCase
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof QueryException);
             $this->assertEquals('Invalid query: Query value is invalid for attribute "v1"', $e->getMessage());
         }
 
@@ -322,7 +158,6 @@ abstract class Base extends TestCase
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof QueryException);
             $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
         }
 

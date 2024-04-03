@@ -3469,7 +3469,7 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        if (!$document->getId() || !$id) {
+        if (!$id) {
             throw new DatabaseException('Must define $id attribute');
         }
 

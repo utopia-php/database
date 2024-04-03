@@ -3189,9 +3189,11 @@ class Database
             try {
                 switch (\gettype($value)) {
                     case 'array':
-                        if(($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                        if(
+                            ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD) ||
-                            ($relationType === Database::RELATION_ONE_TO_ONE)) {
+                            ($relationType === Database::RELATION_ONE_TO_ONE)
+                        ) {
                             throw new DatabaseException('Invalid relationship value. Must be either a document ID or a document, array given.');
                         }
 
@@ -3239,9 +3241,11 @@ class Database
                             throw new DatabaseException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                         }
 
-                        if(($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
-                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
-                        ($relationType === Database::RELATION_MANY_TO_MANY)) {
+                        if(
+                            ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
+                            ($relationType === Database::RELATION_MANY_TO_MANY)
+                        ) {
                             throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs, document given.');
                         }
 
@@ -3260,9 +3264,11 @@ class Database
                         break;
 
                     case 'string':
-                        if(($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
-                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
-                        ($relationType === Database::RELATION_MANY_TO_MANY)) {
+                        if(
+                            ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
+                            ($relationType === Database::RELATION_MANY_TO_MANY)
+                        ) {
                             throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.');
                         }
 
@@ -3475,6 +3481,7 @@ class Database
 
         $time = DateTime::now();
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
         $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
         $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
         if($this->adapter->getShareTables()) {

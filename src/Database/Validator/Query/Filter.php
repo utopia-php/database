@@ -92,11 +92,6 @@ class Filter extends Base
         // Extract the type of desired attribute from collection $schema
         $attributeType = $attributeSchema['type'];
 
-
-
-
-
-
         foreach ($values as $value) {
 
             $validator = null;

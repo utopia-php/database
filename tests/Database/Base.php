@@ -12670,7 +12670,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
@@ -12680,7 +12680,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
@@ -12690,7 +12690,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
@@ -12700,7 +12700,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
@@ -12710,7 +12710,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {
@@ -12720,7 +12720,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
+            $this->assertEquals('Invalid query: Query value is invalid for attribute "string"', $e->getMessage());
         }
 
         try {

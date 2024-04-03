@@ -61,10 +61,10 @@ class FilterTest extends TestCase
     public function testTypeMissmatch(): void
     {
         $this->assertFalse($this->validator->isValid(Query::parse('equal("attr", false)')));
-        $this->assertEquals('Query type does not match expected: string', $this->validator->getDescription());
+        $this->assertEquals('Query value is invalid for attribute "attr"', $this->validator->getDescription());
 
         $this->assertFalse($this->validator->isValid(Query::parse('equal("attr", null)')));
-        $this->assertEquals('Query type does not match expected: string', $this->validator->getDescription());
+        $this->assertEquals('Query value is invalid for attribute "attr"', $this->validator->getDescription());
     }
 
     public function testEmptyValues(): void

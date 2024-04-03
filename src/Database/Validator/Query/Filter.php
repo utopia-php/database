@@ -5,6 +5,11 @@ namespace Utopia\Database\Validator\Query;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Validator\Boolean;
+use Utopia\Validator\FloatValidator;
+use Utopia\Validator\Integer;
+use Utopia\Validator\Text;
 
 class Filter extends Base
 {
@@ -87,16 +92,47 @@ class Filter extends Base
         // Extract the type of desired attribute from collection $schema
         $attributeType = $attributeSchema['type'];
 
-        foreach ($values as $value) {
-            $condition = match ($attributeType) {
-                Database::VAR_RELATIONSHIP => true,
-                Database::VAR_DATETIME => gettype($value) === Database::VAR_STRING,
-                Database::VAR_FLOAT => (gettype($value) === Database::VAR_FLOAT || gettype($value) === Database::VAR_INTEGER),
-                default => gettype($value) === $attributeType
-            };
 
-            if (!$condition) {
-                $this->message = 'Query type does not match expected: ' . $attributeType;
+
+
+
+
+        foreach ($values as $value) {
+
+            $validator = null;
+
+            switch ($attributeType) {
+                case Database::VAR_STRING:
+                    $validator = new Text(0, 0);
+                    break;
+
+                case Database::VAR_INTEGER:
+                    $validator = new Integer();
+                    break;
+
+                case Database::VAR_FLOAT:
+                    $validator = new FloatValidator();
+                    break;
+
+                case Database::VAR_BOOLEAN:
+                    $validator = new Boolean();
+                    break;
+
+                case Database::VAR_DATETIME:
+                    $validator = new DatetimeValidator();
+                    break;
+
+                case Database::VAR_RELATIONSHIP:
+                    $validator = new Text(255, 0); // The query is always on uid
+                    break;
+                default:
+                    $this->message = 'Unknown Data type';
+                    return false;
+            }
+
+            if (!$validator->isValid($value)) {
+                $this->message = 'Query value is invalid for attribute "' . $attribute . '"';
+                return false;
             }
         }
 

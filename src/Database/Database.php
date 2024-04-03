@@ -3089,7 +3089,7 @@ class Database
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
-        if (!$document->getId() || !$id) {
+        if (!$id) {
             throw new DatabaseException('Must define $id attribute');
         }
 

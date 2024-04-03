@@ -4433,7 +4433,9 @@ class Database
                 $this->skipRelationships(fn () => $this->updateDocument(
                     $relatedCollection->getId(),
                     $related->getId(),
-                    $related->setAttribute($twoWayKey, null)
+                    new Document([
+                        $twoWayKey => null
+                    ])
                 ));
             });
         }
@@ -4498,7 +4500,9 @@ class Database
                     $this->skipRelationships(fn () => $this->updateDocument(
                         $relatedCollection->getId(),
                         $related->getId(),
-                        $related->setAttribute($twoWayKey, null)
+                        new Document([
+                            $twoWayKey => null
+                        ])
                     ));
                 });
                 break;
@@ -4509,12 +4513,12 @@ class Database
                 }
                 foreach ($value as $relation) {
                     Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
-                        $related = $this->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select(['$id'])]);
-
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
-                            $related->getId(),
-                            $related->setAttribute($twoWayKey, null)
+                            $relation->getId(),
+                            new Document([
+                                $twoWayKey => null
+                            ]),
                         ));
                     });
                 }
@@ -4539,7 +4543,6 @@ class Database
                             $relatedCollection->getId(),
                             $relation->getId(),
                             new Document([
-                                '$id' => $relation->getId(),
                                 $twoWayKey => null
                             ])
                         ));

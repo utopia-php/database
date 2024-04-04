@@ -42,7 +42,6 @@ class Wrap extends Database {
      * @throws Exception
      */
     public function __call($method, $args) {
-
         var_dump("==== __call ");
 
         if (method_exists($this, $method)) {

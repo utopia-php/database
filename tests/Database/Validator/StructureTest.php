@@ -2,6 +2,7 @@
 
 namespace Utopia\Tests\Validator;
 
+use Utopia\Database\Exception;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Validator\Structure;
 use PHPUnit\Framework\TestCase;
@@ -295,7 +296,6 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
         ])));
 
-
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'string',
@@ -308,6 +308,41 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals('Invalid document structure: Attribute "tags[\'0\']" has invalid type. Value must be a valid string and no longer than 55 chars', $validator->getDescription());
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testArrayAsObjectValidation(): void
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['name' => 'dog'],
+            'feedback' => 'team@appwrite.io'
+        ])));
+    }
+
+    public function testArrayOfObjectsValidation(): void
+    {
+        $validator = new Structure(new Document($this->collection));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'string',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => [['name' => 'dog']],
+            'feedback' => 'team@appwrite.io'
+        ])));
     }
 
     public function testIntegerValidation(): void

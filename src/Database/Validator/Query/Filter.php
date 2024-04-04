@@ -173,6 +173,28 @@ class Filter extends Base
             return false;
         }
 
+        if($attributeSchema['type'] === 'relationship') {
+            /**
+             * We can not disable relationship query since we have logic that use it
+             */
+            $options = $attributeSchema['options'];
+
+            if($options['relationType'] === Database::RELATION_ONE_TO_MANY && $options['side'] === Database::RELATION_SIDE_PARENT) {
+                $this->message = 'Cannot query on virtual relation attribute';
+                return false;
+            }
+
+            if($options['relationType'] === Database::RELATION_MANY_TO_ONE && $options['side'] === Database::RELATION_SIDE_CHILD) {
+                $this->message = 'Cannot query on virtual relation attribute';
+                return false;
+            }
+
+            if($options['relationType'] === Database::RELATION_MANY_TO_MANY) {
+                $this->message = 'Cannot query on virtual relation attribute';
+                return false;
+            }
+        }
+
         return true;
     }
 

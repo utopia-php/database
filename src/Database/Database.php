@@ -3767,7 +3767,7 @@ class Database
                     case Database::RELATION_ONE_TO_ONE:
                         if (!$twoWay) {
                             if (\is_string($value)) {
-                                $related = $this->skipRelationships(fn() => $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])]));
+                                $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])]));
                                 if ($related->isEmpty()) {
                                     // If no such document exists in related collection
                                     // For one-one we need to update the related key to null if no relation exists
@@ -3875,9 +3875,9 @@ class Database
                         break;
                     case Database::RELATION_ONE_TO_MANY:
                     case Database::RELATION_MANY_TO_ONE:
-                    var_dump('======== '.$relationType.' ======= ');
-                    var_dump('======== '.$side.' ======= ');
-                    var_dump(\gettype($value));
+                        var_dump('======== '.$relationType.' ======= ');
+                        var_dump('======== '.$side.' ======= ');
+                        var_dump(\gettype($value));
                         if (
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
@@ -3929,7 +3929,8 @@ class Database
                                         $related->setAttribute($twoWayKey, $document->getId())
                                     ));
                                 } elseif ($relation instanceof Document) {
-                                    $related = $this->skipRelationships(fn () =>
+                                    $related = $this->skipRelationships(
+                                        fn () =>
                                         $this->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select(['$id'])])
                                     );
 
@@ -3958,7 +3959,8 @@ class Database
                         }
 
                         if (\is_string($value)) {
-                            $related = $this->skipRelationships(fn () =>
+                            $related = $this->skipRelationships(
+                                fn () =>
                                 $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])])
                             );
 
@@ -3969,7 +3971,8 @@ class Database
                             }
                             $this->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
-                            $related = $this->skipRelationships(fn () =>
+                            $related = $this->skipRelationships(
+                                fn () =>
                                 $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])])
                             );
 
@@ -5426,7 +5429,7 @@ class Database
      */
     protected function arrayIsList(mixed $param): bool
     {
-        if(!is_array($param)){
+        if(!is_array($param)) {
             return false;
         }
 

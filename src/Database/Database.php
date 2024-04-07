@@ -3733,10 +3733,8 @@ class Database
         foreach ($relationships as $index => $relationship) {
             /** @var string $key */
             $key = $relationship['key'];
-            var_dump($key);
 
             $value = $document->getAttribute($key);
-            var_dump($value);
             $oldValue = $old->getAttribute($key);
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
             $relationType = (string) $relationship['options']['relationType'];
@@ -4000,7 +3998,6 @@ class Database
                         } elseif (empty($value)) {
                             throw new DatabaseException('Invalid value for relationship');
                         } else {
-                            var_dump("=== shalom1");
                             throw new DatabaseException('Invalid value for relationship');
                         }
 

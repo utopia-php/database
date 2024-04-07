@@ -341,6 +341,26 @@ class Database
      */
     protected array $relationshipDeleteStack = [];
 
+    public function __call($name, $arguments) {
+        echo "Before executing method: $name\n";
+
+        if (!method_exists($this, $name)) {
+            echo "no exist ===== ";
+            // You can add your custom logic here
+        }
+
+    }
+
+    public function __call3($name, $arguments) {
+        echo "Before executing method: $name\n";
+        if (method_exists($this, $name)) {
+            echo "Before executing method: $name\n";
+            // You can add your custom logic here
+        }
+
+        return $name($arguments);
+    }
+
     /**
      * @param Adapter $adapter
      * @param Cache $cache

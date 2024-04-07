@@ -5651,7 +5651,7 @@ abstract class Base extends TestCase
 
         // Cannot update with delete permission:
         $didFail = false;
-
+        $database->updateDocument('animals', 'dog2222222222', new Document([]));
         try {
             $newDog = $dog->setAttribute('type', 'newDog');
             $database->updateDocument('animals', 'dog', $newDog);

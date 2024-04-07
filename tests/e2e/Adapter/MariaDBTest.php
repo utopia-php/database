@@ -45,8 +45,10 @@ class MariaDBTest extends Base
         $redis->connect('redis', 6379);
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
-        //$database = new Database(new MariaDB($pdo), $cache);
-        $database = new Wrap(new MariaDB($pdo), $cache);
+        $database = new Database(new MariaDB($pdo), $cache);
+        //$database = new Wrap(new MariaDB($pdo), $cache);
+
+        $database->pleaseTrigger__call('utopiaTests');
 
         $database->setDatabase('utopiaTests');
         $database->setNamespace(static::$namespace = 'myapp_' . uniqid());

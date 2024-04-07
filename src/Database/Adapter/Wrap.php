@@ -22,20 +22,14 @@ class FunctionTimer {
     }
 }
 
-class Wrap extends Database {
-    private $timer;
+class Wrap {
+    protected Database $database;
 
-    public function __construct(Adapter $adapter, Cache $cache, array $filters = []) {
-        parent::__construct($adapter, $cache, $filters);
-        $this->timer = new FunctionTimer();
-    }
+    public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
+    {
+        $database = new Database(new MariaDB($pdo), $cache);
 
-    private function startTimer(string $functionName): void {
-        $this->timer->startTimer($functionName);
-    }
-
-    private function endTimer(string $functionName): float {
-        return $this->timer->endTimer($functionName);
+        return $this->database;
     }
 
     /**

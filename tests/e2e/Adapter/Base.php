@@ -303,6 +303,74 @@ abstract class Base extends TestCase
             $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
         }
 
+
+        /**
+         * Success for later test update
+         */
+        $doc = static::getDatabase()->createDocument('v2', new Document([
+            '$id' => 'v2_uid',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any())
+            ],
+            'v1' => [
+                '$id' => 'v1_uid',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any())
+                ],
+            ]
+        ]));
+
+        $this->assertEquals('v2_uid', $doc->getId());
+
+        /**
+         * Test update
+         */
+
+        try {
+            static::getDatabase()->updateDocument('v1', 'v1_uid', new Document([
+                '$permissions' => [],
+                'v2' => [ // Expecting array of arrays or array of strings, object given
+                    '$id' => 'v2_uid',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID object given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->updateDocument('v1', 'v1_uid', new Document([
+                '$permissions' => [],
+                'v2' => 'v2_uid'
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID string given.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->updateDocument('v2', 'v2_uid', new Document([
+                '$permissions' => [],
+                'v1' => [
+                    '$id' => null, // Invalid value
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
+        }
+
         /**
          * Here we get this error: Unknown PDO Type for array
          * Added in Filter.php Text validator for relationship

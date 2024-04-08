@@ -3972,8 +3972,7 @@ class Database
                             $this->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
                             $related = $this->skipRelationships(
-                                fn () =>
-                                $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])])
+                                fn () => $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])])
                             );
 
                             if ($related->isEmpty()) {

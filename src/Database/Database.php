@@ -3555,6 +3555,7 @@ class Database
                                 throw new InvalidRelationshipValue('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
 
+                            // todo: \is_null($value) is always false since value is an array?
                             if ((\is_null($old->getAttribute($key)) !== \is_null($value))
                                 || \count($old->getAttribute($key)) !== \count($value)
                             ) {

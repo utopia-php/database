@@ -3887,7 +3887,7 @@ class Database
                             }
 
                             if (!$this->arrayIsList($value)) {
-                                throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs, document ID ' . \gettype($value) . ' given.');
+                                throw new DatabaseException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
 
                             $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);

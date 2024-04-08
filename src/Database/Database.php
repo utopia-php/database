@@ -3961,8 +3961,7 @@ class Database
 
                         if (\is_string($value)) {
                             $related = $this->skipRelationships(
-                                fn () =>
-                                $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])])
+                                fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])])
                             );
 
                             if ($related->isEmpty()) {

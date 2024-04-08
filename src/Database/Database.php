@@ -3551,19 +3551,25 @@ class Database
                                 break;
                             }
 
+                            if (!$this->arrayIsList($value)) {
+                                throw new InvalidRelationshipValue('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
+                            }
+
                             if ((\is_null($old->getAttribute($key)) !== \is_null($value))
                                 || \count($old->getAttribute($key)) !== \count($value)
                             ) {
                                 $shouldUpdate = true;
                                 break;
                             }
+
                             foreach ($value as $index => $relation) {
                                 $oldValue = $old->getAttribute($key)[$index] instanceof Document
                                     ? $old->getAttribute($key)[$index]->getId()
                                     : $old->getAttribute($key)[$index];
 
-                                if ((\is_string($relation) && $relation !== $oldValue)
-                                    || ($relation instanceof Document && $relation->getId() !== $oldValue)
+                                if (
+                                    (\is_string($relation) && $relation !== $oldValue) ||
+                                    ($relation instanceof Document && $relation->getId() !== $oldValue)
                                 ) {
                                     $shouldUpdate = true;
                                     break;

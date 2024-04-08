@@ -462,11 +462,13 @@ abstract class Base extends TestCase
             '$id' => 'doc1',
             '$permissions' => [
                 Permission::update(Role::any()),
+                Permission::read(Role::any()),
             ],
             'v2' => [
                 '$id' => 'doc2',
                 '$permissions' => [
                     Permission::update(Role::any()),
+                    Permission::read(Role::any()),
                 ],
             ]
         ]));
@@ -475,7 +477,10 @@ abstract class Base extends TestCase
 
         try {
             static::getDatabase()->updateDocument('v1', 'doc1', new Document([
-                '$permissions' => [Permission::update(Role::any())],
+                '$permissions' => [
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
                 'v2' => [[]],
             ]));
             $this->fail('Failed to throw exception');

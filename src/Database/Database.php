@@ -3886,11 +3886,6 @@ class Database
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
                         ) {
-                            //                            if (\is_null($value)) {
-                            //                                We should always get an array!
-                            //                                break;
-                            //                            }
-
                             if (!$this->arrayIsList($value)) {
                                 throw new InvalidRelationshipValue('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }

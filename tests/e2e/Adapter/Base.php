@@ -242,41 +242,6 @@ abstract class Base extends TestCase
         $this->assertCount(0, $collection->getAttribute('indexes'));
     }
 
-
-    public function testUpdateDocumentNotExist(): void
-    {
-        static::getDatabase()->createCollection('updates',
-            [],
-            [],
-            [
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::read(Role::any()),
-            ], false);
-
-//        static::getDatabase()->createDocument('updates', new Document([
-//            '$id' => 'doc1',
-//            '$permissions' => [
-//                Permission::read(Role::any()),
-//            ],
-//        ]));
-
-        // Error: No permissions provided for action 'update'
-        static::getDatabase()->updateDocument('updates', 'bad_id', new Document([
-            '$permissions' => [],
-        ]));
-
-
-        // Error: No permissions provided for action 'update'
-        static::getDatabase()->updateDocument('updates', 'doc1', new Document([
-            '$permissions' => [],
-        ]));
-
-        $this->assertEquals('1', '2');
-
-    }
-
-
     public function testVirtualRelationsAttributes(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {

@@ -254,13 +254,12 @@ abstract class Base extends TestCase
                 Permission::read(Role::any()),
             ], false);
 
-        static::getDatabase()->createDocument('updates', new Document([
-            '$id' => 'doc1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-            ],
-        ]));
-
+//        static::getDatabase()->createDocument('updates', new Document([
+//            '$id' => 'doc1',
+//            '$permissions' => [
+//                Permission::read(Role::any()),
+//            ],
+//        ]));
 
         // Error: No permissions provided for action 'update'
         static::getDatabase()->updateDocument('updates', 'bad_id', new Document([

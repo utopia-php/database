@@ -5,7 +5,7 @@ namespace Utopia\Database;
 use Exception;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\InvalidRelationshipValue;
+use Utopia\Database\Exception\InvalidRelationshipValue as InvalidRelationshipValueException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -2059,7 +2059,7 @@ class Database
                     // Indexes created on junction collection creation
                     break;
                 default:
-                    throw new InvalidRelationshipValue('Invalid relationship type.');
+                    throw new InvalidRelationshipValueException('Invalid relationship type.');
             }
         });
 
@@ -2237,7 +2237,7 @@ class Database
                     }
                     break;
                 default:
-                    throw new InvalidRelationshipValue('Invalid relationship type.');
+                    throw new InvalidRelationshipValueException('Invalid relationship type.');
             }
         });
 
@@ -2344,7 +2344,7 @@ class Database
                     $this->deleteDocument(self::METADATA, $junction);
                     break;
                 default:
-                    throw new InvalidRelationshipValue('Invalid relationship type.');
+                    throw new InvalidRelationshipValueException('Invalid relationship type.');
             }
         });
 
@@ -3195,7 +3195,7 @@ class Database
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD) ||
                             ($relationType === Database::RELATION_ONE_TO_ONE)
                         ) {
-                            throw new InvalidRelationshipValue('Invalid relationship value. Must be either a document ID or a document, array given.');
+                            throw new InvalidRelationshipValueException('Invalid relationship value. Must be either a document ID or a document, array given.');
                         }
 
                         // List of documents or IDs
@@ -3203,7 +3203,7 @@ class Database
                             switch (\gettype($related)) {
                                 case 'object':
                                     if (!$related instanceof Document) {
-                                        throw new InvalidRelationshipValue('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                                        throw new InvalidRelationshipValueException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                                     }
                                     $this->relateDocuments(
                                         $collection,
@@ -3231,7 +3231,7 @@ class Database
                                     );
                                     break;
                                 default:
-                                    throw new InvalidRelationshipValue('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                                    throw new InvalidRelationshipValueException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                             }
                         }
                         $document->removeAttribute($key);
@@ -3239,7 +3239,7 @@ class Database
 
                     case 'object':
                         if (!$value instanceof Document) {
-                            throw new InvalidRelationshipValue('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                            throw new InvalidRelationshipValueException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                         }
 
                         if(
@@ -3247,7 +3247,7 @@ class Database
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
                             ($relationType === Database::RELATION_MANY_TO_MANY)
                         ) {
-                            throw new InvalidRelationshipValue('Invalid relationship value. Must be either an array of documents or document IDs, document given.');
+                            throw new InvalidRelationshipValueException('Invalid relationship value. Must be either an array of documents or document IDs, document given.');
                         }
 
                         $relatedId = $this->relateDocuments(
@@ -3270,7 +3270,7 @@ class Database
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
                             ($relationType === Database::RELATION_MANY_TO_MANY)
                         ) {
-                            throw new InvalidRelationshipValue('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.');
+                            throw new InvalidRelationshipValueException('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.');
                         }
 
                         // Single document ID
@@ -3294,7 +3294,7 @@ class Database
                         break;
 
                     default:
-                        throw new InvalidRelationshipValue('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
+                        throw new InvalidRelationshipValueException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                 }
             } finally {
                 \array_pop($this->relationshipWriteStack);
@@ -3553,7 +3553,7 @@ class Database
 
                             //todo: in php >= 8.1 use array_is_list
                             if(!is_array($value) || (\array_keys($value) !== \range(0, count($value) - 1))) {
-                                throw new InvalidRelationshipValue('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
+                                throw new InvalidRelationshipValueException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
 
                             if (\count($old->getAttribute($key)) !== \count($value)) {
@@ -3876,7 +3876,7 @@ class Database
                                 }
                                 break;
                             default:
-                                throw new InvalidRelationshipValue('Invalid relationship value. Must be either a document, document ID or null.');
+                                throw new InvalidRelationshipValueException('Invalid relationship value. Must be either a document, document ID or null.');
                         }
                         break;
                     case Database::RELATION_ONE_TO_MANY:
@@ -3886,7 +3886,7 @@ class Database
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
                         ) {
                             if(!is_array($value) || (\array_keys($value) !== \range(0, count($value) - 1))) {
-                                throw new InvalidRelationshipValue('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
+                                throw new InvalidRelationshipValueException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
 
                             $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
@@ -3897,7 +3897,7 @@ class Database
                                 } elseif ($item instanceof Document) {
                                     return $item->getId();
                                 } else {
-                                    throw new InvalidRelationshipValue('Invalid relationship value. No id provided');
+                                    throw new InvalidRelationshipValueException('Invalid relationship value. No id provided');
                                 }
                             }, $value);
 
@@ -3949,7 +3949,7 @@ class Database
                                         );
                                     }
                                 } else {
-                                    throw new InvalidRelationshipValue('Invalid relationship value.');
+                                    throw new InvalidRelationshipValueException('Invalid relationship value.');
                                 }
                             }
 
@@ -3994,11 +3994,11 @@ class Database
                         } elseif (\is_null($value)) {
                             break;
                         } elseif (is_array($value)) {
-                            throw new InvalidRelationshipValue('Invalid relationship value. Must be either a document ID or a document, array given.');
+                            throw new InvalidRelationshipValueException('Invalid relationship value. Must be either a document ID or a document, array given.');
                         } elseif (empty($value)) {
-                            throw new InvalidRelationshipValue('Invalid relationship value.');
+                            throw new InvalidRelationshipValueException('Invalid relationship value.');
                         } else {
-                            throw new InvalidRelationshipValue('Invalid relationship value.');
+                            throw new InvalidRelationshipValueException('Invalid relationship value.');
                         }
 
                         break;
@@ -4007,7 +4007,7 @@ class Database
                             break;
                         }
                         if (!\is_array($value)) {
-                            throw new InvalidRelationshipValue('Invalid relationship value.');
+                            throw new InvalidRelationshipValueException('Invalid relationship value.');
                         }
 
                         $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
@@ -4018,7 +4018,7 @@ class Database
                             } elseif ($item instanceof Document) {
                                 return $item->getId();
                             } else {
-                                throw new InvalidRelationshipValue('Invalid relationship value.');
+                                throw new InvalidRelationshipValueException('Invalid relationship value.');
                             }
                         }, $value);
 
@@ -4068,7 +4068,7 @@ class Database
 
                                 $relation = $related->getId();
                             } else {
-                                throw new InvalidRelationshipValue('Invalid relationship value.');
+                                throw new InvalidRelationshipValueException('Invalid relationship value.');
                             }
 
                             $this->skipRelationships(fn () => $this->createDocument(

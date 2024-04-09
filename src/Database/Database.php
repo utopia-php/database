@@ -3551,14 +3551,12 @@ class Database
                                 break;
                             }
 
-                            if (!$this->arrayIsList($value)) {
+                            //todo: in php >= 8.1 use array_is_list
+                            if(!is_array($value) || (\array_keys($value) !== \range(0, count($value) - 1))) {
                                 throw new InvalidRelationshipValue('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
 
-                            // todo: \is_null($value) is always false since value is an array?
-                            if ((\is_null($old->getAttribute($key)) !== \is_null($value))
-                                || \count($old->getAttribute($key)) !== \count($value)
-                            ) {
+                            if (\count($old->getAttribute($key)) !== \count($value)) {
                                 $shouldUpdate = true;
                                 break;
                             }
@@ -3887,7 +3885,7 @@ class Database
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
                         ) {
-                            if (!$this->arrayIsList($value)) {
+                            if(!is_array($value) || (\array_keys($value) !== \range(0, count($value) - 1))) {
                                 throw new InvalidRelationshipValue('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
 
@@ -5420,20 +5418,5 @@ class Database
         }
 
         return $attributes;
-    }
-
-    /**
-     * @param mixed $param
-     * @return bool
-     */
-    protected function arrayIsList(mixed $param): bool
-    {
-        if(!is_array($param)) {
-            return false;
-        }
-
-        //todo in php 8.1 use array_is_list
-        return \array_keys($param) === \range(0, count($param) - 1);
-        //return $param === array_values($param);
     }
 }

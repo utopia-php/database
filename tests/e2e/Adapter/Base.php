@@ -258,7 +258,7 @@ abstract class Base extends TestCase
 
 
         // Error: No permissions provided for action 'update'
-        static::getDatabase()->updateDocument('updates', 'no_attribute', new Document([
+        static::getDatabase()->updateDocument('updates', 'bad_id', new Document([
             '$permissions' => [],
             'attr' => 'tests2',
         ]));

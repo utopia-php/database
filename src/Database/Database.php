@@ -3739,7 +3739,6 @@ class Database
         foreach ($relationships as $index => $relationship) {
             /** @var string $key */
             $key = $relationship['key'];
-
             $value = $document->getAttribute($key);
             $oldValue = $old->getAttribute($key);
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);

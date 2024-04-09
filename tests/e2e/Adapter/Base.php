@@ -304,7 +304,6 @@ abstract class Base extends TestCase
             $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
         }
 
-
         /**
          * Success for later test update
          */

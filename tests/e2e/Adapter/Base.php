@@ -300,7 +300,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValue);
+            $this->assertTrue($e instanceof InvalidRelationshipValueException);
             $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
         }
 

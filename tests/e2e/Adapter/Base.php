@@ -245,29 +245,32 @@ abstract class Base extends TestCase
 
     public function testUpdateDocumentNotExist(): void
     {
-        static::getDatabase()->createCollection('updates');
-        static::getDatabase()->createAttribute('updates', 'attr', Database::VAR_STRING, 10, false);
+        static::getDatabase()->createCollection('updates',
+            [],
+            [],
+            [
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::read(Role::any()),
+            ], false);
 
         static::getDatabase()->createDocument('updates', new Document([
             '$id' => 'doc1',
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
-            'attr' => 'tests1',
         ]));
 
 
         // Error: No permissions provided for action 'update'
         static::getDatabase()->updateDocument('updates', 'bad_id', new Document([
             '$permissions' => [],
-            'attr' => 'tests2',
         ]));
 
 
         // Error: No permissions provided for action 'update'
         static::getDatabase()->updateDocument('updates', 'doc1', new Document([
             '$permissions' => [],
-            'attr' => 'tests2',
         ]));
 
         $this->assertEquals('1', '2');

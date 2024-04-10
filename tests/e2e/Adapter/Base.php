@@ -253,6 +253,91 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('v2');
 
         /**
+         * RELATION_ONE_TO_ONE
+         * TwoWay is false no attribute is created on v2
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: false
+        );
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'v1' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof InvalidRelationshipValueException);
+            $this->assertEquals('Invalid relationship value. Child side. Two-way is false.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'v1' => [
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof InvalidRelationshipValueException);
+            $this->assertEquals('Invalid relationship value. Child side. Two-way is false.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->find('v2', [
+                Query::equal('v1', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+        }
+
+        /**
+         * Success for later test update
+         */
+
+        $doc = static::getDatabase()->createDocument('v1', new Document([
+            '$id' => 'man',
+            '$permissions' => [
+                Permission::update(Role::any()),
+                Permission::read(Role::any()),
+            ],
+            'v2' => [
+                '$id' => 'woman',
+                '$permissions' => [
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any())
+                ]
+            ]
+        ]));
+
+        $this->assertEquals('man', $doc->getId());
+
+        try {
+            static::getDatabase()->updateDocument('v1', 'man', new Document([
+                '$permissions' => [],
+                'v2' => [[
+                    '$id' => 'woman',
+                    '$permissions' => []
+                ]]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof InvalidRelationshipValueException);
+            $this->assertEquals('Invalid relationship value. Must be either a document, document ID or null. Array given.', $e->getMessage());
+        }
+
+        static::getDatabase()->deleteRelationship('v1', 'v2');
+
+        /**
          * RELATION_ONE_TO_MANY
          * No attribute is created in V1 collection
          */

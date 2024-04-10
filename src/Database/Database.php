@@ -3242,6 +3242,10 @@ class Database
                             throw new InvalidRelationshipValueException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                         }
 
+                        if($relationType === Database::RELATION_ONE_TO_ONE && $twoWay === false && $side === Database::RELATION_SIDE_CHILD) {
+                            throw new InvalidRelationshipValueException('Invalid relationship value. Child side. Two-way is false.');
+                        }
+
                         if(
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
@@ -3265,6 +3269,10 @@ class Database
                         break;
 
                     case 'string':
+                        if($relationType === Database::RELATION_ONE_TO_ONE && $twoWay === false && $side === Database::RELATION_SIDE_CHILD) {
+                            throw new InvalidRelationshipValueException('Invalid relationship value. Child side. Two-way is false.');
+                        }
+
                         if(
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
@@ -3517,7 +3525,6 @@ class Database
                     }
                     $relationType = (string) $relationships[$key]['options']['relationType'];
                     $side = (string) $relationships[$key]['options']['side'];
-
                     switch ($relationType) {
                         case Database::RELATION_ONE_TO_ONE:
                             $oldValue = $old->getAttribute($key) instanceof Document
@@ -3771,6 +3778,10 @@ class Database
                 switch ($relationType) {
                     case Database::RELATION_ONE_TO_ONE:
                         if (!$twoWay) {
+                            if($side === Database::RELATION_SIDE_CHILD) {
+                                throw new InvalidRelationshipValueException('Invalid relationship value. Child side. Two-way is false.');
+                            }
+
                             if (\is_string($value)) {
                                 $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])]));
                                 if ($related->isEmpty()) {
@@ -3791,7 +3802,10 @@ class Database
                                     $side,
                                 );
                                 $document->setAttribute($key, $relationId);
+                            } elseif (is_array($value)) {
+                                throw new InvalidRelationshipValueException('Invalid relationship value. Must be either a document, document ID or null. Array given.');
                             }
+
                             break;
                         }
 

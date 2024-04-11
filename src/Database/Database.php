@@ -4858,7 +4858,7 @@ class Database
      * @param Document $collection
      * @param array<Query> $queries
      * @return array<string>
-     * @throws DatabaseException
+     * @throws QueryException
      */
     private function validateSelections(Document $collection, array $queries): array
     {
@@ -4895,7 +4895,7 @@ class Database
 
         $invalid = \array_diff($selections, $keys);
         if (!empty($invalid) && !\in_array('*', $invalid)) {
-            throw new DatabaseException('Cannot select attributes: ' . \implode(', ', $invalid));
+            throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
         }
 
         $selections = \array_merge($selections, $relationshipSelections);

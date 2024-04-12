@@ -1999,9 +1999,17 @@ class Database
 
             switch ($type) {
                 case self::RELATION_ONE_TO_ONE:
-                    $this->deleteIndex($collection->getId(), $indexKey);
-                    if ($twoWay) {
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        $this->deleteIndex($collection->getId(), $indexKey);
+                        if ($twoWay) {
+                            $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                        }
+                    }
+                    if ($side === Database::RELATION_SIDE_CHILD) {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                        if ($twoWay) {
+                            $this->deleteIndex($collection->getId(), $indexKey);
+                        }
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
@@ -2012,9 +2020,9 @@ class Database
                     }
                     break;
                 case self::RELATION_MANY_TO_ONE:
-                    if ($twoWay && $side === Database::RELATION_SIDE_CHILD) {
+                    if ($side === Database::RELATION_SIDE_CHILD) {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                    } else {
+                    } elseif ($twoWay) {
                         $this->deleteIndex($collection->getId(), $indexKey);
                     }
                     break;

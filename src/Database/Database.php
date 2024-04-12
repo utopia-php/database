@@ -3149,16 +3149,16 @@ class Database
                     }
                     $relationType = (string) $relationships[$key]['options']['relationType'];
                     $side = (string) $relationships[$key]['options']['side'];
-
-                    switch($relationType) {
+                    switch ($relationType) {
                         case Database::RELATION_ONE_TO_ONE:
                             $oldValue = $old->getAttribute($key) instanceof Document
                                 ? $old->getAttribute($key)->getId()
                                 : $old->getAttribute($key);
 
                             if ((\is_null($value) !== \is_null($oldValue))
-                            || (\is_string($value) && $value !== $oldValue)
-                            || ($value instanceof Document && $value->getId() !== $oldValue)) {
+                                || (\is_string($value) && $value !== $oldValue)
+                                || ($value instanceof Document && $value->getId() !== $oldValue)
+                            ) {
                                 $shouldUpdate = true;
                             }
                             break;
@@ -3309,8 +3309,10 @@ class Database
             ));
 
             $validator = new Authorization(self::PERMISSION_UPDATE);
-            if ($collection->getId() !== self::METADATA
-                && !$validator->isValid($old->getUpdate())) {
+            if (
+                $collection->getId() !== self::METADATA
+                && !$validator->isValid($old->getUpdate())
+            ) {
                 throw new AuthorizationException($validator->getDescription());
             }
 
@@ -3369,7 +3371,7 @@ class Database
             if ($oldValue == $value) {
                 if (
                     ($relationType === Database::RELATION_ONE_TO_ONE  ||
-                    ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
+                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
                     $value instanceof Document
                 ) {
                     $document->setAttribute($key, $value->getId());
@@ -3574,7 +3576,7 @@ class Database
                                         );
                                     }
                                 } else {
-                                    throw new DatabaseException('Invalid value for relationship');
+                                    throw new InvalidRelationshipValueException('Invalid relationship value.');
                                 }
                             }
 
@@ -3982,8 +3984,8 @@ class Database
                         // collection as an existing relationship, but a different two-way key (the third condition),
                         // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                         $transitive = (($existingKey === $twoWayKey
-                                && $existingCollection === $relatedCollection->getId()
-                                && $existingSide !== $side)
+                            && $existingCollection === $relatedCollection->getId()
+                            && $existingSide !== $side)
                             || ($existingTwoWayKey === $key
                                 && $existingRelatedCollection === $collection->getId()
                                 && $existingSide !== $side)

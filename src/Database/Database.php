@@ -2346,6 +2346,7 @@ class Database
 
                     $this->deleteDocument(self::METADATA, $junction);
                     break;
+
                 default:
                     throw new InvalidRelationshipValueException('Invalid relationship type.');
             }

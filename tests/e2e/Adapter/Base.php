@@ -242,7 +242,7 @@ abstract class Base extends TestCase
         $this->assertCount(0, $collection->getAttribute('indexes'));
     }
 
-    public function testDeleteRelation():void
+    public function testDeleteRelation(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();

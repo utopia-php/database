@@ -5313,7 +5313,7 @@ class Database
 
         $invalid = \array_diff($selections, $keys);
         if (!empty($invalid) && !\in_array('*', $invalid)) {
-            throw new DatabaseException('Cannot select attributes: ' . \implode(', ', $invalid));
+            throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
         }
 
         $selections = \array_merge($selections, $relationshipSelections);
@@ -5355,32 +5355,37 @@ class Database
      * @param Document $collection
      * @param array<Query> $queries
      * @return array<Query>
-     * @throws DatabaseException
+     * @throws QueryException
      */
     public static function convertQueries(Document $collection, array $queries): array
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        foreach ($attributes as $attribute) {
-            foreach ($queries as $query) {
-                if ($query->getAttribute() === $attribute->getId()) {
-                    $query->setOnArray($attribute->getAttribute('array', false));
-                }
-            }
-
-            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
-                foreach ($queries as $index => $query) {
+        try {
+            foreach ($attributes as $attribute) {
+                foreach ($queries as $query) {
                     if ($query->getAttribute() === $attribute->getId()) {
-                        $values = $query->getValues();
-                        foreach ($values as $valueIndex => $value) {
-                            $values[$valueIndex] = DateTime::setTimezone($value);
+                        $query->setOnArray($attribute->getAttribute('array', false));
+                    }
+                }
+
+                if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
+                    foreach ($queries as $index => $query) {
+                        if ($query->getAttribute() === $attribute->getId()) {
+                            $values = $query->getValues();
+                            foreach ($values as $valueIndex => $value) {
+                                $values[$valueIndex] = DateTime::setTimezone($value);
+                            }
+                            $query->setValues($values);
+                            $queries[$index] = $query;
                         }
-                        $query->setValues($values);
-                        $queries[$index] = $query;
                     }
                 }
             }
+        } catch (\Throwable $e) {
+            throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
+
         return $queries;
     }
 

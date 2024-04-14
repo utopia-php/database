@@ -5361,29 +5361,29 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        try {
-            foreach ($attributes as $attribute) {
-                foreach ($queries as $query) {
-                    if ($query->getAttribute() === $attribute->getId()) {
-                        $query->setOnArray($attribute->getAttribute('array', false));
-                    }
+        foreach ($attributes as $attribute) {
+            foreach ($queries as $query) {
+                if ($query->getAttribute() === $attribute->getId()) {
+                    $query->setOnArray($attribute->getAttribute('array', false));
                 }
+            }
 
-                if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
-                    foreach ($queries as $index => $query) {
-                        if ($query->getAttribute() === $attribute->getId()) {
-                            $values = $query->getValues();
-                            foreach ($values as $valueIndex => $value) {
+            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
+                foreach ($queries as $index => $query) {
+                    if ($query->getAttribute() === $attribute->getId()) {
+                        $values = $query->getValues();
+                        foreach ($values as $valueIndex => $value) {
+                            try {
                                 $values[$valueIndex] = DateTime::setTimezone($value);
+                            } catch (\Throwable $e) {
+                                throw new QueryException($e->getMessage(), $e->getCode(), $e);
                             }
-                            $query->setValues($values);
-                            $queries[$index] = $query;
                         }
+                        $query->setValues($values);
+                        $queries[$index] = $query;
                     }
                 }
             }
-        } catch (\Throwable $e) {
-            throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
 
         return $queries;

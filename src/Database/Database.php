@@ -3232,6 +3232,10 @@ class Database
             }
         }
 
+        if ($old->isEmpty()) {
+            return new Document();
+        }
+
         if ($shouldUpdate) {
             $document->setAttribute('$updatedAt', $time);
         }

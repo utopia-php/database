@@ -5730,7 +5730,8 @@ abstract class Base extends TestCase
                     Query::equal('date', [$date])
                 ]);
                 $this->fail('Failed to throw exception');
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
+                $this->assertTrue($e instanceof QueryException);
                 $this->assertEquals('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());
             }
         }

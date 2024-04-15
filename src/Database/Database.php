@@ -5313,7 +5313,7 @@ class Database
 
         $invalid = \array_diff($selections, $keys);
         if (!empty($invalid) && !\in_array('*', $invalid)) {
-            throw new DatabaseException('Cannot select attributes: ' . \implode(', ', $invalid));
+            throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
         }
 
         $selections = \array_merge($selections, $relationshipSelections);
@@ -5355,7 +5355,7 @@ class Database
      * @param Document $collection
      * @param array<Query> $queries
      * @return array<Query>
-     * @throws DatabaseException
+     * @throws QueryException
      */
     public static function convertQueries(Document $collection, array $queries): array
     {
@@ -5373,7 +5373,11 @@ class Database
                     if ($query->getAttribute() === $attribute->getId()) {
                         $values = $query->getValues();
                         foreach ($values as $valueIndex => $value) {
-                            $values[$valueIndex] = DateTime::setTimezone($value);
+                            try {
+                                $values[$valueIndex] = DateTime::setTimezone($value);
+                            } catch (\Throwable $e) {
+                                throw new QueryException($e->getMessage(), $e->getCode(), $e);
+                            }
                         }
                         $query->setValues($values);
                         $queries[$index] = $query;
@@ -5381,6 +5385,7 @@ class Database
                 }
             }
         }
+
         return $queries;
     }
 

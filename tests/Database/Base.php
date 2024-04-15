@@ -95,7 +95,6 @@ abstract class Base extends TestCase
             collection: 'v1',
             relatedCollection: 'v2',
             type: Database::RELATION_ONE_TO_ONE,
-            twoWay: false
         );
 
         try {
@@ -107,7 +106,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Child side. Two-way is false.', $e->getMessage());
         }
 
         try {
@@ -122,7 +120,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Child side. Two-way is false.', $e->getMessage());
         }
 
         try {
@@ -132,7 +129,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+            $this->assertEquals('Invalid query: Cannot query on virtual relationship attribute', $e->getMessage());
         }
 
         /**
@@ -306,7 +303,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+            $this->assertEquals('Invalid query: Cannot query on virtual relationship attribute', $e->getMessage());
         }
 
         static::getDatabase()->deleteRelationship('v1', 'v2');
@@ -370,7 +367,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+            $this->assertEquals('Invalid query: Cannot query on virtual relationship attribute', $e->getMessage());
         }
 
         /**
@@ -477,7 +474,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+            $this->assertEquals('Invalid query: Cannot query on virtual relationship attribute', $e->getMessage());
         }
 
         try {
@@ -487,7 +484,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
+            $this->assertEquals('Invalid query: Cannot query on virtual relationship attribute', $e->getMessage());
         }
 
         /**

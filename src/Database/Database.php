@@ -2006,15 +2006,15 @@ class Database
                 case self::RELATION_ONE_TO_MANY:
                     if ($side === Database::RELATION_SIDE_PARENT) {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                    } elseif ($twoWay) {
+                    } else {
                         $this->deleteIndex($collection->getId(), $indexKey);
                     }
                     break;
                 case self::RELATION_MANY_TO_ONE:
-                    if ($twoWay && $side === Database::RELATION_SIDE_CHILD) {
-                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                    } else {
+                    if ($side === Database::RELATION_SIDE_PARENT) {
                         $this->deleteIndex($collection->getId(), $indexKey);
+                    } else {
+                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
                     }
                     break;
                 case self::RELATION_MANY_TO_MANY:

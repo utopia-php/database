@@ -1913,6 +1913,7 @@ class Database
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
+                    // todo: do we care about size updating?
                     if ($twoWayKey !== $newTwoWayKey) {
                         $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
                     }

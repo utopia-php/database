@@ -445,12 +445,14 @@ class MariaDB extends SQL
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
+                // todo: do we care about $twoWay? or side like we do in deleteRelations
                 if ($twoWay && !\is_null($newTwoWayKey)) {
                     $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                if (!\is_null($newKey)) {
+                // todo: do we care about $twoWay? or side like we do in deleteRelations
+            if (!\is_null($newKey)) {
                     $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
                 }
                 break;

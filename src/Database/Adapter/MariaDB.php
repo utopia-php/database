@@ -513,7 +513,7 @@ class MariaDB extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                if ($twoWay && $side === Database::RELATION_SIDE_CHILD) {
+                if ($side === Database::RELATION_SIDE_CHILD) {
                     $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
                 } else {
                     $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";

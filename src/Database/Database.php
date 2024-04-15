@@ -2875,7 +2875,7 @@ class Database
                         }
 
                         if($relationType === Database::RELATION_ONE_TO_ONE && $twoWay === false && $side === Database::RELATION_SIDE_CHILD) {
-                            throw new InvalidRelationshipValueException('Invalid relationship value. Child side. Two-way is false.');
+                            throw new InvalidRelationshipValueException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                         }
 
                         if(
@@ -2902,7 +2902,7 @@ class Database
 
                     case 'string':
                         if($relationType === Database::RELATION_ONE_TO_ONE && $twoWay === false && $side === Database::RELATION_SIDE_CHILD) {
-                            throw new InvalidRelationshipValueException('Invalid relationship value. Child side. Two-way is false.');
+                            throw new InvalidRelationshipValueException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                         }
 
                         if(
@@ -3393,7 +3393,7 @@ class Database
                     case Database::RELATION_ONE_TO_ONE:
                         if (!$twoWay) {
                             if($side === Database::RELATION_SIDE_CHILD) {
-                                throw new InvalidRelationshipValueException('Invalid relationship value. Child side. Two-way is false.');
+                                throw new InvalidRelationshipValueException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                             }
 
                             if (\is_string($value)) {
@@ -3524,7 +3524,7 @@ class Database
                                 } elseif ($item instanceof Document) {
                                     return $item->getId();
                                 } else {
-                                    throw new InvalidRelationshipValueException('Invalid relationship value. No id provided');
+                                    throw new InvalidRelationshipValueException('Invalid relationship value. No ID provided.');
                                 }
                             }, $value);
 

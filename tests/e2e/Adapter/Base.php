@@ -710,7 +710,7 @@ abstract class Base extends TestCase
 
             for ($i = 0 ; $i <= 20 ; $i++) {
                 static::getDatabase()->createDocument('global-timeouts', new Document([
-                    'longtext' => file_get_contents(__DIR__ . '/../resources/longtext.txt'),
+                    'longtext' => file_get_contents(__DIR__ . '/../../resources/longtext.txt'),
                     '$permissions' => [
                         Permission::read(Role::any()),
                         Permission::update(Role::any()),

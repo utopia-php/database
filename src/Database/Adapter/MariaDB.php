@@ -452,7 +452,7 @@ class MariaDB extends SQL
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 // todo: do we care about $twoWay? or side like we do in deleteRelations
-            if (!\is_null($newKey)) {
+                if (!\is_null($newKey)) {
                     $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
                 }
                 break;

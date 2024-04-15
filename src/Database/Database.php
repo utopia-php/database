@@ -1162,6 +1162,7 @@ class Database
      * @param string $id
      *
      * @return bool
+     * @throws DatabaseException
      */
     public function deleteCollection(string $id): bool
     {

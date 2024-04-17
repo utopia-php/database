@@ -86,6 +86,15 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::contains('integer_array', [10.6])));
     }
 
+    public function testTypeMismatch(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::equal('string', [false])));
+        $this->assertEquals('Query value is invalid for attribute "string"', $this->validator->getDescription());
+
+        $this->assertFalse($this->validator->isValid(Query::equal('string', [1])));
+        $this->assertEquals('Query value is invalid for attribute "string"', $this->validator->getDescription());
+    }
+
     public function testEmptyValues(): void
     {
         $this->assertFalse($this->validator->isValid(Query::contains('string', [])));

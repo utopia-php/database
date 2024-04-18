@@ -951,8 +951,10 @@ class Database
             $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
         );
 
-        foreach ($relationships as $relationship) {
-            $this->deleteRelationship($collection->getId(), $relationship->getId());
+        if ($this->resolveRelationships) {
+            foreach ($relationships as $relationship) {
+                $this->deleteRelationship($collection->getId(), $relationship->getId());
+            }
         }
 
         $this->adapter->deleteCollection($id);

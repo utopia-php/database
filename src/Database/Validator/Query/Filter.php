@@ -139,24 +139,43 @@ class Filter extends Base
             $options = $attributeSchema['options'];
 
             if($options['relationType'] === Database::RELATION_ONE_TO_ONE && $options['twoWay'] === false && $options['side'] === Database::RELATION_SIDE_CHILD) {
-                $this->message = 'Cannot query on virtual relation attribute';
+                $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
 
             if($options['relationType'] === Database::RELATION_ONE_TO_MANY && $options['side'] === Database::RELATION_SIDE_PARENT) {
-                $this->message = 'Cannot query on virtual relation attribute';
+                $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
 
             if($options['relationType'] === Database::RELATION_MANY_TO_ONE && $options['side'] === Database::RELATION_SIDE_CHILD) {
-                $this->message = 'Cannot query on virtual relation attribute';
+                $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
 
             if($options['relationType'] === Database::RELATION_MANY_TO_MANY) {
-                $this->message = 'Cannot query on virtual relation attribute';
+                $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
+        }
+
+        $array = $attributeSchema['array'] ?? false;
+
+        if(
+            !$array &&
+            $method === Query::TYPE_CONTAINS &&
+            $attributeSchema['type'] !==  Database::VAR_STRING
+        ) {
+            $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array or string.';
+            return false;
+        }
+
+        if(
+            $array &&
+            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
+        ) {
+            $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
+            return false;
         }
 
         $array = $attributeSchema['array'] ?? false;
@@ -185,17 +204,17 @@ class Filter extends Base
             $options = $attributeSchema['options'];
 
             if($options['relationType'] === Database::RELATION_ONE_TO_MANY && $options['side'] === Database::RELATION_SIDE_PARENT) {
-                $this->message = 'Cannot query on virtual relation attribute';
+                $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
 
             if($options['relationType'] === Database::RELATION_MANY_TO_ONE && $options['side'] === Database::RELATION_SIDE_CHILD) {
-                $this->message = 'Cannot query on virtual relation attribute';
+                $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
 
             if($options['relationType'] === Database::RELATION_MANY_TO_MANY) {
-                $this->message = 'Cannot query on virtual relation attribute';
+                $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
         }

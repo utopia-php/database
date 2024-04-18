@@ -77,7 +77,6 @@ jobs:
             Postgres,
             SQLite,
             MongoDB,
-            #MariaDBProxy
           ]
 
     steps:

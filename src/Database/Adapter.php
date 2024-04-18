@@ -394,11 +394,12 @@ abstract class Adapter
      * @param bool $twoWay
      * @param string $key
      * @param string $twoWayKey
+     * @param string $side
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @return bool
      */
-    abstract public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool;
+    abstract public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool;
 
     /**
      * Delete Relationship

@@ -4,6 +4,6 @@ namespace Utopia\Database\Exception;
 
 use Utopia\Database\Exception;
 
-class InvalidRelationshipValue extends Exception
+class Relationship extends Exception
 {
 }

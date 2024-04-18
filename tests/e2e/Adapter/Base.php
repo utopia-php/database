@@ -6408,7 +6408,6 @@ abstract class Base extends TestCase
 
         $this->assertEquals('Album 1 Updated!!!', $albumDocument['name']);
         $this->assertEquals($albumDocument->getId(), $artist1->getAttribute('albums')[0]->getId());
-        //Todo: This is failing
         $this->assertEquals($albumDocument->getAttribute('name'), $artist1->getAttribute('albums')[0]->getAttribute('name'));
 
         // Create new document with no relationship
@@ -11206,6 +11205,61 @@ abstract class Base extends TestCase
             type: 'invalid',
             twoWay: true,
         );
+    }
+
+    public function testOneToManyAndManyToOneDeleteRelationship(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('relation1');
+        static::getDatabase()->createCollection('relation2');
+
+        static::getDatabase()->createRelationship(
+            collection: 'relation1',
+            relatedCollection: 'relation2',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(1, $relation1->getAttribute('attributes'));
+        $this->assertCount(0, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(1, $relation2->getAttribute('attributes'));
+        $this->assertCount(1, $relation2->getAttribute('indexes'));
+
+        static::getDatabase()->deleteRelationship('relation2', 'relation1');
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(0, $relation1->getAttribute('attributes'));
+        $this->assertCount(0, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(0, $relation2->getAttribute('attributes'));
+        $this->assertCount(0, $relation2->getAttribute('indexes'));
+
+        static::getDatabase()->createRelationship(
+            collection: 'relation1',
+            relatedCollection: 'relation2',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(1, $relation1->getAttribute('attributes'));
+        $this->assertCount(1, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(1, $relation2->getAttribute('attributes'));
+        $this->assertCount(0, $relation2->getAttribute('indexes'));
+
+        static::getDatabase()->deleteRelationship('relation1', 'relation2');
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(0, $relation1->getAttribute('attributes'));
+        $this->assertCount(0, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(0, $relation2->getAttribute('attributes'));
+        $this->assertCount(0, $relation2->getAttribute('indexes'));
     }
 
     public function testDeleteMissingRelationship(): void

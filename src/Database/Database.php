@@ -6,10 +6,10 @@ use Exception;
 use InvalidArgumentException;
 use Utopia\Cache\Cache;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\InvalidRelationshipValue as InvalidRelationshipValueException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\InvalidRelationshipValue as InvalidRelationshipValueException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -1878,6 +1878,7 @@ class Database
                     $twoWay,
                     $id,
                     $twoWayKey,
+                    $side,
                     $newKey,
                     $newTwoWayKey
                 );
@@ -1913,13 +1914,25 @@ class Database
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        if ($twoWayKey !== $newTwoWayKey) {
+                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                        }
+                    } else {
+                        if ($id !== $newKey) {
+                            $renameIndex($collection->getId(), $id, $newKey);
+                        }
                     }
                     break;
                 case self::RELATION_MANY_TO_ONE:
-                    if ($id !== $newKey) {
-                        $renameIndex($collection->getId(), $id, $newKey);
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        if ($id !== $newKey) {
+                            $renameIndex($collection->getId(), $id, $newKey);
+                        }
+                    } else {
+                        if ($twoWayKey !== $newTwoWayKey) {
+                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                        }
                     }
                     break;
                 case self::RELATION_MANY_TO_MANY:
@@ -2015,15 +2028,15 @@ class Database
                 case self::RELATION_ONE_TO_MANY:
                     if ($side === Database::RELATION_SIDE_PARENT) {
                         $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                    } elseif ($twoWay) {
+                    } else {
                         $this->deleteIndex($collection->getId(), $indexKey);
                     }
                     break;
                 case self::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_CHILD) {
-                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                    } elseif ($twoWay) {
+                    if ($side === Database::RELATION_SIDE_PARENT) {
                         $this->deleteIndex($collection->getId(), $indexKey);
+                    } else {
+                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
                     }
                     break;
                 case self::RELATION_MANY_TO_MANY:
@@ -4991,7 +5004,7 @@ class Database
      * @param Document $collection
      * @param array<Query> $queries
      * @return array<Query>
-     * @throws DatabaseException
+     * @throws QueryException
      */
     public static function convertQueries(Document $collection, array $queries): array
     {
@@ -5003,7 +5016,11 @@ class Database
                     if ($query->getAttribute() === $attribute->getId()) {
                         $values = $query->getValues();
                         foreach ($values as $valueIndex => $value) {
-                            $values[$valueIndex] = DateTime::setTimezone($value);
+                            try {
+                                $values[$valueIndex] = DateTime::setTimezone($value);
+                            } catch (\Throwable $e) {
+                                throw new QueryException($e->getMessage(), $e->getCode(), $e);
+                            }
                         }
                         $query->setValues($values);
                         $queries[$index] = $query;

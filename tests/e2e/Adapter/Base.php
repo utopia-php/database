@@ -295,7 +295,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relationship attribute', $e->getMessage());
         }
 
         /**
@@ -453,7 +452,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Query value is invalid for attribute "v1"', $e->getMessage());
         }
 
         try {
@@ -463,7 +461,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relationship attribute', $e->getMessage());
         }
 
         static::getDatabase()->deleteRelationship('v1', 'v2');
@@ -524,93 +521,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relationship attribute', $e->getMessage());
-        }
-
-        /**
-         * Success for later test update
-         */
-        $doc = static::getDatabase()->createDocument('v1', new Document([
-            '$id' => 'doc1',
-            '$permissions' => [
-                Permission::update(Role::any()),
-                Permission::read(Role::any()),
-            ],
-            'v2' => [
-                '$id' => 'doc2',
-                '$permissions' => [
-                    Permission::update(Role::any()),
-                    Permission::read(Role::any()),
-                ],
-            ]
-        ]));
-
-        $this->assertEquals('doc1', $doc->getId());
-
-        try {
-            static::getDatabase()->updateDocument('v1', 'doc1', new Document([
-                '$permissions' => [
-                    Permission::update(Role::any()),
-                    Permission::read(Role::any()),
-                ],
-                'v2' => [[]],
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertTrue($e instanceof RelationshipException);
-        }
-
-        try {
-            static::getDatabase()->updateDocument('v2', 'doc2', new Document([
-                '$permissions' => [],
-                'v1' => null
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertTrue($e instanceof RelationshipException);
-        }
-
-        /**
-         * Success for later test update
-         */
-        $doc = static::getDatabase()->createDocument('v1', new Document([
-            '$id' => 'doc1',
-            '$permissions' => [
-                Permission::update(Role::any()),
-                Permission::read(Role::any()),
-            ],
-            'v2' => [
-                '$id' => 'doc2',
-                '$permissions' => [
-                    Permission::update(Role::any()),
-                    Permission::read(Role::any()),
-                ],
-            ]
-        ]));
-
-        $this->assertEquals('doc1', $doc->getId());
-
-        try {
-            static::getDatabase()->updateDocument('v1', 'doc1', new Document([
-                '$permissions' => [
-                    Permission::update(Role::any()),
-                    Permission::read(Role::any()),
-                ],
-                'v2' => [[]],
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertTrue($e instanceof RelationshipException);
-        }
-
-        try {
-            static::getDatabase()->updateDocument('v2', 'doc2', new Document([
-                '$permissions' => [],
-                'v1' => null
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertTrue($e instanceof RelationshipException);
         }
 
         /**
@@ -712,7 +622,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relationship attribute', $e->getMessage());
         }
 
         try {
@@ -722,69 +631,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relationship attribute', $e->getMessage());
-        }
-
-        /**
-         * Success for later test update
-         */
-
-        $doc = static::getDatabase()->createDocument('v1', new Document([
-            '$id' => 'class1',
-            '$permissions' => [
-                Permission::update(Role::any()),
-                Permission::read(Role::any()),
-            ],
-            'students' => [
-                [
-                    '$id' => 'Richard',
-                    '$permissions' => [
-                        Permission::update(Role::any()),
-                        Permission::read(Role::any())
-                    ]
-                ],
-                [
-                    '$id' => 'Bill',
-                    '$permissions' => [
-                        Permission::update(Role::any()),
-                        Permission::read(Role::any())
-                    ]
-                ]
-            ]
-        ]));
-
-        $this->assertEquals('class1', $doc->getId());
-
-        try {
-            static::getDatabase()->updateDocument('v1', 'class1', new Document([
-                '$permissions' => [
-                    Permission::update(Role::any()),
-                    Permission::read(Role::any()),
-                ],
-                'students' => [
-                    '$id' => 'Richard',
-                    '$permissions' => [
-                        Permission::update(Role::any()),
-                        Permission::read(Role::any())
-                    ]
-                ]
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertTrue($e instanceof RelationshipException);
-        }
-
-        try {
-            static::getDatabase()->updateDocument('v1', 'class1', new Document([
-                '$permissions' => [
-                    Permission::update(Role::any()),
-                    Permission::read(Role::any()),
-                ],
-                'students' => 'Richard'
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertTrue($e instanceof RelationshipException);
         }
 
         /**

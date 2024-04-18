@@ -6408,7 +6408,6 @@ abstract class Base extends TestCase
 
         $this->assertEquals('Album 1 Updated!!!', $albumDocument['name']);
         $this->assertEquals($albumDocument->getId(), $artist1->getAttribute('albums')[0]->getId());
-        //Todo: This is failing
         $this->assertEquals($albumDocument->getAttribute('name'), $artist1->getAttribute('albums')[0]->getAttribute('name'));
 
         // Create new document with no relationship

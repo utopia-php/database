@@ -442,20 +442,20 @@ class Postgres extends SQL
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                if (!\is_null($newKey)) {
+                if ($key !== $newKey) {
                     $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
                 }
-                if ($twoWay && !\is_null($newTwoWayKey)) {
+                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
                     $sql .= "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
-                    if (!\is_null($newTwoWayKey)) {
+                    if ($twoWayKey !== $newTwoWayKey) {
                         $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
                     }
                 } else {
-                    if (!\is_null($newKey)) {
+                    if ($key !== $newKey) {
                         $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
                     }
                 }

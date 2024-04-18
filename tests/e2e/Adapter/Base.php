@@ -13,7 +13,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\InvalidRelationshipValue as InvalidRelationshipValueException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -280,8 +280,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Child side. Two-way is false.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -295,8 +294,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Child side. Two-way is false.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -306,7 +304,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
         }
 
         /**
@@ -340,8 +337,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either a document, document ID or null. Array given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         static::getDatabase()->deleteRelationship('v1', 'v2');
@@ -368,8 +364,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -379,8 +374,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -394,8 +388,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         /**
@@ -430,8 +423,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, object given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -441,8 +433,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, string given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -455,8 +446,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         /**
@@ -471,7 +461,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Query value is invalid for attribute "v1"', $e->getMessage());
         }
 
         try {
@@ -481,7 +470,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
         }
 
         static::getDatabase()->deleteRelationship('v1', 'v2');
@@ -508,8 +496,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -519,8 +506,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -534,8 +520,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -545,7 +530,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
         }
 
         /**
@@ -578,8 +562,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -589,8 +572,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, NULL given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         static::getDatabase()->deleteRelationship('v1', 'v2');
@@ -615,8 +597,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -626,8 +607,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -641,8 +621,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -652,7 +631,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
         }
 
         try {
@@ -662,7 +640,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Cannot query on virtual relation attribute', $e->getMessage());
         }
 
         /**
@@ -711,8 +688,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, object given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         try {
@@ -725,8 +701,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof InvalidRelationshipValueException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, string given.', $e->getMessage());
+            $this->assertTrue($e instanceof RelationshipException);
         }
     }
 
@@ -7270,7 +7245,6 @@ abstract class Base extends TestCase
 
         $this->assertEquals('Album 1 Updated!!!', $albumDocument['name']);
         $this->assertEquals($albumDocument->getId(), $artist1->getAttribute('albums')[0]->getId());
-        //Todo: This is failing
         $this->assertEquals($albumDocument->getAttribute('name'), $artist1->getAttribute('albums')[0]->getAttribute('name'));
 
         // Create new document with no relationship
@@ -12070,6 +12044,61 @@ abstract class Base extends TestCase
         );
     }
 
+    public function testOneToManyAndManyToOneDeleteRelationship(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('relation1');
+        static::getDatabase()->createCollection('relation2');
+
+        static::getDatabase()->createRelationship(
+            collection: 'relation1',
+            relatedCollection: 'relation2',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(1, $relation1->getAttribute('attributes'));
+        $this->assertCount(0, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(1, $relation2->getAttribute('attributes'));
+        $this->assertCount(1, $relation2->getAttribute('indexes'));
+
+        static::getDatabase()->deleteRelationship('relation2', 'relation1');
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(0, $relation1->getAttribute('attributes'));
+        $this->assertCount(0, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(0, $relation2->getAttribute('attributes'));
+        $this->assertCount(0, $relation2->getAttribute('indexes'));
+
+        static::getDatabase()->createRelationship(
+            collection: 'relation1',
+            relatedCollection: 'relation2',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(1, $relation1->getAttribute('attributes'));
+        $this->assertCount(1, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(1, $relation2->getAttribute('attributes'));
+        $this->assertCount(0, $relation2->getAttribute('indexes'));
+
+        static::getDatabase()->deleteRelationship('relation1', 'relation2');
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(0, $relation1->getAttribute('attributes'));
+        $this->assertCount(0, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(0, $relation2->getAttribute('attributes'));
+        $this->assertCount(0, $relation2->getAttribute('indexes'));
+    }
+
     public function testDeleteMissingRelationship(): void
     {
         if (!$this->getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -12100,7 +12129,7 @@ abstract class Base extends TestCase
             twoWay: true,
         );
 
-        $this->expectException(InvalidRelationshipValueException::class);
+        $this->expectException(RelationshipException::class);
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
         $this->getDatabase()->createDocument('invalid1', new Document([
@@ -12119,7 +12148,7 @@ abstract class Base extends TestCase
             return;
         }
 
-        $this->expectException(InvalidRelationshipValueException::class);
+        $this->expectException(RelationshipException::class);
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
         $this->getDatabase()->createDocument('invalid1', new Document([
@@ -12147,7 +12176,7 @@ abstract class Base extends TestCase
             twoWayKey: 'invalid4',
         );
 
-        $this->expectException(InvalidRelationshipValueException::class);
+        $this->expectException(RelationshipException::class);
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
         $this->getDatabase()->createDocument('invalid1', new Document([

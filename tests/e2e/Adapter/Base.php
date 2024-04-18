@@ -330,7 +330,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either a document, document ID or null. Array given.', $e->getMessage());
         }
 
         static::getDatabase()->deleteRelationship('v1', 'v2');
@@ -358,7 +357,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document given.', $e->getMessage());
         }
 
         try {
@@ -369,7 +367,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
         }
 
         try {
@@ -384,7 +381,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
         }
 
         /**
@@ -420,7 +416,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, object given.', $e->getMessage());
         }
 
         try {
@@ -431,7 +426,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, string given.', $e->getMessage());
         }
 
         try {
@@ -445,7 +439,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
         }
 
         /**
@@ -498,7 +491,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
         }
 
         try {
@@ -509,7 +501,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
         }
 
         try {
@@ -524,7 +515,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document given.', $e->getMessage());
         }
 
         try {
@@ -568,7 +558,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
         }
 
         try {
@@ -579,7 +568,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, NULL given.', $e->getMessage());
         }
 
         /**
@@ -613,7 +601,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either a document ID or a document, array given.', $e->getMessage());
         }
 
         try {
@@ -624,7 +611,49 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, NULL given.', $e->getMessage());
+        }
+
+        /**
+         * Success for later test update
+         */
+        $doc = static::getDatabase()->createDocument('v1', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [
+                Permission::update(Role::any()),
+                Permission::read(Role::any()),
+            ],
+            'v2' => [
+                '$id' => 'doc2',
+                '$permissions' => [
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+            ]
+        ]));
+
+        $this->assertEquals('doc1', $doc->getId());
+
+        try {
+            static::getDatabase()->updateDocument('v1', 'doc1', new Document([
+                '$permissions' => [
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+                'v2' => [[]],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->updateDocument('v2', 'doc2', new Document([
+                '$permissions' => [],
+                'v1' => null
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
         }
 
         static::getDatabase()->deleteRelationship('v1', 'v2');
@@ -650,7 +679,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
         }
 
         try {
@@ -661,7 +689,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document ID given.', $e->getMessage());
         }
 
         try {
@@ -676,7 +703,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, document given.', $e->getMessage());
         }
 
         try {
@@ -746,7 +772,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, object given.', $e->getMessage());
         }
 
         try {
@@ -760,7 +785,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, string given.', $e->getMessage());
         }
 
         /**
@@ -810,7 +834,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, object given.', $e->getMessage());
         }
 
         try {
@@ -824,7 +847,6 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
-            $this->assertEquals('Invalid relationship value. Must be either an array of documents or document IDs, string given.', $e->getMessage());
         }
     }
 

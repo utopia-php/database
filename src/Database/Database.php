@@ -3255,7 +3255,7 @@ class Database
                             throw new RelationshipException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                         }
 
-                        if($relationType === Database::RELATION_ONE_TO_ONE && $twoWay === false && $side === Database::RELATION_SIDE_CHILD) {
+                        if($relationType === Database::RELATION_ONE_TO_ONE && !$twoWay && $side === Database::RELATION_SIDE_CHILD) {
                             throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                         }
 
@@ -4026,7 +4026,7 @@ class Database
                         } elseif (is_array($value)) {
                             throw new RelationshipException('Invalid relationship value. Must be either a document ID or a document, array given.');
                         } elseif (empty($value)) {
-                            throw new RelationshipException('Invalid relationship value.');
+                            throw new RelationshipException('Invalid relationship value. Must be either a document ID or a document.');
                         } else {
                             throw new RelationshipException('Invalid relationship value.');
                         }
@@ -4037,7 +4037,7 @@ class Database
                             break;
                         }
                         if (!\is_array($value)) {
-                            throw new RelationshipException('Invalid relationship value.');
+                            throw new RelationshipException('Invalid relationship value. Must be an array of documents or document IDs.');
                         }
 
                         $oldIds = \array_map(fn ($document) => $document->getId(), $oldValue);
@@ -4048,7 +4048,7 @@ class Database
                             } elseif ($item instanceof Document) {
                                 return $item->getId();
                             } else {
-                                throw new RelationshipException('Invalid relationship value.');
+                                throw new RelationshipException('Invalid relationship value. Must be either a document or document ID.');
                             }
                         }, $value);
 
@@ -4098,7 +4098,7 @@ class Database
 
                                 $relation = $related->getId();
                             } else {
-                                throw new RelationshipException('Invalid relationship value.');
+                                throw new RelationshipException('Invalid relationship value. Must be either a document or document ID.');
                             }
 
                             $this->skipRelationships(fn () => $this->createDocument(

@@ -1923,9 +1923,6 @@ class Database
                             $renameIndex($collection->getId(), $id, $newKey);
                         }
                     }
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                    }
                     break;
                 case self::RELATION_MANY_TO_ONE:
                     if ($side === Database::RELATION_SIDE_PARENT) {

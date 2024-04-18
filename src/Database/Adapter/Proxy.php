@@ -288,9 +288,9 @@ abstract class Proxy extends Adapter
      * @param string|null $newTwoWayKey
      * @return bool
      */
-    public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+    public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        return $this->query('updateRelationship', [$collection, $relatedCollection, $type, $twoWay, $key, $twoWayKey, $newKey, $newTwoWayKey]);
+        return $this->query('updateRelationship', [$collection, $relatedCollection, $type, $twoWay, $key, $twoWayKey, $side, $newKey, $newTwoWayKey]);
     }
 
     /**

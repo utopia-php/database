@@ -1878,6 +1878,7 @@ class Database
                     $twoWay,
                     $id,
                     $twoWayKey,
+                    $side,
                     $newKey,
                     $newTwoWayKey
                 );
@@ -1913,14 +1914,28 @@ class Database
                     }
                     break;
                 case self::RELATION_ONE_TO_MANY:
-                    // todo: do we care about size updating?
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        if ($twoWayKey !== $newTwoWayKey) {
+                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                        }
+                    } else {
+                        if ($id !== $newKey) {
+                            $renameIndex($collection->getId(), $id, $newKey);
+                        }
+                    }
                     if ($twoWayKey !== $newTwoWayKey) {
                         $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
                     }
                     break;
                 case self::RELATION_MANY_TO_ONE:
-                    if ($id !== $newKey) {
-                        $renameIndex($collection->getId(), $id, $newKey);
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        if ($id !== $newKey) {
+                            $renameIndex($collection->getId(), $id, $newKey);
+                        }
+                    } else {
+                        if ($twoWayKey !== $newTwoWayKey) {
+                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                        }
                     }
                     break;
                 case self::RELATION_MANY_TO_MANY:

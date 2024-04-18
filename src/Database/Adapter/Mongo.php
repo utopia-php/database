@@ -380,11 +380,12 @@ class Mongo extends Adapter
      * @param bool $twoWay
      * @param string $key
      * @param string $twoWayKey
+     * @param string $side
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @return bool
+     * @throws DatabaseException
      * @throws MongoException
-     * @throws Exception
      */
     public function updateRelationship(
         string $collection,
@@ -393,6 +394,7 @@ class Mongo extends Adapter
         bool $twoWay,
         string $key,
         string $twoWayKey,
+        string $side,
         ?string $newKey = null,
         ?string $newTwoWayKey = null
     ): bool {

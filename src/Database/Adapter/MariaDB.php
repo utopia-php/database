@@ -404,10 +404,11 @@ class MariaDB extends SQL
      * @param bool $twoWay
      * @param string $key
      * @param string $twoWayKey
+     * @param string $side
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function updateRelationship(
         string $collection,
@@ -416,6 +417,7 @@ class MariaDB extends SQL
         bool $twoWay,
         string $key,
         string $twoWayKey,
+        string $side,
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
     ): bool {
@@ -445,15 +447,25 @@ class MariaDB extends SQL
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
-                // todo: do we care about $twoWay? or side like we do in deleteRelations
-                if ($twoWay && !\is_null($newTwoWayKey)) {
-                    $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if (!\is_null($newTwoWayKey)) {
+                        $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                    }
+                } else {
+                    if (!\is_null($newKey)) {
+                        $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                    }
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                // todo: do we care about $twoWay? or side like we do in deleteRelations
-                if (!\is_null($newKey)) {
-                    $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    if (!\is_null($newTwoWayKey)) {
+                        $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN `{$twoWayKey}` TO `{$newTwoWayKey}`;";
+                    }
+                } else {
+                    if (!\is_null($newKey)) {
+                        $sql = "ALTER TABLE {$table} RENAME COLUMN `{$key}` TO `{$newKey}`;";
+                    }
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -484,6 +496,17 @@ class MariaDB extends SQL
             ->execute();
     }
 
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     * @throws DatabaseException
+     */
     public function deleteRelationship(
         string $collection,
         string $relatedCollection,

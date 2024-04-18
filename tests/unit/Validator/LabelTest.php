@@ -2,8 +2,8 @@
 
 namespace Tests\Unit\Validator;
 
-use Utopia\Database\Validator\Label;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Validator\Label;
 
 class LabelTest extends TestCase
 {

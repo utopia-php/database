@@ -5,6 +5,7 @@ namespace Tests\Unit\Validator;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Query\Cursor;
@@ -86,18 +87,38 @@ class IndexedQueriesTest extends TestCase
             ]
         );
 
-        $this->assertEquals(true, $validator->isValid(['cursorAfter("asdf")']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['equal("name", "value")']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid([Query::equal('name', ['value'])]), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['limit(10)']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid([Query::limit(10)]), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['offset(10)']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid([Query::offset(10)]), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['orderAsc("name")']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid([Query::orderAsc('name')]), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid(['search("name", "value")']), $validator->getDescription());
-        $this->assertEquals(true, $validator->isValid([Query::search('name', 'value')]), $validator->getDescription());
+        $query = Query::cursorAfter(new Document(['$id' => 'abc']));
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"cursorAfter","attribute":"","values":["abc"]}');
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::parse('{"method":"cursorAfter","values":["abc"]}'); // No attribute required
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::equal('name', ['value']);
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"equal","attribute":"name","values":["value"]}');
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::limit(10);
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"limit","values":[10]}');
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::offset(10);
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"offset","values":[10]}');
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::orderAsc('name');
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"orderAsc","attribute":"name"}'); // No values required
+        $this->assertEquals(true, $validator->isValid([$query]));
+
+        $query = Query::search('name', 'value');
+        $this->assertEquals(true, $validator->isValid([$query]));
+        $query = Query::parse('{"method":"search","attribute":"name","values":["value"]}');
+        $this->assertEquals(true, $validator->isValid([$query]));
     }
 
     public function testMissingIndex(): void
@@ -129,9 +150,21 @@ class IndexedQueriesTest extends TestCase
             ]
         );
 
-        $this->assertEquals(false, $validator->isValid(['equal("dne", "value")']), $validator->getDescription());
-        $this->assertEquals(false, $validator->isValid(['orderAsc("dne")']), $validator->getDescription());
-        $this->assertEquals(false, $validator->isValid(['search("name", "value")']), $validator->getDescription());
+        $query = Query::equal('dne', ['value']);
+        $this->assertEquals(false, $validator->isValid([$query]));
+        $this->assertEquals('Invalid query: Attribute not found in schema: dne', $validator->getDescription());
+
+        $query = Query::orderAsc('dne');
+        $this->assertEquals(false, $validator->isValid([$query]));
+        $this->assertEquals('Invalid query: Attribute not found in schema: dne', $validator->getDescription());
+
+        $query = Query::search('dne', 'phrase');
+        $this->assertEquals(false, $validator->isValid([$query]));
+        $this->assertEquals('Invalid query: Attribute not found in schema: dne', $validator->getDescription());
+
+        $query = Query::search('name', 'phrase');
+        $this->assertEquals(false, $validator->isValid([$query]));
+        $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $validator->getDescription());
     }
 
     public function testTwoAttributesFulltext(): void
@@ -171,5 +204,16 @@ class IndexedQueriesTest extends TestCase
         );
 
         $this->assertEquals(false, $validator->isValid([Query::search('ft1', 'value')]));
+    }
+
+
+    public function testJsonParse(): void
+    {
+        try {
+            Query::parse('{"method":"equal","attribute":"name","values":["value"]'); // broken Json;
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Invalid query: Syntax error', $e->getMessage());
+        }
     }
 }

@@ -2,8 +2,8 @@
 
 namespace Tests\Unit\Validator;
 
-use Utopia\Database\Helpers\Role;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Roles;
 
 class RolesTest extends TestCase

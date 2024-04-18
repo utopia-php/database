@@ -2,8 +2,8 @@
 
 namespace Tests\Unit\Validator;
 
-use Utopia\Database\Validator\Key;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Validator\Key;
 
 class KeyTest extends TestCase
 {
@@ -31,6 +31,11 @@ class KeyTest extends TestCase
         $this->assertEquals(false, $this->object->isValid(1.5));
         $this->assertEquals(true, $this->object->isValid('asdas7as9as'));
         $this->assertEquals(true, $this->object->isValid('5f058a8925807'));
+
+        // Don't allow empty string
+        $this->assertEquals(false, $this->object->isValid(''));
+        $this->assertEquals(true, $this->object->isValid('0'));
+        $this->assertEquals(true, $this->object->isValid('null'));
 
         // No leading special chars
         $this->assertEquals(false, $this->object->isValid('_asdasdasdas'));
@@ -72,6 +77,7 @@ class KeyTest extends TestCase
         $this->assertEquals(true, $validator->isValid('appwrite'));
         $this->assertEquals(true, $validator->isValid('appwrite_'));
         $this->assertEquals(false, $validator->isValid('_appwrite'));
+        $this->assertEquals(false, $validator->isValid('_'));
 
         $this->assertEquals(true, $validator->isValid('$id'));
         $this->assertEquals(true, $validator->isValid('$createdAt'));
@@ -79,5 +85,6 @@ class KeyTest extends TestCase
 
         $this->assertEquals(false, $validator->isValid('$appwrite'));
         $this->assertEquals(false, $validator->isValid('$permissions'));
+        $this->assertEquals(false, $validator->isValid('$'));
     }
 }

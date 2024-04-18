@@ -2,7 +2,6 @@
 
 namespace Tests\Unit;
 
-use Utopia\Validator;
 use Utopia\Validator\Text;
 
 /**

@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 class PostgresTest extends Base
 {
     public static ?Database $database = null;
+    protected static string $namespace;
 
     /**
      * Return name of adapter
@@ -44,8 +45,8 @@ class PostgresTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new Postgres($pdo), $cache);
-        $database->setDefaultDatabase('utopiaTests');
-        $database->setNamespace('myapp_'.uniqid());
+        $database->setDatabase('utopiaTests');
+        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         if ($database->exists('utopiaTests')) {
             $database->delete('utopiaTests');

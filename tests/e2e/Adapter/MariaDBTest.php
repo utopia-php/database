@@ -11,9 +11,9 @@ use Utopia\Database\Database;
 
 class MariaDBTest extends Base
 {
-    public static ?Database $database = null;
+    protected static ?Database $database = null;
+    protected static string $namespace;
 
-    // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
     /**
      * Return name of adapter
@@ -28,9 +28,9 @@ class MariaDBTest extends Base
     /**
      * @return Database
      */
-    public static function getDatabase(): Database
+    public static function getDatabase(bool $fresh = false): Database
     {
-        if (!is_null(self::$database)) {
+        if (!is_null(self::$database) && !$fresh) {
             return self::$database;
         }
 
@@ -46,8 +46,8 @@ class MariaDBTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MariaDB($pdo), $cache);
-        $database->setDefaultDatabase('utopiaTests');
-        $database->setNamespace('myapp_' . uniqid());
+        $database->setDatabase('utopiaTests');
+        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         if ($database->exists('utopiaTests')) {
             $database->delete('utopiaTests');

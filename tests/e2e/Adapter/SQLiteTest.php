@@ -12,8 +12,8 @@ use Utopia\Database\Database;
 class SQLiteTest extends Base
 {
     public static ?Database $database = null;
+    protected static string $namespace;
 
-    // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
     /**
      * Return name of adapter
@@ -26,15 +26,6 @@ class SQLiteTest extends Base
     }
 
     /**
-     *
-     * @return int
-     */
-    public static function getUsedIndexes(): int
-    {
-        return SQLite::getCountOfDefaultIndexes();
-    }
-
-    /**
      * @return Database
      */
     public static function getDatabase(): Database
@@ -43,25 +34,31 @@ class SQLiteTest extends Base
             return self::$database;
         }
 
-        $sqliteDir = __DIR__."/database.sql";
+        $db = __DIR__."/database.sql";
 
-        if (file_exists($sqliteDir)) {
-            unlink($sqliteDir);
+        if (file_exists($db)) {
+            unlink($db);
         }
 
-        $dsn = $sqliteDir;
-        $dsn = 'memory'; // Overwrite for fast tests
+        $dsn = $db;
+        //$dsn = 'memory'; // Overwrite for fast tests
         $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
-        $redis->connect('redis', 6379);
+        $redis->connect('redis');
         $redis->flushAll();
 
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new SQLite($pdo), $cache);
-        $database->setDefaultDatabase('utopiaTests');
-        $database->setNamespace('myapp_'.uniqid());
+        $database->setDatabase('utopiaTests');
+        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
+
+        if ($database->exists()) {
+            $database->delete();
+        }
+
+        $database->create();
 
         return self::$database = $database;
     }

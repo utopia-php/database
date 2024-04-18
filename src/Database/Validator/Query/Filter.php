@@ -69,7 +69,7 @@ class Filter extends Base
      * @param array<mixed> $values
      * @return bool
      */
-    protected function isValidAttributeAndValues(string $attribute, array $values): bool
+    protected function isValidAttributeAndValues(string $attribute, array $values, string $method): bool
     {
         if (!$this->isValidAttribute($attribute)) {
             return false;
@@ -139,9 +139,50 @@ class Filter extends Base
             $options = $attributeSchema['options'];
 
             if($options['relationType'] === Database::RELATION_ONE_TO_ONE && $options['twoWay'] === false && $options['side'] === Database::RELATION_SIDE_CHILD) {
-                $this->message = 'Cannot query on virtual relationship attribute';
+                $this->message = 'Cannot query on virtual relation attribute';
                 return false;
             }
+
+            if($options['relationType'] === Database::RELATION_ONE_TO_MANY && $options['side'] === Database::RELATION_SIDE_PARENT) {
+                $this->message = 'Cannot query on virtual relation attribute';
+                return false;
+            }
+
+            if($options['relationType'] === Database::RELATION_MANY_TO_ONE && $options['side'] === Database::RELATION_SIDE_CHILD) {
+                $this->message = 'Cannot query on virtual relation attribute';
+                return false;
+            }
+
+            if($options['relationType'] === Database::RELATION_MANY_TO_MANY) {
+                $this->message = 'Cannot query on virtual relation attribute';
+                return false;
+            }
+        }
+
+        $array = $attributeSchema['array'] ?? false;
+
+        if(
+            !$array &&
+            $method === Query::TYPE_CONTAINS &&
+            $attributeSchema['type'] !==  Database::VAR_STRING
+        ) {
+            $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array or string.';
+            return false;
+        }
+
+        if(
+            $array &&
+            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
+        ) {
+            $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
+            return false;
+        }
+
+        if($attributeSchema['type'] === 'relationship') {
+            /**
+             * We can not disable relationship query since we have logic that use it
+             */
+            $options = $attributeSchema['options'];
 
             if($options['relationType'] === Database::RELATION_ONE_TO_MANY && $options['side'] === Database::RELATION_SIDE_PARENT) {
                 $this->message = 'Cannot query on virtual relationship attribute';
@@ -201,7 +242,7 @@ class Filter extends Base
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_NOT_EQUAL:
             case Query::TYPE_LESSER:
@@ -216,7 +257,7 @@ class Filter extends Base
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_BETWEEN:
                 if (count($value->getValues()) != 2) {
@@ -224,11 +265,27 @@ class Filter extends Base
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-                return $this->isValidAttributeAndValues($attribute, $value->getValues());
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+
+            case Query::TYPE_OR:
+            case Query::TYPE_AND:
+                $filters = Query::groupByType($value->getValues())['filters'];
+
+                if(count($value->getValues()) !== count($filters)) {
+                    $this->message = \ucfirst($method) . ' queries can only contain filter queries';
+                    return false;
+                }
+
+                if(count($filters) < 2) {
+                    $this->message = \ucfirst($method) . ' queries require at least two queries';
+                    return false;
+                }
+
+                return true;
 
             default:
                 return false;

@@ -12,8 +12,8 @@ use Utopia\Database\Database;
 class MySQLTest extends Base
 {
     public static ?Database $database = null;
+    protected static string $namespace;
 
-    // TODO@kodumbeats hacky way to identify adapters for tests
     // Remove once all methods are implemented
     /**
      * Return name of adapter
@@ -23,15 +23,6 @@ class MySQLTest extends Base
     public static function getAdapterName(): string
     {
         return "mysql";
-    }
-
-    /**
-     *
-     * @return int
-     */
-    public static function getUsedIndexes(): int
-    {
-        return MySQL::getCountOfDefaultIndexes();
     }
 
     /**
@@ -57,8 +48,8 @@ class MySQLTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MySQL($pdo), $cache);
-        $database->setDefaultDatabase('utopiaTests');
-        $database->setNamespace('myapp_'.uniqid());
+        $database->setDatabase('utopiaTests');
+        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         if ($database->exists('utopiaTests')) {
             $database->delete('utopiaTests');

@@ -12,6 +12,7 @@ use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
+use Utopia\Validator\Range;
 use Utopia\Validator\Text;
 
 class Structure extends Validator
@@ -48,6 +49,16 @@ class Structure extends Validator
             'type' => Database::VAR_STRING,
             'size' => 255,
             'required' => true,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ],
+        [
+            '$id' => '$tenant',
+            'type' => Database::VAR_STRING,
+            'size' => 36,
+            'required' => false,
+            'default' => null,
             'signed' => true,
             'array' => false,
             'filters' => [],
@@ -208,7 +219,7 @@ class Structure extends Validator
         }
 
         if (empty($this->collection->getId()) || Database::METADATA !== $this->collection->getCollection()) {
-            $this->message = 'Collection "'.$this->collection->getCollection().'" not found';
+            $this->message = 'Collection not found';
             return false;
         }
 
@@ -239,6 +250,8 @@ class Structure extends Validator
             $array = $attribute['array'] ?? false;
             $format = $attribute['format'] ?? '';
             $required = $attribute['required'] ?? false;
+            $size = $attribute['size'] ?? 0;
+            $signed = $attribute['signed'] ?? true;
 
             if ($required === false && is_null($value)) { // Allow null value to optional params
                 continue;
@@ -248,26 +261,34 @@ class Structure extends Validator
                 continue;
             }
 
+            $validators = [];
+
             switch ($type) {
                 case Database::VAR_STRING:
-                    $size = $attribute['size'] ?? 0;
-                    $validator = new Text($size, min: 0);
+                    $validators[] = new Text($size, min: 0);
                     break;
 
                 case Database::VAR_INTEGER:
-                    $validator = new Integer();
+                    // We need both Integer and Range because Range implicitly casts non-numeric values
+                    $validators[] = new Integer();
+                    $max = $size >= 8 ? Database::BIG_INT_MAX : Database::INT_MAX;
+                    $min = $signed ? -$max : 0;
+                    $validators[] = new Range($min, $max, Database::VAR_INTEGER);
                     break;
 
                 case Database::VAR_FLOAT:
-                    $validator = new FloatValidator();
+                    // We need both Float and Range because Range implicitly casts non-numeric values
+                    $validators[] = new FloatValidator();
+                    $min = $signed ? -Database::DOUBLE_MAX : 0;
+                    $validators[] =  new Range($min, Database::DOUBLE_MAX, Database::VAR_FLOAT);
                     break;
 
                 case Database::VAR_BOOLEAN:
-                    $validator = new Boolean();
+                    $validators[] = new Boolean();
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator();
+                    $validators[] = new DatetimeValidator();
                     break;
 
                 default:
@@ -281,7 +302,7 @@ class Structure extends Validator
             if ($format) {
                 // Format encoded as json string containing format name and relevant format options
                 $format = self::getFormat($format, $type);
-                $validator = $format['callback']($attribute);
+                $validators[] = $format['callback']($attribute);
             }
 
             if ($array) { // Validate attribute type for arrays - format for arrays handled separately
@@ -299,15 +320,19 @@ class Structure extends Validator
                         continue;
                     }
 
-                    if (!$validator->isValid($child)) {
-                        $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid '.$label.'. '.$validator->getDescription();
-                        return false;
+                    foreach ($validators as $validator) {
+                        if (!$validator->isValid($child)) {
+                            $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid '.$label.'. '.$validator->getDescription();
+                            return false;
+                        }
                     }
                 }
             } else {
-                if (!$validator->isValid($value)) {
-                    $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
-                    return false;
+                foreach ($validators as $validator) {
+                    if (!$validator->isValid($value)) {
+                        $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
+                        return false;
+                    }
                 }
             }
         }

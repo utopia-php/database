@@ -7,15 +7,13 @@ use Utopia\Database\Exception as DatabaseException;
 
 abstract class Adapter
 {
-    /**
-     * @var string
-     */
+    protected string $database = '';
+
     protected string $namespace = '';
 
-    /**
-     * @var string
-     */
-    protected string $defaultDatabase = '';
+    protected bool $shareTables = false;
+
+    protected ?int $tenant = null;
 
     /**
      * @var array<string, mixed>
@@ -73,15 +71,11 @@ abstract class Adapter
      * @param string $namespace
      *
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      *
      */
     public function setNamespace(string $namespace): bool
     {
-        if (empty($namespace)) {
-            throw new DatabaseException('Missing namespace');
-        }
-
         $this->namespace = $this->filter($namespace);
 
         return true;
@@ -93,15 +87,10 @@ abstract class Adapter
      * Get namespace of current set scope
      *
      * @return string
-     * @throws DatabaseException
      *
      */
     public function getNamespace(): string
     {
-        if (empty($this->namespace)) {
-            throw new DatabaseException('Missing namespace');
-        }
-
         return $this->namespace;
     }
 
@@ -111,18 +100,13 @@ abstract class Adapter
      * Set database to use for current scope
      *
      * @param string $name
-     * @param bool $reset
      *
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
-    public function setDefaultDatabase(string $name, bool $reset = false): bool
+    public function setDatabase(string $name): bool
     {
-        if (empty($name) && $reset === false) {
-            throw new DatabaseException('Missing database');
-        }
-
-        $this->defaultDatabase = ($reset) ? '' : $this->filter($name);
+        $this->database = $this->filter($name);
 
         return true;
     }
@@ -133,16 +117,72 @@ abstract class Adapter
      * Get Database from current scope
      *
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      *
      */
-    public function getDefaultDatabase(): string
+    public function getDatabase(): string
     {
-        if (empty($this->defaultDatabase)) {
-            throw new DatabaseException('Missing default database');
+        if (empty($this->database)) {
+            throw new DatabaseException('Missing database. Database must be set before use.');
         }
 
-        return $this->defaultDatabase;
+        return $this->database;
+    }
+
+    /**
+     * Set Share Tables.
+     *
+     * Set whether to share tables between tenants
+     *
+     * @param bool $shareTables
+     *
+     * @return bool
+     */
+    public function setShareTables(bool $shareTables): bool
+    {
+        $this->shareTables = $shareTables;
+
+        return true;
+    }
+
+    /**
+     * Get Share Tables.
+     *
+     * Get whether to share tables between tenants
+     *
+     * @return bool
+     */
+    public function getShareTables(): bool
+    {
+        return $this->shareTables;
+    }
+
+    /**
+     * Set Tenant.
+     *
+     * Set tenant to use if tables are shared
+     *
+     * @param ?int $tenant
+     *
+     * @return bool
+     */
+    public function setTenant(?int $tenant): bool
+    {
+        $this->tenant = $tenant;
+
+        return true;
+    }
+
+    /**
+     * Get Tenant.
+     *
+     * Get tenant to use for shared tables
+     *
+     * @return ?int
+     */
+    public function getTenant(): ?int
+    {
+        return $this->tenant;
     }
 
     /**
@@ -281,11 +321,11 @@ abstract class Adapter
     /**
      * Delete Collection
      *
-     * @param string $name
+     * @param string $id
      *
      * @return bool
      */
-    abstract public function deleteCollection(string $name): bool;
+    abstract public function deleteCollection(string $id): bool;
 
     /**
      * Create Attribute
@@ -710,11 +750,11 @@ abstract class Adapter
      *
      * @param string $value
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function filter(string $value): string
     {
-        $value = preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
+        $value = \preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
 
         if (\is_null($value)) {
             throw new DatabaseException('Failed to filter key');

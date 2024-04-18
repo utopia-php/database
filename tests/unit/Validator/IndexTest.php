@@ -5,9 +5,9 @@ namespace Tests\Unit\Validator;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Validator\Index;
-use Utopia\Database\Document;
 
 class IndexTest extends TestCase
 {

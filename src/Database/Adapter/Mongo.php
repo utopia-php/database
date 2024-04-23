@@ -631,7 +631,7 @@ class Mongo extends Adapter
 
         $filters = ['_uid' => $id];
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -671,7 +671,7 @@ class Mongo extends Adapter
 
         $document->removeAttribute('$internalId');
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $document->setAttribute('$tenant', (string)$this->getTenant());
         }
 
@@ -709,7 +709,7 @@ class Mongo extends Adapter
         foreach ($documents as $document) {
             $document->removeAttribute('$internalId');
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $document->setAttribute('$tenant', (string)$this->getTenant());
             }
 
@@ -746,7 +746,7 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
 
@@ -781,7 +781,7 @@ class Mongo extends Adapter
 
         $filters = [];
         $filters['_uid'] = $document->getId();
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -816,7 +816,7 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
 
@@ -843,7 +843,7 @@ class Mongo extends Adapter
         $attribute = $this->filter($attribute);
         $filters = ['_uid' => $id];
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -879,7 +879,7 @@ class Mongo extends Adapter
 
         $filters = [];
         $filters['_uid'] = $id;
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -928,7 +928,7 @@ class Mongo extends Adapter
 
         $filters = $this->buildFilters($queries);
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 

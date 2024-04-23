@@ -119,7 +119,14 @@ class MariaDB extends SQL
                 $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
             }
 
-            $indexStrings[$key] = "{$indexType} `{$indexId}` (" . \implode(", ", $indexAttributes) . " ),";
+            $indexAttributes = \implode(", ", $indexAttributes);
+
+            if ($this->sharedTables && $indexType !== Database::INDEX_FULLTEXT) {
+                // Add tenant as first index column for best performance
+                $indexAttributes = "_tenant, {$indexAttributes}";
+            }
+
+            $indexStrings[$key] = "{$indexType} `{$indexId}` ({$indexAttributes}),";
         }
 
         $sql = "
@@ -134,10 +141,10 @@ class MariaDB extends SQL
 				" . \implode(' ', $indexStrings) . "
 		";
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= "
             	_tenant INT(11) UNSIGNED DEFAULT NULL,
-				UNIQUE KEY _uid_tenant (_uid, _tenant),
+				UNIQUE KEY _uid (_tenant, _uid),
 				KEY _created_at (_tenant, _createdAt),
 				KEY _updated_at (_tenant, _updatedAt),
 				KEY _tenant_id (_tenant, _id)
@@ -168,7 +175,7 @@ class MariaDB extends SQL
 					PRIMARY KEY (_id),
 			";
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $sql .= "
                 	_tenant INT(11) UNSIGNED DEFAULT NULL,
 					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
@@ -677,7 +684,7 @@ class MariaDB extends SQL
 
         $attributes = \implode(', ', $attributes);
 
-        if ($this->shareTables && $type !== Database::INDEX_FULLTEXT) {
+        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }
@@ -743,7 +750,7 @@ class MariaDB extends SQL
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $attributes['_tenant'] = $this->tenant;
             }
 
@@ -804,7 +811,7 @@ class MariaDB extends SQL
                     $permission = \str_replace('"', '', $permission);
                     $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $permission .= ", :_tenant)";
                     } else {
                         $permission .= ")";
@@ -821,7 +828,7 @@ class MariaDB extends SQL
 				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
 			    ";
 
-                if ($this->shareTables) {
+                if ($this->sharedTables) {
                     $sqlPermissions .= ', _tenant)';
                 } else {
                     $sqlPermissions .= ")";
@@ -831,7 +838,7 @@ class MariaDB extends SQL
                 $sqlPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sqlPermissions);
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
 
-                if ($this->shareTables) {
+                if ($this->sharedTables) {
                     $stmtPermissions->bindValue(':_tenant', $this->tenant);
                 }
             }
@@ -906,7 +913,7 @@ class MariaDB extends SQL
                         $attributes['_id'] = $document->getInternalId();
                     }
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $attributes['_tenant'] = $this->tenant;
                     }
 
@@ -936,7 +943,7 @@ class MariaDB extends SQL
                             $permission = \str_replace('"', '', $permission);
                             $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
 
-                            if ($this->shareTables) {
+                            if ($this->sharedTables) {
                                 $permission .= ", :_tenant)";
                             } else {
                                 $permission .= ")";
@@ -964,7 +971,7 @@ class MariaDB extends SQL
 						INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
 					";
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $sqlPermissions .= ', _tenant)';
                     } else {
                         $sqlPermissions .= ")";
@@ -974,7 +981,7 @@ class MariaDB extends SQL
 
                     $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $stmtPermissions->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1023,7 +1030,7 @@ class MariaDB extends SQL
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = json_encode($document->getPermissions());
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $attributes['_tenant'] = $this->tenant;
             }
 
@@ -1036,7 +1043,7 @@ class MariaDB extends SQL
 			    WHERE _document = :_uid
 			";
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $sql .= ' AND _tenant = :_tenant';
             }
 
@@ -1048,7 +1055,7 @@ class MariaDB extends SQL
             $sqlPermissions = $this->getPDO()->prepare($sql);
             $sqlPermissions->bindValue(':_uid', $document->getId());
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $sqlPermissions->bindValue(':_tenant', $this->tenant);
             }
 
@@ -1113,7 +1120,7 @@ class MariaDB extends SQL
                     WHERE _document = :_uid
                 ";
 
-                if ($this->shareTables) {
+                if ($this->sharedTables) {
                     $sql .= ' AND _tenant = :_tenant';
                 }
 
@@ -1124,7 +1131,7 @@ class MariaDB extends SQL
                 $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
                 $stmtRemovePermissions->bindValue(':_uid', $document->getId());
 
-                if ($this->shareTables) {
+                if ($this->sharedTables) {
                     $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                 }
 
@@ -1144,7 +1151,7 @@ class MariaDB extends SQL
                     foreach ($permissions as $i => $_) {
                         $value = "( :_uid, '{$type}', :_add_{$type}_{$i}";
 
-                        if ($this->shareTables) {
+                        if ($this->sharedTables) {
                             $value .= ", :_tenant)";
                         } else {
                             $value .= ")";
@@ -1158,7 +1165,7 @@ class MariaDB extends SQL
 				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission
 				";
 
-                if ($this->shareTables) {
+                if ($this->sharedTables) {
                     $sql .= ', _tenant)';
                 } else {
                     $sql .= ')';
@@ -1172,7 +1179,7 @@ class MariaDB extends SQL
 
                 $stmtAddPermissions->bindValue(":_uid", $document->getId());
 
-                if ($this->shareTables) {
+                if ($this->sharedTables) {
                     $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
                 }
 
@@ -1200,7 +1207,7 @@ class MariaDB extends SQL
 			WHERE _uid = :_uid
 			";
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $sql .= ' AND _tenant = :_tenant';
             }
 
@@ -1210,7 +1217,7 @@ class MariaDB extends SQL
 
             $stmt->bindValue(':_uid', $document->getId());
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant);
             }
 
@@ -1297,7 +1304,7 @@ class MariaDB extends SQL
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $attributes['_tenant'] = $this->tenant;
                     }
 
@@ -1327,7 +1334,7 @@ class MariaDB extends SQL
                         WHERE _document = :_uid
                     ";
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $sql .= ' AND _tenant = :_tenant';
                     }
 
@@ -1336,7 +1343,7 @@ class MariaDB extends SQL
                     $permissionsStmt = $this->getPDO()->prepare($sql);
                     $permissionsStmt->bindValue(':_uid', $document->getId());
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $permissionsStmt->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1370,7 +1377,7 @@ class MariaDB extends SQL
                             $removeBindValues[$bindKey] = $document->getId();
 
                             $tenantQuery = '';
-                            if ($this->shareTables) {
+                            if ($this->sharedTables) {
                                 $tenantQuery = ' AND _tenant = :_tenant';
                             }
 
@@ -1419,7 +1426,7 @@ class MariaDB extends SQL
 
                                 $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey}";
 
-                                if ($this->shareTables) {
+                                if ($this->sharedTables) {
                                     $addQuery .= ", :_tenant)";
                                 } else {
                                     $addQuery .= ")";
@@ -1467,7 +1474,7 @@ class MariaDB extends SQL
                     foreach ($removeBindValues as $key => $value) {
                         $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                     }
                     $stmtRemovePermissions->execute();
@@ -1478,7 +1485,7 @@ class MariaDB extends SQL
                         INSERT INTO {$this->getSQLTable($name . '_perms')} (`_document`, `_type`, `_permission`
                     ";
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $sqlAddPermissions .= ', `_tenant`)';
                     } else {
                         $sqlAddPermissions .= ')';
@@ -1492,7 +1499,7 @@ class MariaDB extends SQL
                         $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1546,7 +1553,7 @@ class MariaDB extends SQL
 			WHERE _uid = :_uid
 		";
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -1558,7 +1565,7 @@ class MariaDB extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1588,7 +1595,7 @@ class MariaDB extends SQL
 		    WHERE _uid = :_uid
 		    ";
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $sql .= ' AND _tenant = :_tenant';
             }
 
@@ -1598,7 +1605,7 @@ class MariaDB extends SQL
 
             $stmt->bindValue(':_uid', $id);
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant);
             }
 
@@ -1607,7 +1614,7 @@ class MariaDB extends SQL
 		        WHERE _document = :_uid
 		    ";
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $sql .= ' AND _tenant = :_tenant';
             }
 
@@ -1616,7 +1623,7 @@ class MariaDB extends SQL
             $stmtPermissions = $this->getPDO()->prepare($sql);
             $stmtPermissions->bindValue(':_uid', $id);
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $stmtPermissions->bindValue(':_tenant', $this->tenant);
             }
 
@@ -1748,7 +1755,7 @@ class MariaDB extends SQL
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $where[] = "table_main._tenant = :_tenant";
         }
 
@@ -1774,7 +1781,7 @@ class MariaDB extends SQL
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1874,7 +1881,7 @@ class MariaDB extends SQL
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $where[] = "table_main._tenant = :_tenant";
         }
 
@@ -1899,7 +1906,7 @@ class MariaDB extends SQL
             $this->bindConditionValue($stmt, $query);
         }
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1944,7 +1951,7 @@ class MariaDB extends SQL
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $where[] = "table_main._tenant = :_tenant";
         }
 
@@ -1969,7 +1976,7 @@ class MariaDB extends SQL
             $this->bindConditionValue($stmt, $query);
         }
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 

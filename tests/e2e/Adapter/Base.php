@@ -13920,7 +13920,7 @@ abstract class Base extends TestCase
         $database
             ->setDatabase('sharedTables')
             ->setNamespace('')
-            ->setShareTables(true)
+            ->setSharedTables(true)
             ->setTenant($tenant1)
             ->create();
 
@@ -14010,7 +14010,7 @@ abstract class Base extends TestCase
         }
 
         // Reset state
-        $database->setShareTables(false);
+        $database->setSharedTables(false);
         $database->setNamespace(static::$namespace);
         $database->setDatabase($this->testDatabase);
     }

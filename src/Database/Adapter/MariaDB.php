@@ -917,10 +917,6 @@ class MariaDB extends SQL
                         $attributes['_tenant'] = $this->tenant;
                     }
 
-                    if ($this->sharedTables) {
-                        $attributes['_tenant'] = $this->tenant;
-                    }
-
                     $columns = [];
                     foreach (\array_keys($attributes) as $key => $attribute) {
                         $columns[$key] = "`{$this->filter($attribute)}`";

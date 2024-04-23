@@ -123,12 +123,9 @@ class SQLite extends MariaDB
             $attrType = $this->getSQLType(
                 $attribute->getAttribute('type'),
                 $attribute->getAttribute('size', 0),
-                $attribute->getAttribute('signed', true)
+                $attribute->getAttribute('signed', true),
+                $attribute->getAttribute('array', false)
             );
-
-            if ($attribute->getAttribute('array')) {
-                $attrType = 'LONGTEXT';
-            }
 
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
@@ -347,11 +344,15 @@ class SQLite extends MariaDB
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        $collection = $this->filter($collection);
-        $collectionDocument = $this->getDocument(Database::METADATA, $collection);
+        $collection = $this->getDocument(Database::METADATA, $collection);
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $indexes = json_decode($collectionDocument['indexes'], true);
+        $indexes = \json_decode($collection->getAttribute('indexes', []), true);
         $index = null;
 
         foreach ($indexes as $node) {
@@ -362,9 +363,9 @@ class SQLite extends MariaDB
         }
 
         if ($index
-            && $this->deleteIndex($collection, $old)
+            && $this->deleteIndex($collection->getId(), $old)
             && $this->createIndex(
-                $collection,
+                $collection->getId(),
                 $new,
                 $index['type'],
                 $index['attributes'],
@@ -395,13 +396,11 @@ class SQLite extends MariaDB
         $name = $this->filter($collection);
         $id = $this->filter($id);
 
-
         // Workaround for no support for CREATE INDEX IF NOT EXISTS
         $stmt = $this->getPDO()->prepare("
 			SELECT name 
 			FROM sqlite_master 
-			WHERE type='index' 
-			  AND name=:_index;
+			WHERE type='index' AND name=:_index;
 		");
         $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}");
         $stmt->execute();
@@ -1080,6 +1079,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForQueryContains(): bool
+    {
+        return false;
+    }
+
     /**
      * Is fulltext index supported?
      *
@@ -1126,14 +1130,13 @@ class SQLite extends MariaDB
     {
         switch ($type) {
             case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
                 return 'INDEX';
 
             case Database::INDEX_UNIQUE:
                 return 'UNIQUE INDEX';
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
         }
     }
 
@@ -1153,7 +1156,6 @@ class SQLite extends MariaDB
 
         switch ($type) {
             case Database::INDEX_KEY:
-            case Database::INDEX_ARRAY:
                 $type = 'INDEX';
                 break;
 
@@ -1164,7 +1166,7 @@ class SQLite extends MariaDB
                 break;
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
         }
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {

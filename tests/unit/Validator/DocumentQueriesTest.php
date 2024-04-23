@@ -63,7 +63,7 @@ class DocumentQueriesTest extends TestCase
         $validator = new DocumentQueries($this->collection['attributes']);
 
         $queries = [
-            'select(["title"])',
+            Query::select(['title']),
         ];
 
         $this->assertEquals(true, $validator->isValid($queries));
@@ -78,8 +78,7 @@ class DocumentQueriesTest extends TestCase
     public function testInvalidQueries(): void
     {
         $validator = new DocumentQueries($this->collection['attributes']);
-
-        $queries = [Query::limit(1)]; // We only accept Select queries
+        $queries = [Query::limit(1)];
         $this->assertEquals(false, $validator->isValid($queries));
     }
 }

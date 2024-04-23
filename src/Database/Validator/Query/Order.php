@@ -56,7 +56,7 @@ class Order extends Base
         $method = $value->getMethod();
         $attribute = $value->getAttribute();
 
-        if ($method === Query::TYPE_ORDERASC || $method === Query::TYPE_ORDERDESC) {
+        if ($method === Query::TYPE_ORDER_ASC || $method === Query::TYPE_ORDER_DESC) {
             if ($attribute === '') {
                 return true;
             }

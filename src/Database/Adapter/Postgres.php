@@ -87,15 +87,19 @@ class Postgres extends SQL
 
         $this->getPDO()->beginTransaction();
 
-        foreach ($attributes as $key => $attribute) {
+        /** @var array<string> $attributeStrings */
+        $attributeStrings = [];
+        foreach ($attributes as $attribute) {
             $attrId = $this->filter($attribute->getId());
-            $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
-            if ($attribute->getAttribute('array')) {
-                $attrType = 'TEXT';
-            }
+            $attrType = $this->getSQLType(
+                $attribute->getAttribute('type'),
+                $attribute->getAttribute('size', 0),
+                $attribute->getAttribute('signed', true),
+                $attribute->getAttribute('array', false)
+            );
 
-            $attributeStrings[$key] = "\"{$attrId}\" {$attrType}, ";
+            $attributeStrings[] = "\"{$attrId}\" {$attrType}, ";
         }
 
         $sqlTenant = $this->sharedTables ? '_tenant INTEGER DEFAULT NULL,' : '';
@@ -114,7 +118,7 @@ class Postgres extends SQL
         ";
         if ($this->sharedTables) {
             $sql .= "
-				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid));
+				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid), _tenant);
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_updated\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_tenant_id\" ON {$this->getSQLTable($id)} (_tenant, _id);
@@ -170,7 +174,7 @@ class Postgres extends SQL
             foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
                 $indexType = $index->getAttribute('type');
-                $indexAttributes = $index->getAttribute('attributes');
+                $indexAttributes = $index->getAttribute('attributes', []);
                 $indexOrders = $index->getAttribute('orders', []);
 
                 $this->createIndex(
@@ -262,11 +266,7 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'TEXT';
-        }
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
         $sql = "
 			ALTER TABLE {$this->getSQLTable($name)}
@@ -351,11 +351,7 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'LONGTEXT';
-        }
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
@@ -433,10 +429,11 @@ class Postgres extends SQL
      * @param bool $twoWay
      * @param string $key
      * @param string $twoWayKey
+     * @param string $side
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function updateRelationship(
         string $collection,
@@ -445,6 +442,7 @@ class Postgres extends SQL
         bool $twoWay,
         string $key,
         string $twoWayKey,
+        string $side,
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
     ): bool {
@@ -466,21 +464,33 @@ class Postgres extends SQL
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                if (!\is_null($newKey)) {
+                if ($key !== $newKey) {
                     $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
                 }
-                if ($twoWay && !\is_null($newTwoWayKey)) {
+                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
                     $sql .= "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                if (!\is_null($newKey)) {
-                    $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+                    }
+                } else {
+                    if ($key !== $newKey) {
+                        $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+                    }
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($twoWay && !\is_null($newTwoWayKey)) {
-                    $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+                    }
+                } else {
+                    if ($key !== $newKey) {
+                        $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+                    }
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -511,6 +521,17 @@ class Postgres extends SQL
             ->execute();
     }
 
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     * @throws DatabaseException
+     */
     public function deleteRelationship(
         string $collection,
         string $relatedCollection,
@@ -525,12 +546,22 @@ class Postgres extends SQL
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
         $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+
+        $sql = '';
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                if ($twoWay) {
-                    $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                    if ($twoWay) {
+                        $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                    }
+                } elseif ($side === Database::RELATION_SIDE_CHILD) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                    if ($twoWay) {
+                        $sql .= "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                    }
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
@@ -541,10 +572,10 @@ class Postgres extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                } else {
+                if ($side === Database::RELATION_SIDE_CHILD) {
                     $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                } else {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -563,6 +594,10 @@ class Postgres extends SQL
                 break;
             default:
                 throw new DatabaseException('Invalid relationship type');
+        }
+
+        if (empty($sql)) {
+            return true;
         }
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
@@ -586,34 +621,42 @@ class Postgres extends SQL
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
-        $name = $this->filter($collection);
+        $collection = $this->filter($collection);
         $id = $this->filter($id);
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => '_uid',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $attribute
-        }, $attributes);
+        foreach ($attributes as $i => $attr) {
+            $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
 
-        foreach ($attributes as $key => &$attribute) {
-            $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
-            $order = $orders[$key] ?? '';
-            $attribute = $this->filter($attribute);
-
-            if (Database::INDEX_FULLTEXT === $type) {
-                $order = '';
-            }
+            $attr = match ($attr) {
+                '$id' => '_uid',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $this->filter($attr),
+            };
 
             if (Database::INDEX_UNIQUE === $type) {
-                $attribute = "LOWER(\"{$attribute}\"::text) {$order}";
+                $attributes[$i] = "LOWER(\"{$attr}\"::text) {$order}";
             } else {
-                $attribute = "\"{$attribute}\" {$order}";
+                $attributes[$i] = "\"{$attr}\" {$order}";
             }
         }
 
-        $sql = $this->getSQLIndex($name, $id, $type, $attributes);
+        $sqlType = match ($type) {
+            Database::INDEX_KEY,
+            Database::INDEX_FULLTEXT => 'INDEX',
+            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT),
+        };
+
+        $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
+        $attributes = \implode(', ', $attributes);
+
+        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT) {
+            // Add tenant as first index column for best performance
+            $attributes = "_tenant, {$attributes}";
+        }
+
+        $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         return $this->getPDO()
@@ -1476,7 +1519,6 @@ class Postgres extends SQL
 			WHERE _document = :_uid
 		";
 
-
         if ($this->sharedTables) {
             $sql .= ' AND _tenant = :_tenant';
         }
@@ -1609,11 +1651,9 @@ class Postgres extends SQL
             }
         }
 
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                continue;
-            }
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)) {
+            $where[] = $conditions;
         }
 
         if ($this->sharedTables) {
@@ -1737,8 +1777,9 @@ class Postgres extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)) {
+            $where[] = $conditions;
         }
 
         if ($this->sharedTables) {
@@ -1915,8 +1956,9 @@ class Postgres extends SQL
             default => $query->getAttribute()
         });
 
-        $attribute = "\"{$query->getAttribute()}\"" ;
+        $attribute = "\"{$query->getAttribute()}\"";
         $placeholder = $this->getSQLPlaceholder($query);
+        $operator = null;
 
         switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
@@ -1929,10 +1971,15 @@ class Postgres extends SQL
             case Query::TYPE_IS_NOT_NULL:
                 return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
+            case Query::TYPE_CONTAINS:
+                $operator = $query->onArray() ? '@>' : null;
+
+                // no break
             default:
                 $conditions = [];
+                $operator = $operator ?? $this->getSQLOperator($query->getMethod());
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute.' '.$operator.' :'.$placeholder.'_'.$key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
@@ -1962,11 +2009,17 @@ class Postgres extends SQL
      *
      * @param string $type
      * @param int $size in chars
-     *
+     * @param bool $signed
+     * @param bool $array
      * @return string
+     * @throws DatabaseException
      */
-    protected function getSQLType(string $type, int $size, bool $signed = true): string
+    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
+        if($array === true) {
+            return 'JSONB';
+        }
+
         switch ($type) {
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
@@ -1999,38 +2052,6 @@ class Postgres extends SQL
             default:
                 throw new DatabaseException('Unknown Type: ' . $type);
         }
-    }
-
-    /**
-     * Get SQL Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     *
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
-    {
-        $sqlType = match ($type) {
-            Database::INDEX_KEY,
-            Database::INDEX_ARRAY,
-            Database::INDEX_FULLTEXT => 'INDEX',
-            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
-        };
-
-        $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
-        $attributes = \implode(', ', $attributes);
-
-        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT) {
-            // Add tenant as first index column for best performance
-            $attributes = "_tenant, {$attributes}";
-        }
-
-        return "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
     }
 
     /**
@@ -2136,6 +2157,16 @@ class Postgres extends SQL
     }
 
     /**
+     * Does the adapter handle Query Array Overlaps?
+     *
+     * @return bool
+     */
+    public function getSupportForJSONOverlaps(): bool
+    {
+        return false;
+    }
+
+    /**
      * Returns Max Execution Time
      * @param int $milliseconds
      * @param string $event
@@ -2176,5 +2207,13 @@ class Postgres extends SQL
         }
 
         throw $e;
+    }
+
+    /**
+     * @return string
+     */
+    public function getLikeOperator(): string
+    {
+        return 'ILIKE';
     }
 }

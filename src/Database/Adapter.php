@@ -198,7 +198,7 @@ abstract class Adapter
 
         $output = '';
         foreach ($this->metadata as $key => $value) {
-            $output .= "-- {$key}: {$value}\n";
+            $output .= "/* {$key}: {$value} */\n";
         }
 
         $this->before(Database::EVENT_ALL, 'metadata', function ($query) use ($output) {
@@ -321,11 +321,11 @@ abstract class Adapter
     /**
      * Delete Collection
      *
-     * @param string $name
+     * @param string $id
      *
      * @return bool
      */
-    abstract public function deleteCollection(string $name): bool;
+    abstract public function deleteCollection(string $id): bool;
 
     /**
      * Create Attribute
@@ -394,11 +394,12 @@ abstract class Adapter
      * @param bool $twoWay
      * @param string $key
      * @param string $twoWayKey
+     * @param string $side
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @return bool
      */
-    abstract public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, ?string $newKey = null, ?string $newTwoWayKey = null): bool;
+    abstract public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool;
 
     /**
      * Delete Relationship

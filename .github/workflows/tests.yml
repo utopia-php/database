@@ -16,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Build Docker Image
         uses: docker/build-push-action@v3
@@ -45,7 +45,7 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Load Cache
         uses: actions/cache@v3
@@ -81,7 +81,7 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Load Cache
         uses: actions/cache@v3
@@ -98,3 +98,4 @@ jobs:
 
       - name: Run ${{matrix.service}} Tests
         run: docker compose exec -T tests vendor/bin/phpunit /usr/src/code/tests/e2e/Adapter/${{matrix.adapter}}Test.php --debug
+

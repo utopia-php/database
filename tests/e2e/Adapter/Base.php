@@ -13,6 +13,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -76,6 +77,722 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(static::getDatabase(), static::getDatabase()->setDatabase($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create());
+    }
+
+    public function testDeleteRelatedCollection(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createCollection('c2');
+
+        // ONE_TO_ONE
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c2');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        // ONE_TO_MANY
+        static::getDatabase()->createCollection('c2');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c2');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        // RELATION_MANY_TO_ONE
+        static::getDatabase()->createCollection('c2');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c2');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
+        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        static::getDatabase()->createCollection('c1');
+        static::getDatabase()->createRelationship(
+            collection: 'c1',
+            relatedCollection: 'c2',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true
+        );
+
+        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
+        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertCount(0, $collection->getAttribute('attributes'));
+        $this->assertCount(0, $collection->getAttribute('indexes'));
+    }
+
+    public function testVirtualRelationsAttributes(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('v1');
+        static::getDatabase()->createCollection('v2');
+
+        /**
+         * RELATION_ONE_TO_ONE
+         * TwoWay is false no attribute is created on v2
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: false
+        );
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'v1' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'v1' => [
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->find('v2', [
+                Query::equal('v1', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+        }
+
+        /**
+         * Success for later test update
+         */
+
+        $doc = static::getDatabase()->createDocument('v1', new Document([
+            '$id' => 'man',
+            '$permissions' => [
+                Permission::update(Role::any()),
+                Permission::read(Role::any()),
+            ],
+            'v2' => [
+                '$id' => 'woman',
+                '$permissions' => [
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any())
+                ]
+            ]
+        ]));
+
+        $this->assertEquals('man', $doc->getId());
+
+        try {
+            static::getDatabase()->updateDocument('v1', 'man', new Document([
+                '$permissions' => [],
+                'v2' => [[
+                    '$id' => 'woman',
+                    '$permissions' => []
+                ]]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        static::getDatabase()->deleteRelationship('v1', 'v2');
+
+        /**
+         * RELATION_ONE_TO_MANY
+         * No attribute is created in V1 collection
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true
+        );
+
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'v2' => [ // Expecting Array of arrays or array of strings, object provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$permissions' => [],
+                'v2' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'v1' => [[  // Expecting a string or an object ,array provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        /**
+         * Success for later test update
+         */
+        $doc = static::getDatabase()->createDocument('v2', new Document([
+            '$id' => 'v2_uid',
+            '$permissions' => [
+                Permission::update(Role::any()),
+            ],
+            'v1' => [
+                '$id' => 'v1_uid',
+                '$permissions' => [
+                    Permission::update(Role::any())
+                ],
+            ]
+        ]));
+
+        $this->assertEquals('v2_uid', $doc->getId());
+
+        /**
+         * Test update
+         */
+
+        try {
+            static::getDatabase()->updateDocument('v1', 'v1_uid', new Document([
+                '$permissions' => [],
+                'v2' => [ // Expecting array of arrays or array of strings, object given
+                    '$id' => 'v2_uid',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->updateDocument('v1', 'v1_uid', new Document([
+                '$permissions' => [],
+                'v2' => 'v2_uid'
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->updateDocument('v2', 'v2_uid', new Document([
+                '$permissions' => [],
+                'v1' => [
+                    '$id' => null, // Invalid value
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        /**
+         * Here we get this error: Unknown PDO Type for array
+         * Added in Filter.php Text validator for relationship
+         */
+        try {
+            static::getDatabase()->find('v2', [
+                //@phpstan-ignore-next-line
+                Query::equal('v1', [['doc1']]),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+        }
+
+        try {
+            static::getDatabase()->find('v1', [
+                Query::equal('v2', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+        }
+
+        static::getDatabase()->deleteRelationship('v1', 'v2');
+
+        /**
+         * RELATION_MANY_TO_ONE
+         * No attribute is created in V2 collection
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true
+        );
+
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$id' => 'doc',
+                '$permissions' => [],
+                'v2' => [[ // Expecting an object or a string array provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$permissions' => [],
+                'v1' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc',
+                '$permissions' => [],
+                'v1' => [ // Expecting an array, object provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->find('v2', [
+                Query::equal('v1', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+        }
+
+        /**
+         * Success for later test update
+         */
+        $doc = static::getDatabase()->createDocument('v1', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [
+                Permission::update(Role::any()),
+                Permission::read(Role::any()),
+            ],
+            'v2' => [
+                '$id' => 'doc2',
+                '$permissions' => [
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+            ]
+        ]));
+
+        $this->assertEquals('doc1', $doc->getId());
+
+        try {
+            static::getDatabase()->updateDocument('v1', 'doc1', new Document([
+                '$permissions' => [
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+                'v2' => [[]],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->updateDocument('v2', 'doc2', new Document([
+                '$permissions' => [],
+                'v1' => null
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        static::getDatabase()->deleteRelationship('v1', 'v2');
+
+        /**
+         * RELATION_MANY_TO_MANY
+         * No attribute on V1/v2 collections only on junction table
+         */
+        static::getDatabase()->createRelationship(
+            collection: 'v1',
+            relatedCollection: 'v2',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'students',
+            twoWayKey: 'classes'
+        );
+
+        try {
+            static::getDatabase()->createDocument('v1', new Document([
+                '$permissions' => [],
+                'students' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$permissions' => [],
+                'classes' => 'invalid_value',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->createDocument('v2', new Document([
+                '$id' => 'doc',
+                '$permissions' => [],
+                'classes' => [ // Expected array, object provided
+                    '$id' => 'test',
+                    '$permissions' => [],
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->find('v1', [
+                Query::equal('students', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+        }
+
+        try {
+            static::getDatabase()->find('v2', [
+                Query::equal('classes', ['virtual_attribute']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof QueryException);
+        }
+
+        /**
+         * Success for later test update
+         */
+
+        $doc = static::getDatabase()->createDocument('v1', new Document([
+            '$id' => 'class1',
+            '$permissions' => [
+                Permission::update(Role::any()),
+                Permission::read(Role::any()),
+            ],
+            'students' => [
+                [
+                    '$id' => 'Richard',
+                    '$permissions' => [
+                        Permission::update(Role::any()),
+                        Permission::read(Role::any())
+                    ]
+                ],
+                [
+                    '$id' => 'Bill',
+                    '$permissions' => [
+                        Permission::update(Role::any()),
+                        Permission::read(Role::any())
+                    ]
+                ]
+            ]
+        ]));
+
+        $this->assertEquals('class1', $doc->getId());
+
+        try {
+            static::getDatabase()->updateDocument('v1', 'class1', new Document([
+                '$permissions' => [
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+                'students' => [
+                    '$id' => 'Richard',
+                    '$permissions' => [
+                        Permission::update(Role::any()),
+                        Permission::read(Role::any())
+                    ]
+                ]
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+
+        try {
+            static::getDatabase()->updateDocument('v1', 'class1', new Document([
+                '$permissions' => [
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+                'students' => 'Richard'
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertTrue($e instanceof RelationshipException);
+        }
+    }
+
+    public function testPreserveDatesUpdate(): void
+    {
+        Authorization::disable();
+
+        static::getDatabase()->setPreserveDates(true);
+
+        static::getDatabase()->createCollection('preserve_update_dates');
+
+        static::getDatabase()->createAttribute('preserve_update_dates', 'attr1', Database::VAR_STRING, 10, false);
+
+        $doc1 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [],
+            'attr1' => 'value1',
+        ]));
+
+        $doc2 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+            '$id' => 'doc2',
+            '$permissions' => [],
+            'attr1' => 'value2',
+        ]));
+
+        $doc3 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+            '$id' => 'doc3',
+            '$permissions' => [],
+            'attr1' => 'value3',
+        ]));
+
+        $newDate = '2000-01-01T10:00:00.000+00:00';
+
+        $doc1->setAttribute('$updatedAt', $newDate);
+        static::getDatabase()->updateDocument('preserve_update_dates', 'doc1', $doc1);
+        $doc1 = static::getDatabase()->getDocument('preserve_update_dates', 'doc1');
+        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
+
+        $doc2->setAttribute('$updatedAt', $newDate);
+        $doc3->setAttribute('$updatedAt', $newDate);
+        static::getDatabase()->updateDocuments('preserve_update_dates', [$doc2, $doc3], 2);
+
+        $doc2 = static::getDatabase()->getDocument('preserve_update_dates', 'doc2');
+        $doc3 = static::getDatabase()->getDocument('preserve_update_dates', 'doc3');
+        $this->assertEquals($newDate, $doc2->getAttribute('$updatedAt'));
+        $this->assertEquals($newDate, $doc3->getAttribute('$updatedAt'));
+
+        static::getDatabase()->deleteCollection('preserve_update_dates');
+
+        static::getDatabase()->setPreserveDates(false);
+
+        Authorization::reset();
+    }
+
+    public function testPreserveDatesCreate(): void
+    {
+        Authorization::disable();
+
+        static::getDatabase()->setPreserveDates(true);
+
+        static::getDatabase()->createCollection('preserve_create_dates');
+
+        static::getDatabase()->createAttribute('preserve_create_dates', 'attr1', Database::VAR_STRING, 10, false);
+
+        $date = '2000-01-01T10:00:00.000+00:00';
+
+        static::getDatabase()->createDocument('preserve_create_dates', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [],
+            'attr1' => 'value1',
+            '$createdAt' => $date
+        ]));
+
+        static::getDatabase()->createDocuments('preserve_create_dates', [
+            new Document([
+                '$id' => 'doc2',
+                '$permissions' => [],
+                'attr1' => 'value2',
+                '$createdAt' => $date
+            ]),
+            new Document([
+                '$id' => 'doc3',
+                '$permissions' => [],
+                'attr1' => 'value3',
+                '$createdAt' => $date
+            ]),
+        ], 2);
+
+        $doc1 = static::getDatabase()->getDocument('preserve_create_dates', 'doc1');
+        $doc2 = static::getDatabase()->getDocument('preserve_create_dates', 'doc2');
+        $doc3 = static::getDatabase()->getDocument('preserve_create_dates', 'doc3');
+        $this->assertEquals($date, $doc1->getAttribute('$createdAt'));
+        $this->assertEquals($date, $doc2->getAttribute('$createdAt'));
+        $this->assertEquals($date, $doc3->getAttribute('$createdAt'));
+
+        static::getDatabase()->deleteCollection('preserve_create_dates');
+
+        static::getDatabase()->setPreserveDates(false);
+
+        Authorization::reset();
     }
 
     /**
@@ -903,9 +1620,12 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('documents');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'string', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'bigint', Database::VAR_INTEGER, 8, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'float', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'integer_signed', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'integer_unsigned', Database::VAR_INTEGER, 4, true, signed: false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'bigint_signed', Database::VAR_INTEGER, 8, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'bigint_unsigned', Database::VAR_INTEGER, 9, true, signed: false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'float_signed', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'float_unsigned', Database::VAR_FLOAT, 0, true, signed: false));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'boolean', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
@@ -927,9 +1647,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::user(ID::custom('2x'))),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
@@ -939,12 +1662,18 @@ abstract class Base extends TestCase
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
-        $this->assertIsInt($document->getAttribute('integer'));
-        $this->assertEquals(5, $document->getAttribute('integer'));
-        $this->assertIsInt($document->getAttribute('bigint'));
-        $this->assertEquals(8589934592, $document->getAttribute('bigint'));
-        $this->assertIsFloat($document->getAttribute('float'));
-        $this->assertEquals(5.55, $document->getAttribute('float'));
+        $this->assertIsInt($document->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::INT_MAX, $document->getAttribute('integer_signed'));
+        $this->assertIsInt($document->getAttribute('integer_unsigned'));
+        $this->assertEquals(Database::INT_MAX, $document->getAttribute('integer_unsigned'));
+        $this->assertIsInt($document->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::BIG_INT_MAX, $document->getAttribute('bigint_signed'));
+        $this->assertIsInt($document->getAttribute('bigint_signed'));
+        $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint_unsigned'));
+        $this->assertIsFloat($document->getAttribute('float_signed'));
+        $this->assertEquals(-5.55, $document->getAttribute('float_signed'));
+        $this->assertIsFloat($document->getAttribute('float_unsigned'));
+        $this->assertEquals(5.55, $document->getAttribute('float_unsigned'));
         $this->assertIsBool($document->getAttribute('boolean'));
         $this->assertEquals(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
@@ -971,9 +1700,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::user(ID::custom('2x'))),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
@@ -984,12 +1716,18 @@ abstract class Base extends TestCase
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
-        $this->assertIsInt($manualIdDocument->getAttribute('integer'));
-        $this->assertEquals(5, $manualIdDocument->getAttribute('integer'));
-        $this->assertIsInt($manualIdDocument->getAttribute('bigint'));
-        $this->assertEquals(8589934592, $manualIdDocument->getAttribute('bigint'));
-        $this->assertIsFloat($manualIdDocument->getAttribute('float'));
-        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float'));
+        $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::INT_MAX, $manualIdDocument->getAttribute('integer_signed'));
+        $this->assertIsInt($manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertEquals(Database::INT_MAX, $manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertEquals(Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float_signed'));
+        $this->assertEquals(-5.55, $manualIdDocument->getAttribute('float_signed'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float_unsigned'));
+        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float_unsigned'));
         $this->assertIsBool($manualIdDocument->getAttribute('boolean'));
         $this->assertEquals(true, $manualIdDocument->getAttribute('boolean'));
         $this->assertIsArray($manualIdDocument->getAttribute('colors'));
@@ -1003,18 +1741,62 @@ abstract class Base extends TestCase
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
-        $this->assertIsInt($manualIdDocument->getAttribute('integer'));
-        $this->assertEquals(5, $manualIdDocument->getAttribute('integer'));
-        $this->assertIsInt($manualIdDocument->getAttribute('bigint'));
-        $this->assertEquals(8589934592, $manualIdDocument->getAttribute('bigint'));
-        $this->assertIsFloat($manualIdDocument->getAttribute('float'));
-        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float'));
+        $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::INT_MAX, $manualIdDocument->getAttribute('integer_signed'));
+        $this->assertIsInt($manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertEquals(Database::INT_MAX, $manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertIsInt($manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertEquals(Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float_signed'));
+        $this->assertEquals(-5.55, $manualIdDocument->getAttribute('float_signed'));
+        $this->assertIsFloat($manualIdDocument->getAttribute('float_unsigned'));
+        $this->assertEquals(5.55, $manualIdDocument->getAttribute('float_unsigned'));
         $this->assertIsBool($manualIdDocument->getAttribute('boolean'));
         $this->assertEquals(true, $manualIdDocument->getAttribute('boolean'));
         $this->assertIsArray($manualIdDocument->getAttribute('colors'));
         $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
         $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
         $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
+
+        try {
+            static::getDatabase()->createDocument('documents', new Document([
+                'string' => '',
+                'integer_signed' => 0,
+                'integer_unsigned' => 0,
+                'bigint_signed' => 0,
+                'bigint_unsigned' => 0,
+                'float_signed' => 0,
+                'float_unsigned' => -5.55,
+                'boolean' => true,
+                'colors' => [],
+                'empty' => [],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createDocument('documents', new Document([
+                'string' => '',
+                'integer_signed' => 0,
+                'integer_unsigned' => 0,
+                'bigint_signed' => 0,
+                'bigint_unsigned' => -10,
+                'float_signed' => 0,
+                'float_unsigned' => 0,
+                'boolean' => true,
+                'colors' => [],
+                'empty' => [],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,808', $e->getMessage());
+        }
 
         return $document;
     }
@@ -1046,7 +1828,7 @@ abstract class Base extends TestCase
                 ],
                 'string' => 'text📝',
                 'integer' => 5,
-                'bigint' => 8589934592, // 2^33
+                'bigint' => Database::BIG_INT_MAX,
             ]);
         }
 
@@ -1061,7 +1843,7 @@ abstract class Base extends TestCase
             $this->assertIsInt($document->getAttribute('integer'));
             $this->assertEquals(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(8589934592, $document->getAttribute('bigint'));
+            $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
         }
 
         return $documents;
@@ -1231,10 +2013,12 @@ abstract class Base extends TestCase
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
-        $this->assertIsInt($document->getAttribute('integer'));
-        $this->assertEquals(5, $document->getAttribute('integer'));
-        $this->assertIsFloat($document->getAttribute('float'));
-        $this->assertEquals(5.55, $document->getAttribute('float'));
+        $this->assertIsInt($document->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::INT_MAX, $document->getAttribute('integer_signed'));
+        $this->assertIsFloat($document->getAttribute('float_signed'));
+        $this->assertEquals(-5.55, $document->getAttribute('float_signed'));
+        $this->assertIsFloat($document->getAttribute('float_unsigned'));
+        $this->assertEquals(5.55, $document->getAttribute('float_unsigned'));
         $this->assertIsBool($document->getAttribute('boolean'));
         $this->assertEquals(true, $document->getAttribute('boolean'));
         $this->assertIsArray($document->getAttribute('colors'));
@@ -1252,15 +2036,15 @@ abstract class Base extends TestCase
         $documentId = $document->getId();
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer']),
+            Query::select(['string', 'integer_signed']),
         ]);
 
         $this->assertEmpty($document->getId());
         $this->assertFalse($document->isEmpty());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
-        $this->assertIsInt($document->getAttribute('integer'));
-        $this->assertEquals(5, $document->getAttribute('integer'));
+        $this->assertIsInt($document->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::INT_MAX, $document->getAttribute('integer_signed'));
         $this->assertArrayNotHasKey('float', $document->getAttributes());
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
@@ -1273,7 +2057,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$id']),
+            Query::select(['string', 'integer_signed', '$id']),
         ]);
 
         $this->assertArrayHasKey('$id', $document);
@@ -1284,7 +2068,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$permissions']),
+            Query::select(['string', 'integer_signed', '$permissions']),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1295,7 +2079,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$internalId']),
+            Query::select(['string', 'integer_signed', '$internalId']),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1306,7 +2090,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$collection']),
+            Query::select(['string', 'integer_signed', '$collection']),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1317,7 +2101,7 @@ abstract class Base extends TestCase
         $this->assertArrayHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$createdAt']),
+            Query::select(['string', 'integer_signed', '$createdAt']),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1328,7 +2112,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer', '$updatedAt']),
+            Query::select(['string', 'integer_signed', '$updatedAt']),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1351,10 +2135,10 @@ abstract class Base extends TestCase
         if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
             $this->expectExceptionMessage('Fulltext index is not supported');
         } else {
-            $this->expectExceptionMessage('Attribute "integer" cannot be part of a FULLTEXT index, must be of type string');
+            $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a FULLTEXT index, must be of type string');
         }
 
-        static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer']);
+        static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
     }
 
     public function testListDocumentSearch(): void
@@ -1374,9 +2158,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => '*test+alias@email-provider.com',
-            'integer' => 0,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => 0,
+            'integer_unsigned' => 0,
+            'bigint_signed' => 0,
+            'bigint_unsigned' => 0,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
@@ -1443,8 +2230,10 @@ abstract class Base extends TestCase
     {
         $document
             ->setAttribute('string', 'text📝 updated')
-            ->setAttribute('integer', 6)
-            ->setAttribute('float', 5.56)
+            ->setAttribute('integer_signed', -6)
+            ->setAttribute('integer_unsigned', 6)
+            ->setAttribute('float_signed', -5.56)
+            ->setAttribute('float_unsigned', 5.56)
             ->setAttribute('boolean', false)
             ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
             ->setAttribute('with-dash', 'Works');
@@ -1454,10 +2243,14 @@ abstract class Base extends TestCase
         $this->assertNotEmpty(true, $new->getId());
         $this->assertIsString($new->getAttribute('string'));
         $this->assertEquals('text📝 updated', $new->getAttribute('string'));
-        $this->assertIsInt($new->getAttribute('integer'));
-        $this->assertEquals(6, $new->getAttribute('integer'));
-        $this->assertIsFloat($new->getAttribute('float'));
-        $this->assertEquals(5.56, $new->getAttribute('float'));
+        $this->assertIsInt($new->getAttribute('integer_signed'));
+        $this->assertEquals(-6, $new->getAttribute('integer_signed'));
+        $this->assertIsInt($new->getAttribute('integer_unsigned'));
+        $this->assertEquals(6, $new->getAttribute('integer_unsigned'));
+        $this->assertIsFloat($new->getAttribute('float_signed'));
+        $this->assertEquals(-5.56, $new->getAttribute('float_signed'));
+        $this->assertIsFloat($new->getAttribute('float_unsigned'));
+        $this->assertEquals(5.56, $new->getAttribute('float_unsigned'));
         $this->assertIsBool($new->getAttribute('boolean'));
         $this->assertEquals(false, $new->getAttribute('boolean'));
         $this->assertIsArray($new->getAttribute('colors'));
@@ -1549,18 +2342,23 @@ abstract class Base extends TestCase
      */
     public function testUpdateDocumentConflict(Document $document): void
     {
-        $document->setAttribute('integer', 7);
+        $document->setAttribute('integer_signed', 7);
         $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function () use ($document) {
             return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
         });
-        $this->assertEquals(7, $result->getAttribute('integer'));
+        $this->assertEquals(7, $result->getAttribute('integer_signed'));
 
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
-        $document->setAttribute('integer', 8);
-        $this->expectException(ConflictException::class);
-        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
-            return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
-        });
+        $document->setAttribute('integer_signed', 8);
+        try {
+            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
+                return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+            });
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertTrue($e instanceof ConflictException);
+            $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
+        }
     }
 
     /**
@@ -1612,22 +2410,288 @@ abstract class Base extends TestCase
 
 
     /**
+     * @throws AuthorizationException
+     * @throws DuplicateException
+     * @throws ConflictException
+     * @throws LimitException
+     * @throws StructureException
+     */
+    public function testArrayAttribute(): void
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        $database = static::getDatabase();
+        $collection = 'json';
+        $permissions = [Permission::read(Role::any())];
+
+        $database->createCollection($collection, permissions: [
+            Permission::create(Role::any()),
+        ]);
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'booleans',
+            Database::VAR_BOOLEAN,
+            size: 0,
+            required: true,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'names',
+            Database::VAR_STRING,
+            size: 255, // Does this mean each Element max is 255? We need to check this on Structure validation?
+            required: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'numbers',
+            Database::VAR_INTEGER,
+            size: 0,
+            required: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'age',
+            Database::VAR_INTEGER,
+            size: 0,
+            required: false,
+            signed: false
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'tv_show',
+            Database::VAR_STRING,
+            size: 700,
+            required: false,
+            signed: false,
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'short',
+            Database::VAR_STRING,
+            size: 5,
+            required: false,
+            signed: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'pref',
+            Database::VAR_STRING,
+            size: 16384,
+            required: false,
+            signed: false,
+            filters: ['json'],
+        ));
+
+        try {
+            $database->createDocument($collection, new Document([]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
+        }
+
+        $database->updateAttribute($collection, 'booleans', required: false);
+
+        $doc = $database->getCollection($collection);
+        $attribute = $doc->getAttribute('attributes')[0];
+        $this->assertEquals('boolean', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(true, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+
+        try {
+            $database->createDocument($collection, new Document([
+                'short' => ['More than 5 size'],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "short[\'0\']" has invalid type. Value must be a valid string and no longer than 5 chars', $e->getMessage());
+        }
+
+        try {
+            $database->createDocument($collection, new Document([
+                'names' => ['Joe', 100],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 255 chars', $e->getMessage());
+        }
+
+        try {
+            $database->createDocument($collection, new Document([
+                'age' => 1.5,
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
+        }
+
+        try {
+            $database->createDocument($collection, new Document([
+                'age' => -100,
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
+        }
+
+        $database->createDocument($collection, new Document([
+            '$id' => 'id1',
+            '$permissions' => $permissions,
+            'booleans' => [false],
+            'names' => ['Joe', 'Antony', '100'],
+            'numbers' => [0, 100, 1000, -1],
+            'age' => 41,
+            'tv_show' => 'Everybody Loves Raymond',
+            'pref' => [
+                'fname' => 'Joe',
+                'lname' => 'Baiden',
+                'age' => 80,
+                'male' => true,
+            ],
+        ]));
+
+        $document = $database->getDocument($collection, 'id1');
+
+        $this->assertEquals(false, $document->getAttribute('booleans')[0]);
+        $this->assertEquals('Antony', $document->getAttribute('names')[1]);
+        $this->assertEquals(100, $document->getAttribute('numbers')[1]);
+
+        try {
+            $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+                $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
+            } else {
+                $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+            }
+        }
+
+        try {
+            $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+        }
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'long_size',
+            Database::VAR_STRING,
+            size: 2000,
+            required: false,
+            array: true
+        ));
+
+        if ($database->getAdapter()->getMaxIndexLength() > 0) {
+            // If getMaxIndexLength() > 0 We clear length for array attributes
+            $database->createIndex($collection, 'indx1', Database::INDEX_KEY, ['long_size'], [], []);
+            $database->createIndex($collection, 'indx2', Database::INDEX_KEY, ['long_size'], [1000], []);
+
+            try {
+                $database->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
+                $this->fail('Failed to throw exception');
+            } catch(Throwable $e) {
+                $this->assertEquals('Index length is longer than the maximum: 768', $e->getMessage());
+            }
+        }
+
+        // We clear orders for array attributes
+        $database->createIndex($collection, 'indx3', Database::INDEX_KEY, ['names'], [255], ['desc']);
+
+        try {
+            $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
+        }
+
+        $this->assertTrue($database->createIndex($collection, 'indx6', Database::INDEX_KEY, ['age', 'names'], [null, 999], []));
+        $this->assertTrue($database->createIndex($collection, 'indx7', Database::INDEX_KEY, ['age', 'booleans'], [0, 999], []));
+
+        if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
+            try {
+                $database->find($collection, [
+                    Query::equal('names', ['Joe']),
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch(Throwable $e) {
+                $this->assertEquals('Invalid query: Cannot query equal on attribute "names" because it is an array.', $e->getMessage());
+            }
+
+            try {
+                $database->find($collection, [
+                    Query::contains('age', [10])
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch(Throwable $e) {
+                $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array or string.', $e->getMessage());
+            }
+
+            $documents = $database->find($collection, [
+                Query::isNull('long_size')
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::contains('tv_show', ['love'])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::contains('names', ['Jake', 'Joe'])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::contains('numbers', [-1, 0, 999])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::contains('booleans', [false, true])
+            ]);
+            $this->assertCount(1, $documents);
+
+            // Regular like query on primitive json string data
+            $documents = $database->find($collection, [
+                Query::contains('pref', ['Joe'])
+            ]);
+            $this->assertCount(1, $documents);
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function testFind(): array
     {
         Authorization::setRole(Role::any()->toString());
+
         static::getDatabase()->createCollection('movies', permissions: [
             Permission::create(Role::any()),
             Permission::update(Role::users())
-        ], documentSecurity: true);
+        ]);
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'name', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'director', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'year', Database::VAR_INTEGER, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'price', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'active', Database::VAR_BOOLEAN, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'generes', Database::VAR_STRING, 32, true, null, true, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'genres', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'with-dash', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'nullable', Database::VAR_STRING, 128, false));
 
@@ -1652,7 +2716,7 @@ abstract class Base extends TestCase
             'year' => 2013,
             'price' => 39.50,
             'active' => true,
-            'generes' => ['animation', 'kids'],
+            'genres' => ['animation', 'kids'],
             'with-dash' => 'Works'
         ]));
 
@@ -1676,7 +2740,7 @@ abstract class Base extends TestCase
             'year' => 2019,
             'price' => 39.50,
             'active' => true,
-            'generes' => ['animation', 'kids'],
+            'genres' => ['animation', 'kids'],
             'with-dash' => 'Works'
         ]));
 
@@ -1700,7 +2764,7 @@ abstract class Base extends TestCase
             'year' => 2011,
             'price' => 25.94,
             'active' => true,
-            'generes' => ['science fiction', 'action', 'comics'],
+            'genres' => ['science fiction', 'action', 'comics'],
             'with-dash' => 'Works2'
         ]));
 
@@ -1724,7 +2788,7 @@ abstract class Base extends TestCase
             'year' => 2019,
             'price' => 25.99,
             'active' => true,
-            'generes' => ['science fiction', 'action', 'comics'],
+            'genres' => ['science fiction', 'action', 'comics'],
             'with-dash' => 'Works2'
         ]));
 
@@ -1748,7 +2812,7 @@ abstract class Base extends TestCase
             'year' => 2025,
             'price' => 0.0,
             'active' => false,
-            'generes' => [],
+            'genres' => [],
             'with-dash' => 'Works3'
         ]));
 
@@ -1770,7 +2834,7 @@ abstract class Base extends TestCase
             'year' => 2026,
             'price' => 0.0,
             'active' => false,
-            'generes' => [],
+            'genres' => [],
             'with-dash' => 'Works3',
             'nullable' => 'Not null'
         ]));
@@ -1799,8 +2863,8 @@ abstract class Base extends TestCase
         $this->assertIsFloat($documents[0]->getAttribute('price'));
         $this->assertEquals(true, $documents[0]->getAttribute('active'));
         $this->assertIsBool($documents[0]->getAttribute('active'));
-        $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('generes'));
-        $this->assertIsArray($documents[0]->getAttribute('generes'));
+        $this->assertEquals(['animation', 'kids'], $documents[0]->getAttribute('genres'));
+        $this->assertIsArray($documents[0]->getAttribute('genres'));
         $this->assertEquals('Works', $documents[0]->getAttribute('with-dash'));
 
         // Alphabetical order
@@ -1970,7 +3034,7 @@ abstract class Base extends TestCase
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::contains('generes', ['comics'])
+            Query::contains('genres', ['comics'])
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -1979,10 +3043,26 @@ abstract class Base extends TestCase
          * Array contains OR condition
          */
         $documents = static::getDatabase()->find('movies', [
-            Query::contains('generes', ['comics', 'kids']),
+            Query::contains('genres', ['comics', 'kids']),
         ]);
 
         $this->assertEquals(4, count($documents));
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::contains('genres', ['non-existent']),
+        ]);
+
+        $this->assertEquals(0, count($documents));
+
+        try {
+            static::getDatabase()->find('movies', [
+                Query::contains('price', [10.5]),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch(Throwable $e) {
+            $this->assertEquals('Invalid query: Cannot query contains on attribute "price" because it is not an array or string.', $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+        }
     }
 
     public function testFindFulltext(): void
@@ -2877,6 +3957,111 @@ abstract class Base extends TestCase
         }
     }
 
+    public function testOrSingleQuery(): void
+    {
+        try {
+            static::getDatabase()->find('movies', [
+                Query::or([
+                    Query::equal('active', [true])
+                ])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch(Exception $e) {
+            $this->assertEquals('Invalid query: Or queries require at least two queries', $e->getMessage());
+        }
+    }
+
+    public function testOrMultipleQueries(): void
+    {
+        $queries = [
+            Query::or([
+                Query::equal('active', [true]),
+                Query::equal('name', ['Frozen II'])
+            ])
+        ];
+        $this->assertCount(4, static::getDatabase()->find('movies', $queries));
+        $this->assertEquals(4, static::getDatabase()->count('movies', $queries));
+
+        $queries = [
+            Query::equal('active', [true]),
+            Query::or([
+                Query::equal('name', ['Frozen']),
+                Query::equal('name', ['Frozen II']),
+                Query::equal('director', ['Joe Johnston'])
+            ])
+        ];
+
+        $this->assertCount(3, static::getDatabase()->find('movies', $queries));
+        $this->assertEquals(3, static::getDatabase()->count('movies', $queries));
+    }
+
+    public function testOrNested(): void
+    {
+        $queries = [
+            Query::select(['director']),
+            Query::equal('director', ['Joe Johnston']),
+            Query::or([
+                Query::equal('name', ['Frozen']),
+                Query::or([
+                    Query::equal('active', [true]),
+                    Query::equal('active', [false]),
+                ])
+            ])
+        ];
+
+        $documents = static::getDatabase()->find('movies', $queries);
+        $this->assertCount(1, $documents);
+        $this->assertArrayNotHasKey('name', $documents[0]);
+
+        $count = static::getDatabase()->count('movies', $queries);
+        $this->assertEquals(1, $count);
+    }
+
+    public function testAndSingleQuery(): void
+    {
+        try {
+            static::getDatabase()->find('movies', [
+                Query::and([
+                    Query::equal('active', [true])
+                ])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch(Exception $e) {
+            $this->assertEquals('Invalid query: And queries require at least two queries', $e->getMessage());
+        }
+    }
+
+    public function testAndMultipleQueries(): void
+    {
+        $queries = [
+            Query::and([
+                Query::equal('active', [true]),
+                Query::equal('name', ['Frozen II'])
+            ])
+        ];
+        $this->assertCount(1, static::getDatabase()->find('movies', $queries));
+        $this->assertEquals(1, static::getDatabase()->count('movies', $queries));
+    }
+
+    public function testAndNested(): void
+    {
+        $queries = [
+            Query::or([
+                Query::equal('active', [false]),
+                Query::and([
+                    Query::equal('active', [true]),
+                    Query::equal('name', ['Frozen']),
+                ])
+            ])
+        ];
+
+        $documents = static::getDatabase()->find('movies', $queries);
+        $this->assertCount(3, $documents);
+
+        $count = static::getDatabase()->count('movies', $queries);
+        $this->assertEquals(3, $count);
+    }
+
     /**
      * @depends testFind
      */
@@ -3090,6 +4275,7 @@ abstract class Base extends TestCase
         $count = static::getDatabase()->count('movies');
         $this->assertEquals(6, $count);
         $count = static::getDatabase()->count('movies', [Query::equal('year', [2019])]);
+
         $this->assertEquals(2, $count);
         $count = static::getDatabase()->count('movies', [Query::equal('with-dash', ['Works'])]);
         $this->assertEquals(2, $count);
@@ -3128,6 +4314,7 @@ abstract class Base extends TestCase
     public function testSum(): void
     {
         Authorization::setRole('user:x');
+
         $sum = static::getDatabase()->sum('movies', 'year', [Query::equal('year', [2019]),]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = static::getDatabase()->sum('movies', 'year');
@@ -3412,9 +4599,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -3444,9 +4634,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::user('1')),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -3478,9 +4671,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -3504,9 +4700,12 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -5.55,
+            'float_unsigned' => 5.55,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -3522,9 +4721,10 @@ abstract class Base extends TestCase
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer' => 6,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => 6,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'float_signed' => -Database::DOUBLE_MAX,
+            'float_unsigned' => Database::DOUBLE_MAX,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -3532,18 +4732,18 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    /**
-     * @depends testCreateDocument
-     */
-    public function testNoChangeUpdateDocumentWithoutPermission(Document $document): Document
+    public function testNoChangeUpdateDocumentWithoutPermission(): Document
     {
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$id' => ID::unique(),
             '$permissions' => [],
             'string' => 'text📝',
-            'integer' => 5,
-            'bigint' => 8589934592, // 2^33
-            'float' => 5.55,
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -123456789.12346,
+            'float_unsigned' => 123456789.12346,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));
@@ -3559,6 +4759,36 @@ abstract class Base extends TestCase
         $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
 
         return $document;
+    }
+
+    public function testStructureValidationAfterRelationsAttribute(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection("structure_1", [], [], [Permission::create(Role::any())]);
+        static::getDatabase()->createCollection("structure_2", [], [], [Permission::create(Role::any())]);
+
+        static::getDatabase()->createRelationship(
+            collection: "structure_1",
+            relatedCollection: "structure_2",
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        try {
+            static::getDatabase()->createDocument('structure_1', new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'structure_2' => '100',
+                'name' => 'Frozen', // Unknown attribute 'name' after relation attribute
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch(Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
     }
 
     public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
@@ -3867,7 +5097,6 @@ abstract class Base extends TestCase
     {
         $document->setAttribute('$id', 'duplicated');
         static::getDatabase()->createDocument($document->getCollection(), $document);
-
         $this->expectException(DuplicateException::class);
         static::getDatabase()->createDocument($document->getCollection(), $document);
     }
@@ -3918,7 +5147,7 @@ abstract class Base extends TestCase
             'year' => 2013,
             'price' => 39.50,
             'active' => true,
-            'generes' => ['animation', 'kids'],
+            'genres' => ['animation', 'kids'],
             'with-dash' => 'Works4'
         ]));
     }
@@ -3950,7 +5179,7 @@ abstract class Base extends TestCase
             'year' => 2013,
             'price' => 39.50,
             'active' => true,
-            'generes' => ['animation', 'kids'],
+            'genres' => ['animation', 'kids'],
             'with-dash' => 'Works4'
         ]));
 
@@ -4449,18 +5678,38 @@ abstract class Base extends TestCase
             Query::greaterThan('date', '1975-12-06 10:00:00+01:00'),
             Query::lessThan('date', '2030-12-06 10:00:00-01:00'),
         ]);
-
         $this->assertEquals(1, count($documents));
 
-        $this->expectException(StructureException::class);
-        static::getDatabase()->createDocument('datetime', new Document([
-            '$permissions' => [
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'date' => "1975-12-06 00:00:61"
-        ]));
+        $documents = static::getDatabase()->find('datetime', [
+            Query::greaterThan('$createdAt', '1975-12-06 11:00:00.000'),
+        ]);
+        $this->assertCount(1, $documents);
+
+        try {
+            static::getDatabase()->createDocument('datetime', new Document([
+                'date' => "1975-12-06 00:00:61" // 61 seconds is invalid
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        $invalidDates = [
+            '1975-12-06 00:00:61',
+            '16/01/2024 12:00:00AM'
+        ];
+
+        foreach ($invalidDates as $date) {
+            try {
+                static::getDatabase()->find('datetime', [
+                    Query::equal('date', [$date])
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertTrue($e instanceof QueryException);
+                $this->assertEquals('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());
+            }
+        }
     }
 
     public function testCreateDateTimeAttributeFailure(): void
@@ -5220,7 +6469,7 @@ abstract class Base extends TestCase
             ],
         ]);
 
-        static::getDatabase()->createDocument('country', $doc);
+        static::getDatabase()->createDocument('country', new Document($doc->getArrayCopy()));
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
@@ -5248,7 +6497,7 @@ abstract class Base extends TestCase
 
         $this->assertTrue(static::getDatabase()->deleteDocument('country', 'country1'));
 
-        static::getDatabase()->createDocument('country', $doc);
+        static::getDatabase()->createDocument('country', new Document($doc->getArrayCopy()));
         $country1 = static::getDatabase()->getDocument('country', 'country1');
         $this->assertEquals('London', $country1->getAttribute('city')->getAttribute('name'));
 
@@ -5988,7 +7237,6 @@ abstract class Base extends TestCase
 
         $this->assertEquals('Album 1 Updated!!!', $albumDocument['name']);
         $this->assertEquals($albumDocument->getId(), $artist1->getAttribute('albums')[0]->getId());
-        //Todo: This is failing
         $this->assertEquals($albumDocument->getAttribute('name'), $artist1->getAttribute('albums')[0]->getAttribute('name'));
 
         // Create new document with no relationship
@@ -10788,6 +12036,61 @@ abstract class Base extends TestCase
         );
     }
 
+    public function testOneToManyAndManyToOneDeleteRelationship(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('relation1');
+        static::getDatabase()->createCollection('relation2');
+
+        static::getDatabase()->createRelationship(
+            collection: 'relation1',
+            relatedCollection: 'relation2',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(1, $relation1->getAttribute('attributes'));
+        $this->assertCount(0, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(1, $relation2->getAttribute('attributes'));
+        $this->assertCount(1, $relation2->getAttribute('indexes'));
+
+        static::getDatabase()->deleteRelationship('relation2', 'relation1');
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(0, $relation1->getAttribute('attributes'));
+        $this->assertCount(0, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(0, $relation2->getAttribute('attributes'));
+        $this->assertCount(0, $relation2->getAttribute('indexes'));
+
+        static::getDatabase()->createRelationship(
+            collection: 'relation1',
+            relatedCollection: 'relation2',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(1, $relation1->getAttribute('attributes'));
+        $this->assertCount(1, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(1, $relation2->getAttribute('attributes'));
+        $this->assertCount(0, $relation2->getAttribute('indexes'));
+
+        static::getDatabase()->deleteRelationship('relation1', 'relation2');
+
+        $relation1 = static::getDatabase()->getCollection('relation1');
+        $this->assertCount(0, $relation1->getAttribute('attributes'));
+        $this->assertCount(0, $relation1->getAttribute('indexes'));
+        $relation2 = static::getDatabase()->getCollection('relation2');
+        $this->assertCount(0, $relation2->getAttribute('attributes'));
+        $this->assertCount(0, $relation2->getAttribute('indexes'));
+    }
+
     public function testDeleteMissingRelationship(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -10818,7 +12121,7 @@ abstract class Base extends TestCase
             twoWay: true,
         );
 
-        $this->expectException(Exception::class);
+        $this->expectException(RelationshipException::class);
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
         static::getDatabase()->createDocument('invalid1', new Document([
@@ -10837,7 +12140,7 @@ abstract class Base extends TestCase
             return;
         }
 
-        $this->expectException(Exception::class);
+        $this->expectException(RelationshipException::class);
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
         static::getDatabase()->createDocument('invalid1', new Document([
@@ -10865,7 +12168,7 @@ abstract class Base extends TestCase
             twoWayKey: 'invalid4',
         );
 
-        $this->expectException(Exception::class);
+        $this->expectException(RelationshipException::class);
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
         static::getDatabase()->createDocument('invalid1', new Document([
@@ -12546,66 +13849,6 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals('Invalid query: Equal queries require at least one value.', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::search('string', null),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::notEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::lessThan('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::lessThanEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::greaterThan('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
-        }
-
-        try {
-            static::getDatabase()->findOne('documents', [
-                Query::greaterThanEqual('string', []),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals('Invalid query: Query type does not match expected: string', $e->getMessage());
         }
 
         try {

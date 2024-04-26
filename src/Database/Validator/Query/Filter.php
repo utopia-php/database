@@ -172,7 +172,7 @@ class Filter extends Base
 
         if(
             $array &&
-            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
+            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL, Query::TYPE_EQUAL, Query::TYPE_NOT_EQUAL, Query::TYPE_SEARCH ])
         ) {
             $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
             return false;

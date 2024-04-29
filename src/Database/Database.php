@@ -3964,7 +3964,7 @@ class Database
                                     );
 
                                     if ($related->isEmpty()) {
-                                        if (!isset($value['$permissions'])) {
+                                        if (!isset($relation['$permissions'])) {
                                             $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                         }
                                         $this->createDocument(

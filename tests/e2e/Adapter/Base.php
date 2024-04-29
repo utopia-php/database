@@ -1812,7 +1812,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch(Throwable $e) {
             $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,808', $e->getMessage());
+            $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
         }
 
         return $document;

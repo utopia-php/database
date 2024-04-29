@@ -3572,8 +3572,7 @@ class Database
                                 break;
                             }
 
-                            //todo: in php >= 8.1 use array_is_list
-                            if(!is_array($value) || (\array_keys($value) !== \range(0, count($value) - 1))) {
+                            if(!\is_array($value) || !\array_is_list($value)) {
                                 throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
 
@@ -3916,7 +3915,7 @@ class Database
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
                         ) {
-                            if(!is_array($value) || (\array_keys($value) !== \range(0, count($value) - 1))) {
+                            if(!\is_array($value) || !\array_is_list($value)) {
                                 throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
 
@@ -3965,7 +3964,7 @@ class Database
                                     );
 
                                     if ($related->isEmpty()) {
-                                        if (!isset($value['$permissions'])) {
+                                        if (!isset($relation['$permissions'])) {
                                             $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                         }
                                         $this->createDocument(

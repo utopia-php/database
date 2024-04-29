@@ -79,6 +79,23 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
+    public function testUpdateDeleteCollectionNotFound(): void
+    {
+        try {
+            static::getDatabase()->deleteCollection('not_found');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Collection not found', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->updateCollection('not_found', [], true);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Collection not found', $e->getMessage());
+        }
+    }
+
     public function testDeleteRelatedCollection(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {

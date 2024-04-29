@@ -3621,10 +3621,6 @@ class Database
             }
         }
 
-        if ($old->isEmpty()) {
-            return new Document();
-        }
-
         if ($shouldUpdate) {
             $updatedAt = $document->getUpdatedAt();
             $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);

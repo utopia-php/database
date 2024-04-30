@@ -572,10 +572,10 @@ class MariaDB extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_CHILD) {
-                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
-                } elseif ($twoWay) {
+                if ($side === Database::RELATION_SIDE_PARENT) {
                     $sql = "ALTER TABLE {$table} DROP COLUMN `{$key}`;";
+                } else {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`;";
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -742,7 +742,6 @@ class MariaDB extends SQL
     public function createDocument(string $collection, Document $document): Document
     {
         try {
-            // beginTransaction must wrap prepare statements
             $this->getPDO()->beginTransaction();
 
             $attributes = $document->getAttributes();
@@ -891,7 +890,6 @@ class MariaDB extends SQL
         }
 
         try {
-            // beginTransaction must wrap prepare statements
             $this->getPDO()->beginTransaction();
 
             $name = $this->filter($collection);
@@ -1585,7 +1583,6 @@ class MariaDB extends SQL
     public function deleteDocument(string $collection, string $id): bool
     {
         try {
-            // beginTransaction must wrap prepare statements
             $this->getPDO()->beginTransaction();
 
             $name = $this->filter($collection);

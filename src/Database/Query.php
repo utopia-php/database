@@ -221,7 +221,7 @@ class Query
     {
         try {
             $query = \json_decode($query, true, flags: JSON_THROW_ON_ERROR);
-        } catch (JsonException $e) {
+        } catch (\JsonException $e) {
             throw new QueryException('Invalid query: ' . $e->getMessage());
         }
 
@@ -243,6 +243,10 @@ class Query
 
         if (!self::isMethod($method)) {
             throw new QueryException('Invalid query method: ' . $method);
+        }
+
+        if (!\is_string($attribute)) {
+            throw new QueryException('Invalid query attribute. Must be a string, got ' . \gettype($attribute));
         }
 
         if (\in_array($method, self::LOGICAL_TYPES)) {

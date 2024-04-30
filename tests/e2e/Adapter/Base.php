@@ -1947,6 +1947,40 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('defaults');
     }
 
+    public function testInvalidUtfCharacters(): void
+    {
+        // This test is a reminder we can not insert non UTF chars to UTF field
+        $collection = 'invalid_characters';
+
+        static::getDatabase()->createCollection($collection);
+        static::getDatabase()->createAttribute($collection, 'str', Database::VAR_STRING, 128, true);
+
+        // Test insert of null
+        $str = "\x00"; // Use double quotes!
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
+            'str' => $str
+        ])));
+
+        // Test insert of null
+        $str = "\u0000"; // Use double quotes!
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
+            'str' => $str
+        ])));
+
+        // Test insert of null Use double quotes
+        $str = "\000"; // Use double quotes!
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
+            'str' => $str,
+        ])));
+
+        // Suggestion for fix: cleanup non-utf chars
+        $str = "\xE2\x94"; // Use double quotes!
+        $str = mb_convert_encoding($str, 'UTF-8', 'UTF-8');
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createDocument($collection, new Document([
+            'str' => $str
+        ])));
+    }
+
     /**
      * @throws AuthorizationException|LimitException|DuplicateException|StructureException|Exception|Throwable
      */

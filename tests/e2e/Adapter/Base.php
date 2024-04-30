@@ -13766,6 +13766,1030 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('appearance');
     }
 
+    public function testRecreateOneToOneOneWayRelationshipFromParent(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        static::getDatabase()->deleteRelationship('one', 'two');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateOneToOneOneWayRelationshipFromChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        static::getDatabase()->deleteRelationship('two', 'one');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateOneToOneTwoWayRelationshipFromParent(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+
+        static::getDatabase()->deleteRelationship('one', 'two');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateOneToOneTwoWayRelationshipFromChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+
+        static::getDatabase()->deleteRelationship('two', 'one');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateOneToManyOneWayRelationshipFromParent(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        static::getDatabase()->deleteRelationship('one', 'two');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateOneToManyOneWayRelationshipFromChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        static::getDatabase()->deleteRelationship('two', 'one');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_MANY,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateOneToManyTwoWayRelationshipFromParent(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+
+        static::getDatabase()->deleteRelationship('one', 'two');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateOneToManyTwoWayRelationshipFromChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+
+        static::getDatabase()->deleteRelationship('two', 'one');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateManyToOneOneWayRelationshipFromParent(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        static::getDatabase()->deleteRelationship('one', 'two');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateManyToOneOneWayRelationshipFromChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        static::getDatabase()->deleteRelationship('two', 'one');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_ONE,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateManyToOneTwoWayRelationshipFromParent(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+
+        static::getDatabase()->deleteRelationship('one', 'two');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateManyToOneTwoWayRelationshipFromChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+
+        static::getDatabase()->deleteRelationship('two', 'one');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateManyToManyOneWayRelationshipFromParent(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_MANY,
+        );
+
+        static::getDatabase()->deleteRelationship('one', 'two');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_MANY,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateManyToManyOneWayRelationshipFromChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_MANY,
+        );
+
+        static::getDatabase()->deleteRelationship('two', 'one');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_MANY,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateManyToManyTwoWayRelationshipFromParent(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+        );
+
+        static::getDatabase()->deleteRelationship('one', 'two');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
+    public function testRecreateManyToManyTwoWayRelationshipFromChild(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        static::getDatabase()->createCollection('one', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+        static::getDatabase()->createCollection('two', [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+        );
+
+        static::getDatabase()->deleteRelationship('two', 'one');
+
+        $result = static::getDatabase()->createRelationship(
+            collection: 'one',
+            relatedCollection: 'two',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+        );
+
+        $this->assertTrue($result);
+
+        static::getDatabase()->deleteCollection('one');
+        static::getDatabase()->deleteCollection('two');
+    }
+
     public function testLabels(): void
     {
         $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection(

@@ -484,14 +484,14 @@ class Mongo extends Adapter
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
-                } elseif ($twoWay) {
+                } else {
                     $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
-                } elseif ($twoWay) {
+                } else {
                     $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
                 }
                 break;

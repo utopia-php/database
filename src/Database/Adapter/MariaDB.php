@@ -851,7 +851,9 @@ class MariaDB extends SQL
                 $stmtPermissions->execute();
             }
 
-            $this->getPDO()->commit();
+            if (!$this->getPDO()->commit()) {
+                throw new DatabaseException('Failed to commit transaction');
+            }
         } catch (\Throwable $e) {
             if($this->getPDO()->inTransaction()) {
                 $this->getPDO()->rollBack();
@@ -987,7 +989,9 @@ class MariaDB extends SQL
                 }
             }
 
-            $this->getPDO()->commit();
+            if (!$this->getPDO()->commit()) {
+                throw new DatabaseException('Failed to commit transaction');
+            }
         } catch (\Throwable $e) {
             if($this->getPDO()->inTransaction()) {
                 $this->getPDO()->rollBack();
@@ -1240,7 +1244,9 @@ class MariaDB extends SQL
                 $stmtAddPermissions->execute();
             }
 
-            $this->getPDO()->commit();
+            if (!$this->getPDO()->commit()) {
+                throw new DatabaseException('Failed to commit transaction');
+            }
         } catch (\Throwable $e) {
             if($this->getPDO()->inTransaction()) {
                 $this->getPDO()->rollBack();
@@ -1505,7 +1511,9 @@ class MariaDB extends SQL
                 }
             }
 
-            $this->getPDO()->commit();
+            if (!$this->getPDO()->commit()) {
+                throw new DatabaseException('Failed to commit transaction');
+            }
         } catch (\Throwable $e) {
             if($this->getPDO()->inTransaction()) {
                 $this->getPDO()->rollBack();
@@ -1634,7 +1642,9 @@ class MariaDB extends SQL
                 throw new DatabaseException('Failed to delete permissions');
             }
 
-            $this->getPDO()->commit();
+            if (!$this->getPDO()->commit()) {
+                throw new DatabaseException('Failed to commit transaction');
+            }
         } catch (\Throwable $th) {
             if($this->getPDO()->inTransaction()) {
                 $this->getPDO()->rollBack();

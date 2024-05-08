@@ -2,14 +2,14 @@
 
 namespace Utopia\Database\Adapter;
 
+use Exception;
 use PDO;
 use PDOException;
-use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Helpers\ID;
 
 /**
  * Main differences from MariaDB and MySQL:

@@ -5,17 +5,17 @@
  */ global $cli;
 
 use Faker\Factory;
-use Utopia\Mongo\Client;
-use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
 use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
+use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Database;
 use Utopia\Database\Query;
-use Utopia\Database\Adapter\Mongo;
-use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Mongo\Client;
 use Utopia\Validator\Numeric;
 use Utopia\Validator\Text;
 

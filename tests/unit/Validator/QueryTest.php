@@ -298,9 +298,9 @@ class QueryTest extends TestCase
             [
                 Query::or(
                     [
-                    Query::equal('price', [0]),
-                    Query::equal('not_found', [''])
-                ]
+                        Query::equal('price', [0]),
+                        Query::equal('not_found', [''])
+                    ]
                 )]
         ));
 

@@ -13,9 +13,9 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -2988,6 +2988,12 @@ abstract class Base extends TestCase
         ]);
 
         $this->assertEquals(2, count($documents));
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::equal('director', ['']),
+        ]);
+
+        $this->assertEquals(0, count($documents));
     }
 
     public function testFindNotEqual(): void
@@ -3004,6 +3010,14 @@ abstract class Base extends TestCase
         foreach ($documents as $document) {
             $this->assertTrue($document['director'] !== 'TBD');
         }
+
+        $documents = static::getDatabase()->find('movies', [
+            Query::notEqual('director', ''),
+        ]);
+
+        $total = static::getDatabase()->count('movies');
+
+        $this->assertEquals($total, count($documents));
     }
 
 
@@ -10388,7 +10402,7 @@ abstract class Base extends TestCase
             ],
             'name' => 'Floor 2',
             'renters' => [
-                    [
+                [
                     '$id' => 'renter2',
                     '$permissions' => [
                         Permission::read(Role::any()),
@@ -11016,60 +11030,60 @@ abstract class Base extends TestCase
         );
 
         static::getDatabase()->createDocument('groups', new Document([
-                    '$id' => 'group1',
+            '$id' => 'group1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Group 1',
+            'tounaments' => [
+                [
+                    '$id' => 'tounament1',
                     '$permissions' => [
                         Permission::read(Role::any()),
                     ],
-                    'name' => 'Group 1',
-                    'tounaments' => [
+                    'name' => 'Tounament 1',
+                    'prizes' => [
                         [
-                            '$id' => 'tounament1',
+                            '$id' => 'prize1',
                             '$permissions' => [
                                 Permission::read(Role::any()),
                             ],
-                            'name' => 'Tounament 1',
-                            'prizes' => [
-                                [
-                                    '$id' => 'prize1',
-                                    '$permissions' => [
-                                        Permission::read(Role::any()),
-                                    ],
-                                    'name' => 'Prize 1',
-                                ],
-                                [
-                                    '$id' => 'prize2',
-                                    '$permissions' => [
-                                        Permission::read(Role::any()),
-                                    ],
-                                    'name' => 'Prize 2',
-                                ],
-                            ],
+                            'name' => 'Prize 1',
                         ],
                         [
-                            '$id' => 'tounament2',
+                            '$id' => 'prize2',
                             '$permissions' => [
                                 Permission::read(Role::any()),
                             ],
-                            'name' => 'Tounament 2',
-                            'prizes' => [
-                                [
-                                    '$id' => 'prize3',
-                                    '$permissions' => [
-                                        Permission::read(Role::any()),
-                                    ],
-                                    'name' => 'Prize 3',
-                                ],
-                                [
-                                    '$id' => 'prize4',
-                                    '$permissions' => [
-                                        Permission::read(Role::any()),
-                                    ],
-                                    'name' => 'Prize 4',
-                                ],
-                            ],
+                            'name' => 'Prize 2',
                         ],
                     ],
-                ]));
+                ],
+                [
+                    '$id' => 'tounament2',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                    ],
+                    'name' => 'Tounament 2',
+                    'prizes' => [
+                        [
+                            '$id' => 'prize3',
+                            '$permissions' => [
+                                Permission::read(Role::any()),
+                            ],
+                            'name' => 'Prize 3',
+                        ],
+                        [
+                            '$id' => 'prize4',
+                            '$permissions' => [
+                                Permission::read(Role::any()),
+                            ],
+                            'name' => 'Prize 4',
+                        ],
+                    ],
+                ],
+            ],
+        ]));
 
         $group1 = static::getDatabase()->getDocument('groups', 'group1');
         $this->assertEquals(2, \count($group1['tounaments']));

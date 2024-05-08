@@ -8,16 +8,16 @@ use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;
+use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
-use Utopia\Database\Database;
-use Utopia\Database\Exception\Timeout;
-use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
-use Utopia\Mongo\Exception as MongoException;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
+use Utopia\Mongo\Exception as MongoException;
 
 class Mongo extends Adapter
 {

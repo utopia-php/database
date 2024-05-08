@@ -4,8 +4,8 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
-use Utopia\Database\Query;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Query;
 
 class QueryTest extends TestCase
 {

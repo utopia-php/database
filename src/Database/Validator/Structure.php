@@ -12,8 +12,8 @@ use Utopia\Http\Validator;
 use Utopia\Http\Validator\Boolean;
 use Utopia\Http\Validator\FloatValidator;
 use Utopia\Http\Validator\Integer;
-use Utopia\Http\Validator\Text;
 use Utopia\Http\Validator\Range;
+use Utopia\Http\Validator\Text;
 
 class Structure extends Validator
 {

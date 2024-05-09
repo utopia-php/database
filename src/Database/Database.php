@@ -1121,7 +1121,7 @@ class Database
 
         if ($this->adapter->getSharedTables()) {
             $result = \array_filter($result, function ($collection) {
-                return $collection->getAttribute('$tenant') === $this->adapter->getTenant();
+                return $collection->getAttribute('$tenant') == $this->adapter->getTenant();
             });
         }
 

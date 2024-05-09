@@ -15002,6 +15002,8 @@ abstract class Base extends TestCase
             ])
         ]);
 
+        $this->assertCount(1, $database->listCollections());
+
         if ($database->getAdapter()->getSupportForFulltextIndex()) {
             $database->createIndex(
                 collection: 'people',
@@ -15027,7 +15029,7 @@ abstract class Base extends TestCase
         $this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
 
         $docs = $database->find('people');
-        $this->assertEquals(1, \count($docs));
+        $this->assertCount(1, $docs);
 
         // Swap to tenant 2, no access
         $database->setTenant($tenant2);
@@ -15045,6 +15047,8 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertEquals('Collection not found', $e->getMessage());
         }
+
+        $this->assertCount(0, $database->listCollections());
 
         // Swap back to tenant 1, allowed
         $database->setTenant($tenant1);

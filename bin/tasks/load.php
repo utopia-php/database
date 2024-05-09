@@ -7,23 +7,23 @@ global $cli;
 
 use Faker\Factory;
 use Faker\Generator;
+use Swoole\Database\PDOConfig;
+use Swoole\Database\PDOPool;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
+use Utopia\CLI\CLI;
+use Utopia\CLI\Console;
+use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
-use Swoole\Database\PDOConfig;
-use Swoole\Database\PDOPool;
-use Utopia\Cache\Cache;
-use Utopia\Cache\Adapter\None as NoCache;
-use Utopia\CLI\CLI;
-use Utopia\CLI\Console;
-use Utopia\Database\Database;
-use Utopia\Database\Document;
-use Utopia\Database\Adapter\Mongo;
-use Utopia\Database\Adapter\MariaDB;
-use Utopia\Http\Validator\Numeric;
-use Utopia\Http\Validator\Text;
+use Utopia\Validator\Numeric;
+use Utopia\Validator\Text;
 
 $authorization = new Authorization();
 

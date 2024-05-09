@@ -310,7 +310,7 @@ class Structure extends Validator
                     continue;
                 }
 
-                if (!\is_array($value) || (!empty($value) && \array_keys($value) !== \range(0, count($value) - 1))) {
+                if (!\is_array($value) || !\array_is_list($value)) {
                     $this->message = 'Attribute "'.$key.'" must be an array';
                     return false;
                 }

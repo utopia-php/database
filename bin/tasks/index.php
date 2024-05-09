@@ -5,16 +5,16 @@
  */
 global $cli;
 
-use Utopia\Database\Adapter\MySQL;
-use Utopia\Mongo\Client;
-use Utopia\Cache\Cache;
 use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
 use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
-use Utopia\Database\Database;
-use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MariaDB;
-use Utopia\Http\Validator\Text;
+use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Database;
+use Utopia\Mongo\Client;
+use Utopia\Validator\Text;
 
 /**
  * @Example

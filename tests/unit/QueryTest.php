@@ -4,8 +4,8 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
-use Utopia\Database\Query;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Query;
 
 class QueryTest extends TestCase
 {
@@ -212,9 +212,16 @@ class QueryTest extends TestCase
         $this->assertEquals(Query::TYPE_EQUAL, $queries[0]->getMethod());
         $this->assertEquals('actors', $queries[0]->getAttribute());
         $this->assertEquals($json, '{"method":"or","values":[{"method":"equal","attribute":"actors","values":["Brad Pitt"]},{"method":"equal","attribute":"actors","values":["Johnny Depp"]}]}');
+
+        try {
+            Query::parse('{"method":"equal","attribute":["title"],"values":["test"]}');
+            $this->fail('Failed to throw exception');
+        } catch (QueryException $e) {
+            $this->assertEquals('Invalid query attribute. Must be a string, got array', $e->getMessage());
+        }
     }
 
-    public function testisMethod(): void
+    public function testIsMethod(): void
     {
         $this->assertTrue(Query::isMethod('equal'));
         $this->assertTrue(Query::isMethod('notEqual'));

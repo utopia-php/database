@@ -115,7 +115,7 @@ abstract class SQL extends Adapter
             WHERE _uid = :_uid 
 		";
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= "AND _tenant = :_tenant";
         }
 
@@ -123,7 +123,7 @@ abstract class SQL extends Adapter
 
         $stmt->bindValue(':_uid', $id);
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->getTenant());
         }
 
@@ -861,7 +861,7 @@ abstract class SQL extends Adapter
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
 
         $tenantQuery = '';
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $tenantQuery = 'AND _tenant = :_tenant';
         }
 

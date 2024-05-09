@@ -12,7 +12,7 @@ abstract class Adapter
 
     protected string $namespace = '';
 
-    protected bool $shareTables = false;
+    protected bool $sharedTables = false;
 
     protected ?int $tenant = null;
 
@@ -160,17 +160,17 @@ abstract class Adapter
     }
 
     /**
-     * Set Share Tables.
+     * Set Shared Tables.
      *
      * Set whether to share tables between tenants
      *
-     * @param bool $shareTables
+     * @param bool $sharedTables
      *
      * @return bool
      */
-    public function setShareTables(bool $shareTables): bool
+    public function setSharedTables(bool $sharedTables): bool
     {
-        $this->shareTables = $shareTables;
+        $this->sharedTables = $sharedTables;
 
         return true;
     }
@@ -182,9 +182,9 @@ abstract class Adapter
      *
      * @return bool
      */
-    public function getShareTables(): bool
+    public function getSharedTables(): bool
     {
-        return $this->shareTables;
+        return $this->sharedTables;
     }
 
     /**

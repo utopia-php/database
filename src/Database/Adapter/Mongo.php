@@ -8,16 +8,16 @@ use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;
+use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
-use Utopia\Database\Database;
-use Utopia\Database\Exception\Timeout;
-use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
-use Utopia\Mongo\Exception as MongoException;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
+use Utopia\Mongo\Exception as MongoException;
 
 class Mongo extends Adapter
 {
@@ -484,14 +484,14 @@ class Mongo extends Adapter
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
-                } elseif ($twoWay) {
+                } else {
                     $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
-                } elseif ($twoWay) {
+                } else {
                     $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
                 }
                 break;
@@ -631,7 +631,7 @@ class Mongo extends Adapter
 
         $filters = ['_uid' => $id];
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -671,7 +671,7 @@ class Mongo extends Adapter
 
         $document->removeAttribute('$internalId');
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $document->setAttribute('$tenant', (string)$this->getTenant());
         }
 
@@ -709,7 +709,7 @@ class Mongo extends Adapter
         foreach ($documents as $document) {
             $document->removeAttribute('$internalId');
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $document->setAttribute('$tenant', (string)$this->getTenant());
             }
 
@@ -746,7 +746,7 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
 
@@ -781,7 +781,7 @@ class Mongo extends Adapter
 
         $filters = [];
         $filters['_uid'] = $document->getId();
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -816,7 +816,7 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
 
@@ -843,7 +843,7 @@ class Mongo extends Adapter
         $attribute = $this->filter($attribute);
         $filters = ['_uid' => $id];
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -879,7 +879,7 @@ class Mongo extends Adapter
 
         $filters = [];
         $filters['_uid'] = $id;
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -928,7 +928,7 @@ class Mongo extends Adapter
 
         $filters = $this->buildFilters($queries);
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 

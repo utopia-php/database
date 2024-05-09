@@ -1192,7 +1192,11 @@ class Database
 
         $this->adapter->deleteCollection($id);
 
-        $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
+        if ($id === self::METADATA) {
+            $deleted = true;
+        } else {
+            $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
+        }
 
         if ($deleted) {
             $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);

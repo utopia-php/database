@@ -15000,6 +15000,11 @@ abstract class Base extends TestCase
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['name']
             ])
+        ], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
         ]);
 
         $this->assertCount(1, $database->listCollections());

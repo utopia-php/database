@@ -15033,6 +15033,32 @@ abstract class Base extends TestCase
         $this->assertEquals('Spiderman', $doc['name']);
         $this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
 
+        /**
+         * Remove Permissions
+         */
+        $doc->setAttribute('$permissions', [
+            Permission::read(Role::any())
+        ]);
+
+        $database->updateDocument('people', $docId, $doc);
+
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEquals([Permission::read(Role::any())], $doc['$permissions']);
+        $this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
+
+        /**
+         * Add Permissions
+         */
+        $doc->setAttribute('$permissions', [
+            Permission::read(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        $database->updateDocument('people', $docId, $doc);
+
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEquals([Permission::read(Role::any()), Permission::delete(Role::any())], $doc['$permissions']);
+
         $docs = $database->find('people');
         $this->assertCount(1, $docs);
 

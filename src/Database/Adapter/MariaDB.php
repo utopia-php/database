@@ -1103,7 +1103,7 @@ class MariaDB extends SQL
              */
             $removeQuery = '';
             if (!empty($removals)) {
-                $removeQuery = 'AND (';
+                $removeQuery = ' AND (';
                 foreach ($removals as $type => $permissions) {
                     $removeQuery .= "(
                     _type = '{$type}'

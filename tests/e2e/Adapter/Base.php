@@ -2198,6 +2198,11 @@ abstract class Base extends TestCase
 
     public function testEmptyTenant(): void
     {
+        if(static::getDatabase()->getAdapter()->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $documents = static::getDatabase()->find(
             'documents',
             [Query::notEqual('$id', '56000')] // Mongo bug with Integer UID

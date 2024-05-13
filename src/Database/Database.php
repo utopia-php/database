@@ -3075,6 +3075,10 @@ class Database
             ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
             ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
+        if($this->adapter->getSharedTables()) {
+            $document['$tenant'] = (string)$this->adapter->getTenant();
+        }
+
         $document = $this->encode($collection, $document);
 
         if ($this->validate) {
@@ -3102,7 +3106,6 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
-
         return $document;
     }
 
@@ -3136,7 +3139,7 @@ class Database
         foreach ($documents as $key => $document) {
             if ($this->adapter->getSharedTables()) {
                 if (empty($document->getAttribute('$tenant'))) {
-                    throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
+                    //throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
                 }
             }
 
@@ -3697,7 +3700,7 @@ class Database
 
         foreach ($documents as $document) {
             if ($this->adapter->getSharedTables() && empty($document->getAttribute('$tenant'))) {
-                throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
+                //throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
             }
 
             if (!$document->getId()) {

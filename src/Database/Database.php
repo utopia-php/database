@@ -3102,7 +3102,6 @@ class Database
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
-
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
@@ -3137,12 +3136,6 @@ class Database
         $time = DateTime::now();
 
         foreach ($documents as $key => $document) {
-            if ($this->adapter->getSharedTables()) {
-                if (empty($document->getAttribute('$tenant'))) {
-                    //throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
-                }
-            }
-
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 
@@ -3699,10 +3692,6 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         foreach ($documents as $document) {
-            if ($this->adapter->getSharedTables() && empty($document->getAttribute('$tenant'))) {
-                //throw new DatabaseException('Missing tenant. Tenant must be included when isolation mode is set to "table".');
-            }
-
             if (!$document->getId()) {
                 throw new DatabaseException('Must define $id attribute for each document');
             }

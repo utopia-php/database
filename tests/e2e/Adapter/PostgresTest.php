@@ -45,11 +45,12 @@ class PostgresTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new Postgres($pdo), $cache);
-        $database->setDatabase('utopiaTests');
-        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
-        if ($database->exists('utopiaTests')) {
-            $database->delete('utopiaTests');
+        if ($database->exists()) {
+            $database->delete();
         }
 
         $database->create();

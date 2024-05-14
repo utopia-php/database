@@ -53,7 +53,9 @@ class MongoDBTest extends Base
         $database = new Database(new Mongo($client), $cache);
         $database
             ->setDatabase($schema)
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setSharedTables(true)
+            ->setTenant(999)
+            ->setNamespace(static::$namespace = '');
 
         if ($database->exists()) {
             $database->delete();

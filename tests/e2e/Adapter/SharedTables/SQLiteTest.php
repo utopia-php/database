@@ -53,7 +53,9 @@ class SQLiteTest extends Base
         $database = new Database(new SQLite($pdo), $cache);
         $database
             ->setDatabase('utopiaTests')
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+            ->setSharedTables(true)
+            ->setTenant(999)
+            ->setNamespace(static::$namespace = '');
 
         if ($database->exists()) {
             $database->delete();

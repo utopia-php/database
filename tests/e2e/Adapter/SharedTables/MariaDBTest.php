@@ -1,15 +1,16 @@
 <?php
 
-namespace Tests\E2E\Adapter;
+namespace Tests\E2E\Adapter\SharedTables;
 
 use PDO;
 use Redis;
+use Tests\E2E\Adapter\Base;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Database;
 
-class MariaDBSharedTablesTest extends Base
+class MariaDBTest extends Base
 {
     protected static ?Database $database = null;
     protected static string $namespace;
@@ -46,13 +47,14 @@ class MariaDBSharedTablesTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MariaDB($pdo), $cache);
-        $database->setDatabase('utopiaTests');
-        $database->setSharedTables(true);
-        $database->setTenant(999);
-        $database->setNamespace(static::$namespace = '');
+        $database
+            ->setDatabase('utopiaTests')
+            ->setSharedTables(true)
+            ->setTenant(999)
+            ->setNamespace(static::$namespace = '');
 
-        if ($database->exists('utopiaTests')) {
-            $database->delete('utopiaTests');
+        if ($database->exists()) {
+            $database->delete();
         }
 
         $database->create();

@@ -1645,12 +1645,12 @@ class MariaDB extends SQL
             if (!$this->getPDO()->commit()) {
                 throw new DatabaseException('Failed to commit transaction');
             }
-        } catch (\Throwable $th) {
+        } catch (\Throwable $e) {
             if($this->getPDO()->inTransaction()) {
                 $this->getPDO()->rollBack();
             }
 
-            throw new DatabaseException($th->getMessage());
+            throw $e;
         }
 
         return $deleted;

@@ -2198,12 +2198,12 @@ class Postgres extends SQL
     {
         // Regular PDO
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            throw new Timeout($e->getMessage());
+            throw new Timeout($e->getMessage(), $e->getCode(), $e);
         }
 
         // PDOProxy switches errorInfo PDOProxy.php line 64
         if ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014') {
-            throw new Timeout($e->getMessage());
+            throw new Timeout($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;

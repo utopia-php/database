@@ -225,6 +225,10 @@ class Query
             throw new QueryException('Invalid query: ' . $e->getMessage());
         }
 
+        if (!\is_array($query)) {
+            throw new QueryException('Invalid query. Must be an array, got ' . \gettype($query));
+        }
+
         return self::parseQuery($query);
     }
 

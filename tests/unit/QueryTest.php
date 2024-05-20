@@ -219,6 +219,13 @@ class QueryTest extends TestCase
         } catch (QueryException $e) {
             $this->assertEquals('Invalid query attribute. Must be a string, got array', $e->getMessage());
         }
+
+        try {
+            Query::parse('false');
+            $this->fail('Failed to throw exception');
+        } catch (QueryException $e) {
+            $this->assertEquals('Invalid query. Must be an array, got boolean', $e->getMessage());
+        }
     }
 
     public function testIsMethod(): void

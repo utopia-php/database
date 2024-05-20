@@ -1300,7 +1300,7 @@ class MariaDB extends SQL
 
                 $addQuery = '';
                 $addBindValues = [];
-
+                /* @var $document Document */
                 foreach ($batch as $index => $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();

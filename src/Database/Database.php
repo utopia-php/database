@@ -5231,7 +5231,7 @@ class Database
      * @return mixed
      * @throws DatabaseException
      */
-    protected function encodeAttribute(string $name, $value, Document $document): mixed
+    protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new DatabaseException("Filter: {$name} not found");

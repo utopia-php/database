@@ -41,12 +41,12 @@ class MySQL extends MariaDB
     protected function processException(PDOException $e): void
     {
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
-            throw new TimeoutException($e->getMessage());
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         // PDOProxy which who switches errorInfo
         if ($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000") {
-            throw new TimeoutException($e->getMessage());
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;

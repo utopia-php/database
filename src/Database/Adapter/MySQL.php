@@ -10,47 +10,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 class MySQL extends MariaDB
 {
     /**
-     * Get SQL Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     *
-     * @return string
-     * @throws DatabaseException
-     */
-    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
-    {
-        switch ($type) {
-            case Database::INDEX_KEY:
-                $type = 'INDEX';
-                break;
-
-            case Database::INDEX_ARRAY:
-                $type = 'INDEX';
-
-                foreach ($attributes as $key => $value) {
-                    $attributes[$key] = '(CAST(' . $value . ' AS char(255) ARRAY))';
-                }
-                break;
-
-            case Database::INDEX_UNIQUE:
-                $type = 'UNIQUE INDEX';
-                break;
-
-            case Database::INDEX_FULLTEXT:
-                $type = 'FULLTEXT INDEX';
-                break;
-
-            default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT);
-        }
-
-        return 'CREATE '.$type.' `'.$id.'` ON `'.$this->getDatabase().'`.`'.$this->getNamespace().'_'.$collection.'` ( '.implode(', ', $attributes).' );';
-    }
-
-    /**
      * Set max execution time
      * @param int $milliseconds
      * @param string $event
@@ -82,12 +41,12 @@ class MySQL extends MariaDB
     protected function processException(PDOException $e): void
     {
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
-            throw new TimeoutException($e->getMessage());
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         // PDOProxy which who switches errorInfo
         if ($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000") {
-            throw new TimeoutException($e->getMessage());
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;
@@ -131,5 +90,13 @@ class MySQL extends MariaDB
         }
 
         return $size;
+    }
+
+    /**
+     * @return bool
+     */
+    public function castIndexArray(): bool
+    {
+        return true;
     }
 }

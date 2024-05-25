@@ -8,16 +8,16 @@ use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;
+use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
-use Utopia\Database\Database;
-use Utopia\Database\Exception\Timeout;
-use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
-use Utopia\Mongo\Exception as MongoException;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
+use Utopia\Mongo\Exception as MongoException;
 
 class Mongo extends Adapter
 {
@@ -377,11 +377,12 @@ class Mongo extends Adapter
      * @param bool $twoWay
      * @param string $key
      * @param string $twoWayKey
+     * @param string $side
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @return bool
+     * @throws DatabaseException
      * @throws MongoException
-     * @throws Exception
      */
     public function updateRelationship(
         string $collection,
@@ -390,6 +391,7 @@ class Mongo extends Adapter
         bool $twoWay,
         string $key,
         string $twoWayKey,
+        string $side,
         ?string $newKey = null,
         ?string $newTwoWayKey = null
     ): bool {
@@ -482,14 +484,14 @@ class Mongo extends Adapter
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
-                } elseif ($twoWay) {
+                } else {
                     $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     $this->getClient()->update($collection, [], ['$unset' => [$key => '']], multi: true);
-                } elseif ($twoWay) {
+                } else {
                     $this->getClient()->update($relatedCollection, [], ['$unset' => [$twoWayKey => '']], multi: true);
                 }
                 break;
@@ -629,7 +631,7 @@ class Mongo extends Adapter
 
         $filters = ['_uid' => $id];
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -667,9 +669,11 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $internalId = $document->getInternalId();
 
-        $document
-            ->removeAttribute('$internalId')
-            ->setAttribute('$tenant', (string)$this->getTenant());
+        $document->removeAttribute('$internalId');
+
+        if ($this->sharedTables) {
+            $document->setAttribute('$tenant', (string)$this->getTenant());
+        }
 
         $record = $this->replaceChars('$', '_', (array)$document);
         $record = $this->timeToMongo($record);
@@ -703,9 +707,11 @@ class Mongo extends Adapter
 
         $records = [];
         foreach ($documents as $document) {
-            $document
-                ->removeAttribute('$internalId')
-                ->setAttribute('$tenant', (string)$this->getTenant());
+            $document->removeAttribute('$internalId');
+
+            if ($this->sharedTables) {
+                $document->setAttribute('$tenant', (string)$this->getTenant());
+            }
 
             $record = $this->replaceChars('$', '_', (array)$document);
             $record = $this->timeToMongo($record);
@@ -740,7 +746,7 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
 
@@ -775,7 +781,7 @@ class Mongo extends Adapter
 
         $filters = [];
         $filters['_uid'] = $document->getId();
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -810,13 +816,11 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
 
             $this->client->update($name, $filters, $document);
-
-            $documents[$index] = new Document($document);
         }
 
         return $documents;
@@ -839,7 +843,7 @@ class Mongo extends Adapter
         $attribute = $this->filter($attribute);
         $filters = ['_uid' => $id];
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -875,7 +879,7 @@ class Mongo extends Adapter
 
         $filters = [];
         $filters['_uid'] = $id;
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -924,7 +928,7 @@ class Mongo extends Adapter
 
         $filters = $this->buildFilters($queries);
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
@@ -1388,7 +1392,11 @@ class Mongo extends Adapter
         } elseif ($operator == '$ne' && \is_array($value)) {
             $filter[$attribute]['$nin'] = $value;
         } elseif ($operator == '$in') {
-            $filter[$attribute]['$in'] = $query->getValues();
+            if($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
+                $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
+            } else {
+                $filter[$attribute]['$in'] = $query->getValues();
+            }
         } elseif ($operator == '$search') {
             $filter['$text'][$operator] = $value;
         } elseif ($operator === Query::TYPE_BETWEEN) {

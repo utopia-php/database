@@ -70,6 +70,7 @@ class Query
 
     protected string $method = '';
     protected string $attribute = '';
+    protected bool $onArray = false;
 
     /**
      * @var array<mixed>
@@ -220,8 +221,12 @@ class Query
     {
         try {
             $query = \json_decode($query, true, flags: JSON_THROW_ON_ERROR);
-        } catch (JsonException $e) {
+        } catch (\JsonException $e) {
             throw new QueryException('Invalid query: ' . $e->getMessage());
+        }
+
+        if (!\is_array($query)) {
+            throw new QueryException('Invalid query. Must be an array, got ' . \gettype($query));
         }
 
         return self::parseQuery($query);
@@ -242,6 +247,10 @@ class Query
 
         if (!self::isMethod($method)) {
             throw new QueryException('Invalid query method: ' . $method);
+        }
+
+        if (!\is_string($attribute)) {
+            throw new QueryException('Invalid query attribute. Must be a string, got ' . \gettype($attribute));
         }
 
         if (\in_array($method, self::LOGICAL_TYPES)) {
@@ -677,5 +686,22 @@ class Query
         }
 
         return false;
+    }
+
+    /**
+     * @return bool
+     */
+    public function onArray(): bool
+    {
+        return $this->onArray;
+    }
+
+    /**
+     * @param bool $bool
+     * @return void
+     */
+    public function setOnArray(bool $bool): void
+    {
+        $this->onArray = $bool;
     }
 }

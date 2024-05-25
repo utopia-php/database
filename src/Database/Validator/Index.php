@@ -3,9 +3,9 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Validator;
-use Utopia\Database\Document;
 
 class Index extends Validator
 {
@@ -97,7 +97,6 @@ class Index extends Validator
     /**
      * @param Document $index
      * @return bool
-     * @throws DatabaseException
      */
     public function checkFulltextIndexNonString(Document $index): bool
     {
@@ -108,6 +107,51 @@ class Index extends Validator
                     $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a FULLTEXT index, must be of type string';
                     return false;
                 }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkArrayIndex(Document $index): bool
+    {
+        $attributes = $index->getAttribute('attributes', []);
+        $orders = $index->getAttribute('orders', []);
+        $lengths = $index->getAttribute('lengths', []);
+
+        $arrayAttributes = [];
+        foreach ($attributes as $attributePosition => $attributeName) {
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
+
+            if($attribute->getAttribute('array', false)) {
+                // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
+                if($index->getAttribute('type') != Database::INDEX_KEY) {
+                    $this->message = '"' . ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
+                    return false;
+                }
+
+                if(empty($lengths[$attributePosition])) {
+                    $this->message = 'Index length for array not specified';
+                    return false;
+                }
+
+                $arrayAttributes[] = $attribute->getAttribute('key', '');
+                if(count($arrayAttributes) > 1) {
+                    $this->message = 'An index may only contain one array attribute';
+                    return false;
+                }
+
+                $direction = $orders[$attributePosition] ?? '';
+                if(!empty($direction)) {
+                    $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
+                    return false;
+                }
+            } elseif($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
+                $this->message = 'Cannot set a length on "'. $attribute->getAttribute('type') . '" attributes';
+                return false;
             }
         }
         return true;
@@ -142,6 +186,11 @@ class Index extends Validator
                     $attributeSize = 1; // 4 bytes / 4 mb4
                     $indexLength = 1;
                     break;
+            }
+
+            if($attribute->getAttribute('array', false)) {
+                $attributeSize = Database::ARRAY_INDEX_LENGTH;
+                $indexLength = Database::ARRAY_INDEX_LENGTH;
             }
 
             if ($indexLength > $attributeSize) {
@@ -183,6 +232,10 @@ class Index extends Validator
         }
 
         if (!$this->checkFulltextIndexNonString($value)) {
+            return false;
+        }
+
+        if (!$this->checkArrayIndex($value)) {
             return false;
         }
 

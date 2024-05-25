@@ -36,8 +36,8 @@
         "ext-pdo": "*",
         "ext-mbstring": "*",
         "php": ">=8.0",
-        "utopia-php/framework": "0.*.*",
-        "utopia-php/cache": "0.8.*",
+        "utopia-php/framework": "0.33.*",
+        "utopia-php/cache": "0.9.*",
         "utopia-php/mongo": "0.3.*"
     },
     "require-dev": {

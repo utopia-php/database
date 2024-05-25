@@ -82,36 +82,41 @@ class Postgres extends SQL
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
+        /** @var array<string> $attributeStrings */
+        $attributeStrings = [];
+
         $this->getPDO()->beginTransaction();
 
-        foreach ($attributes as &$attribute) {
+        /** @var array<string> $attributeStrings */
+        $attributeStrings = [];
+        foreach ($attributes as $attribute) {
             $attrId = $this->filter($attribute->getId());
-            $attrType = $this->getSQLType($attribute->getAttribute('type'), $attribute->getAttribute('size', 0), $attribute->getAttribute('signed', true));
 
-            if ($attribute->getAttribute('array')) {
-                $attrType = 'TEXT';
-            }
+            $attrType = $this->getSQLType(
+                $attribute->getAttribute('type'),
+                $attribute->getAttribute('size', 0),
+                $attribute->getAttribute('signed', true),
+                $attribute->getAttribute('array', false)
+            );
 
-            $attribute = "\"{$attrId}\" {$attrType}, ";
+            $attributeStrings[] = "\"{$attrId}\" {$attrType}, ";
         }
 
-        /**
-         * @var array<string> $attributes
-         */
+        $sqlTenant = $this->sharedTables ? '_tenant INTEGER DEFAULT NULL,' : '';
+
         $sql = "
             CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
                 _id SERIAL NOT NULL,
                 _uid VARCHAR(255) NOT NULL,
-                _tenant INTEGER DEFAULT NULL,
+                ". $sqlTenant ."
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 _permissions TEXT DEFAULT NULL,
-                " . \implode(' ', $attributes) . "
+                " . \implode(' ', $attributeStrings) . "
                 PRIMARY KEY (_id)
             );
         ";
-
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= "
 				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid), _tenant);
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
@@ -144,7 +149,7 @@ class Postgres extends SQL
 				);   
 			";
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $sql .= "
 					CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_ukey\" 
 				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_document,_type,_permission);
@@ -169,7 +174,7 @@ class Postgres extends SQL
             foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
                 $indexType = $index->getAttribute('type');
-                $indexAttributes = $index->getAttribute('attributes');
+                $indexAttributes = $index->getAttribute('attributes', []);
                 $indexOrders = $index->getAttribute('orders', []);
 
                 $this->createIndex(
@@ -261,11 +266,7 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'TEXT';
-        }
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
         $sql = "
 			ALTER TABLE {$this->getSQLTable($name)}
@@ -350,11 +351,7 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed);
-
-        if ($array) {
-            $type = 'LONGTEXT';
-        }
+        $type = $this->getSQLType($type, $size, $signed, $array);
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
@@ -432,10 +429,11 @@ class Postgres extends SQL
      * @param bool $twoWay
      * @param string $key
      * @param string $twoWayKey
+     * @param string $side
      * @param string|null $newKey
      * @param string|null $newTwoWayKey
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function updateRelationship(
         string $collection,
@@ -444,6 +442,7 @@ class Postgres extends SQL
         bool $twoWay,
         string $key,
         string $twoWayKey,
+        string $side,
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
     ): bool {
@@ -465,21 +464,33 @@ class Postgres extends SQL
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                if (!\is_null($newKey)) {
+                if ($key !== $newKey) {
                     $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
                 }
-                if ($twoWay && !\is_null($newTwoWayKey)) {
+                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
                     $sql .= "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
                 }
                 break;
-            case Database::RELATION_MANY_TO_ONE:
-                if (!\is_null($newKey)) {
-                    $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+                    }
+                } else {
+                    if ($key !== $newKey) {
+                        $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+                    }
                 }
                 break;
-            case Database::RELATION_ONE_TO_MANY:
-                if ($twoWay && !\is_null($newTwoWayKey)) {
-                    $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $sql = "ALTER TABLE {$relatedTable} RENAME COLUMN \"{$twoWayKey}\" TO \"{$newTwoWayKey}\";";
+                    }
+                } else {
+                    if ($key !== $newKey) {
+                        $sql = "ALTER TABLE {$table} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
+                    }
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -510,6 +521,17 @@ class Postgres extends SQL
             ->execute();
     }
 
+    /**
+     * @param string $collection
+     * @param string $relatedCollection
+     * @param string $type
+     * @param bool $twoWay
+     * @param string $key
+     * @param string $twoWayKey
+     * @param string $side
+     * @return bool
+     * @throws DatabaseException
+     */
     public function deleteRelationship(
         string $collection,
         string $relatedCollection,
@@ -524,12 +546,22 @@ class Postgres extends SQL
         $table = $this->getSQLTable($name);
         $relatedTable = $this->getSQLTable($relatedName);
         $key = $this->filter($key);
+        $twoWayKey = $this->filter($twoWayKey);
+
+        $sql = '';
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
-                $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                if ($twoWay) {
-                    $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                    if ($twoWay) {
+                        $sql .= "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                    }
+                } elseif ($side === Database::RELATION_SIDE_CHILD) {
+                    $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                    if ($twoWay) {
+                        $sql .= "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
+                    }
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
@@ -540,10 +572,10 @@ class Postgres extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
-                } else {
+                if ($side === Database::RELATION_SIDE_CHILD) {
                     $sql = "ALTER TABLE {$relatedTable} DROP COLUMN \"{$twoWayKey}\";";
+                } else {
+                    $sql = "ALTER TABLE {$table} DROP COLUMN \"{$key}\";";
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
@@ -562,6 +594,10 @@ class Postgres extends SQL
                 break;
             default:
                 throw new DatabaseException('Invalid relationship type');
+        }
+
+        if (empty($sql)) {
+            return true;
         }
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
@@ -585,34 +621,42 @@ class Postgres extends SQL
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
     {
-        $name = $this->filter($collection);
+        $collection = $this->filter($collection);
         $id = $this->filter($id);
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => '_uid',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $attribute
-        }, $attributes);
+        foreach ($attributes as $i => $attr) {
+            $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
 
-        foreach ($attributes as $key => &$attribute) {
-            $length = $lengths[$key] ?? '';
-            $length = (empty($length)) ? '' : '(' . (int)$length . ')';
-            $order = $orders[$key] ?? '';
-            $attribute = $this->filter($attribute);
-
-            if (Database::INDEX_FULLTEXT === $type) {
-                $order = '';
-            }
+            $attr = match ($attr) {
+                '$id' => '_uid',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                default => $this->filter($attr),
+            };
 
             if (Database::INDEX_UNIQUE === $type) {
-                $attribute = "LOWER(\"{$attribute}\"::text) {$order}";
+                $attributes[$i] = "LOWER(\"{$attr}\"::text) {$order}";
             } else {
-                $attribute = "\"{$attribute}\" {$order}";
+                $attributes[$i] = "\"{$attr}\" {$order}";
             }
         }
 
-        $sql = $this->getSQLIndex($name, $id, $type, $attributes);
+        $sqlType = match ($type) {
+            Database::INDEX_KEY,
+            Database::INDEX_FULLTEXT => 'INDEX',
+            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT),
+        };
+
+        $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
+        $attributes = \implode(', ', $attributes);
+
+        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT) {
+            // Add tenant as first index column for best performance
+            $attributes = "_tenant, {$attributes}";
+        }
+
+        $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         return $this->getPDO()
@@ -683,10 +727,13 @@ class Postgres extends SQL
     public function createDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
-        $attributes['_tenant'] = $this->tenant;
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+        if ($this->sharedTables) {
+            $attributes['_tenant'] = $this->tenant;
+        }
 
         $name = $this->filter($collection);
         $columns = '';
@@ -746,22 +793,26 @@ class Postgres extends SQL
         foreach (Database::PERMISSIONS as $type) {
             foreach ($document->getPermissionsByType($type) as $permission) {
                 $permission = \str_replace('"', '', $permission);
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', :_tenant)";
+                $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
+                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}' {$sqlTenant})";
             }
         }
 
 
         if (!empty($permissions)) {
             $permissions = \implode(', ', $permissions);
+            $sqlTenant = $this->sharedTables ? ', _tenant' : '';
 
             $queryPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _tenant)
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$sqlTenant})
 				VALUES {$permissions}
 			";
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-            $stmtPermissions->bindValue(':_tenant', $this->tenant);
+            if($sqlTenant) {
+                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+            }
         }
 
         try {
@@ -820,11 +871,14 @@ class Postgres extends SQL
 
                 foreach ($batch as $document) {
                     $attributes = $document->getAttributes();
-                    $attributes['_tenant'] = $this->tenant;
                     $attributes['_uid'] = $document->getId();
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+                    if($this->sharedTables) {
+                        $attributes['_tenant'] = $this->tenant;
+                    }
 
                     $columns = [];
                     foreach (\array_keys($attributes) as $key => $attribute) {
@@ -905,10 +959,13 @@ class Postgres extends SQL
     public function updateDocument(string $collection, Document $document): Document
     {
         $attributes = $document->getAttributes();
-        $attributes['_tenant'] = $this->tenant;
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
+
+        if ($this->sharedTables) {
+            $attributes['_tenant'] = $this->tenant;
+        }
 
         $name = $this->filter($collection);
         $columns = '';
@@ -919,7 +976,7 @@ class Postgres extends SQL
 			WHERE _document = :_uid
 		";
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -931,7 +988,7 @@ class Postgres extends SQL
         $permissionsStmt = $this->getPDO()->prepare($sql);
         $permissionsStmt->bindValue(':_uid', $document->getId());
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $permissionsStmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -979,7 +1036,7 @@ class Postgres extends SQL
          */
         $removeQuery = '';
         if (!empty($removals)) {
-            $removeQuery = 'AND (';
+            $removeQuery = ' AND (';
             foreach ($removals as $type => $permissions) {
                 $removeQuery .= "(
                     _type = '{$type}'
@@ -999,7 +1056,7 @@ class Postgres extends SQL
                 WHERE _document = :_uid
 			";
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $sql .= ' AND _tenant = :_tenant';
             }
 
@@ -1009,7 +1066,7 @@ class Postgres extends SQL
             $stmtRemovePermissions = $this->getPDO()->prepare($removeQuery);
             $stmtRemovePermissions->bindValue(':_uid', $document->getId());
 
-            if ($this->shareTables) {
+            if ($this->sharedTables) {
                 $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
             }
 
@@ -1027,19 +1084,24 @@ class Postgres extends SQL
             $values = [];
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $_) {
-                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_tenant)";
+                    $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
+                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$sqlTenant})";
                 }
             }
 
+            $sqlTenant = $this->sharedTables ? ', _tenant' : '';
+
             $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _tenant)
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$sqlTenant})
 				VALUES" . \implode(', ', $values);
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
 
             $stmtAddPermissions = $this->getPDO()->prepare($sql);
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
-            $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+            if ($this->sharedTables) {
+                $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+            }
 
             foreach ($additions as $type => $permissions) {
                 foreach ($permissions as $i => $permission) {
@@ -1066,7 +1128,7 @@ class Postgres extends SQL
 			WHERE _uid = :_uid
 		";
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -1076,7 +1138,7 @@ class Postgres extends SQL
 
         $stmt->bindValue(':_uid', $document->getId());
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1156,10 +1218,13 @@ class Postgres extends SQL
                 foreach ($batch as $index => $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
-                    $attributes['_tenant'] = $this->tenant;
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
+
+                    if($this->sharedTables) {
+                        $attributes['_tenant'] = $this->tenant;
+                    }
 
                     $columns = \array_map(function ($attribute) {
                         return '"' . $this->filter($attribute) . '"';
@@ -1187,7 +1252,7 @@ class Postgres extends SQL
                         WHERE _document = :_uid
                     ";
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $sql .= ' AND _tenant = :_tenant';
                     }
 
@@ -1196,7 +1261,7 @@ class Postgres extends SQL
                     $permissionsStmt = $this->getPDO()->prepare($sql);
                     $permissionsStmt->bindValue(':_uid', $document->getId());
 
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $permissionsStmt->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1230,7 +1295,7 @@ class Postgres extends SQL
                             $removeBindValues[$bindKey] = $document->getId();
 
                             $tenantQuery = '';
-                            if ($this->shareTables) {
+                            if ($this->sharedTables) {
                                 $tenantQuery = ' AND _tenant = :_tenant';
                             }
 
@@ -1277,7 +1342,9 @@ class Postgres extends SQL
                                 $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
                                 $addBindValues[$bindKey] = $permission;
 
-                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey}, :_tenant)";
+                                $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
+
+                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey} {$tenantQuery})";
 
                                 if ($i !== \array_key_last($permissionsToAdd) || $type !== \array_key_last($additions)) {
                                     $addQuery .= ', ';
@@ -1304,7 +1371,7 @@ class Postgres extends SQL
                     VALUES " . \implode(', ', $batchKeys) . "
                 ";
 
-                if ($this->shareTables) {
+                if ($this->sharedTables) {
                     $sql .= "ON CONFLICT (_tenant, LOWER(_uid)) DO UPDATE SET $updateClause";
                 } else {
                     $sql .= "ON CONFLICT (LOWER(_uid)) DO UPDATE SET $updateClause";
@@ -1328,7 +1395,7 @@ class Postgres extends SQL
                     foreach ($removeBindValues as $key => $value) {
                         $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
-                    if ($this->shareTables) {
+                    if ($this->sharedTables) {
                         $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1336,15 +1403,21 @@ class Postgres extends SQL
                 }
 
                 if (!empty($addQuery)) {
+                    $tenantQuery = $this->sharedTables ? ', _tenant' : '';
+
                     $stmtAddPermissions = $this->getPDO()->prepare("
-                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _tenant)
+                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$tenantQuery})
                         VALUES {$addQuery}
                     ");
 
                     foreach ($addBindValues as $key => $value) {
                         $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
-                    $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+
+                    if($this->sharedTables) {
+                        $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+                    }
+
                     $stmtAddPermissions->execute();
                 }
             }
@@ -1390,7 +1463,7 @@ class Postgres extends SQL
 			WHERE _uid = :_uid 
 		";
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -1402,7 +1475,7 @@ class Postgres extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1429,7 +1502,7 @@ class Postgres extends SQL
 			WHERE _uid = :_uid
 		";
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -1437,7 +1510,7 @@ class Postgres extends SQL
         $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1446,8 +1519,7 @@ class Postgres extends SQL
 			WHERE _document = :_uid
 		";
 
-
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $sql .= ' AND _tenant = :_tenant';
         }
 
@@ -1456,14 +1528,19 @@ class Postgres extends SQL
         $stmtPermissions = $this->getPDO()->prepare($sql);
         $stmtPermissions->bindValue(':_uid', $id);
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmtPermissions->bindValue(':_tenant', $this->tenant);
         }
+
+        $deleted = false;
 
         try {
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete document');
             }
+
+            $deleted = $stmt->rowCount();
+
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to delete permissions');
             }
@@ -1476,7 +1553,7 @@ class Postgres extends SQL
             throw new DatabaseException('Failed to commit transaction');
         }
 
-        return true;
+        return $deleted;
     }
 
     /**
@@ -1579,7 +1656,7 @@ class Postgres extends SQL
             $where[] = $conditions;
         }
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $where[] = "table_main._tenant = :_tenant";
         }
 
@@ -1608,7 +1685,7 @@ class Postgres extends SQL
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1705,7 +1782,7 @@ class Postgres extends SQL
             $where[] = $conditions;
         }
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $where[] = "table_main._tenant = :_tenant";
         }
 
@@ -1730,7 +1807,7 @@ class Postgres extends SQL
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1768,7 +1845,7 @@ class Postgres extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $where[] = "table_main._tenant = :_tenant";
         }
 
@@ -1796,7 +1873,7 @@ class Postgres extends SQL
         foreach ($queries as $query) {
             $this->bindConditionValue($stmt, $query);
         }
-        if ($this->shareTables) {
+        if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
@@ -1879,8 +1956,9 @@ class Postgres extends SQL
             default => $query->getAttribute()
         });
 
-        $attribute = "\"{$query->getAttribute()}\"" ;
+        $attribute = "\"{$query->getAttribute()}\"";
         $placeholder = $this->getSQLPlaceholder($query);
+        $operator = null;
 
         switch ($query->getMethod()) {
             case Query::TYPE_SEARCH:
@@ -1893,10 +1971,15 @@ class Postgres extends SQL
             case Query::TYPE_IS_NOT_NULL:
                 return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
+            case Query::TYPE_CONTAINS:
+                $operator = $query->onArray() ? '@>' : null;
+
+                // no break
             default:
                 $conditions = [];
+                $operator = $operator ?? $this->getSQLOperator($query->getMethod());
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$this->getSQLOperator($query->getMethod()).' :'.$placeholder.'_'.$key;
+                    $conditions[] = $attribute.' '.$operator.' :'.$placeholder.'_'.$key;
                 }
                 $condition = implode(' OR ', $conditions);
                 return empty($condition) ? '' : '(' . $condition . ')';
@@ -1926,11 +2009,17 @@ class Postgres extends SQL
      *
      * @param string $type
      * @param int $size in chars
-     *
+     * @param bool $signed
+     * @param bool $array
      * @return string
+     * @throws DatabaseException
      */
-    protected function getSQLType(string $type, int $size, bool $signed = true): string
+    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
+        if($array === true) {
+            return 'JSONB';
+        }
+
         switch ($type) {
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
@@ -1963,38 +2052,6 @@ class Postgres extends SQL
             default:
                 throw new DatabaseException('Unknown Type: ' . $type);
         }
-    }
-
-    /**
-     * Get SQL Index
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param array<string> $attributes
-     *
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLIndex(string $collection, string $id, string $type, array $attributes): string
-    {
-        $sqlType = match ($type) {
-            Database::INDEX_KEY,
-            Database::INDEX_ARRAY,
-            Database::INDEX_FULLTEXT => 'INDEX',
-            Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_ARRAY . ', ' . Database::INDEX_FULLTEXT),
-        };
-
-        $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
-        $attributes = \implode(', ', $attributes);
-
-        if ($this->shareTables && $type !== Database::INDEX_FULLTEXT) {
-            // Add tenant as first index column for best performance
-            $attributes = "_tenant, {$attributes}";
-        }
-
-        return "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
     }
 
     /**
@@ -2100,6 +2157,16 @@ class Postgres extends SQL
     }
 
     /**
+     * Does the adapter handle Query Array Overlaps?
+     *
+     * @return bool
+     */
+    public function getSupportForJSONOverlaps(): bool
+    {
+        return false;
+    }
+
+    /**
      * Returns Max Execution Time
      * @param int $milliseconds
      * @param string $event
@@ -2131,14 +2198,22 @@ class Postgres extends SQL
     {
         // Regular PDO
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            throw new Timeout($e->getMessage());
+            throw new Timeout($e->getMessage(), $e->getCode(), $e);
         }
 
         // PDOProxy switches errorInfo PDOProxy.php line 64
         if ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014') {
-            throw new Timeout($e->getMessage());
+            throw new Timeout($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;
+    }
+
+    /**
+     * @return string
+     */
+    public function getLikeOperator(): string
+    {
+        return 'ILIKE';
     }
 }

@@ -2786,6 +2786,7 @@ class Database
         if (!$hasTwoWayRelationship && empty($relationships)) {
             $this->cache->save($documentCacheHash.'---'.$documentCacheKey, $document->getArrayCopy());
             //add document reference to the collection hash
+            var_dump('Saving '.$collectionCacheHash.'---'.$documentCacheHash);
             $this->cache->save($collectionCacheHash.'---'.$documentCacheHash, '');
         }
 

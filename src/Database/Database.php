@@ -2703,7 +2703,7 @@ class Database
          * Cache hash keys
          */
         $documentCacheHash = $documentCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':' . $id;
-        $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId();
+        $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . '-collection-' . $collection->getId();
         if (!empty($selections)) {
             $documentCacheKey .= ':' . \md5(\implode($selections));
         }
@@ -4729,7 +4729,7 @@ class Database
      */
     public function purgeCachedCollection(string $collection): bool
     {
-        $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection;
+        $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . '-collection-' . $collection;
         $documents = $this->cache->list($collectionCacheHash);
         foreach ($documents as $document) {
             $this->cache->purge($document);

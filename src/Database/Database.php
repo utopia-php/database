@@ -2785,7 +2785,7 @@ class Database
         // Don't save to cache if it's part of a two-way relationship or a relationship at all
         if (!$hasTwoWayRelationship && empty($relationships)) {
             $this->cache->save($documentCacheHash.'---'.$documentCacheKey, $document->getArrayCopy());
-             //add document reference to the collection hash
+            //add document reference to the collection hash
             $this->cache->save($collectionCacheHash.'---'.$documentCacheHash, '');
         }
 
@@ -4731,7 +4731,7 @@ class Database
     {
         $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection;
         $documents = $this->cache->list($collectionCacheHash);
-        foreach ($documents as $document){
+        foreach ($documents as $document) {
             $this->cache->purge($document);
         }
         return true;

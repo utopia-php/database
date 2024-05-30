@@ -2698,15 +2698,17 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $cacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':' . $id;
 
+        /**
+         * Cache hash keys
+         */
+        $documentCacheHash = $documentCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':' . $id;
+        $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId();
         if (!empty($selections)) {
-            $cacheKey .= ':' . \md5(\implode($selections));
-        } else {
-            $cacheKey .= ':*';
+            $documentCacheKey .= ':' . \md5(\implode($selections));
         }
 
-        if ($cache = $this->cache->load($cacheKey, self::TTL)) {
+        if ($cache = $this->cache->load($documentCacheHash.'---'.$documentCacheKey, self::TTL)) {
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {
@@ -2770,19 +2772,21 @@ class Database
         foreach ($this->map as $key => $value) {
             [$k, $v] = \explode('=>', $key);
             $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
-            $cache = $this->cache->load($ck, self::TTL);
+            $cache = $this->cache->load($ck.'---'.$ck, self::TTL);
             if (empty($cache)) {
                 $cache = [];
             }
             if (!\in_array($v, $cache)) {
                 $cache[] = $v;
-                $this->cache->save($ck, $cache);
+                $this->cache->save($ck.'---'.$ck, $cache);
             }
         }
 
         // Don't save to cache if it's part of a two-way relationship or a relationship at all
         if (!$hasTwoWayRelationship && empty($relationships)) {
-            $this->cache->save($cacheKey, $document->getArrayCopy());
+            $this->cache->save($documentCacheHash.'---'.$documentCacheKey, $document->getArrayCopy());
+             //add document reference to the collection hash
+            $this->cache->save($collectionCacheHash.'---'.$documentCacheHash, '');
         }
 
         // Remove internal attributes if not queried for select query
@@ -4725,7 +4729,12 @@ class Database
      */
     public function purgeCachedCollection(string $collection): bool
     {
-        return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':*');
+        $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection;
+        $documents = $this->cache->list($collectionCacheHash);
+        foreach ($documents as $document){
+            $this->cache->purge($document);
+        }
+        return true;
     }
 
     /**
@@ -4735,7 +4744,6 @@ class Database
      * @param string $id
      *
      * @return bool
-     * @throws DatabaseException
      */
     public function purgeCachedDocument(string $collection, string $id): bool
     {
@@ -5425,7 +5433,7 @@ class Database
         }
 
         $key = $this->cacheName . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
-        $cache = $this->cache->load($key, self::TTL);
+        $cache = $this->cache->load($key.'---'.$key, self::TTL);
         if (!empty($cache)) {
             foreach ($cache as $v) {
                 list($collectionId, $documentId) = explode(':', $v);

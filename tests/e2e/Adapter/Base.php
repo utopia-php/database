@@ -5730,7 +5730,17 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(StructureException::class, $e);
         }
 
+        try {
+            static::getDatabase()->createDocument('datetime', new Document([
+                'date' => '+055769-02-14T17:56:18.000Z'
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
         $invalidDates = [
+            '+055769-02-14T17:56:18.000Z1',
             '1975-12-06 00:00:61',
             '16/01/2024 12:00:00AM'
         ];

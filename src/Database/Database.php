@@ -2787,7 +2787,8 @@ class Database
             $this->cache->save($documentCacheHash.'---'.$documentCacheKey, $document->getArrayCopy());
             //add document reference to the collection hash
             var_dump('Saving '.$collectionCacheHash.'---'.$documentCacheHash);
-            $this->cache->save($collectionCacheHash.'---'.$documentCacheHash, '');
+            $bla = $this->cache->save($collectionCacheHash.'---'.$documentCacheHash, 'bla');
+            var_dump($bla);
         }
 
         // Remove internal attributes if not queried for select query

@@ -4747,7 +4747,7 @@ class Database
      */
     public function purgeCachedDocument(string $collection, string $id): bool
     {
-        return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id . ':*');
+        return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id);
     }
 
     /**

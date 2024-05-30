@@ -59,7 +59,7 @@ class Datetime extends Validator
 
         [$year] = explode('-', $value);
 
-        if ((int)$year > 9999 || (int)$year < 1000) {
+        if ((int)$year > 9999) {
             return false;
         }
 

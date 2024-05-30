@@ -57,6 +57,12 @@ class Datetime extends Validator
             return false;
         }
 
+        [$year] = explode('-', $value);
+
+        if ((int)$year > 9999) {
+            return false;
+        }
+
         return true;
     }
 

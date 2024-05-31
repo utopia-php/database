@@ -2786,9 +2786,8 @@ class Database
         if (!$hasTwoWayRelationship && empty($relationships)) {
             $this->cache->save($documentCacheHash.'---'.$documentCacheKey, $document->getArrayCopy());
             //add document reference to the collection hash
-            var_dump('Saving '.$collectionCacheHash.'---'.$documentCacheHash);
-            $bla = $this->cache->save($collectionCacheHash.'---'.$documentCacheHash, 'bla');
-            var_dump($bla);
+            $this->cache->save($collectionCacheHash.'---'.$documentCacheHash, 'empty');
+
         }
 
         // Remove internal attributes if not queried for select query
@@ -4749,6 +4748,8 @@ class Database
      */
     public function purgeCachedDocument(string $collection, string $id): bool
     {
+        $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':collection';
+        // Todo we should implement HDEL on the collection
         return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id);
     }
 

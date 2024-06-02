@@ -2702,13 +2702,14 @@ class Database
         /**
          * Cache hash keys
          */
-        $documentCacheHash = $documentCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':' . $id;
-        $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId() . ':collection';
+        $documentCacheBaseKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId();
+        $documentCacheKey = $documentCacheHash = $documentCacheBaseKey . ':' . $id;
+        $collectionCacheKey = $documentCacheBaseKey . ':collection';
         if (!empty($selections)) {
-            $documentCacheKey .= ':' . \md5(\implode($selections));
+            $documentCacheHash .= ':' . \md5(\implode($selections));
         }
 
-        if ($cache = $this->cache->load($documentCacheHash.'---'.$documentCacheKey, self::TTL)) {
+        if ($cache = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash)) {
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {
@@ -2772,21 +2773,21 @@ class Database
         foreach ($this->map as $key => $value) {
             [$k, $v] = \explode('=>', $key);
             $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
-            $cache = $this->cache->load($ck.'---'.$ck, self::TTL);
+            $cache = $this->cache->load($ck, self::TTL, $ck);
             if (empty($cache)) {
                 $cache = [];
             }
             if (!\in_array($v, $cache)) {
                 $cache[] = $v;
-                $this->cache->save($ck.'---'.$ck, $cache);
+                $this->cache->save($ck, $cache, $ck);
             }
         }
 
         // Don't save to cache if it's part of a two-way relationship or a relationship at all
         if (!$hasTwoWayRelationship && empty($relationships)) {
-            $this->cache->save($documentCacheHash.'---'.$documentCacheKey, $document->getArrayCopy());
+            $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
             //add document reference to the collection hash
-            $this->cache->save($collectionCacheHash.'---'.$documentCacheHash, 'empty');
+            $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
 
         }
 
@@ -4730,11 +4731,12 @@ class Database
      */
     public function purgeCachedCollection(string $collection): bool
     {
-        $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':collection';
-        $documents = $this->cache->list($collectionCacheHash);
-        foreach ($documents as $document) {
-            $this->cache->purge($document);
+        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':collection';
+        $documentKeys = $this->cache->list($collectionKey);
+        foreach ($documentKeys as $documentKey) {
+            $this->cache->purge($documentKey);
         }
+
         return true;
     }
 
@@ -4748,9 +4750,14 @@ class Database
      */
     public function purgeCachedDocument(string $collection, string $id): bool
     {
-        $collectionCacheHash = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':collection';
-        // Todo we should implement HDEL on the collection
-        return $this->cache->purge($this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':' . $id);
+        $baseKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection;
+        $documentKey =  $baseKey . ':' . $id;
+        $collectionKey = $baseKey . ':collection';
+
+        $this->cache->purge($collectionKey, $documentKey);
+        $this->cache->purge($documentKey);
+
+        return true;
     }
 
     /**
@@ -5436,7 +5443,7 @@ class Database
         }
 
         $key = $this->cacheName . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
-        $cache = $this->cache->load($key.'---'.$key, self::TTL);
+        $cache = $this->cache->load($key, self::TTL, $key);
         if (!empty($cache)) {
             foreach ($cache as $v) {
                 list($collectionId, $documentId) = explode(':', $v);

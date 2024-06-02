@@ -4750,7 +4750,7 @@ class Database
      */
     public function purgeCachedDocument(string $collection, string $id): bool
     {
-        $baseKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection;
+        $baseKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant();
         $documentKey =  $baseKey . ':' . $id;
         $collectionKey = $baseKey . ':collection';
 

@@ -2786,7 +2786,7 @@ class Database
         // Don't save to cache if it's part of a two-way relationship or a relationship at all
         if (!$hasTwoWayRelationship && empty($relationships)) {
             $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
-            //add document reference to the collection hash
+            //add document reference to the collection key
             $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
 
         }
@@ -4723,6 +4723,7 @@ class Database
 
     /**
      * Cleans the all the collection's documents from the cache
+     * And the all related cached documents.
      *
      * @param string $collection
      *
@@ -4742,6 +4743,7 @@ class Database
 
     /**
      * Cleans a specific document from cache
+     * And related document reference in the collection cache.
      *
      * @param string $collection
      * @param string $id
@@ -4750,7 +4752,7 @@ class Database
      */
     public function purgeCachedDocument(string $collection, string $id): bool
     {
-        $baseKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant();
+        $baseKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection;
         $documentKey =  $baseKey . ':' . $id;
         $collectionKey = $baseKey . ':collection';
 

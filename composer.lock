@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1fec834c5b222e402702b7bc89a5a8a8",
+    "content-hash": "54a22d537730ec4d452e304fb50dcebf",
     "packages": [
         {
             "name": "jean85/pretty-package-versions",
@@ -216,16 +216,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "0.9.1",
+            "version": "dev-refactor-redis-cache",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "552b4c554bb14d0c529631ce304cdf4a2b9d06a6"
+                "reference": "48e1b1800f4ffd14aaa89cc5505d1c99e5a2bcdc"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/552b4c554bb14d0c529631ce304cdf4a2b9d06a6",
-                "reference": "552b4c554bb14d0c529631ce304cdf4a2b9d06a6",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/48e1b1800f4ffd14aaa89cc5505d1c99e5a2bcdc",
+                "reference": "48e1b1800f4ffd14aaa89cc5505d1c99e5a2bcdc",
                 "shasum": ""
             },
             "require": {
@@ -260,9 +260,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/0.9.1"
+                "source": "https://github.com/utopia-php/cache/tree/refactor-redis-cache"
             },
-            "time": "2024-03-19T17:07:20+00:00"
+            "time": "2024-06-02T13:03:08+00:00"
         },
         {
             "name": "utopia-php/framework",
@@ -2592,9 +2592,18 @@
             "time": "2022-10-09T10:19:07+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "utopia-php/cache",
+            "version": "dev-refactor-redis-cache",
+            "alias": "0.9.1",
+            "alias_normalized": "0.9.1.0"
+        }
+    ],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {
+        "utopia-php/cache": 20
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -2603,5 +2612,5 @@
         "php": ">=8.0"
     },
     "platform-dev": [],
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.2.0"
 }

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "54a22d537730ec4d452e304fb50dcebf",
+    "content-hash": "0b71e4329463ee71c5067fa62792a52f",
     "packages": [
         {
             "name": "jean85/pretty-package-versions",
@@ -216,16 +216,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "dev-refactor-redis-cache",
+            "version": "0.10.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "48e1b1800f4ffd14aaa89cc5505d1c99e5a2bcdc"
+                "reference": "313bcdfbb166f75c2c205a59d1467cead63a9626"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/48e1b1800f4ffd14aaa89cc5505d1c99e5a2bcdc",
-                "reference": "48e1b1800f4ffd14aaa89cc5505d1c99e5a2bcdc",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/313bcdfbb166f75c2c205a59d1467cead63a9626",
+                "reference": "313bcdfbb166f75c2c205a59d1467cead63a9626",
                 "shasum": ""
             },
             "require": {
@@ -260,9 +260,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/refactor-redis-cache"
+                "source": "https://github.com/utopia-php/cache/tree/0.10.0"
             },
-            "time": "2024-06-02T13:03:08+00:00"
+            "time": "2024-06-05T16:40:43+00:00"
         },
         {
             "name": "utopia-php/framework",
@@ -2592,18 +2592,9 @@
             "time": "2022-10-09T10:19:07+00:00"
         }
     ],
-    "aliases": [
-        {
-            "package": "utopia-php/cache",
-            "version": "dev-refactor-redis-cache",
-            "alias": "0.9.1",
-            "alias_normalized": "0.9.1.0"
-        }
-    ],
+    "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "utopia-php/cache": 20
-    },
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

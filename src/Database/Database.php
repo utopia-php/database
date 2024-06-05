@@ -915,6 +915,7 @@ class Database
      *
      * @param string|null $database
      * @return bool
+     * @throws DatabaseException
      */
     public function delete(?string $database = null): bool
     {

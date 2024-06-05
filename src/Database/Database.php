@@ -2702,9 +2702,8 @@ class Database
         /**
          * Cache hash keys
          */
-        $documentCacheBaseKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection->getId();
-        $documentCacheKey = $documentCacheHash = $documentCacheBaseKey . ':' . $id;
-        $collectionCacheKey = $documentCacheBaseKey . ':collection';
+        $collectionCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection->getId();
+        $documentCacheKey = $documentCacheHash = $collectionCacheKey . ':' . $id;
         if (!empty($selections)) {
             $documentCacheHash .= ':' . \md5(\implode($selections));
         }
@@ -4732,7 +4731,7 @@ class Database
      */
     public function purgeCachedCollection(string $collection): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection . ':collection';
+        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection . ':collection';
         $documentKeys = $this->cache->list($collectionKey);
         foreach ($documentKeys as $documentKey) {
             $this->cache->purge($documentKey);
@@ -4752,9 +4751,8 @@ class Database
      */
     public function purgeCachedDocument(string $collection, string $id): bool
     {
-        $baseKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':' . $collection;
-        $documentKey =  $baseKey . ':' . $id;
-        $collectionKey = $baseKey . ':collection';
+        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection;
+        $documentKey =  $collectionKey . ':' . $id;
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);

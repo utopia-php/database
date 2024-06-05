@@ -4725,14 +4725,13 @@ class Database
      * Cleans the all the collection's documents from the cache
      * And the all related cached documents.
      *
-     * @param string $collection
+     * @param string $collectionId
      *
      * @return bool
-     * @throws DatabaseException
      */
-    public function purgeCachedCollection(string $collection): bool
+    public function purgeCachedCollection(string $collectionId): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection . ':collection';
+        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId . ':collection';
         $documentKeys = $this->cache->list($collectionKey);
         foreach ($documentKeys as $documentKey) {
             $this->cache->purge($documentKey);
@@ -4745,14 +4744,14 @@ class Database
      * Cleans a specific document from cache
      * And related document reference in the collection cache.
      *
-     * @param string $collection
+     * @param string $collectionId
      * @param string $id
      *
      * @return bool
      */
-    public function purgeCachedDocument(string $collection, string $id): bool
+    public function purgeCachedDocument(string $collectionId, string $id): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection;
+        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
         $documentKey =  $collectionKey . ':' . $id;
 
         $this->cache->purge($collectionKey, $documentKey);

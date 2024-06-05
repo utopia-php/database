@@ -2704,6 +2704,7 @@ class Database
          */
         $collectionCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection->getId();
         $documentCacheKey = $documentCacheHash = $collectionCacheKey . ':' . $id;
+
         if (!empty($selections)) {
             $documentCacheHash .= ':' . \md5(\implode($selections));
         }

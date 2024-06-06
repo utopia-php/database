@@ -3507,11 +3507,13 @@ class Database
         $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
         $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-        $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
-        if($this->adapter->getSharedTables()) {
-            $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
-        }
         $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
+        $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
+
+        if($this->adapter->getSharedTables()) {
+            $document['$tenant'] = $old->getAttribute('$tenant');       // Make sure user doesn't switch tenant
+        }
+
         $document = new Document($document);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));

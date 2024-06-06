@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-use Utopia\Cache\Cache;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
@@ -12,7 +11,7 @@ use Utopia\Database\Validator\Authorization;
 class Mirror extends Database
 {
     protected Database $source;
-    protected Database $destination;
+    protected ?Database $destination;
 
     /**
      * Filters to apply to documents before writing to the destination database
@@ -36,31 +35,32 @@ class Mirror extends Database
     ];
 
     /**
-     * @param Adapter $adapter
-     * @param Cache $cache
-     * @param Database $destination
+     * @param Database $source
+     * @param ?Database $destination
      * @param array<Filter> $filters
      */
     public function __construct(
-        Adapter $adapter,
-        Cache $cache,
-        Database $destination,
+        Database $source,
+        ?Database $destination = null,
         array $filters = [],
     ) {
-        parent::__construct($adapter, $cache);
-        $this->source = new Database($adapter, $cache);
+        parent::__construct(
+            $source->getAdapter(),
+            $source->getCache()
+        );
+        $this->source = $source;
         $this->destination = $destination;
         $this->writeFilters = $filters;
-    }
-
-    public function getDestination(): ?Database
-    {
-        return $this->destination;
     }
 
     public function getSource(): Database
     {
         return $this->source;
+    }
+
+    public function getDestination(): ?Database
+    {
+        return $this->destination;
     }
 
     /**
@@ -79,7 +79,11 @@ class Mirror extends Database
      */
     protected function delegate(string $method, array $args = []): mixed
     {
-        $result = parent::{$method}(...$args);
+        $result = $this->source->{$method}(...$args);
+
+        if ($this->destination === null) {
+            return $result;
+        }
 
         try {
             $result = $this->destination->{$method}(...$args);
@@ -112,13 +116,17 @@ class Mirror extends Database
 
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
-        $result = parent::createCollection(
+        $result = $this->source->createCollection(
             $id,
             $attributes,
             $indexes,
             $permissions,
             $documentSecurity
         );
+
+        if ($this->destination === null) {
+            return $result;
+        }
 
         try {
             $this->destination->createCollection(
@@ -131,7 +139,7 @@ class Mirror extends Database
 
             $this->createUpgrades();
 
-            parent::createDocument('upgrades', new Document([
+            $this->source->createDocument('upgrades', new Document([
                 '$id' => $id,
                 'collectionId' => $id,
                 'status' => 'upgraded'
@@ -179,9 +187,12 @@ class Mirror extends Database
 
     public function createDocument(string $collection, Document $document): Document
     {
-        $document = parent::createDocument($collection, $document);
+        $document = $this->source->createDocument($collection, $document);
 
-        if (\in_array($collection, self::SOURCE_ONLY_COLLECTIONS)) {
+        if (
+            \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+            || $this->destination === null
+        ) {
             return $document;
         }
 
@@ -214,7 +225,14 @@ class Mirror extends Database
 
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
-        $document = parent::updateDocument($collection, $id, $document);
+        $document = $this->source->updateDocument($collection, $id, $document);
+
+        if (
+            \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+            || $this->destination === null
+        ) {
+            return $document;
+        }
 
         $upgrade = $this->getUpgradeStatus($collection);
         if ($upgrade->getAttribute('status', '') !== 'upgraded') {
@@ -233,11 +251,9 @@ class Mirror extends Database
                 );
             }
 
-            if (!$this->destination->getDocument($collection, $id)->isEmpty()) {
-                $this->destination->setPreserveDates(true);
-                $this->destination->updateDocument($collection, $id, $clone);
-                $this->destination->setPreserveDates(false);
-            }
+            $this->destination->setPreserveDates(true);
+            $this->destination->updateDocument($collection, $id, $clone);
+            $this->destination->setPreserveDates(false);
         } catch (\Throwable $err) {
             $this->logError('updateDocument', $err);
         }
@@ -247,7 +263,14 @@ class Mirror extends Database
 
     public function deleteDocument(string $collection, string $id): bool
     {
-        $result = parent::deleteDocument($collection, $id);
+        $result = $this->source->deleteDocument($collection, $id);
+
+        if (
+            \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+            || $this->destination === null
+        ) {
+            return $result;
+        }
 
         $upgrade = $this->getUpgradeStatus($collection);
         if ($upgrade->getAttribute('status', '') !== 'upgraded') {
@@ -354,7 +377,7 @@ class Mirror extends Database
     public function createUpgrades(): void
     {
         try {
-            parent::createCollection(
+            $this->source->createCollection(
                 id: 'upgrades',
                 attributes: [
                     new Document([

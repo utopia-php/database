@@ -11,6 +11,7 @@ use Utopia\Database\Validator\Authorization;
 
 class Mirror extends Database
 {
+    protected Database $source;
     protected Database $destination;
 
     /**
@@ -21,18 +22,18 @@ class Mirror extends Database
     protected array $writeFilters = [];
 
     /**
-     * Collections that should only be present in the source database
-     */
-    protected const SOURCE_ONLY_COLLECTIONS = [
-        'upgrades',
-    ];
-
-    /**
      * Callbacks to run when an error occurs on the destination database
      *
      * @var array<callable(string, \Throwable): void>
      */
     protected array $errorCallbacks = [];
+
+    /**
+     * Collections that should only be present in the source database
+     */
+    protected const SOURCE_ONLY_COLLECTIONS = [
+        'upgrades',
+    ];
 
     /**
      * @param Adapter $adapter
@@ -47,6 +48,7 @@ class Mirror extends Database
         array $filters = [],
     ) {
         parent::__construct($adapter, $cache);
+        $this->source = new Database($adapter, $cache);
         $this->destination = $destination;
         $this->writeFilters = $filters;
     }
@@ -58,7 +60,7 @@ class Mirror extends Database
 
     public function getSource(): Database
     {
-        return $this;
+        return $this->source;
     }
 
     /**
@@ -193,9 +195,9 @@ class Mirror extends Database
 
             foreach ($this->writeFilters as $filter) {
                 $clone = $filter->onCreateDocument(
-                    source: $this,
+                    source: $this->source,
                     destination: $this->destination,
-                    collection: $collection,
+                    collectionId: $collection,
                     document: $clone,
                 );
             }
@@ -224,9 +226,9 @@ class Mirror extends Database
 
             foreach ($this->writeFilters as $filter) {
                 $clone = $filter->onUpdateDocument(
-                    source: $this,
+                    source: $this->source,
                     destination: $this->destination,
-                    collection: $collection,
+                    collectionId: $collection,
                     document: $clone,
                 );
             }
@@ -257,9 +259,10 @@ class Mirror extends Database
 
             foreach ($this->writeFilters as $filter) {
                 $filter->onDeleteDocument(
-                    source: $this,
+                    source: $this->source,
                     destination: $this->destination,
-                    collection: $collection,
+                    collectionId: $collection,
+                    documentId: $id,
                 );
             }
         } catch (\Throwable $err) {

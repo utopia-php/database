@@ -2207,6 +2207,11 @@ abstract class Base extends TestCase
 
     public function testEmptyTenant(): void
     {
+        if(static::getDatabase()->getAdapter()->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $documents = static::getDatabase()->find(
             'documents',
             [Query::notEqual('$id', '56000')] // Mongo bug with Integer UID
@@ -5733,7 +5738,17 @@ abstract class Base extends TestCase
             $this->assertInstanceOf(StructureException::class, $e);
         }
 
+        try {
+            static::getDatabase()->createDocument('datetime', new Document([
+                'date' => '+055769-02-14T17:56:18.000Z'
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
         $invalidDates = [
+            '+055769-02-14T17:56:18.000Z1',
             '1975-12-06 00:00:61',
             '16/01/2024 12:00:00AM'
         ];
@@ -15040,6 +15055,32 @@ abstract class Base extends TestCase
         $doc = $database->getDocument('people', $docId);
         $this->assertEquals('Spiderman', $doc['name']);
         $this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
+
+        /**
+         * Remove Permissions
+         */
+        $doc->setAttribute('$permissions', [
+            Permission::read(Role::any())
+        ]);
+
+        $database->updateDocument('people', $docId, $doc);
+
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEquals([Permission::read(Role::any())], $doc['$permissions']);
+        $this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
+
+        /**
+         * Add Permissions
+         */
+        $doc->setAttribute('$permissions', [
+            Permission::read(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        $database->updateDocument('people', $docId, $doc);
+
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEquals([Permission::read(Role::any()), Permission::delete(Role::any())], $doc['$permissions']);
 
         $docs = $database->find('people');
         $this->assertCount(1, $docs);

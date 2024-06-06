@@ -1,15 +1,16 @@
 <?php
 
-namespace Tests\E2E\Adapter;
+namespace Tests\E2E\Adapter\SharedTables;
 
 use PDO;
 use Redis;
+use Tests\E2E\Adapter\Base;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
-use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Database;
 
-class MySQLTest extends Base
+class SQLiteTest extends Base
 {
     public static ?Database $database = null;
     protected static string $namespace;
@@ -22,35 +23,40 @@ class MySQLTest extends Base
      */
     public static function getAdapterName(): string
     {
-        return "mysql";
+        return "sqlite";
     }
 
     /**
      * @return Database
      */
-    public function getDatabase(): Database
+    public static function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
         }
 
-        $dbHost = 'mysql';
-        $dbPort = '3307';
-        $dbUser = 'root';
-        $dbPass = 'password';
+        $db = __DIR__."/database.sql";
 
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
+        if (file_exists($db)) {
+            unlink($db);
+        }
+
+        $dsn = $db;
+        //$dsn = 'memory'; // Overwrite for fast tests
+        $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
-        $redis->connect('redis', 6379);
+        $redis->connect('redis');
         $redis->flushAll();
 
         $cache = new Cache(new RedisAdapter($redis));
 
-        $database = new Database(new MySQL($pdo), $cache);
-        $database->setAuthorization(self::$authorization);
-        $database->setDatabase('utopiaTests');
-        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
+        $database = new Database(new SQLite($pdo), $cache);
+        $database
+            ->setDatabase('utopiaTests')
+            ->setSharedTables(true)
+            ->setTenant(999)
+            ->setNamespace(static::$namespace = '');
 
         if ($database->exists()) {
             $database->delete();

@@ -45,13 +45,13 @@ class MariaDBTest extends Base
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 
-        $database = new Database(new MariaDB($pdo), $cache, []);
+        $database = new Database(new MariaDB($pdo), $cache);
         $database->setAuthorization(self::$authorization);
         $database->setDatabase('utopiaTests');
         $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
-        if ($database->exists('utopiaTests')) {
-            $database->delete('utopiaTests');
+        if ($database->exists()) {
+            $database->delete();
         }
 
         $database->create();

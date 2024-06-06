@@ -1,9 +1,10 @@
 <?php
 
-namespace Tests\E2E\Adapter;
+namespace Tests\E2E\Adapter\SharedTables;
 
 use Exception;
 use Redis;
+use Tests\E2E\Adapter\Base;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
@@ -29,7 +30,7 @@ class MongoDBTest extends Base
      * @return Database
      * @throws Exception
      */
-    public function getDatabase(): Database
+    public static function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -51,9 +52,11 @@ class MongoDBTest extends Base
         );
 
         $database = new Database(new Mongo($client), $cache);
-        $database->setAuthorization(self::$authorization);
-        $database->setDatabase($schema);
-        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
+        $database
+            ->setDatabase($schema)
+            ->setSharedTables(true)
+            ->setTenant(999)
+            ->setNamespace(static::$namespace = '');
 
         if ($database->exists()) {
             $database->delete();
@@ -70,10 +73,10 @@ class MongoDBTest extends Base
     public function testCreateExistsDelete(): void
     {
         // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
-        $this->assertNotNull($this->getDatabase()->create());
-        $this->assertEquals(true, $this->getDatabase()->delete($this->testDatabase));
-        $this->assertEquals(true, $this->getDatabase()->create());
-        $this->assertEquals($this->getDatabase(), $this->getDatabase()->setDatabase($this->testDatabase));
+        $this->assertNotNull(static::getDatabase()->create());
+        $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
+        $this->assertEquals(true, static::getDatabase()->create());
+        $this->assertEquals(static::getDatabase(), static::getDatabase()->setDatabase($this->testDatabase));
     }
 
     public function testRenameAttribute(): void

@@ -1,9 +1,10 @@
 <?php
 
-namespace Tests\E2E\Adapter;
+namespace Tests\E2E\Adapter\SharedTables;
 
 use PDO;
 use Redis;
+use Tests\E2E\Adapter\Base;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Postgres;
@@ -27,7 +28,7 @@ class PostgresTest extends Base
     /**
      * @reture Adapter
      */
-    public function getDatabase(): Database
+    public static function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -45,9 +46,11 @@ class PostgresTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new Postgres($pdo), $cache);
-        $database->setAuthorization(self::$authorization);
-        $database->setDatabase('utopiaTests');
-        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
+        $database
+            ->setDatabase('utopiaTests')
+            ->setSharedTables(true)
+            ->setTenant(999)
+            ->setNamespace(static::$namespace = '');
 
         if ($database->exists()) {
             $database->delete();

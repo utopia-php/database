@@ -862,7 +862,7 @@ class MariaDB extends SQL
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
                 }
             }
 
@@ -1000,7 +1000,7 @@ class MariaDB extends SQL
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
                 }
             }
 
@@ -1102,7 +1102,7 @@ class MariaDB extends SQL
              */
             $removeQuery = '';
             if (!empty($removals)) {
-                $removeQuery = 'AND (';
+                $removeQuery = ' AND (';
                 foreach ($removals as $type => $permissions) {
                     $removeQuery .= "(
                     _type = '{$type}'
@@ -1255,7 +1255,7 @@ class MariaDB extends SQL
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
                 }
             }
 
@@ -1299,7 +1299,7 @@ class MariaDB extends SQL
 
                 $addQuery = '';
                 $addBindValues = [];
-
+                /* @var $document Document */
                 foreach ($batch as $index => $document) {
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
@@ -1522,7 +1522,7 @@ class MariaDB extends SQL
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage());
+                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
                 }
             }
 
@@ -1644,12 +1644,12 @@ class MariaDB extends SQL
             if (!$this->getPDO()->commit()) {
                 throw new DatabaseException('Failed to commit transaction');
             }
-        } catch (\Throwable $th) {
+        } catch (\Throwable $e) {
             if($this->getPDO()->inTransaction()) {
                 $this->getPDO()->rollBack();
             }
 
-            throw new DatabaseException($th->getMessage());
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
         return $deleted;
@@ -2246,12 +2246,12 @@ class MariaDB extends SQL
     {
         // Regular PDO
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
-            throw new TimeoutException($e->getMessage());
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         // PDOProxy switches errorInfo PDOProxy.php line 64
         if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
-            throw new TimeoutException($e->getMessage());
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;

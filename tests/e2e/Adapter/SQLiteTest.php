@@ -50,7 +50,7 @@ class SQLiteTest extends Base
 
         $cache = new Cache(new RedisAdapter($redis));
 
-        $database = new Database(new SQLite($pdo), $cache, []);
+        $database = new Database(new SQLite($pdo), $cache);
         $database->setAuthorization(self::$authorization);
         $database->setDatabase('utopiaTests');
         $database->setNamespace(static::$namespace = 'myapp_' . uniqid());

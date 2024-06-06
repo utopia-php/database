@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Validator;
+use Utopia\Http\Validator;
 
 class Datetime extends Validator
 {

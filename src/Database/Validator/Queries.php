@@ -4,7 +4,7 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
-use Utopia\Validator;
+use Utopia\Http\Validator;
 
 class Queries extends Validator
 {

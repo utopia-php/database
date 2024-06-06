@@ -94,6 +94,16 @@ class Mirror extends Database
         return $result;
     }
 
+    public function setDatabase(string $name): Database
+    {
+        return $this->delegate('setDatabase', [$name]);
+    }
+
+    public function setNamespace(string $namespace): Database
+    {
+        return $this->delegate('setNamespace', [$namespace]);
+    }
+
     public function enableValidation(): self
     {
         return $this->delegate('enableValidation');

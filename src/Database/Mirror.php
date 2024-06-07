@@ -233,6 +233,53 @@ class Mirror extends Database
         return $document;
     }
 
+    public function createDocuments(
+        string $collection,
+        array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE
+    ): array {
+        $documents = $this->source->createDocuments($collection, $documents, $batchSize);
+
+        if (
+            \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+            || $this->destination === null
+        ) {
+            return $documents;
+        }
+
+        $upgrade = $this->getUpgradeStatus($collection);
+        if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
+            return $documents;
+        }
+
+        try {
+            $clones = [];
+
+            foreach ($documents as $document) {
+                $clone = clone $document;
+
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->onCreateDocument(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+
+                $clones[] = $clone;
+            }
+
+            $this->destination->setPreserveDates(true);
+            $this->destination->createDocuments($collection, $clones, $batchSize);
+            $this->destination->setPreserveDates(false);
+        } catch (\Throwable $err) {
+            $this->logError('createDocuments', $err);
+        }
+
+        return $documents;
+    }
+
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
         $document = $this->source->updateDocument($collection, $id, $document);
@@ -269,6 +316,53 @@ class Mirror extends Database
         }
 
         return $document;
+    }
+
+    public function updateDocuments(
+        string $collection,
+        array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE
+    ): array {
+        $documents = $this->source->updateDocuments($collection, $documents, $batchSize);
+
+        if (
+            \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+            || $this->destination === null
+        ) {
+            return $documents;
+        }
+
+        $upgrade = $this->getUpgradeStatus($collection);
+        if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
+            return $documents;
+        }
+
+        try {
+            $clones = [];
+
+            foreach ($documents as $document) {
+                $clone = clone $document;
+
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->onUpdateDocument(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+
+                $clones[] = $clone;
+            }
+
+            $this->destination->setPreserveDates(true);
+            $this->destination->updateDocuments($collection, $clones, $batchSize);
+            $this->destination->setPreserveDates(false);
+        } catch (\Throwable $err) {
+            $this->logError('updateDocuments', $err);
+        }
+
+        return $documents;
     }
 
     public function deleteDocument(string $collection, string $id): bool

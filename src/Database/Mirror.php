@@ -259,6 +259,14 @@ class Mirror extends Database
 
     public function createDocument(string $collection, Document $document): Document
     {
+        $time = DateTime::now();
+
+        $createdAt = $document->getCreatedAt();
+        $updatedAt = $document->getUpdatedAt();
+
+        $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+        $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
         $document = $this->source->createDocument($collection, $document);
 
         if (
@@ -300,6 +308,16 @@ class Mirror extends Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): array {
+        $time = DateTime::now();
+
+        foreach ($documents as $document) {
+            $createdAt = $document->getCreatedAt();
+            $updatedAt = $document->getUpdatedAt();
+
+            $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+            $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+        }
+
         $documents = $this->source->createDocuments($collection, $documents, $batchSize);
 
         if (
@@ -344,6 +362,14 @@ class Mirror extends Database
 
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
+        $time = DateTime::now();
+
+        $createdAt = $document->getCreatedAt();
+        $updatedAt = $document->getUpdatedAt();
+
+        $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+        $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
         $document = $this->source->updateDocument($collection, $id, $document);
 
         if (
@@ -385,6 +411,16 @@ class Mirror extends Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): array {
+        $time = DateTime::now();
+
+        foreach ($documents as $document) {
+            $createdAt = $document->getCreatedAt();
+            $updatedAt = $document->getUpdatedAt();
+
+            $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+            $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+        }
+
         $documents = $this->source->updateDocuments($collection, $documents, $batchSize);
 
         if (

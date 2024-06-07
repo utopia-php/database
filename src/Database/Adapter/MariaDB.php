@@ -841,7 +841,7 @@ class MariaDB extends SQL
                     $stmtPermissions->bindValue(':_tenant', $this->tenant);
                 }
             }
-            
+
             $stmt->execute();
 
             $document['$internalId'] = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])])->getInternalId();

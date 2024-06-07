@@ -143,6 +143,23 @@ class Mirror extends Database
         return $this;
     }
 
+    public function on(string $event, string $name, callable $callback): static
+    {
+        $this->source->on($event, $name, $callback);
+
+        return $this;
+    }
+
+    protected function trigger(string $event, mixed $args = null): void
+    {
+        $this->source->trigger($event, $args);
+    }
+
+    public function silent(callable $callback, array $listeners = null): mixed
+    {
+        return $this->source->silent($callback, $listeners);
+    }
+
     public function exists(?string $database = null, ?string $collection = null): bool
     {
         return $this->delegate('exists', [$database, $collection]);

@@ -126,6 +126,8 @@ class Mirror extends Database
     {
         $this->delegate('setPreserveDates', [$preserve]);
 
+        $this->preserveDates = $preserve;
+
         return $this;
     }
 
@@ -133,12 +135,16 @@ class Mirror extends Database
     {
         $this->delegate('enableValidation');
 
+        $this->validate = true;
+
         return $this;
     }
 
     public function disableValidation(): static
     {
         $this->delegate('disableValidation');
+
+        $this->validate = false;
 
         return $this;
     }

@@ -3109,9 +3109,11 @@ class Database
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
+
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
+
         return $document;
     }
 

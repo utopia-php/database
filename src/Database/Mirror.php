@@ -438,14 +438,18 @@ class Mirror extends Database
     /**
      * @throws Exception
      */
-    protected function getUpgradeStatus(string $collection): Document
+    protected function getUpgradeStatus(string $collection): ?Document
     {
         if ($collection === 'upgrades' || $collection === Database::METADATA) {
-            return new Document([]);
+            return new Document();
         }
 
         return Authorization::skip(function () use ($collection) {
-            return $this->getDocument('upgrades', $collection);
+            try {
+                return $this->getDocument('upgrades', $collection);
+            } catch (\Throwable) {
+                return null;
+            }
         });
     }
 

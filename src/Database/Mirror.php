@@ -207,7 +207,7 @@ class Mirror extends Database
         }
 
         $upgrade = $this->getUpgradeStatus($collection);
-        if ($upgrade->getAttribute('status', '') !== 'upgraded') {
+        if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $document;
         }
 
@@ -292,7 +292,7 @@ class Mirror extends Database
         }
 
         $upgrade = $this->getUpgradeStatus($collection);
-        if ($upgrade->getAttribute('status', '') !== 'upgraded') {
+        if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $document;
         }
 
@@ -377,7 +377,7 @@ class Mirror extends Database
         }
 
         $upgrade = $this->getUpgradeStatus($collection);
-        if ($upgrade->getAttribute('status', '') !== 'upgraded') {
+        if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $result;
         }
 

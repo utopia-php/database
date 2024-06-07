@@ -160,6 +160,11 @@ class Mirror extends Database
         return $this->source->silent($callback, $listeners);
     }
 
+    public function withRequestTimestamp(?\DateTime $requestTimestamp, callable $callback): mixed
+    {
+        return $this->delegate('withRequestTimestamp', [$requestTimestamp, $callback]);
+    }
+
     public function exists(?string $database = null, ?string $collection = null): bool
     {
         return $this->delegate('exists', [$database, $collection]);

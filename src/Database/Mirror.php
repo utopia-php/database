@@ -96,37 +96,51 @@ class Mirror extends Database
 
     public function setDatabase(string $name): static
     {
-        return $this->delegate('setDatabase', [$name]);
+        $this->delegate('setDatabase', [$name]);
+
+        return $this;
     }
 
     public function setNamespace(string $namespace): static
     {
-        return $this->delegate('setNamespace', [$namespace]);
+        $this->delegate('setNamespace', [$namespace]);
+
+        return $this;
     }
 
     public function setSharedTables(bool $sharedTables): static
     {
-        return $this->delegate('setSharedTables', [$sharedTables]);
+        $this->delegate('setSharedTables', [$sharedTables]);
+
+        return $this;
     }
 
     public function setTenant(?int $tenant): static
     {
-        return $this->delegate('setTenant', [$tenant]);
+        $this->delegate('setTenant', [$tenant]);
+
+        return $this;
     }
 
     public function setPreserveDates(bool $preserve): static
     {
-        return $this->delegate('setPreserveDates', [$preserve]);
+        $this->delegate('setPreserveDates', [$preserve]);
+
+        return $this;
     }
 
     public function enableValidation(): static
     {
-        return $this->delegate('enableValidation');
+        $this->delegate('enableValidation');
+
+        return $this;
     }
 
     public function disableValidation(): static
     {
-        return $this->delegate('disableValidation');
+        $this->delegate('disableValidation');
+
+        return $this;
     }
 
     public function exists(?string $database = null, ?string $collection = null): bool

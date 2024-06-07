@@ -1478,7 +1478,7 @@ class Database
         $updateCallback($attributes[$index], $collection, $index);
 
         // Save
-        $collection->setAttribute('attributes', $attributes, Document::SET_TYPE_ASSIGN);
+        $collection->setAttribute('attributes', $attributes);
 
         $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 

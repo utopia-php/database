@@ -104,7 +104,22 @@ class Mirror extends Database
         return $this->delegate('setNamespace', [$namespace]);
     }
 
-    public function enableValidation(): self
+    public function setSharedTables(bool $sharedTables): static
+    {
+        return $this->delegate('setSharedTables', [$sharedTables]);
+    }
+
+    public function setTenant(?int $tenant): static
+    {
+        return $this->delegate('setTenant', [$tenant]);
+    }
+
+    public function setPreserveDates(bool $preserve): static
+    {
+        return $this->delegate('setPreserveDates', [$preserve]);
+    }
+
+    public function enableValidation(): static
     {
         return $this->delegate('enableValidation');
     }
@@ -114,14 +129,19 @@ class Mirror extends Database
         return $this->delegate('disableValidation');
     }
 
-    public function delete(?string $database = null): bool
+    public function exists(?string $database = null, ?string $collection = null): bool
     {
-        return $this->delegate('delete', [$database]);
+        return $this->delegate('exists', [$database, $collection]);
     }
 
     public function create(?string $database = null): bool
     {
         return $this->delegate('create', [$database]);
+    }
+
+    public function delete(?string $database = null): bool
+    {
+        return $this->delegate('delete', [$database]);
     }
 
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document

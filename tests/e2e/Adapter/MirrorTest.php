@@ -8,10 +8,13 @@ use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Exception;
+use Utopia\Database\Exception\Authorization;
 use Utopia\Database\Exception\Conflict;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Limit;
+use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
@@ -80,7 +83,7 @@ class MirrorTest extends Base
      * @throws Exception
      * @throws \RedisException
      */
-    public function testGetSource(): void
+    public function testGetMirrorSource(): void
     {
         $database = self::getDatabase();
         $source = $database->getSource();
@@ -92,7 +95,7 @@ class MirrorTest extends Base
      * @throws Exception
      * @throws \RedisException
      */
-    public function testGetDestination(): void
+    public function testGetMirrorDestination(): void
     {
         $database = self::getDatabase();
         $destination = $database->getDestination();
@@ -106,15 +109,15 @@ class MirrorTest extends Base
      * @throws Exception
      * @throws \RedisException
      */
-    public function testCreateCollection(): void
+    public function testCreateMirroredCollection(): void
     {
         $database = self::getDatabase();
 
-        $database->createCollection('testCreateCollection');
+        $database->createCollection('testCreateMirroredCollection');
 
         // Assert collection exists in both databases
-        $this->assertFalse($database->getSource()->getCollection('testCreateCollection')->isEmpty());
-        $this->assertFalse($database->getDestination()->getCollection('testCreateCollection')->isEmpty());
+        $this->assertFalse($database->getSource()->getCollection('testCreateMirroredCollection')->isEmpty());
+        $this->assertFalse($database->getDestination()->getCollection('testCreateMirroredCollection')->isEmpty());
     }
 
     /**
@@ -124,18 +127,18 @@ class MirrorTest extends Base
      * @throws Conflict
      * @throws Exception
      */
-    public function testUpdateCollection(): void
+    public function testUpdateMirroredCollection(): void
     {
         $database = self::getDatabase();
 
-        $database->createCollection('testUpdateCollection', permissions: [
+        $database->createCollection('testUpdateMirroredCollection', permissions: [
             Permission::read(Role::any()),
         ]);
 
-        $collection = $database->getCollection('testUpdateCollection');
+        $collection = $database->getCollection('testUpdateMirroredCollection');
 
         $database->updateCollection(
-            'testUpdateCollection',
+            'testUpdateMirroredCollection',
             [
                 Permission::read(Role::users()),
             ],
@@ -145,12 +148,144 @@ class MirrorTest extends Base
         // Asset both databases have updated the collection
         $this->assertEquals(
             [Permission::read(Role::users())],
-            $database->getSource()->getCollection('testUpdateCollection')->getPermissions()
+            $database->getSource()->getCollection('testUpdateMirroredCollection')->getPermissions()
         );
 
         $this->assertEquals(
             [Permission::read(Role::users())],
-            $database->getDestination()->getCollection('testUpdateCollection')->getPermissions()
+            $database->getDestination()->getCollection('testUpdateMirroredCollection')->getPermissions()
         );
+    }
+
+    public function testDeleteMirroredCollection(): void
+    {
+        $database = self::getDatabase();
+
+        $database->createCollection('testDeleteMirroredCollection');
+
+        $database->deleteCollection('testDeleteMirroredCollection');
+
+        // Assert collection is deleted in both databases
+        $this->assertTrue($database->getSource()->getCollection('testDeleteMirroredCollection')->isEmpty());
+        $this->assertTrue($database->getDestination()->getCollection('testDeleteMirroredCollection')->isEmpty());
+    }
+
+    /**
+     * @throws Authorization
+     * @throws Duplicate
+     * @throws \RedisException
+     * @throws Limit
+     * @throws Structure
+     * @throws Exception
+     */
+    public function testCreateMirroredDocument(): void
+    {
+        $database = self::getDatabase();
+
+        $database->createCollection('testCreateMirroredDocument', attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'required' => true,
+                'size' => Database::LENGTH_KEY,
+            ]),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false);
+
+        $document = $database->createDocument('testCreateMirroredDocument', new Document([
+            'name' => 'Jake',
+            '$permissions' => []
+        ]));
+
+        // Assert document is created in both databases
+        $this->assertEquals(
+            $document,
+            $database->getSource()->getDocument('testCreateMirroredDocument', $document->getId())
+        );
+
+        $this->assertEquals(
+            $document,
+            $database->getDestination()->getDocument('testCreateMirroredDocument', $document->getId())
+        );
+    }
+
+    /**
+     * @throws Authorization
+     * @throws Duplicate
+     * @throws \RedisException
+     * @throws Conflict
+     * @throws Limit
+     * @throws Structure
+     * @throws Exception
+     */
+    public function testUpdateMirroredDocument(): void
+    {
+        $database = self::getDatabase();
+
+        $database->createCollection('testUpdateMirroredDocument', attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'required' => true,
+                'size' => Database::LENGTH_KEY,
+            ]),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false);
+
+        $document = $database->createDocument('testUpdateMirroredDocument', new Document([
+            'name' => 'Jake',
+            '$permissions' => []
+        ]));
+
+        $document = $database->updateDocument(
+            'testUpdateMirroredDocument',
+            $document->getId(),
+            $document->setAttribute('name', 'John')
+        );
+
+        // Assert document is updated in both databases
+        $this->assertEquals(
+            $document,
+            $database->getSource()->getDocument('testUpdateMirroredDocument', $document->getId())
+        );
+
+        $this->assertEquals(
+            $document,
+            $database->getDestination()->getDocument('testUpdateMirroredDocument', $document->getId())
+        );
+    }
+
+    public function testDeleteMirroredDocument(): void
+    {
+        $database = self::getDatabase();
+
+        $database->createCollection('testDeleteMirroredDocument', attributes: [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'required' => true,
+                'size' => Database::LENGTH_KEY,
+            ]),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::delete(Role::any()),
+        ], documentSecurity: false);
+
+        $document = $database->createDocument('testDeleteMirroredDocument', new Document([
+            'name' => 'Jake',
+            '$permissions' => []
+        ]));
+
+        $database->deleteDocument('testDeleteMirroredDocument', $document->getId());
+
+        // Assert document is deleted in both databases
+        $this->assertTrue($database->getSource()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
+        $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
     }
 }

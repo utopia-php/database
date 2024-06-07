@@ -4,6 +4,8 @@ services:
     image: databases-dev
     build:
       context: .
+      args:
+        - DEBUG=true
     networks:
       - database
     volumes:
@@ -11,8 +13,7 @@ services:
       - ./src:/usr/src/code/src
       - ./tests:/usr/src/code/tests
       - ./phpunit.xml:/usr/src/code/phpunit.xml
-    ports:
-      - "8708:8708"
+      - ./dev/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
 
   adminer:
     image: adminer

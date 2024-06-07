@@ -430,9 +430,9 @@ class Database
      * @param string $event
      * @param string $name
      * @param callable $callback
-     * @return self
+     * @return static
      */
-    public function on(string $event, string $name, callable $callback): self
+    public function on(string $event, string $name, callable $callback): static
     {
         if (!isset($this->listeners[$event])) {
             $this->listeners[$event] = [];
@@ -450,7 +450,7 @@ class Database
      * @param callable $callback
      * @return $this
      */
-    public function before(string $event, string $name, callable $callback): self
+    public function before(string $event, string $name, callable $callback): static
     {
         $this->adapter->before($event, $name, $callback);
 
@@ -563,7 +563,7 @@ class Database
      *
      * @throws DatabaseException
      */
-    public function setNamespace(string $namespace): self
+    public function setNamespace(string $namespace): static
     {
         $this->adapter->setNamespace($namespace);
 
@@ -587,10 +587,10 @@ class Database
      *
      * @param string $name
      *
-     * @return self
+     * @return static
      * @throws DatabaseException
      */
-    public function setDatabase(string $name): self
+    public function setDatabase(string $name): static
     {
         $this->adapter->setDatabase($name);
 
@@ -617,7 +617,7 @@ class Database
      *
      * @return $this
      */
-    public function setCache(Cache $cache): self
+    public function setCache(Cache $cache): static
     {
         $this->cache = $cache;
         return $this;
@@ -639,7 +639,7 @@ class Database
      * @param string $name
      * @return $this
      */
-    public function setCacheName(string $name): self
+    public function setCacheName(string $name): static
     {
         $this->cacheName = $name;
 
@@ -661,9 +661,9 @@ class Database
      *
      * @param string $key
      * @param mixed $value
-     * @return self
+     * @return static
      */
-    public function setMetadata(string $key, mixed $value): self
+    public function setMetadata(string $key, mixed $value): static
     {
         $this->adapter->setMetadata($key, $value);
 
@@ -695,10 +695,10 @@ class Database
      *
      * @param int $milliseconds
      * @param string $event
-     * @return self
+     * @return static
      * @throws Exception
      */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): self
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): static
     {
         $this->adapter->setTimeout($milliseconds, $event);
 
@@ -721,7 +721,7 @@ class Database
      *
      * @return $this
      */
-    public function enableFilters(): self
+    public function enableFilters(): static
     {
         $this->filter = true;
 
@@ -733,7 +733,7 @@ class Database
      *
      * @return $this
      */
-    public function disableFilters(): self
+    public function disableFilters(): static
     {
         $this->filter = false;
 
@@ -755,7 +755,7 @@ class Database
      *
      * @return $this
      */
-    public function enableValidation(): self
+    public function enableValidation(): static
     {
         $this->validate = true;
 
@@ -767,7 +767,7 @@ class Database
      *
      * @return $this
      */
-    public function disableValidation(): self
+    public function disableValidation(): static
     {
         $this->validate = false;
 
@@ -780,9 +780,9 @@ class Database
      * Set whether to share tables between tenants
      *
      * @param bool $sharedTables
-     * @return self
+     * @return static
      */
-    public function setSharedTables(bool $sharedTables): self
+    public function setSharedTables(bool $sharedTables): static
     {
         $this->adapter->setSharedTables($sharedTables);
 
@@ -795,16 +795,16 @@ class Database
      * Set tenant to use if tables are shared
      *
      * @param ?int $tenant
-     * @return self
+     * @return static
      */
-    public function setTenant(?int $tenant): self
+    public function setTenant(?int $tenant): static
     {
         $this->adapter->setTenant($tenant);
 
         return $this;
     }
 
-    public function setPreserveDates(bool $preserve): self
+    public function setPreserveDates(bool $preserve): static
     {
         $this->preserveDates = $preserve;
 

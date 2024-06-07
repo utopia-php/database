@@ -38,7 +38,7 @@ abstract class Adapter
      *
      * @return $this
      */
-    public function setDebug(string $key, mixed $value): self
+    public function setDebug(string $key, mixed $value): static
     {
         $this->debug[$key] = $value;
 
@@ -54,9 +54,9 @@ abstract class Adapter
     }
 
     /**
-     * @return self
+     * @return static
      */
-    public function resetDebug(): self
+    public function resetDebug(): static
     {
         $this->debug = [];
 
@@ -192,7 +192,7 @@ abstract class Adapter
      * @param mixed $value
      * @return $this
      */
-    public function setMetadata(string $key, mixed $value): self
+    public function setMetadata(string $key, mixed $value): static
     {
         $this->metadata[$key] = $value;
 
@@ -223,7 +223,7 @@ abstract class Adapter
      *
      * @return $this
      */
-    public function resetMetadata(): self
+    public function resetMetadata(): static
     {
         $this->metadata = [];
 
@@ -236,9 +236,9 @@ abstract class Adapter
      * @param string $event
      * @param string $name
      * @param ?callable $callback
-     * @return self
+     * @return static
      */
-    public function before(string $event, string $name = '', ?callable $callback = null): self
+    public function before(string $event, string $name = '', ?callable $callback = null): static
     {
         if (!isset($this->transformations[$event])) {
             $this->transformations[$event] = [];

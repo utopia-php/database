@@ -94,12 +94,12 @@ class Mirror extends Database
         return $result;
     }
 
-    public function setDatabase(string $name): Database
+    public function setDatabase(string $name): static
     {
         return $this->delegate('setDatabase', [$name]);
     }
 
-    public function setNamespace(string $namespace): Database
+    public function setNamespace(string $namespace): static
     {
         return $this->delegate('setNamespace', [$namespace]);
     }
@@ -124,7 +124,7 @@ class Mirror extends Database
         return $this->delegate('enableValidation');
     }
 
-    public function disableValidation(): self
+    public function disableValidation(): static
     {
         return $this->delegate('disableValidation');
     }
@@ -562,7 +562,7 @@ class Mirror extends Database
             try {
                 return $this->getDocument('upgrades', $collection);
             } catch (\Throwable) {
-                return null;
+                return;
             }
         });
     }

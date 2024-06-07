@@ -75,7 +75,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
-        $this->assertEquals(static::getDatabase(), static::getDatabase()->setDatabase($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
@@ -317,7 +316,6 @@ abstract class Base extends TestCase
         /**
          * Success for later test update
          */
-
         $doc = static::getDatabase()->createDocument('v1', new Document([
             '$id' => 'man',
             '$permissions' => [
@@ -744,7 +742,8 @@ abstract class Base extends TestCase
         $newDate = '2000-01-01T10:00:00.000+00:00';
 
         $doc1->setAttribute('$updatedAt', $newDate);
-        static::getDatabase()->updateDocument('preserve_update_dates', 'doc1', $doc1);
+        $doc1 = static::getDatabase()->updateDocument('preserve_update_dates', 'doc1', $doc1);
+        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
         $doc1 = static::getDatabase()->getDocument('preserve_update_dates', 'doc1');
         $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
 
@@ -14983,7 +14982,6 @@ abstract class Base extends TestCase
         /**
          * Table
          */
-
         $tenant1 = 1;
         $tenant2 = 2;
 

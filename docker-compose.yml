@@ -44,6 +44,16 @@ services:
       - "8701:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
+
+  mariadb-mirror:
+    image: mariadb:10.11
+    container_name: utopia-mariadb-mirror
+    networks:
+      - database
+    ports:
+      - "8704:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
   
   mongo:
     image: mongo:5.0
@@ -63,6 +73,22 @@ services:
       - database
     ports:
       - "8703:3307"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: default
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_TCP_PORT: 3307
+    cap_add:
+      - SYS_NICE
+
+  mysql-mirror:
+    image: mysql:8.0.33
+    container_name: utopia-mysql-mirror
+    networks:
+      - database
+    ports:
+      - "8705:3307"
     environment:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: default

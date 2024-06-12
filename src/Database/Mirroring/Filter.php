@@ -16,7 +16,7 @@ abstract class Filter
      * @param Document $collection
      * @return Document
      */
-    public function onCreateCollection(
+    public function beforeCreateCollection(
         Database $source,
         Database $destination,
         string $collectionId,
@@ -34,7 +34,7 @@ abstract class Filter
      * @param Document $collection
      * @return Document
      */
-    public function onUpdateCollection(
+    public function beforeUpdateCollection(
         Database $source,
         Database $destination,
         string $collectionId,
@@ -51,12 +51,11 @@ abstract class Filter
      * @param string $collectionId
      * @return void
      */
-    public function onDeleteCollection(
+    public function beforeDeleteCollection(
         Database $source,
         Database $destination,
         string $collectionId,
     ): void {
-        return;
     }
 
     /**
@@ -67,7 +66,7 @@ abstract class Filter
      * @param Document $attribute
      * @return Document
      */
-    public function onCreateAttribute(
+    public function beforeCreateAttribute(
         Database $source,
         Database $destination,
         string $collectionId,
@@ -85,7 +84,7 @@ abstract class Filter
      * @param Document $attribute
      * @return Document
      */
-    public function onUpdateAttribute(
+    public function beforeUpdateAttribute(
         Database $source,
         Database $destination,
         string $collectionId,
@@ -102,13 +101,12 @@ abstract class Filter
      * @param string $attributeId
      * @return void
      */
-    public function onDeleteAttribute(
+    public function beforeDeleteAttribute(
         Database $source,
         Database $destination,
         string $collectionId,
         string $attributeId,
     ): void {
-        return;
     }
 
     // Indexes
@@ -121,7 +119,7 @@ abstract class Filter
      * @param Document $index
      * @return Document
      */
-    public function onCreateIndex(
+    public function beforeCreateIndex(
         Database $source,
         Database $destination,
         string $collectionId,
@@ -139,7 +137,7 @@ abstract class Filter
      * @param Document $index
      * @return Document
      */
-    public function onUpdateIndex(
+    public function beforeUpdateIndex(
         Database $source,
         Database $destination,
         string $collectionId,
@@ -156,13 +154,12 @@ abstract class Filter
      * @param string $indexId
      * @return void
      */
-    public function onDeleteIndex(
+    public function beforeDeleteIndex(
         Database $source,
         Database $destination,
         string $collectionId,
         string $indexId,
     ): void {
-        return;
     }
 
     /**
@@ -174,7 +171,7 @@ abstract class Filter
      * @param Document $document
      * @return Document
      */
-    public function onCreateDocument(
+    public function beforeCreateDocument(
         Database $source,
         Database $destination,
         string $collectionId,
@@ -183,6 +180,22 @@ abstract class Filter
         return $document;
     }
 
+    /**
+     * Called before document is created in the destination database
+     *
+     * @param Database $source
+     * @param Database $destination
+     * @param string $collectionId
+     * @param Document $document
+     * @return void
+     */
+    public function afterCreateDocument(
+        Database $source,
+        Database $destination,
+        string $collectionId,
+        Document $document,
+    ): void {
+    }
 
     /**
      * Called before document is updated in the destination database
@@ -193,13 +206,47 @@ abstract class Filter
      * @param Document $document
      * @return Document
      */
-    public function onUpdateDocument(
+    public function beforeUpdateDocument(
         Database $source,
         Database $destination,
         string $collectionId,
         Document $document,
     ): Document {
         return $document;
+    }
+
+    /**
+     * Called after document is updated in the destination database
+     *
+     * @param Database $source
+     * @param Database $destination
+     * @param string $collectionId
+     * @param Document $document
+     * @return void
+     */
+    public function afterUpdateDocument(
+        Database $source,
+        Database $destination,
+        string $collectionId,
+        Document $document,
+    ): void {
+    }
+
+    /**
+     * Called before document is deleted in the destination database
+     *
+     * @param Database $source
+     * @param Database $destination
+     * @param string $collectionId
+     * @param string $documentId
+     * @return void
+     */
+    public function beforeDeleteDocument(
+        Database $source,
+        Database $destination,
+        string $collectionId,
+        string $documentId,
+    ): void {
     }
 
     /**
@@ -211,12 +258,11 @@ abstract class Filter
      * @param string $documentId
      * @return void
      */
-    public function onDeleteDocument(
+    public function afterDeleteDocument(
         Database $source,
         Database $destination,
         string $collectionId,
         string $documentId,
     ): void {
-        return;
     }
 }

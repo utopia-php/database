@@ -210,7 +210,7 @@ class Mirror extends Database
 
         try {
             foreach ($this->writeFilters as $filter) {
-                $result = $filter->onCreateCollection(
+                $result = $filter->beforeCreateCollection(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $id,
@@ -249,7 +249,7 @@ class Mirror extends Database
 
         try {
             foreach ($this->writeFilters as $filter) {
-                $result = $filter->onUpdateCollection(
+                $result = $filter->beforeUpdateCollection(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $id,
@@ -277,7 +277,7 @@ class Mirror extends Database
             $this->destination->deleteCollection($id);
 
             foreach ($this->writeFilters as $filter) {
-                $filter->onDeleteCollection(
+                $filter->beforeDeleteCollection(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $id,
@@ -325,7 +325,7 @@ class Mirror extends Database
             ]);
 
             foreach ($this->writeFilters as $filter) {
-                $document = $filter->onCreateAttribute(
+                $document = $filter->beforeCreateAttribute(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
@@ -334,7 +334,7 @@ class Mirror extends Database
                 );
             }
 
-           $result = $this->destination->createAttribute(
+            $result = $this->destination->createAttribute(
                 $collection,
                 $document->getId(),
                 $document->getAttribute('type'),
@@ -376,7 +376,7 @@ class Mirror extends Database
 
         try {
             foreach ($this->writeFilters as $filter) {
-                $document = $filter->onUpdateAttribute(
+                $document = $filter->beforeUpdateAttribute(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
@@ -415,7 +415,7 @@ class Mirror extends Database
 
         try {
             foreach ($this->writeFilters as $filter) {
-                $filter->onDeleteAttribute(
+                $filter->beforeDeleteAttribute(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
@@ -449,7 +449,7 @@ class Mirror extends Database
             ]);
 
             foreach ($this->writeFilters as $filter) {
-                $document = $filter->onCreateIndex(
+                $document = $filter->beforeCreateIndex(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
@@ -485,7 +485,7 @@ class Mirror extends Database
             $this->destination->deleteIndex($collection, $id);
 
             foreach ($this->writeFilters as $filter) {
-                $filter->onDeleteIndex(
+                $filter->beforeDeleteIndex(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
@@ -519,7 +519,7 @@ class Mirror extends Database
             $clone = clone $document;
 
             foreach ($this->writeFilters as $filter) {
-                $clone = $filter->onCreateDocument(
+                $clone = $filter->beforeCreateDocument(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
@@ -528,8 +528,17 @@ class Mirror extends Database
             }
 
             $this->destination->setPreserveDates(true);
-            $this->destination->createDocument($collection, $clone);
+            $document = $this->destination->createDocument($collection, $clone);
             $this->destination->setPreserveDates(false);
+
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterCreateDocument(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    document: $clone,
+                );
+            }
         } catch (\Throwable $err) {
             $this->logError('createDocument', $err);
         }
@@ -563,7 +572,7 @@ class Mirror extends Database
                 $clone = clone $document;
 
                 foreach ($this->writeFilters as $filter) {
-                    $clone = $filter->onCreateDocument(
+                    $clone = $filter->beforeCreateDocument(
                         source: $this->source,
                         destination: $this->destination,
                         collectionId: $collection,
@@ -577,6 +586,18 @@ class Mirror extends Database
             $this->destination->setPreserveDates(true);
             $this->destination->createDocuments($collection, $clones, $batchSize);
             $this->destination->setPreserveDates(false);
+
+            foreach ($clones as $clone) {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterCreateDocument(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+            }
+
         } catch (\Throwable $err) {
             $this->logError('createDocuments', $err);
         }
@@ -604,7 +625,7 @@ class Mirror extends Database
             $clone = clone $document;
 
             foreach ($this->writeFilters as $filter) {
-                $clone = $filter->onUpdateDocument(
+                $clone = $filter->beforeUpdateDocument(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
@@ -615,6 +636,15 @@ class Mirror extends Database
             $this->destination->setPreserveDates(true);
             $this->destination->updateDocument($collection, $id, $clone);
             $this->destination->setPreserveDates(false);
+
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterUpdateDocument(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    document: $clone,
+                );
+            }
         } catch (\Throwable $err) {
             $this->logError('updateDocument', $err);
         }
@@ -648,7 +678,7 @@ class Mirror extends Database
                 $clone = clone $document;
 
                 foreach ($this->writeFilters as $filter) {
-                    $clone = $filter->onUpdateDocument(
+                    $clone = $filter->beforeUpdateDocument(
                         source: $this->source,
                         destination: $this->destination,
                         collectionId: $collection,
@@ -662,6 +692,17 @@ class Mirror extends Database
             $this->destination->setPreserveDates(true);
             $this->destination->updateDocuments($collection, $clones, $batchSize);
             $this->destination->setPreserveDates(false);
+
+            foreach ($clones as $clone) {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterUpdateDocument(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+            }
         } catch (\Throwable $err) {
             $this->logError('updateDocuments', $err);
         }
@@ -686,10 +727,12 @@ class Mirror extends Database
         }
 
         try {
+
+
             $this->destination->deleteDocument($collection, $id);
 
             foreach ($this->writeFilters as $filter) {
-                $filter->onDeleteDocument(
+                $filter->afterDeleteDocument(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,

@@ -64,6 +64,14 @@ class Mirror extends Database
     }
 
     /**
+     * @return array<Filter>
+     */
+    public function getWriteFilters(): array
+    {
+        return $this->writeFilters;
+    }
+
+    /**
      * @param callable(string, \Throwable): void $callback
      * @return void
      */
@@ -588,17 +596,6 @@ class Mirror extends Database
             );
         } catch (DuplicateException) {
             // Ignore
-        }
-    }
-
-    /**
-     * @param callable(Filter): void $callback
-     * @return void
-     */
-    public function forEachFilter(callable $callback): void
-    {
-        foreach ($this->writeFilters as $filter) {
-            $callback($filter);
         }
     }
 

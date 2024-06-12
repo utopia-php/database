@@ -592,6 +592,17 @@ class Mirror extends Database
     }
 
     /**
+     * @param callable(Filter): void $callback
+     * @return void
+     */
+    public function forEachFilter(callable $callback): void
+    {
+        foreach ($this->writeFilters as $filter) {
+            $callback($filter);
+        }
+    }
+
+    /**
      * @throws Exception
      */
     protected function getUpgradeStatus(string $collection): ?Document

@@ -209,6 +209,15 @@ class Mirror extends Database
         }
 
         try {
+            foreach ($this->writeFilters as $filter) {
+                $result = $filter->onCreateCollection(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $id,
+                    collection: $result,
+                );
+            }
+
             $this->destination->createCollection(
                 $id,
                 $attributes,
@@ -232,37 +241,262 @@ class Mirror extends Database
 
     public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
     {
-        return $this->delegate('updateCollection', [$id, $permissions, $documentSecurity]);
+        $result = $this->source->updateCollection($id, $permissions, $documentSecurity);
+
+        if ($this->destination === null) {
+            return $result;
+        }
+
+        try {
+            foreach ($this->writeFilters as $filter) {
+                $result = $filter->onUpdateCollection(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $id,
+                    collection: $result,
+                );
+            }
+
+            $this->destination->updateCollection($id, $permissions, $documentSecurity);
+        } catch (\Throwable $err) {
+            $this->logError('updateCollection', $err);
+        }
+
+        return $result;
     }
 
     public function deleteCollection(string $id): bool
     {
-        return $this->delegate('deleteCollection', [$id]);
+        $result = $this->source->deleteCollection($id);
+
+        if ($this->destination === null) {
+            return $result;
+        }
+
+        try {
+            $this->destination->deleteCollection($id);
+
+            foreach ($this->writeFilters as $filter) {
+                $filter->onDeleteCollection(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $id,
+                );
+            }
+        } catch (\Throwable $err) {
+            $this->logError('deleteCollection', $err);
+        }
+
+        return $result;
     }
 
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
-        return $this->delegate('createAttribute', [$collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters]);
+        $result = $this->source->createAttribute(
+            $collection,
+            $id,
+            $type,
+            $size,
+            $required,
+            $default,
+            $signed,
+            $array,
+            $format,
+            $formatOptions,
+            $filters
+        );
+
+        if ($this->destination === null) {
+            return $result;
+        }
+
+        try {
+            $document = new Document([
+                '$id' => $id,
+                'type' => $type,
+                'size' => $size,
+                'required' => $required,
+                'default' => $default,
+                'signed' => $signed,
+                'array' => $array,
+                'format' => $format,
+                'formatOptions' => $formatOptions,
+                'filters' => $filters,
+            ]);
+
+            foreach ($this->writeFilters as $filter) {
+                $document = $filter->onCreateAttribute(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    attributeId: $id,
+                    attribute: $document,
+                );
+            }
+
+           $result = $this->destination->createAttribute(
+                $collection,
+                $document->getId(),
+                $document->getAttribute('type'),
+                $document->getAttribute('size'),
+                $document->getAttribute('required'),
+                $document->getAttribute('default'),
+                $document->getAttribute('signed'),
+                $document->getAttribute('array'),
+                $document->getAttribute('format'),
+                $document->getAttribute('formatOptions'),
+                $document->getAttribute('filters'),
+            );
+        } catch (\Throwable $err) {
+            $this->logError('createAttribute', $err);
+        }
+
+        return $result;
     }
 
     public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null): Document
     {
-        return $this->delegate('updateAttribute', [$collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters]);
+        $document = $this->source->updateAttribute(
+            $collection,
+            $id,
+            $type,
+            $size,
+            $required,
+            $default,
+            $signed,
+            $array,
+            $format,
+            $formatOptions,
+            $filters
+        );
+
+        if ($this->destination === null) {
+            return $document;
+        }
+
+        try {
+            foreach ($this->writeFilters as $filter) {
+                $document = $filter->onUpdateAttribute(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    attributeId: $id,
+                    attribute: $document,
+                );
+            }
+
+            $this->destination->updateAttribute(
+                $collection,
+                $id,
+                $document->getAttribute('type'),
+                $document->getAttribute('size'),
+                $document->getAttribute('required'),
+                $document->getAttribute('default'),
+                $document->getAttribute('signed'),
+                $document->getAttribute('array'),
+                $document->getAttribute('format'),
+                $document->getAttribute('formatOptions'),
+                $document->getAttribute('filters')
+            );
+        } catch (\Throwable $err) {
+            $this->logError('updateAttribute', $err);
+        }
+
+        return $document;
     }
 
     public function deleteAttribute(string $collection, string $id): bool
     {
-        return $this->delegate('deleteAttribute', [$collection, $id]);
+        $result = $this->source->deleteAttribute($collection, $id);
+
+        if ($this->destination === null) {
+            return $result;
+        }
+
+        try {
+            foreach ($this->writeFilters as $filter) {
+                $filter->onDeleteAttribute(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    attributeId: $id,
+                );
+            }
+
+            $this->destination->deleteAttribute($collection, $id);
+        } catch (\Throwable $err) {
+            $this->logError('deleteAttribute', $err);
+        }
+
+        return $result;
     }
 
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths = [], array $orders = []): bool
     {
-        return $this->delegate('createIndex', [$collection, $id, $type, $attributes, $lengths, $orders]);
+        $result = $this->source->createIndex($collection, $id, $type, $attributes, $lengths, $orders);
+
+        if ($this->destination === null) {
+            return $result;
+        }
+
+        try {
+            $document = new Document([
+                '$id' => $id,
+                'type' => $type,
+                'attributes' => $attributes,
+                'lengths' => $lengths,
+                'orders' => $orders,
+            ]);
+
+            foreach ($this->writeFilters as $filter) {
+                $document = $filter->onCreateIndex(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    indexId: $id,
+                    index: $document,
+                );
+            }
+
+            $result = $this->destination->createIndex(
+                $collection,
+                $document->getId(),
+                $document->getAttribute('type'),
+                $document->getAttribute('attributes'),
+                $document->getAttribute('lengths'),
+                $document->getAttribute('orders')
+            );
+        } catch (\Throwable $err) {
+            $this->logError('createIndex', $err);
+        }
+
+        return $result;
     }
 
     public function deleteIndex(string $collection, string $id): bool
     {
-        return $this->delegate('deleteIndex', [$collection, $id]);
+        $result = $this->source->deleteIndex($collection, $id);
+
+        if ($this->destination === null) {
+            return $result;
+        }
+
+        try {
+            $this->destination->deleteIndex($collection, $id);
+
+            foreach ($this->writeFilters as $filter) {
+                $filter->onDeleteIndex(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    indexId: $id,
+                );
+            }
+        } catch (\Throwable $err) {
+            $this->logError('deleteIndex', $err);
+        }
+
+        return $result;
     }
 
     public function createDocument(string $collection, Document $document): Document

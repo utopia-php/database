@@ -8,6 +8,25 @@ use Utopia\Database\Document;
 abstract class Filter
 {
     /**
+     * Called before any action is executed
+     *
+     * @param Database $source
+     * @param Database $destination
+     * @return void
+     */
+    public function init(
+        Database $source,
+        Database $destination,
+    ): void {
+    }
+
+    public function shutdown(
+        Database $source,
+        Database $destination,
+    ): void {
+    }
+
+    /**
      * Called before collection is created in the destination database
      *
      * @param Database $source

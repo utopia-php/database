@@ -181,7 +181,7 @@ abstract class Filter
     }
 
     /**
-     * Called before document is created in the destination database
+     * Called after document is created in the destination database
      *
      * @param Database $source
      * @param Database $destination

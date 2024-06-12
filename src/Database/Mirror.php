@@ -727,7 +727,14 @@ class Mirror extends Database
         }
 
         try {
-
+            foreach ($this->writeFilters as $filter) {
+                $filter->beforeDeleteDocument(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    documentId: $id,
+                );
+            }
 
             $this->destination->deleteDocument($collection, $id);
 

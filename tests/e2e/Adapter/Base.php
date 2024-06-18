@@ -1137,7 +1137,7 @@ abstract class Base extends TestCase
         $this->assertArrayHasKey('age', $document);
     }
 
-        public function testCreateDeleteAttribute(): void
+    public function testCreateDeleteAttribute(): void
     {
         static::getDatabase()->createCollection('attributes');
 

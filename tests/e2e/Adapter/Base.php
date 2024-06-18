@@ -1103,6 +1103,40 @@ abstract class Base extends TestCase
         $this->assertGreaterThan($size2, $size3);
     }
 
+    public function testPurgeCollectionCache(): void
+    {
+        static::getDatabase()->createCollection('redis');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('redis', 'name', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('redis', 'age', Database::VAR_INTEGER, 0, true));
+
+        static::getDatabase()->createDocument('redis', new Document([
+            '$id' => 'doc1',
+            'name' => 'Richard',
+            'age' => 15,
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ]
+        ]));
+
+        $document = static::getDatabase()->getDocument('redis', 'doc1');
+
+        $this->assertEquals('Richard', $document->getAttribute('name'));
+        $this->assertEquals(15, $document->getAttribute('age'));
+
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('redis', 'age'));
+
+        $document = static::getDatabase()->getDocument('redis', 'doc1');
+        $this->assertEquals('Richard', $document->getAttribute('name'));
+        $this->assertArrayNotHasKey('age', $document);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('redis', 'age', Database::VAR_INTEGER, 0, true));
+
+        $document = static::getDatabase()->getDocument('redis', 'doc1');
+        $this->assertEquals('Richard', $document->getAttribute('name'));
+        $this->assertArrayHasKey('age', $document);
+    }
+
     public function testCreateDeleteAttribute(): void
     {
         static::getDatabase()->createCollection('attributes');

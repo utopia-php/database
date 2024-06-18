@@ -1336,6 +1336,9 @@ class Database
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedDocument(self::METADATA, $collection->getId());
+
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
 
         return true;
@@ -1803,6 +1806,9 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedDocument(self::METADATA, $collection->getId());
 
         $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
 
@@ -4731,7 +4737,7 @@ class Database
      */
     public function purgeCachedCollection(string $collectionId): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId . ':collection';
+        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
         $documentKeys = $this->cache->list($collectionKey);
         foreach ($documentKeys as $documentKey) {
             $this->cache->purge($documentKey);

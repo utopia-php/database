@@ -3638,7 +3638,7 @@ class Database
 
             if ($shouldUpdate && !$updateValidator->isValid($updatePermissions)) {
                 throw new AuthorizationException($updateValidator->getDescription());
-            } else if (!$shouldUpdate && !$readValidator->isValid($readPermissions)) {
+            } elseif (!$shouldUpdate && !$readValidator->isValid($readPermissions)) {
                 throw new AuthorizationException($readValidator->getDescription());
             }
         }

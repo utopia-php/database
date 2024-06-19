@@ -1045,7 +1045,7 @@ abstract class Base extends TestCase
         $byteDifference = 5000;
         $this->assertLessThan($byteDifference, $sizeDifference);
 
-        static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 20000, true);
         static::getDatabase()->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
@@ -4806,7 +4806,9 @@ abstract class Base extends TestCase
     {
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$id' => ID::unique(),
-            '$permissions' => [],
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'string' => 'text📝',
             'integer_signed' => -Database::INT_MAX,
             'integer_unsigned' => Database::INT_MAX,
@@ -4827,6 +4829,31 @@ abstract class Base extends TestCase
         // Document should not be updated as there is no change.
         // It should also not throw any authorization exception without any permission because of no change.
         $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
+
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [],
+            'string' => 'text📝',
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -123456789.12346,
+            'float_unsigned' => 123456789.12346,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        // Should throw exception, because nothing was updated, but there was no read permission
+        try {
+            static::getDatabase()->updateDocument(
+                'documents',
+                $document->getId(),
+                $document
+            );
+        } catch (Exception $e) {
+            $this->assertInstanceOf(AuthorizationException::class, $e);
+        }
 
         return $document;
     }

@@ -3531,7 +3531,8 @@ class Database
             return $attribute['type'] === Database::VAR_RELATIONSHIP;
         });
 
-        $validator = new Authorization(self::PERMISSION_UPDATE);
+        $updateValidator = new Authorization(self::PERMISSION_UPDATE);
+        $readValidator = new Authorization(self::PERMISSION_READ);
         $shouldUpdate = false;
 
         if ($collection->getId() !== self::METADATA) {
@@ -3625,11 +3626,20 @@ class Database
                 }
             }
 
-            if ($shouldUpdate && !$validator->isValid([
+            $updatePermissions = [
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $old->getUpdate() : [])
-            ])) {
-                throw new AuthorizationException($validator->getDescription());
+            ];
+
+            $readPermissions = [
+                ...$collection->getRead(),
+                ...($documentSecurity ? $old->getRead() : [])
+            ];
+
+            if ($shouldUpdate && !$updateValidator->isValid($updatePermissions)) {
+                throw new AuthorizationException($updateValidator->getDescription());
+            } else if (!$shouldUpdate && !$readValidator->isValid($readPermissions)) {
+                throw new AuthorizationException($readValidator->getDescription());
             }
         }
 
@@ -3650,10 +3660,10 @@ class Database
 
         $document = $this->encode($collection, $document);
 
-        $validator = new Structure($collection);
+        $structureValidator = new Structure($collection);
 
-        if (!$validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
-            throw new StructureException($validator->getDescription());
+        if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+            throw new StructureException($structureValidator->getDescription());
         }
 
         if ($this->resolveRelationships) {

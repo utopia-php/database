@@ -14955,6 +14955,12 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
         }
+
+        $database->skipValidation(function () use ($database) {
+            $database->find('validation', queries: [
+                Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
+            ]);
+        });
     }
 
     public function testMetadata(): void

@@ -158,6 +158,14 @@ class Document extends ArrayObject
     }
 
     /**
+     * @return string|null
+     */
+    public function getDeletedAt(): ?string
+    {
+        return $this->getAttribute('$deletedAt');
+    }
+
+    /**
      * Get Document Attributes
      *
      * @return array<string, mixed>

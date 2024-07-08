@@ -213,6 +213,17 @@ class Database
             'filters' => ['datetime']
         ],
         [
+            '$id' => '$deletedAt',
+            'type' => Database::VAR_DATETIME,
+            'format' => '',
+            'size' => 0,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => ['datetime']
+        ],
+        [
             '$id' => '$permissions',
             'type' => Database::VAR_STRING,
             'size' => 1000000,
@@ -229,6 +240,7 @@ class Database
         '_uid',
         '_createdAt',
         '_updatedAt',
+        '_deletedAt',
         '_permissions_id',
         '_permissions',
     ];
@@ -3109,7 +3121,8 @@ class Database
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
             ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
-            ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+            ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt)
+        ;
 
         if ($this->adapter->getSharedTables()) {
             $document['$tenant'] = (string)$this->adapter->getTenant();
@@ -5394,6 +5407,7 @@ class Database
         $selections[] = '$collection';
         $selections[] = '$createdAt';
         $selections[] = '$updatedAt';
+        $selections[] = '$deletedAt';
         $selections[] = '$permissions';
 
         return $selections;

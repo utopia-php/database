@@ -112,7 +112,8 @@ abstract class SQL extends Adapter
         $sql = "
 		    SELECT {$this->getAttributeProjection($selections)} 
             FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid 
+            WHERE _deletedAt is NULL
+            AND _uid = :_uid 
 		";
 
         if ($this->sharedTables) {

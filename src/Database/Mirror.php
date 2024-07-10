@@ -51,17 +51,6 @@ class Mirror extends Database
         $this->source = $source;
         $this->destination = $destination;
         $this->writeFilters = $filters;
-
-        foreach ($this->writeFilters as $filter) {
-            $filter->init($this->source, $this->destination);
-        }
-    }
-
-    public function __destruct()
-    {
-        foreach ($this->writeFilters as $filter) {
-            $filter->shutdown($this->source, $this->destination);
-        }
     }
 
     public function getSource(): Database

@@ -896,6 +896,8 @@ class MariaDB extends SQL
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
+            $internalIds = [];
+
             foreach ($batches as $batch) {
                 $bindIndex = 0;
                 $batchKeys = [];
@@ -908,7 +910,9 @@ class MariaDB extends SQL
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
+
                     if(!empty($document->getInternalId())) {
+                        $internalIds[$document->getId()] = true;
                         $attributes['_id'] = $document->getInternalId();
                     }
 
@@ -1005,6 +1009,16 @@ class MariaDB extends SQL
             }
 
             throw $e;
+        }
+
+        foreach ($documents as $document) {
+            if(!isset($internalIds[$document->getId()])) {
+                $document['$internalId'] = $this->getDocument(
+                    $collection,
+                    $document->getId(),
+                    [Query::select(['$internalId'])]
+                )->getInternalId();
+            }
         }
 
         return $documents;

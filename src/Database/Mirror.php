@@ -834,53 +834,55 @@ class Mirror extends Database
      */
     public function createUpgrades(): void
     {
-        try {
-            $this->source->createCollection(
-                id: 'upgrades',
-                attributes: [
-                    new Document([
-                        '$id' => ID::custom('collectionId'),
-                        'type' => Database::VAR_STRING,
-                        'size' => Database::LENGTH_KEY,
-                        'required' => true,
-                        'signed' => true,
-                        'array' => false,
-                        'filters' => [],
-                        'default' => null,
-                        'format' => ''
-                    ]),
-                    new Document([
-                        '$id' => ID::custom('status'),
-                        'type' => Database::VAR_STRING,
-                        'size' => Database::LENGTH_KEY,
-                        'required' => false,
-                        'signed' => true,
-                        'array' => false,
-                        'filters' => [],
-                        'default' => null,
-                        'format' => ''
-                    ]),
-                ],
-                indexes: [
-                    new Document([
-                        '$id' => ID::custom('_unique_collection'),
-                        'type' => Database::INDEX_UNIQUE,
-                        'attributes' => ['collectionId'],
-                        'lengths' => [Database::LENGTH_KEY],
-                        'orders' => [],
-                    ]),
-                    new Document([
-                        '$id' => ID::custom('_status_index'),
-                        'type' => Database::INDEX_KEY,
-                        'attributes' => ['status'],
-                        'lengths' => [Database::LENGTH_KEY],
-                        'orders' => [Database::ORDER_ASC],
-                    ]),
-                ],
-            );
-        } catch (DuplicateException) {
-            // Ignore
+        $collection = $this->source->getCollection('upgrades');
+
+        if (!$collection->isEmpty()) {
+            return;
         }
+
+        $this->source->createCollection(
+            id: 'upgrades',
+            attributes: [
+                new Document([
+                    '$id' => ID::custom('collectionId'),
+                    'type' => Database::VAR_STRING,
+                    'size' => Database::LENGTH_KEY,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                    'default' => null,
+                    'format' => ''
+                ]),
+                new Document([
+                    '$id' => ID::custom('status'),
+                    'type' => Database::VAR_STRING,
+                    'size' => Database::LENGTH_KEY,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                    'default' => null,
+                    'format' => ''
+                ]),
+            ],
+            indexes: [
+                new Document([
+                    '$id' => ID::custom('_unique_collection'),
+                    'type' => Database::INDEX_UNIQUE,
+                    'attributes' => ['collectionId'],
+                    'lengths' => [Database::LENGTH_KEY],
+                    'orders' => [],
+                ]),
+                new Document([
+                    '$id' => ID::custom('_status_index'),
+                    'type' => Database::INDEX_KEY,
+                    'attributes' => ['status'],
+                    'lengths' => [Database::LENGTH_KEY],
+                    'orders' => [Database::ORDER_ASC],
+                ]),
+            ],
+        );
     }
 
     /**

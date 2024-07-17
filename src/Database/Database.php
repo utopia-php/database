@@ -2733,7 +2733,8 @@ class Database
         /**
          * Cache hash keys
          */
-        $collectionCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection->getId();
+        $projectCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant();
+        $collectionCacheKey = $projectCacheKey . ':collection:' . $collection->getId();
         $documentCacheKey = $documentCacheHash = $collectionCacheKey . ':' . $id;
 
         if (!empty($selections)) {
@@ -2803,22 +2804,26 @@ class Database
          */
         foreach ($this->map as $key => $value) {
             [$k, $v] = \explode('=>', $key);
-            $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
+            $ck = $projectCacheKey . ':map:' . $k;
             $cache = $this->cache->load($ck, self::TTL, $ck);
             if (empty($cache)) {
                 $cache = [];
             }
             if (!\in_array($v, $cache)) {
                 $cache[] = $v;
+                $this->cache->save($projectCacheKey, 'empty', $ck);
                 $this->cache->save($ck, $cache, $ck);
             }
         }
 
         // Don't save to cache if it's part of a two-way relationship or a relationship at all
         if (!$hasTwoWayRelationship && empty($relationships)) {
-            $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
+            //add document reference to the project key
+            $this->cache->save($projectCacheKey, 'empty', $documentCacheKey);
             //add document reference to the collection key
             $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
+
+            $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
         }
 
         // Remove internal attributes if not queried for select query
@@ -4771,11 +4776,17 @@ class Database
      */
     public function purgeCachedCollection(string $collectionId): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
+
+        $projectKey =  $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant();
+        $collectionKey = $projectKey . ':collection:' . $collectionId;
         $documentKeys = $this->cache->list($collectionKey);
+
         foreach ($documentKeys as $documentKey) {
             $this->cache->purge($documentKey);
         }
+
+        //purge collection reference key in project hash.
+        $this->cache->purge($projectKey, $collectionKey);
 
         return true;
     }
@@ -4791,9 +4802,12 @@ class Database
      */
     public function purgeCachedDocument(string $collectionId, string $id): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
+
+        $projectKey =  $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant();
+        $collectionKey = $projectKey . ':collection:' . $collectionId;
         $documentKey =  $collectionKey . ':' . $id;
 
+        $this->cache->purge($projectKey, $documentKey);
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
 

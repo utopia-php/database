@@ -47,6 +47,7 @@ class PostgresTest extends Base
 
         $database = new Database(new Postgres($pdo), $cache);
         $database
+            ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
             ->setSharedTables(true)
             ->setTenant(999)

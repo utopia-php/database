@@ -50,6 +50,7 @@ class MySQLTest extends Base
 
         $database = new Database(new MySQL($pdo), $cache);
         $database
+            ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
             ->setSharedTables(true)
             ->setTenant(999)

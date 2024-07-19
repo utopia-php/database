@@ -48,6 +48,7 @@ class MariaDBTest extends Base
 
         $database = new Database(new MariaDB($pdo), $cache);
         $database
+            ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
             ->setSharedTables(true)
             ->setTenant(999)

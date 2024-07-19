@@ -53,6 +53,7 @@ class MongoDBTest extends Base
 
         $database = new Database(new Mongo($client), $cache);
         $database
+            ->setAuthorization(self::$authorization)
             ->setDatabase($schema)
             ->setSharedTables(true)
             ->setTenant(999)

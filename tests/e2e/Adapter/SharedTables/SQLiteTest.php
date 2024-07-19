@@ -53,6 +53,7 @@ class SQLiteTest extends Base
 
         $database = new Database(new SQLite($pdo), $cache);
         $database
+            ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
             ->setSharedTables(true)
             ->setTenant(999)

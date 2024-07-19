@@ -29,7 +29,7 @@ class SQLiteTest extends Base
     /**
      * @return Database
      */
-    public static function getDatabase(): Database
+    public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;

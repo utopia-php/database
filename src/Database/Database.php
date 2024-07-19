@@ -3689,12 +3689,11 @@ class Database
             $readValidator = new Input(self::PERMISSION_READ, [
                 ...$collection->getRead(),
                 ...($documentSecurity ? $old->getRead() : [])
-            ]));
+            ]);
 
             if (($shouldUpdate && !$this->authorization->isValid($updateValidator))
-                || (!$shouldUpdate && !$this->authorization->isValid($readValidator)){
-                    throw new AuthorizationException($this->authorization->getDescription());
-
+                        || (!$shouldUpdate && !$this->authorization->isValid($readValidator))) {
+                throw new AuthorizationException($this->authorization->getDescription());
             }
         }
 

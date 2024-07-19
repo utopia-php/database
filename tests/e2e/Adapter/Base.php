@@ -1054,7 +1054,7 @@ abstract class Base extends TestCase
         $byteDifference = 5000;
         $this->assertLessThan($byteDifference, $sizeDifference);
 
-        $this->getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 128, true);
+        $this->getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 20000, true);
         $this->getDatabase()->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);
         $this->getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
         $this->getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
@@ -1110,6 +1110,40 @@ abstract class Base extends TestCase
         $size3 = $this->getDatabase()->getSizeOfCollection('fullTextSizeTest');
 
         $this->assertGreaterThan($size2, $size3);
+    }
+
+    public function testPurgeCollectionCache(): void
+    {
+        $this->getDatabase()->createCollection('redis');
+
+        $this->assertEquals(true, $this->getDatabase()->createAttribute('redis', 'name', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, $this->getDatabase()->createAttribute('redis', 'age', Database::VAR_INTEGER, 0, true));
+
+        $this->getDatabase()->createDocument('redis', new Document([
+            '$id' => 'doc1',
+            'name' => 'Richard',
+            'age' => 15,
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ]
+        ]));
+
+        $document = $this->getDatabase()->getDocument('redis', 'doc1');
+
+        $this->assertEquals('Richard', $document->getAttribute('name'));
+        $this->assertEquals(15, $document->getAttribute('age'));
+
+        $this->assertEquals(true, $this->getDatabase()->deleteAttribute('redis', 'age'));
+
+        $document = $this->getDatabase()->getDocument('redis', 'doc1');
+        $this->assertEquals('Richard', $document->getAttribute('name'));
+        $this->assertArrayNotHasKey('age', $document);
+
+        $this->assertEquals(true, $this->getDatabase()->createAttribute('redis', 'age', Database::VAR_INTEGER, 0, true));
+
+        $document = $this->getDatabase()->getDocument('redis', 'doc1');
+        $this->assertEquals('Richard', $document->getAttribute('name'));
+        $this->assertArrayHasKey('age', $document);
     }
 
     public function testCreateDeleteAttribute(): void
@@ -4779,7 +4813,9 @@ abstract class Base extends TestCase
     {
         $document = $this->getDatabase()->createDocument('documents', new Document([
             '$id' => ID::unique(),
-            '$permissions' => [],
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'string' => 'text📝',
             'integer_signed' => -Database::INT_MAX,
             'integer_unsigned' => Database::INT_MAX,
@@ -4800,6 +4836,31 @@ abstract class Base extends TestCase
         // Document should not be updated as there is no change.
         // It should also not throw any authorization exception without any permission because of no change.
         $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
+
+        $document = $this->getDatabase()->createDocument('documents', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [],
+            'string' => 'text📝',
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -123456789.12346,
+            'float_unsigned' => 123456789.12346,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        // Should throw exception, because nothing was updated, but there was no read permission
+        try {
+            $this->getDatabase()->updateDocument(
+                'documents',
+                $document->getId(),
+                $document
+            );
+        } catch (Exception $e) {
+            $this->assertInstanceOf(AuthorizationException::class, $e);
+        }
 
         return $document;
     }
@@ -14902,6 +14963,12 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
         }
+
+        $database->skipValidation(function () use ($database) {
+            $database->find('validation', queries: [
+                Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
+            ]);
+        });
     }
 
     public function testMetadata(): void

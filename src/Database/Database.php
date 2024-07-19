@@ -806,6 +806,27 @@ class Database
     }
 
     /**
+     * Skip Validation
+     *
+     * Skips validation for the code to be executed inside the callback
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function skipValidation(callable $callback): mixed
+    {
+        $initial = $this->validate;
+        $this->disableValidation();
+
+        try {
+            return $callback();
+        } finally {
+            $this->validate = $initial;
+        }
+    }
+
+    /**
      * Set Share Tables
      *
      * Set whether to share tables between tenants
@@ -1087,8 +1108,10 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables()
-            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+        if (
+            $this->adapter->getSharedTables()
+            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()
+        ) {
             throw new DatabaseException('Collection not found');
         }
 
@@ -1119,9 +1142,11 @@ class Database
 
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
-        if ($id !== self::METADATA
+        if (
+            $id !== self::METADATA
             && $this->adapter->getSharedTables()
-            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()
+        ) {
             return new Document();
         }
 
@@ -1366,6 +1391,9 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedDocument(self::METADATA, $collection->getId());
 
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
 
@@ -1834,6 +1862,9 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedDocument(self::METADATA, $collection->getId());
 
         $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
 
@@ -2550,10 +2581,10 @@ class Database
 
         foreach ($attributes as $i => $attr) {
             foreach ($collectionAttributes as $collectionAttribute) {
-                if($collectionAttribute->getAttribute('key') === $attr) {
+                if ($collectionAttribute->getAttribute('key') === $attr) {
                     $isArray = $collectionAttribute->getAttribute('array', false);
-                    if($isArray) {
-                        if($this->adapter->getMaxIndexLength() > 0) {
+                    if ($isArray) {
+                        if ($this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = self::ARRAY_INDEX_LENGTH;
                         }
                         $orders[$i] = null;
@@ -2822,7 +2853,6 @@ class Database
             $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
             //add document reference to the collection key
             $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
-
         }
 
         // Remove internal attributes if not queried for select query
@@ -3115,7 +3145,7 @@ class Database
             ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
             ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
-        if($this->adapter->getSharedTables()) {
+        if ($this->adapter->getSharedTables()) {
             $document['$tenant'] = (string)$this->adapter->getTenant();
         }
 
@@ -3244,7 +3274,7 @@ class Database
             try {
                 switch (\gettype($value)) {
                     case 'array':
-                        if(
+                        if (
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD) ||
                             ($relationType === Database::RELATION_ONE_TO_ONE)
@@ -3296,11 +3326,11 @@ class Database
                             throw new RelationshipException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                         }
 
-                        if($relationType === Database::RELATION_ONE_TO_ONE && !$twoWay && $side === Database::RELATION_SIDE_CHILD) {
+                        if ($relationType === Database::RELATION_ONE_TO_ONE && !$twoWay && $side === Database::RELATION_SIDE_CHILD) {
                             throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                         }
 
-                        if(
+                        if (
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
                             ($relationType === Database::RELATION_MANY_TO_MANY)
@@ -3323,11 +3353,11 @@ class Database
                         break;
 
                     case 'string':
-                        if($relationType === Database::RELATION_ONE_TO_ONE && $twoWay === false && $side === Database::RELATION_SIDE_CHILD) {
+                        if ($relationType === Database::RELATION_ONE_TO_ONE && $twoWay === false && $side === Database::RELATION_SIDE_CHILD) {
                             throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                         }
 
-                        if(
+                        if (
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD) ||
                             ($relationType === Database::RELATION_MANY_TO_MANY)
@@ -3546,7 +3576,7 @@ class Database
         $old = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
         $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
         $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
-        if($this->adapter->getSharedTables()) {
+        if ($this->adapter->getSharedTables()) {
             $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
         }
         $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -3651,14 +3681,20 @@ class Database
                 }
             }
 
-            if ($shouldUpdate) {
-                $isValid = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
-                    ...$collection->getUpdate(),
-                    ...($documentSecurity ? $old->getUpdate() : [])
-                ]));
-                if (!$isValid) {
+            $updateValidator = new Input(self::PERMISSION_UPDATE, [
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $old->getUpdate() : [])
+            ]);
+
+            $readValidator = new Input(self::PERMISSION_READ, [
+                ...$collection->getRead(),
+                ...($documentSecurity ? $old->getRead() : [])
+            ]));
+
+            if (($shouldUpdate && !$this->authorization->isValid($updateValidator))
+                || (!$shouldUpdate && !$this->authorization->isValid($readValidator)){
                     throw new AuthorizationException($this->authorization->getDescription());
-                }
+
             }
         }
 
@@ -3679,10 +3715,10 @@ class Database
 
         $document = $this->encode($collection, $document);
 
-        $validator = new Structure($collection);
+        $structureValidator = new Structure($collection);
 
-        if (!$validator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
-            throw new StructureException($validator->getDescription());
+        if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+            throw new StructureException($structureValidator->getDescription());
         }
 
         if ($this->resolveRelationships) {
@@ -3831,7 +3867,7 @@ class Database
                 switch ($relationType) {
                     case Database::RELATION_ONE_TO_ONE:
                         if (!$twoWay) {
-                            if($side === Database::RELATION_SIDE_CHILD) {
+                            if ($side === Database::RELATION_SIDE_CHILD) {
                                 throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
                             }
 
@@ -3951,7 +3987,7 @@ class Database
                             ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT) ||
                             ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
                         ) {
-                            if(!\is_array($value) || !\array_is_list($value)) {
+                            if (!\is_array($value) || !\array_is_list($value)) {
                                 throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
                             }
 
@@ -4762,7 +4798,7 @@ class Database
      */
     public function purgeCachedCollection(string $collectionId): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId . ':collection';
+        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
         $documentKeys = $this->cache->list($collectionKey);
         foreach ($documentKeys as $documentKey) {
             $this->cache->purge($documentKey);

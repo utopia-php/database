@@ -91,6 +91,23 @@ class MariaDB extends SQL
                 $attribute->getAttribute('array', false)
             );
 
+            // Ignore relationships with virtual attributes
+            if ($attribute->getAttribute('type') === Database::VAR_RELATIONSHIP) {
+                $options = $attribute->getAttribute('options', []);
+                $relationType = $options['relationType'] ?? null;
+                $twoWay = $options['twoWay'] ?? false;
+                $side = $options['side'] ?? null;
+
+                if (
+                    $relationType === Database::RELATION_MANY_TO_MANY
+                    || ($relationType === Database::RELATION_ONE_TO_ONE && !$twoWay && $side === Database::RELATION_SIDE_CHILD)
+                    || ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT)
+                    || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
+                ) {
+                    continue;
+                }
+            }
+
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
@@ -894,7 +911,7 @@ class MariaDB extends SQL
             $this->getPDO()->beginTransaction();
 
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, max(1, $batchSize));
+            $batches = \array_chunk($documents, \max(1, $batchSize));
 
             $internalIds = [];
 

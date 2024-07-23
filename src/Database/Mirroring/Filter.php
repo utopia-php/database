@@ -39,15 +39,15 @@ abstract class Filter
      * @param Database $source
      * @param Database $destination
      * @param string $collectionId
-     * @param Document $collection
-     * @return Document
+     * @param ?Document $collection
+     * @return ?Document
      */
     public function beforeCreateCollection(
         Database $source,
         Database $destination,
         string $collectionId,
-        Document $collection,
-    ): Document {
+        ?Document $collection = null,
+    ): ?Document {
         return $collection;
     }
 
@@ -57,15 +57,15 @@ abstract class Filter
      * @param Database $source
      * @param Database $destination
      * @param string $collectionId
-     * @param Document $collection
-     * @return Document
+     * @param ?Document $collection
+     * @return ?Document
      */
     public function beforeUpdateCollection(
         Database $source,
         Database $destination,
         string $collectionId,
-        Document $collection,
-    ): Document {
+        ?Document $collection = null,
+    ): ?Document {
         return $collection;
     }
 
@@ -89,16 +89,16 @@ abstract class Filter
      * @param Database $destination
      * @param string $collectionId
      * @param string $attributeId
-     * @param Document $attribute
-     * @return Document
+     * @param ?Document $attribute
+     * @return ?Document
      */
     public function beforeCreateAttribute(
         Database $source,
         Database $destination,
         string $collectionId,
         string $attributeId,
-        Document $attribute,
-    ): Document {
+        ?Document $attribute = null,
+    ): ?Document {
         return $attribute;
     }
 
@@ -107,16 +107,16 @@ abstract class Filter
      * @param Database $destination
      * @param string $collectionId
      * @param string $attributeId
-     * @param Document $attribute
-     * @return Document
+     * @param ?Document $attribute
+     * @return ?Document
      */
     public function beforeUpdateAttribute(
         Database $source,
         Database $destination,
         string $collectionId,
         string $attributeId,
-        Document $attribute,
-    ): Document {
+        ?Document $attribute = null,
+    ): ?Document {
         return $attribute;
     }
 
@@ -142,16 +142,16 @@ abstract class Filter
      * @param Database $destination
      * @param string $collectionId
      * @param string $indexId
-     * @param Document $index
-     * @return Document
+     * @param ?Document $index
+     * @return ?Document
      */
     public function beforeCreateIndex(
         Database $source,
         Database $destination,
         string $collectionId,
         string $indexId,
-        Document $index,
-    ): Document {
+        ?Document $index = null,
+    ): ?Document {
         return $index;
     }
 
@@ -160,16 +160,16 @@ abstract class Filter
      * @param Database $destination
      * @param string $collectionId
      * @param string $indexId
-     * @param Document $index
-     * @return Document
+     * @param ?Document $index
+     * @return ?Document
      */
     public function beforeUpdateIndex(
         Database $source,
         Database $destination,
         string $collectionId,
         string $indexId,
-        Document $index,
-    ): Document {
+        ?Document $index = null,
+    ): ?Document {
         return $index;
     }
 
@@ -194,15 +194,15 @@ abstract class Filter
      * @param Database $source
      * @param Database $destination
      * @param string $collectionId
-     * @param Document $document
-     * @return Document
+     * @param ?Document $document
+     * @return ?Document
      */
     public function beforeCreateDocument(
         Database $source,
         Database $destination,
         string $collectionId,
-        Document $document,
-    ): Document {
+        ?Document $document = null,
+    ): ?Document {
         return $document;
     }
 
@@ -212,15 +212,16 @@ abstract class Filter
      * @param Database $source
      * @param Database $destination
      * @param string $collectionId
-     * @param Document $document
-     * @return void
+     * @param ?Document $document
+     * @return ?Document
      */
     public function afterCreateDocument(
         Database $source,
         Database $destination,
         string $collectionId,
-        Document $document,
-    ): void {
+        ?Document $document = null,
+    ): ?Document {
+        return $document;
     }
 
     /**
@@ -229,15 +230,15 @@ abstract class Filter
      * @param Database $source
      * @param Database $destination
      * @param string $collectionId
-     * @param Document $document
-     * @return Document
+     * @param ?Document $document
+     * @return ?Document
      */
     public function beforeUpdateDocument(
         Database $source,
         Database $destination,
         string $collectionId,
-        Document $document,
-    ): Document {
+        ?Document $document = null,
+    ): ?Document {
         return $document;
     }
 
@@ -247,15 +248,16 @@ abstract class Filter
      * @param Database $source
      * @param Database $destination
      * @param string $collectionId
-     * @param Document $document
-     * @return void
+     * @param ?Document $document
+     * @return ?Document
      */
     public function afterUpdateDocument(
         Database $source,
         Database $destination,
         string $collectionId,
-        Document $document,
-    ): void {
+        ?Document $document = null,
+    ): ?Document {
+        return $document;
     }
 
     /**

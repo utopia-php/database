@@ -194,15 +194,15 @@ abstract class Filter
      * @param Database $source
      * @param Database $destination
      * @param string $collectionId
-     * @param ?Document $document
-     * @return ?Document
+     * @param Document $document
+     * @return Document
      */
     public function beforeCreateDocument(
         Database $source,
         Database $destination,
         string $collectionId,
-        ?Document $document = null,
-    ): ?Document {
+        Document $document,
+    ): Document {
         return $document;
     }
 
@@ -212,15 +212,15 @@ abstract class Filter
      * @param Database $source
      * @param Database $destination
      * @param string $collectionId
-     * @param ?Document $document
-     * @return ?Document
+     * @param Document $document
+     * @return Document
      */
     public function afterCreateDocument(
         Database $source,
         Database $destination,
         string $collectionId,
-        ?Document $document = null,
-    ): ?Document {
+        Document $document,
+    ): Document {
         return $document;
     }
 
@@ -230,15 +230,15 @@ abstract class Filter
      * @param Database $source
      * @param Database $destination
      * @param string $collectionId
-     * @param ?Document $document
-     * @return ?Document
+     * @param Document $document
+     * @return Document
      */
     public function beforeUpdateDocument(
         Database $source,
         Database $destination,
         string $collectionId,
-        ?Document $document = null,
-    ): ?Document {
+        Document $document,
+    ): Document {
         return $document;
     }
 
@@ -248,15 +248,15 @@ abstract class Filter
      * @param Database $source
      * @param Database $destination
      * @param string $collectionId
-     * @param ?Document $document
-     * @return ?Document
+     * @param Document $document
+     * @return Document
      */
     public function afterUpdateDocument(
         Database $source,
         Database $destination,
         string $collectionId,
-        ?Document $document = null,
-    ): ?Document {
+        Document $document,
+    ): Document {
         return $document;
     }
 

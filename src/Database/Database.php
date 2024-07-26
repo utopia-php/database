@@ -3188,6 +3188,10 @@ class Database
                 throw new StructureException($validator->getDescription());
             }
 
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
+            }
+
             $documents[$key] = $document;
         }
 
@@ -3770,6 +3774,10 @@ class Database
         $documents = $this->adapter->updateDocuments($collection->getId(), $documents, $batchSize);
 
         foreach ($documents as $key => $document) {
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+            }
+
             $documents[$key] = $this->decode($collection, $document);
 
             $this->purgeCachedDocument($collection->getId(), $document->getId());

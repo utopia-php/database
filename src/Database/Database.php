@@ -3198,6 +3198,10 @@ class Database
         $documents = $this->adapter->createDocuments($collection->getId(), $documents, $batchSize);
 
         foreach ($documents as $key => $document) {
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+            }
+
             $documents[$key] = $this->decode($collection, $document);
         }
 
@@ -3351,6 +3355,16 @@ class Database
 
                     case 'NULL':
                         // TODO: This might need to depend on the relation type, to be either set to null or removed?
+
+                        if (
+                            ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD) ||
+                            ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_ONE_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_ONE_TO_ONE && $side === Database::RELATION_SIDE_CHILD && $twoWay === true)
+                        ) {
+                            break;
+                        }
+
                         $document->removeAttribute($key);
                         // No related document
                         break;
@@ -3741,7 +3755,7 @@ class Database
         $time = DateTime::now();
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        foreach ($documents as $document) {
+        foreach ($documents as $key => $document) {
             if (!$document->getId()) {
                 throw new DatabaseException('Must define $id attribute for each document');
             }
@@ -3768,6 +3782,10 @@ class Database
             $validator = new Structure($collection);
             if (!$validator->isValid($document)) {
                 throw new StructureException($validator->getDescription());
+            }
+
+            if ($this->resolveRelationships) {
+                $documents[$key] = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
         }
 

@@ -3355,6 +3355,16 @@ class Database
 
                     case 'NULL':
                         // TODO: This might need to depend on the relation type, to be either set to null or removed?
+
+                        if (
+                            ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD) ||
+                            ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_ONE_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_ONE_TO_ONE && $side === Database::RELATION_SIDE_CHILD && $twoWay === true)
+                        ) {
+                            break;
+                        }
+
                         $document->removeAttribute($key);
                         // No related document
                         break;

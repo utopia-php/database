@@ -5,7 +5,7 @@ namespace Utopia\Database\Validator;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Validator;
+use Utopia\Http\Validator;
 
 class Index extends Validator
 {

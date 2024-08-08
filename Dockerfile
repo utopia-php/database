@@ -1,4 +1,4 @@
-FROM composer:2.0 as composer
+FROM composer:2.0 AS composer
 
 ARG TESTING=false
 ENV TESTING=$TESTING
@@ -10,13 +10,13 @@ COPY composer.json /usr/local/src/
 
 RUN composer install --ignore-platform-reqs --optimize-autoloader \
     --no-plugins --no-scripts --prefer-dist
-    
-FROM php:8.3.3-cli-alpine3.19 as compile
+
+FROM php:8.3.3-cli-alpine3.19 AS compile
 
 ENV PHP_REDIS_VERSION=6.0.2 \
     PHP_SWOOLE_VERSION=v5.1.2 \
     PHP_MONGO_VERSION=1.16.1
-    
+
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN \
@@ -63,7 +63,7 @@ RUN \
    && ./configure --enable-pcov \
    && make && make install
 
-FROM compile as final
+FROM compile AS final
 
 LABEL maintainer="team@appwrite.io"
 

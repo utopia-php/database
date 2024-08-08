@@ -833,12 +833,15 @@ class Mongo extends Adapter
      * @param string $id
      * @param string $attribute
      * @param int|float $value
+     * @param string $updatedAt
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
+     * @throws DatabaseException
+     * @throws MongoException
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
     {
         $attribute = $this->filter($attribute);
         $filters = ['_uid' => $id];
@@ -858,7 +861,10 @@ class Mongo extends Adapter
         $this->client->update(
             $this->getNamespace() . '_' . $this->filter($collection),
             $filters,
-            ['$inc' => [$attribute => $value]],
+            [
+                '$inc' => [$attribute => $value],
+                '$set' => ['_updatedAt' => $this->toMongoDatetime($updatedAt)],
+            ],
         );
 
         return true;

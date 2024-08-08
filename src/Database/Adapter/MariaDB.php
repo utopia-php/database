@@ -1540,12 +1540,13 @@ class MariaDB extends SQL
      * @param string $id
      * @param string $attribute
      * @param int|float $value
+     * @param string $updatedAt
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
     {
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
@@ -1555,7 +1556,9 @@ class MariaDB extends SQL
 
         $sql = "
 			UPDATE {$this->getSQLTable($name)} 
-			SET `{$attribute}` = `{$attribute}` + :val 
+			SET 
+			    `{$attribute}` = `{$attribute}` + :val,
+			    `_updatedAt` = :updatedAt
 			WHERE _uid = :_uid
 		";
 
@@ -1570,6 +1573,7 @@ class MariaDB extends SQL
         $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
+        $stmt->bindValue(':updatedAt', $updatedAt);
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);

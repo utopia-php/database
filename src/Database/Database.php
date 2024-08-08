@@ -4213,6 +4213,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws DatabaseException
+     * @throws Exception
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
     {
@@ -4253,7 +4254,7 @@ class Database
         /**
          * @var Document $attr
          */
-        $attr = end($attr);
+        $attr = \end($attr);
         if (!in_array($attr->getAttribute('type'), $whiteList)) {
             throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
         }
@@ -4262,8 +4263,26 @@ class Database
             throw new DatabaseException('Attribute value exceeds maximum limit: ' . $max);
         }
 
+        $time = DateTime::now();
+        $updatedAt = $document->getUpdatedAt();
+        $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+
+        // Check if document was updated after the request timestamp
+        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            throw new ConflictException('Document was updated after the request timestamp');
+        }
+
         $max = $max ? $max - $value : null;
-        $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
+
+        $result = $this->adapter->increaseDocumentAttribute(
+            $collection->getId(),
+            $id,
+            $attribute,
+            $value,
+            $updatedAt,
+            max: $max
+        );
 
         $this->purgeCachedDocument($collection->getId(), $id);
 
@@ -4325,7 +4344,7 @@ class Database
         /**
          * @var Document $attr
          */
-        $attr = end($attr);
+        $attr = \end($attr);
         if (!in_array($attr->getAttribute('type'), $whiteList)) {
             throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
         }
@@ -4334,9 +4353,26 @@ class Database
             throw new DatabaseException('Attribute value Exceeds minimum limit ' . $min);
         }
 
+        $time = DateTime::now();
+        $updatedAt = $document->getUpdatedAt();
+        $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+
+        // Check if document was updated after the request timestamp
+        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            throw new ConflictException('Document was updated after the request timestamp');
+        }
+
         $min = $min ? $min + $value : null;
 
-        $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
+        $result = $this->adapter->increaseDocumentAttribute(
+            $collection->getId(),
+            $id,
+            $attribute,
+            $value * -1,
+            $updatedAt,
+            min: $min
+        );
 
         $this->purgeCachedDocument($collection->getId(), $id);
 

@@ -2007,10 +2007,13 @@ abstract class Base extends TestCase
             ]
         ]));
 
+        $updatedAt = $document->getUpdatedAt();
+
         $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101));
 
         $document = static::getDatabase()->getDocument($collection, $document->getId());
         $this->assertEquals(101, $document->getAttribute('increase'));
+        $this->assertNotEquals($updatedAt, $document->getUpdatedAt());
 
         $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
         $document = static::getDatabase()->getDocument($collection, $document->getId());

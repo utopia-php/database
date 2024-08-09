@@ -4,7 +4,7 @@
     "type": "library",
     "keywords": ["php","framework", "upf", "utopia", "database"],
     "license": "MIT",
-    "minimum-stability": "stable",
+    "minimum-stability": "RC",
     "autoload": {
         "psr-4": {"Utopia\\Database\\": "src/Database"}
     },
@@ -36,7 +36,7 @@
         "ext-pdo": "*",
         "ext-mbstring": "*",
         "php": ">=8.0",
-        "utopia-php/framework": "0.34.*",
+        "utopia-php/framework": "1.0.*",
         "utopia-php/cache": "0.10.*",
         "utopia-php/mongo": "0.3.*"
     },
@@ -45,7 +45,7 @@
         "phpunit/phpunit": "^9.4",
         "pcov/clobber": "^2.0",
         "swoole/ide-helper": "4.8.0",
-        "utopia-php/cli": "0.17.*",
+        "utopia-php/cli": "1.0.*",
         "laravel/pint": "1.13.*",
         "phpstan/phpstan": "1.10.*",
         "rregeer/phpunit-coverage-check": "^0.3.1"

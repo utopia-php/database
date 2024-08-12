@@ -161,33 +161,31 @@ class MariaDB extends SQL
         $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
         $permissions = "
-				CREATE TABLE {$this->getSQLTable($id . '_perms')} (
-					_id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-					_type VARCHAR(12) NOT NULL,
-					_permission VARCHAR(255) NOT NULL,
-					_document VARCHAR(255) NOT NULL,
-					PRIMARY KEY (_id),
-			";
+            CREATE TABLE {$this->getSQLTable($id . '_perms')} (
+                _id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+                _type VARCHAR(12) NOT NULL,
+                _permission VARCHAR(255) NOT NULL,
+                _document VARCHAR(255) NOT NULL,
+                PRIMARY KEY (_id),
+        ";
 
         if ($this->sharedTables) {
             $permissions .= "
-                	_tenant INT(11) UNSIGNED DEFAULT NULL,
-					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
-					INDEX _permission (_tenant, _permission, _type)
-				";
+                _tenant INT(11) UNSIGNED DEFAULT NULL,
+                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
+                INDEX _permission (_tenant, _permission, _type)
+            ";
         } else {
             $permissions .= "
-					UNIQUE INDEX _index1 (_document, _type, _permission),
-					INDEX _permission (_permission, _type)
-				";
+                UNIQUE INDEX _index1 (_document, _type, _permission),
+                INDEX _permission (_permission, _type)
+            ";
         }
 
         $permissions .= ")";
         $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
 
         try {
-            $this->getPDO()->beginTransaction();
-
             $this->getPDO()
                 ->prepare($collection)
                 ->execute();
@@ -195,14 +193,10 @@ class MariaDB extends SQL
             $this->getPDO()
                 ->prepare($permissions)
                 ->execute();
-
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Exception $e) {
-            if ($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
+            $this->getPDO()
+                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+                ->execute();
 
             if ($e instanceof PDOException) {
                 $this->processException($e);

@@ -230,6 +230,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Are attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForAttributes(): bool
+    {
+        return true;
+    }
+
+    /**
      * Is unique index supported?
      *
      * @return bool

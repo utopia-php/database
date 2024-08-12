@@ -1269,7 +1269,7 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        // attribute IDs are case insensitive
+        // Attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
         /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {
@@ -1351,10 +1351,17 @@ class Database
             $this->validateDefaultTypes($type, $default);
         }
 
-        $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+        try {
+            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
-        if (!$created) {
-            throw new DatabaseException('Failed to create attribute');
+            if (!$created) {
+                throw new DatabaseException('Failed to create attribute');
+            }
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw $e;
+            }
         }
 
         if ($collection->getId() !== self::METADATA) {

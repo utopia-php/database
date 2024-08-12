@@ -2652,16 +2652,16 @@ class Database
      */
     public function getDocument(string $collection, string $id, array $queries = []): Document
     {
-        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
-            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-        }
-
         if ($collection === self::METADATA && $id === self::METADATA) {
             return new Document(self::COLLECTION);
         }
 
         if (empty($collection)) {
             throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
         if (empty($id)) {

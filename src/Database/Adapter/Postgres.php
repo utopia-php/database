@@ -977,7 +977,7 @@ class Postgres extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
+            $sql .= ' AND _tenant IN (:_tenant, NULL)';
         }
 
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -1057,7 +1057,7 @@ class Postgres extends SQL
 			";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND _tenant IN (:_tenant, NULL)';
             }
 
             $removeQuery = $sql . $removeQuery;
@@ -1129,7 +1129,7 @@ class Postgres extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
+            $sql .= ' AND _tenant IN (:_tenant, NULL)';
         }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
@@ -1253,7 +1253,7 @@ class Postgres extends SQL
                     ";
 
                     if ($this->sharedTables) {
-                        $sql .= ' AND _tenant = :_tenant';
+                        $sql .= ' AND _tenant IN (:_tenant, NULL)';
                     }
 
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -1296,7 +1296,7 @@ class Postgres extends SQL
 
                             $tenantQuery = '';
                             if ($this->sharedTables) {
-                                $tenantQuery = ' AND _tenant = :_tenant';
+                                $tenantQuery = ' AND _tenant IN (:_tenant, NULL)';
                             }
 
                             $removeQuery .= "(
@@ -1467,7 +1467,7 @@ class Postgres extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
+            $sql .= ' AND _tenant IN (:_tenant, NULL)';
         }
 
         $sql .= $sqlMax . $sqlMin;
@@ -1507,7 +1507,7 @@ class Postgres extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
+            $sql .= ' AND _tenant IN (:_tenant, NULL)';
         }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
@@ -1524,7 +1524,7 @@ class Postgres extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
+            $sql .= ' AND _tenant IN (:_tenant, NULL)';
         }
 
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
@@ -1661,7 +1661,7 @@ class Postgres extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "table_main._tenant IN (:_tenant, NULL)";
         }
 
         if (Authorization::$status) {
@@ -1787,7 +1787,7 @@ class Postgres extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "table_main._tenant IN (:_tenant, NULL)";
         }
 
         if (Authorization::$status) {
@@ -1850,7 +1850,7 @@ class Postgres extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "table_main._tenant IN (:_tenant, NULL)";
         }
 
         if (Authorization::$status) {

@@ -1046,7 +1046,7 @@ class MariaDB extends SQL
 			";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND _tenant IN (:_tenant, NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -1123,7 +1123,7 @@ class MariaDB extends SQL
                 ";
 
                 if ($this->sharedTables) {
-                    $sql .= ' AND _tenant = :_tenant';
+                    $sql .= ' AND _tenant IN (:_tenant, NULL)';
                 }
 
                 $removeQuery = $sql . $removeQuery;
@@ -1210,7 +1210,7 @@ class MariaDB extends SQL
 			";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND _tenant IN (:_tenant, NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
@@ -1339,7 +1339,7 @@ class MariaDB extends SQL
                     ";
 
                     if ($this->sharedTables) {
-                        $sql .= ' AND _tenant = :_tenant';
+                        $sql .= ' AND _tenant IN (:_tenant, NULL)';
                     }
 
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -1382,7 +1382,7 @@ class MariaDB extends SQL
 
                             $tenantQuery = '';
                             if ($this->sharedTables) {
-                                $tenantQuery = ' AND _tenant = :_tenant';
+                                $tenantQuery = ' AND _tenant IN (:_tenant, NULL)';
                             }
 
                             $removeQuery .= "(
@@ -1563,7 +1563,7 @@ class MariaDB extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
+            $sql .= ' AND _tenant IN (:_tenant, NULL)';
         }
 
         $sql .= $sqlMax . $sqlMin;
@@ -1605,7 +1605,7 @@ class MariaDB extends SQL
 		    ";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND _tenant IN (:_tenant, NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
@@ -1624,7 +1624,7 @@ class MariaDB extends SQL
 		    ";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND _tenant IN (:_tenant, NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
@@ -1767,7 +1767,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "table_main._tenant IN (:_tenant, NULL)";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1893,7 +1893,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "table_main._tenant IN (:_tenant, NULL)";
         }
 
         $sqlWhere = !empty($where)
@@ -1963,7 +1963,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "table_main._tenant IN (:_tenant, NULL)";
         }
 
         $sqlWhere = !empty($where)

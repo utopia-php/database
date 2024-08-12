@@ -970,10 +970,6 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
     {
-        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
-            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-        }
-
         $permissions ??= [
             Permission::create(Role::any()),
         ];
@@ -1111,10 +1107,13 @@ class Database
 
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
+        $tenant = $collection->getAttribute('$tenant');
+
         if (
             $id !== self::METADATA
             && $this->adapter->getSharedTables()
-            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()
+            && $tenant !== null
+            && $tenant != $this->adapter->getTenant()
         ) {
             return new Document();
         }
@@ -1144,11 +1143,12 @@ class Database
             Query::offset($offset)
         ]));
 
-        if ($this->adapter->getSharedTables()) {
-            $result = \array_filter($result, function ($collection) {
-                return $collection->getAttribute('$tenant') == $this->adapter->getTenant();
-            });
-        }
+        // TODO: Should this be required?
+        //if ($this->adapter->getSharedTables()) {
+        //    $result = \array_filter($result, function ($collection) {
+        //        return $collection->getAttribute('$tenant') == $this->adapter->getTenant();
+        //    });
+        //}
 
         $this->trigger(self::EVENT_COLLECTION_LIST, $result);
 
@@ -3087,7 +3087,11 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
-        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+        if (
+            $this->adapter->getSharedTables()
+            && empty($this->adapter->getTenant())
+            && $collection !== self::METADATA
+        ) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 

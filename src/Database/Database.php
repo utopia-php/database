@@ -1082,14 +1082,6 @@ class Database
      */
     public function getCollection(string $id): Document
     {
-        if (
-            $id !== self::METADATA
-            && $this->adapter->getSharedTables()
-            && empty($this->adapter->getTenant())
-        ) {
-            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-        }
-
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
         $tenant = $collection->getAttribute('$tenant');

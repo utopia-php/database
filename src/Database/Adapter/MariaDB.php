@@ -130,7 +130,7 @@ class MariaDB extends SQL
         }
 
         $sql = "
-			CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
+			CREATE TABLE {$this->getSQLTable($id)} (
 				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 				_uid VARCHAR(255) NOT NULL,
 				_createdAt DATETIME(3) DEFAULT NULL,

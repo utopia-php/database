@@ -129,7 +129,7 @@ class MariaDB extends SQL
             $indexStrings[$key] = "{$indexType} `{$indexId}` ({$indexAttributes}),";
         }
 
-        $sql = "
+        $collectionStmt = "
 			CREATE TABLE {$this->getSQLTable($id)} (
 				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 				_uid VARCHAR(255) NOT NULL,
@@ -142,7 +142,7 @@ class MariaDB extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= "
+            $collectionStmt .= "
             	_tenant INT(11) UNSIGNED DEFAULT NULL,
 				UNIQUE KEY _uid (_tenant, _uid),
 				KEY _created_at (_tenant, _createdAt),
@@ -150,24 +150,18 @@ class MariaDB extends SQL
 				KEY _tenant_id (_tenant, _id)
 			";
         } else {
-            $sql .= "
+            $collectionStmt .= "
 				UNIQUE KEY _uid (_uid),
 				KEY _created_at (_createdAt),
 				KEY _updated_at (_updatedAt)
 			";
         }
 
-        $sql .= ")";
+        $collectionStmt .= ")";
+        $collectionStmt = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collectionStmt);
 
-        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
-
-        try {
-            $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-
-            $sql = "
-				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
+        $permissionsStmt = "
+				CREATE TABLE {$this->getSQLTable($id . '_perms')} (
 					_id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 					_type VARCHAR(12) NOT NULL,
 					_permission VARCHAR(255) NOT NULL,
@@ -175,31 +169,46 @@ class MariaDB extends SQL
 					PRIMARY KEY (_id),
 			";
 
-            if ($this->sharedTables) {
-                $sql .= "
+        if ($this->sharedTables) {
+            $permissionsStmt .= "
                 	_tenant INT(11) UNSIGNED DEFAULT NULL,
 					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
 					INDEX _permission (_tenant, _permission, _type)
 				";
-            } else {
-                $sql .= "
+        } else {
+            $permissionsStmt .= "
 					UNIQUE INDEX _index1 (_document, _type, _permission),
 					INDEX _permission (_permission, _type)
 				";
+        }
+
+        $permissionsStmt .= ")";
+        $permissionsStmt = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissionsStmt);
+
+        try {
+            $this->pdo->beginTransaction();
+
+            $this->getPDO()
+                ->prepare($collectionStmt)
+                ->execute();
+
+            $this->getPDO()
+                ->prepare($permissionsStmt)
+                ->execute();
+
+            if (!$this->pdo->commit()) {
+                throw new DatabaseException('Failed to commit transaction');
+            }
+        } catch (\Exception $e) {
+            if (!$this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
             }
 
-            $sql .= ")";
+            if ($e instanceof PDOException) {
+                $this->processException($e);
+            }
 
-            $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
-
-            $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-        } catch (\Exception $th) {
-            $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
-                ->execute();
-            throw $th;
+            throw $e;
         }
 
         return true;
@@ -2246,17 +2255,20 @@ class MariaDB extends SQL
     /**
      * @param PDOException $e
      * @throws TimeoutException
+     * @throws DuplicateException
      */
     protected function processException(PDOException $e): void
     {
-        // Regular PDO
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        } else if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
             throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
-        // PDOProxy switches errorInfo PDOProxy.php line 64
-        if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        } else if ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;

@@ -901,11 +901,7 @@ class Database
      */
     public function exists(?string $database = null, ?string $collection = null): bool
     {
-        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
-            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-        }
-
-        $database = $database ?? $this->adapter->getDatabase();
+        $database ??= $this->adapter->getDatabase();
 
         return $this->adapter->exists($database, $collection);
     }

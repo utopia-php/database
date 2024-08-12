@@ -15011,7 +15011,7 @@ abstract class Base extends TestCase
      * @throws StructureException
      * @throws TimeoutException
      */
-    public function testIsolationModes(): void
+    public function testSharedTables(): void
     {
         /**
          * Default mode already tested, we'll test 'schema' and 'table' isolation here

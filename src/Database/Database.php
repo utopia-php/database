@@ -871,11 +871,8 @@ class Database
      */
     public function create(?string $database = null): bool
     {
-        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
-            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-        }
+        $database ??= $this->adapter->getDatabase();
 
-        $database = $database ?? $this->adapter->getDatabase();
         $this->adapter->create($database);
 
         /**

@@ -129,7 +129,7 @@ class MariaDB extends SQL
             $indexStrings[$key] = "{$indexType} `{$indexId}` ({$indexAttributes}),";
         }
 
-        $collectionStmt = "
+        $collection = "
 			CREATE TABLE {$this->getSQLTable($id)} (
 				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 				_uid VARCHAR(255) NOT NULL,
@@ -142,7 +142,7 @@ class MariaDB extends SQL
 		";
 
         if ($this->sharedTables) {
-            $collectionStmt .= "
+            $collection .= "
             	_tenant INT(11) UNSIGNED DEFAULT NULL,
 				UNIQUE KEY _uid (_tenant, _uid),
 				KEY _created_at (_tenant, _createdAt),
@@ -150,17 +150,17 @@ class MariaDB extends SQL
 				KEY _tenant_id (_tenant, _id)
 			";
         } else {
-            $collectionStmt .= "
+            $collection .= "
 				UNIQUE KEY _uid (_uid),
 				KEY _created_at (_createdAt),
 				KEY _updated_at (_updatedAt)
 			";
         }
 
-        $collectionStmt .= ")";
-        $collectionStmt = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collectionStmt);
+        $collection .= ")";
+        $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
-        $permissionsStmt = "
+        $permissions = "
 				CREATE TABLE {$this->getSQLTable($id . '_perms')} (
 					_id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 					_type VARCHAR(12) NOT NULL,
@@ -170,38 +170,38 @@ class MariaDB extends SQL
 			";
 
         if ($this->sharedTables) {
-            $permissionsStmt .= "
+            $permissions .= "
                 	_tenant INT(11) UNSIGNED DEFAULT NULL,
 					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
 					INDEX _permission (_tenant, _permission, _type)
 				";
         } else {
-            $permissionsStmt .= "
+            $permissions .= "
 					UNIQUE INDEX _index1 (_document, _type, _permission),
 					INDEX _permission (_permission, _type)
 				";
         }
 
-        $permissionsStmt .= ")";
-        $permissionsStmt = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissionsStmt);
+        $permissions .= ")";
+        $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
 
         try {
-            $this->pdo->beginTransaction();
+            $this->getPDO()->beginTransaction();
 
             $this->getPDO()
-                ->prepare($collectionStmt)
+                ->prepare($collection)
                 ->execute();
 
             $this->getPDO()
-                ->prepare($permissionsStmt)
+                ->prepare($permissions)
                 ->execute();
 
-            if (!$this->pdo->commit()) {
+            if (!$this->getPDO()->commit()) {
                 throw new DatabaseException('Failed to commit transaction');
             }
         } catch (\Exception $e) {
-            if (!$this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
+            if (!$this->getPDO()->inTransaction()) {
+                $this->getPDO()->rollBack();
             }
 
             if ($e instanceof PDOException) {
@@ -2261,13 +2261,13 @@ class MariaDB extends SQL
     {
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
             throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
-        } else if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
+        } elseif ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
             throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
             throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        } else if ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
+        } elseif ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
             throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 

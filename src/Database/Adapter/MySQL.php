@@ -50,7 +50,7 @@ class MySQL extends MariaDB
 
         if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
             throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        } else if ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
+        } elseif ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
             throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 

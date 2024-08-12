@@ -343,30 +343,68 @@ class Postgres extends SQL
      * @param int $size
      * @param bool $signed
      * @param bool $array
+     * @param string $newKey
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
     {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed, $array);
+        try {
+            $name = $this->filter($collection);
+            $id = $this->filter($id);
+            $type = $this->getSQLType($type, $size, $signed, $array);
 
-        if ($type == 'TIMESTAMP(3)') {
-            $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
+            $this->getPDO()->beginTransaction();
+
+            if ($type == 'TIMESTAMP(3)') {
+                $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
+            }
+
+            if (!empty($newKey) && $id !== $newKey) {
+                $newKey = $this->filter($newKey);
+
+                $sql = "
+                    ALTER TABLE {$this->getSQLTable($name)}
+                    RENAME COLUMN \"{$id}\" TO \"{$newKey}\"
+                ";
+
+                $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+                $result = $this->getPDO()
+                    ->prepare($sql)
+                    ->execute();
+
+                if (!$result) {
+                    return false;
+                }
+
+                $id = $newKey;
+            }
+
+            $sql = "
+                ALTER TABLE {$this->getSQLTable($name)}
+                ALTER COLUMN \"{$id}\" TYPE {$type}
+            ";
+
+            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+            $result = $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+
+            if (!$this->getPDO()->commit()) {
+                throw new DatabaseException('Failed to commit transaction');
+            }
+
+            return $result;
+        } catch (\Throwable $e) {
+            if($this->getPDO()->inTransaction()) {
+                $this->getPDO()->rollBack();
+            }
+
+            throw $e;
         }
-
-        $sql = "
-			ALTER TABLE {$this->getSQLTable($name)}
-			ALTER COLUMN \"{$id}\" TYPE {$type}
-		";
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
     }
 
     /**

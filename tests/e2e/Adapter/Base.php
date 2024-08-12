@@ -5725,6 +5725,36 @@ abstract class Base extends TestCase
         $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }
 
+    public function testUpdateAttributeRename(): void
+    {
+        static::getDatabase()->createCollection('rename');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('rename', 'rename_me', Database::VAR_STRING, 128, true));
+
+        $doc = static::getDatabase()->createDocument('rename', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'rename_me' => 'rename me'
+        ]));
+
+        $this->assertEquals('rename me', $doc->getAttribute('rename_me'));
+
+        static::getDatabase()->updateAttribute(
+            collection: 'rename',
+            id: 'rename_me',
+            newKey: 'renamed',
+        );
+
+        $doc = static::getDatabase()->getDocument('rename', $doc->getId());
+
+        $this->assertEquals('rename me', $doc->getAttribute('renamed'));
+        $this->assertNull($doc->getAttribute('rename_me'));
+    }
+
     /**
      * @depends testCreatedAtUpdatedAt
      */

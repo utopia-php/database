@@ -1623,16 +1623,18 @@ class Database
      * @param string|null $format
      * @param array<string, mixed>|null $formatOptions
      * @param array<string>|null $filters
+     * @param string|null $newKey
      * @return Document
      * @throws Exception
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null): Document
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
-        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, $newKey) {
             $altering = !\is_null($type)
                 || !\is_null($size)
                 || !\is_null($signed)
-                || !\is_null($array);
+                || !\is_null($array)
+                || !\is_null($newKey);
             $type ??= $attribute->getAttribute('type');
             $size ??= $attribute->getAttribute('size');
             $signed ??= $attribute->getAttribute('signed');
@@ -1718,7 +1720,7 @@ class Database
             }
 
             if ($altering) {
-                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
+                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
 
                 if (!$updated) {
                     throw new DatabaseException('Failed to update attribute');

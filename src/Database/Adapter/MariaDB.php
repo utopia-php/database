@@ -200,7 +200,7 @@ class MariaDB extends SQL
                 throw new DatabaseException('Failed to commit transaction');
             }
         } catch (\Exception $e) {
-            if (!$this->getPDO()->inTransaction()) {
+            if ($this->getPDO()->inTransaction()) {
                 $this->getPDO()->rollBack();
             }
 

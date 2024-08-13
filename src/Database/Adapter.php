@@ -791,18 +791,19 @@ abstract class Adapter
     }
 
     /**
-     * Increase and Decrease Attribute Value
+     * Increase or decrease attribute value
      *
      * @param string $collection
      * @param string $id
      * @param string $attribute
      * @param int|float $value
+     * @param string $updatedAt
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
      * @throws Exception
      */
-    abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool;
+    abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool;
 
     /**
      * @return int

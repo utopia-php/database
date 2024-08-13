@@ -1,4 +1,4 @@
-FROM composer:2.0 as composer
+FROM composer:2.0 AS composer
 
 ARG DEBUG=false
 ENV DEBUG=$DEBUG

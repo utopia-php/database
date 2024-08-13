@@ -78,6 +78,27 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
+    /**
+     * @throws LimitException
+     * @throws DuplicateException
+     * @throws DatabaseException
+     */
+    public function testCreateDuplicates(): void
+    {
+        static::getDatabase()->createCollection('test', permissions: [
+            Permission::read(Role::any())
+        ]);
+
+        try {
+            static::getDatabase()->createCollection('test');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+
+        $this->assertNotEmpty(static::getDatabase()->listCollections());
+    }
+
     public function testUpdateDeleteCollectionNotFound(): void
     {
         try {
@@ -1044,7 +1065,7 @@ abstract class Base extends TestCase
         $byteDifference = 5000;
         $this->assertLessThan($byteDifference, $sizeDifference);
 
-        static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 20000, true);
         static::getDatabase()->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
@@ -1100,6 +1121,40 @@ abstract class Base extends TestCase
         $size3 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
 
         $this->assertGreaterThan($size2, $size3);
+    }
+
+    public function testPurgeCollectionCache(): void
+    {
+        static::getDatabase()->createCollection('redis');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('redis', 'name', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('redis', 'age', Database::VAR_INTEGER, 0, true));
+
+        static::getDatabase()->createDocument('redis', new Document([
+            '$id' => 'doc1',
+            'name' => 'Richard',
+            'age' => 15,
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ]
+        ]));
+
+        $document = static::getDatabase()->getDocument('redis', 'doc1');
+
+        $this->assertEquals('Richard', $document->getAttribute('name'));
+        $this->assertEquals(15, $document->getAttribute('age'));
+
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('redis', 'age'));
+
+        $document = static::getDatabase()->getDocument('redis', 'doc1');
+        $this->assertEquals('Richard', $document->getAttribute('name'));
+        $this->assertArrayNotHasKey('age', $document);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('redis', 'age', Database::VAR_INTEGER, 0, true));
+
+        $document = static::getDatabase()->getDocument('redis', 'doc1');
+        $this->assertEquals('Richard', $document->getAttribute('name'));
+        $this->assertArrayHasKey('age', $document);
     }
 
     public function testCreateDeleteAttribute(): void
@@ -1972,10 +2027,13 @@ abstract class Base extends TestCase
             ]
         ]));
 
+        $updatedAt = $document->getUpdatedAt();
+
         $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101));
 
         $document = static::getDatabase()->getDocument($collection, $document->getId());
         $this->assertEquals(101, $document->getAttribute('increase'));
+        $this->assertNotEquals($updatedAt, $document->getUpdatedAt());
 
         $this->assertEquals(true, static::getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
         $document = static::getDatabase()->getDocument($collection, $document->getId());
@@ -4771,7 +4829,9 @@ abstract class Base extends TestCase
     {
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$id' => ID::unique(),
-            '$permissions' => [],
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'string' => 'text📝',
             'integer_signed' => -Database::INT_MAX,
             'integer_unsigned' => Database::INT_MAX,
@@ -4792,6 +4852,31 @@ abstract class Base extends TestCase
         // Document should not be updated as there is no change.
         // It should also not throw any authorization exception without any permission because of no change.
         $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
+
+        $document = static::getDatabase()->createDocument('documents', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [],
+            'string' => 'text📝',
+            'integer_signed' => -Database::INT_MAX,
+            'integer_unsigned' => Database::INT_MAX,
+            'bigint_signed' => -Database::BIG_INT_MAX,
+            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'float_signed' => -123456789.12346,
+            'float_unsigned' => 123456789.12346,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]));
+
+        // Should throw exception, because nothing was updated, but there was no read permission
+        try {
+            static::getDatabase()->updateDocument(
+                'documents',
+                $document->getId(),
+                $document
+            );
+        } catch (Exception $e) {
+            $this->assertInstanceOf(AuthorizationException::class, $e);
+        }
 
         return $document;
     }
@@ -14893,6 +14978,12 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertInstanceOf(Exception::class, $e);
         }
+
+        $database->skipValidation(function () use ($database) {
+            $database->find('validation', queries: [
+                Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
+            ]);
+        });
     }
 
     public function testMetadata(): void
@@ -14940,7 +15031,7 @@ abstract class Base extends TestCase
      * @throws StructureException
      * @throws TimeoutException
      */
-    public function testIsolationModes(): void
+    public function testSharedTables(): void
     {
         /**
          * Default mode already tested, we'll test 'schema' and 'table' isolation here

@@ -193,13 +193,13 @@ class MariaDB extends SQL
             $this->getPDO()
                 ->prepare($permissions)
                 ->execute();
-        } catch (\Exception $e) {
-            $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
-                ->execute();
+        } catch (PDOException $e) {
+            $e = $this->processException($e);
 
-            if ($e instanceof PDOException) {
-                $this->processException($e);
+            if (!($e instanceof DuplicateException)) {
+                $this->getPDO()
+                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+                    ->execute();
             }
 
             throw $e;
@@ -1677,6 +1677,7 @@ class MariaDB extends SQL
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
+     * @throws Exception
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
@@ -1827,7 +1828,7 @@ class MariaDB extends SQL
         try {
             $stmt->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
 
         $results = $stmt->fetchAll();
@@ -2246,25 +2247,22 @@ class MariaDB extends SQL
         });
     }
 
-    /**
-     * @param PDOException $e
-     * @throws TimeoutException
-     * @throws DuplicateException
-     */
-    protected function processException(PDOException $e): void
+    protected function processException(PDOException $e): \Exception
     {
+        // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
         } elseif ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
+        // Duplicate table
         if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         } elseif ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
-        throw $e;
+        return $e;
     }
 }

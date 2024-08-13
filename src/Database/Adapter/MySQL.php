@@ -36,28 +36,6 @@ class MySQL extends MariaDB
     }
 
     /**
-     * @param PDOException $e
-     * @throws TimeoutException
-     * @throws DuplicateException
-     */
-    protected function processException(PDOException $e): void
-    {
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000") {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        throw $e;
-    }
-
-    /**
     * Get Collection Size
     * @param string $collection
     * @return int
@@ -103,5 +81,24 @@ class MySQL extends MariaDB
     public function castIndexArray(): bool
     {
         return true;
+    }
+
+    protected function processException(PDOException $e): \Exception
+    {
+        // Timeout
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
+            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000") {
+            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Duplicate table
+        if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        return $e;
     }
 }

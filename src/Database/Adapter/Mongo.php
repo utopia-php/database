@@ -1755,17 +1755,13 @@ class Mongo extends Adapter
         return [];
     }
 
-    /**
-     * @throws Timeout
-     * @throws Exception
-     */
-    protected function processException(Exception $e): void
+    protected function processException(Exception $e): \Exception
     {
         if ($e->getCode() === 50) {
-            throw new Timeout($e->getMessage());
+            return new Timeout($e->getMessage());
         }
 
-        throw $e;
+        return $e;
     }
 
     /**

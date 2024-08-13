@@ -289,9 +289,14 @@ class MariaDB extends SQL
         $sql = "ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -2246,17 +2251,26 @@ class MariaDB extends SQL
     /**
      * @param PDOException $e
      * @throws TimeoutException
+     * @throws DuplicateException
      */
     protected function processException(PDOException $e): void
     {
-        // Regular PDO
+        /**
+         * PDO and Swoole PDOProxy swap error codes and errorInfo
+         */
+
+        // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
             throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
-        // PDOProxy switches errorInfo PDOProxy.php line 64
-        if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        // Duplicate column
+        if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 1060 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S21') {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;

@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 
 class MySQL extends MariaDB
@@ -37,16 +38,24 @@ class MySQL extends MariaDB
     /**
      * @param PDOException $e
      * @throws TimeoutException
+     * @throws DuplicateException
      */
     protected function processException(PDOException $e): void
     {
+        /**
+         * PDO and Swoole PDOProxy swap error codes and errorInfo
+         */
+
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000") {
             throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
-        // PDOProxy which who switches errorInfo
-        if ($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000") {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 1060 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S21') {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;

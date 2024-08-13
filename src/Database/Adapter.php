@@ -4,6 +4,8 @@ namespace Utopia\Database;
 
 use Exception;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 
 abstract class Adapter
 {
@@ -337,6 +339,8 @@ abstract class Adapter
      * @param bool $signed
      * @param bool $array
      * @return bool
+     * @throws TimeoutException
+     * @throws DuplicateException
      */
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
@@ -599,6 +603,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForSchemas(): bool;
+
+    /**
+     * Are attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForAttributes(): bool;
 
     /**
      * Is index supported?

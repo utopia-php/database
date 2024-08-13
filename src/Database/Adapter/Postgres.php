@@ -275,9 +275,14 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -2197,17 +2202,24 @@ class Postgres extends SQL
     /**
      * @param PDOException $e
      * @throws Timeout
+     * @throws Duplicate
      */
     protected function processException(PDOException $e): void
     {
-        // Regular PDO
+        /**
+         * PDO and Swoole PDOProxy swap error codes and errorInfo
+         */
+
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            throw new Timeout($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014') {
             throw new Timeout($e->getMessage(), $e->getCode(), $e);
         }
 
-        // PDOProxy switches errorInfo PDOProxy.php line 64
-        if ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014') {
-            throw new Timeout($e->getMessage(), $e->getCode(), $e);
+        if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42701') {
+            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;

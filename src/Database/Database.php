@@ -825,6 +825,18 @@ class Database
         return $this;
     }
 
+    /**
+     * Get Tenant
+     *
+     * Get tenant to use if tables are shared
+     *
+     * @return ?int
+     */
+    public function getTenant(): ?int
+    {
+        return $this->adapter->getTenant();
+    }
+
     public function setPreserveDates(bool $preserve): static
     {
         $this->preserveDates = $preserve;

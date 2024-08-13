@@ -116,7 +116,7 @@ abstract class SQL extends Adapter
 		";
 
         if ($this->sharedTables) {
-            $sql .= "AND _tenant = :_tenant OR _tenant IS NULL";
+            $sql .= "AND (_tenant = :_tenant OR _tenant IS NULL)";
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -862,7 +862,7 @@ abstract class SQL extends Adapter
 
         $tenantQuery = '';
         if ($this->sharedTables) {
-            $tenantQuery = 'AND _tenant = :_tenant OR _tenant IS NULL';
+            $tenantQuery = 'AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         return "table_main._uid IN (

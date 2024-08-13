@@ -979,7 +979,7 @@ class Postgres extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant OR _tenant IS NULL';
+            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -1059,7 +1059,7 @@ class Postgres extends SQL
 			";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant OR _tenant IS NULL';
+                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
             }
 
             $removeQuery = $sql . $removeQuery;
@@ -1131,7 +1131,7 @@ class Postgres extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant OR _tenant IS NULL';
+            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
@@ -1255,7 +1255,7 @@ class Postgres extends SQL
                     ";
 
                     if ($this->sharedTables) {
-                        $sql .= ' AND _tenant = :_tenant OR _tenant IS NULL';
+                        $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
                     }
 
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -1298,7 +1298,7 @@ class Postgres extends SQL
 
                             $tenantQuery = '';
                             if ($this->sharedTables) {
-                                $tenantQuery = ' AND _tenant = :_tenant OR _tenant IS NULL';
+                                $tenantQuery = ' AND (_tenant = :_tenant OR _tenant IS NULL)';
                             }
 
                             $removeQuery .= "(
@@ -1473,7 +1473,7 @@ class Postgres extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant OR _tenant IS NULL';
+            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         $sql .= $sqlMax . $sqlMin;
@@ -1513,7 +1513,7 @@ class Postgres extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant OR _tenant IS NULL';
+            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
@@ -1530,7 +1530,7 @@ class Postgres extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant OR _tenant IS NULL';
+            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);

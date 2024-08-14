@@ -165,7 +165,7 @@ class Mongo extends Adapter
         try {
             $this->getClient()->createCollection($id);
         } catch (MongoException $e) {
-            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
         }
 
         $indexesCreated = $this->client->createIndexes($id, [[
@@ -1559,6 +1559,16 @@ class Mongo extends Adapter
     public function getSupportForSchemas(): bool
     {
         return true;
+    }
+
+    /**
+     * Are attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForAttributes(): bool
+    {
+        return false;
     }
 
     /**

@@ -1240,8 +1240,14 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'socialAccountForYoutubeSubscribersss', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '5f058a89258075f058a89258075f058t9214', Database::VAR_BOOLEAN, 0, true));
 
-        // Using this collection to test invalid default values
-        // static::getDatabase()->deleteCollection('attributes');
+        // Test shared tables duplicates throw duplicate
+        static::getDatabase()->createAttribute('attributes', 'duplicate', Database::VAR_STRING, 128, true);
+        try {
+            static::getDatabase()->createAttribute('attributes', 'duplicate', Database::VAR_STRING, 128, true);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
     }
 
     /**
@@ -15204,6 +15210,51 @@ abstract class Base extends TestCase
         }
 
         // Reset state
+        $database->setSharedTables(false);
+        $database->setNamespace(static::$namespace);
+        $database->setDatabase($this->testDatabase);
+    }
+
+    public function testSharedTablesDuplicateAttributesDontThrow(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if ($database->exists('sharedTables')) {
+            $database->setDatabase('sharedTables')->delete();
+        }
+
+        $database
+            ->setDatabase('sharedTables')
+            ->setNamespace('')
+            ->setSharedTables(true)
+            ->setTenant(1)
+            ->create();
+
+        // Create collection
+        $database->createCollection('duplicates', documentSecurity: false);
+        $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+
+        $database->setTenant(2);
+        try {
+            $database->createCollection('duplicates', documentSecurity: false);
+        } catch (DuplicateException) {
+            // Ignore
+        }
+        $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+
+        $collection = $database->getCollection('duplicates');
+        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
+
+        $database->setTenant(1);
+
+        $collection = $database->getCollection('duplicates');
+        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
+
         $database->setSharedTables(false);
         $database->setNamespace(static::$namespace);
         $database->setDatabase($this->testDatabase);

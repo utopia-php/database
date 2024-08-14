@@ -99,6 +99,13 @@ class MySQL extends MariaDB
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
+        // Duplicate column
+        if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 1060 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S21') {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
         return $e;
     }
 }

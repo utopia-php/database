@@ -9,6 +9,8 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 
 /**
@@ -1379,5 +1381,26 @@ class SQLite extends MariaDB
             'WITH',
             'WITHOUT',
         ];
+    }
+
+    protected function processException(PDOException $e): \Exception
+    {
+        /**
+         * PDO and Swoole PDOProxy swap error codes and errorInfo
+         */
+
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
+            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000") {
+            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1) {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 1 && isset($e->errorInfo[0]) && $e->errorInfo[0] === 'HY000') {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        return $e;
     }
 }

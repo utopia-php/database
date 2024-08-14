@@ -275,9 +275,14 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -2216,9 +2221,17 @@ class Postgres extends SQL
             return new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
+        // Duplicate table
         if ($e->getCode() === '42P07' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42P07') {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Duplicate column
+        if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42701') {
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 

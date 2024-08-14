@@ -1243,7 +1243,7 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        // attribute IDs are case insensitive
+        // Attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
         /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {

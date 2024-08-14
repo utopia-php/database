@@ -1476,7 +1476,7 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param callable $updateCallback method that receives document, and returns it with changes applied
+     * @param callable(array, Document, int|string): void $updateCallback method that receives document, and returns it with changes applied
      *
      * @return Document
      * @throws ConflictException
@@ -1495,7 +1495,7 @@ class Database
         }
 
         $attributes = $collection->getAttribute('attributes', []);
-        $index = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
+        $index = \array_search($id, \array_map(fn ($attribute) => $attribute['key'], $attributes));
 
         if ($index === false) {
             throw new DatabaseException('Attribute not found');
@@ -1698,6 +1698,7 @@ class Database
             }
 
             $attribute
+                ->setattribute('key', $newKey ?? $id)
                 ->setAttribute('type', $type)
                 ->setAttribute('size', $size)
                 ->setAttribute('signed', $signed)
@@ -1721,6 +1722,22 @@ class Database
 
             if ($altering) {
                 $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
+
+                // Update Indexes
+                if ($id !== $newKey) {
+                    // Grab all collection indexes
+                    $indexes = $collectionDoc->getAttribute('indexes');
+
+                    // Check if any of the attributes of the index have the same ID as the Old ID
+                    foreach ($indexes as $index) {
+                        if (in_array($id, $index['attributes'])) {
+                            // Update the metadata of the index
+                            $index['attributes'] = array_map(function ($attribute) use ($id, $newKey) {
+                                return $attribute === $id ? $newKey : $attribute;
+                            }, $index['attributes']);
+                        }
+                    }
+                }
 
                 if (!$updated) {
                     throw new DatabaseException('Failed to update attribute');

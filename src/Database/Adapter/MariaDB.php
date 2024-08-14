@@ -314,7 +314,13 @@ class MariaDB extends SQL
         $id = $this->filter($id);
         $type = $this->getSQLType($type, $size, $signed, $array);
 
-        $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` {$newKey} {$type};";
+        if (!empty($newKey)) {
+            $newKey = $this->filter($newKey);
+            $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` {$newKey} {$type};";
+        } else {
+            $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
+        }
+
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
         return $this->getPDO()

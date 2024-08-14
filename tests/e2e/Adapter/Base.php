@@ -5727,11 +5727,11 @@ abstract class Base extends TestCase
 
     public function testUpdateAttributeRename(): void
     {
-        static::getDatabase()->createCollection('rename');
+        static::getDatabase()->createCollection('rename_test');
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute('rename', 'rename_me', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('rename_test', 'rename_me', Database::VAR_STRING, 128, true));
 
-        $doc = static::getDatabase()->createDocument('rename', new Document([
+        $doc = static::getDatabase()->createDocument('rename_test', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -5741,18 +5741,44 @@ abstract class Base extends TestCase
             'rename_me' => 'rename me'
         ]));
 
+        // Create an index to check later
+        static::getDatabase()->createIndex('rename_test', 'renameIndexes', Database::INDEX_KEY, ['rename_me'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
+
         $this->assertEquals('rename me', $doc->getAttribute('rename_me'));
 
         static::getDatabase()->updateAttribute(
-            collection: 'rename',
+            collection: 'rename_test',
             id: 'rename_me',
             newKey: 'renamed',
         );
 
-        $doc = static::getDatabase()->getDocument('rename', $doc->getId());
+        $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
 
         $this->assertEquals('rename me', $doc->getAttribute('renamed'));
         $this->assertNull($doc->getAttribute('rename_me'));
+
+        // Check collection
+        $collection = static::getDatabase()->getCollection('rename_test');
+        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['key']);
+
+        // Check empty key doesn't cause issues
+        static::getDatabase()->updateAttribute(
+            collection: 'rename_test',
+            id: 'renamed',
+            type: Database::VAR_STRING,
+        );
+
+        $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
+
+        $this->assertEquals('rename me', $doc->getAttribute('renamed'));
+
+        // Check the metadata was correctly updated
+        $attribute = $collection->getAttribute('attributes')[0];
+        $this->assertEquals('renamed', $attribute['key']);
+
+        // Check the indexes were updated
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertEquals('renamed', $index->getAttribute('attributes')[0]);
     }
 
     /**

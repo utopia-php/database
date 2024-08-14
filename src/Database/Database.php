@@ -136,17 +136,6 @@ class Database
 
     public const INSERT_BATCH_SIZE = 100;
 
-    protected Adapter $adapter;
-
-    protected Cache $cache;
-
-    protected string $cacheName = 'default';
-
-    /**
-     * @var array<bool|string>
-     */
-    protected array $map = [];
-
     /**
      * List of Internal attributes
      *
@@ -287,6 +276,17 @@ class Database
         ],
         'indexes' => [],
     ];
+
+    protected Adapter $adapter;
+
+    protected Cache $cache;
+
+    protected string $cacheName = 'default';
+
+    /**
+     * @var array<bool|string>
+     */
+    protected array $map = [];
 
     /**
      * @var array<string, array{encode: callable, decode: callable}>

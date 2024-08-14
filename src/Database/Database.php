@@ -1476,7 +1476,7 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param callable(array, Document, int|string): void $updateCallback method that receives document, and returns it with changes applied
+     * @param callable(Document, Document, int|string): void $updateCallback method that receives document, and returns it with changes applied
      *
      * @return Document
      * @throws ConflictException

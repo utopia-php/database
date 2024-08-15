@@ -1495,7 +1495,7 @@ class Database
         }
 
         $attributes = $collection->getAttribute('attributes', []);
-        $index = \array_search($id, \array_map(fn ($attribute) => $attribute['key'], $attributes));
+        $index = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($index === false) {
             throw new DatabaseException('Attribute not found');

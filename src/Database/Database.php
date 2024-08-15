@@ -5182,7 +5182,7 @@ class Database
         $attributes = \array_merge($attributes, $internalAttributes);
 
         foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
+            $key = $attribute['key'] ?? $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
@@ -5260,7 +5260,7 @@ class Database
         $attributes = array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
+            $key = $attribute['key'] ?? $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
@@ -5319,7 +5319,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
+            $key = $attribute['key'] ?? $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);

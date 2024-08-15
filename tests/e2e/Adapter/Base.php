@@ -5738,13 +5738,13 @@ abstract class Base extends TestCase
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            'rename_me' => 'rename me'
+            'rename_me' => 'string'
         ]));
+
+        $this->assertEquals('string', $doc->getAttribute('rename_me'));
 
         // Create an index to check later
         static::getDatabase()->createIndex('rename_test', 'renameIndexes', Database::INDEX_KEY, ['rename_me'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
-
-        $this->assertEquals('rename me', $doc->getAttribute('rename_me'));
 
         static::getDatabase()->updateAttribute(
             collection: 'rename_test',
@@ -5754,7 +5754,7 @@ abstract class Base extends TestCase
 
         $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
 
-        $this->assertEquals('rename me', $doc->getAttribute('renamed'));
+        $this->assertEquals('string', $doc->getAttribute('renamed'));
         $this->assertNull($doc->getAttribute('rename_me'));
 
         // Check collection
@@ -5770,7 +5770,8 @@ abstract class Base extends TestCase
 
         $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
 
-        $this->assertEquals('rename me', $doc->getAttribute('renamed'));
+        $this->assertEquals('string', $doc->getAttribute('renamed'));
+        $this->assertArrayNotHasKey('rename_me', $doc->getAttributes());
 
         // Check the metadata was correctly updated
         $attribute = $collection->getAttribute('attributes')[0];

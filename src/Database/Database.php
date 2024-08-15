@@ -903,10 +903,10 @@ class Database
         return $this;
     }
 
-    public function withPreservedDates(bool $preserve, callable $callback): mixed
+    public function withPreserveDates(callable $callback): mixed
     {
         $previous = $this->preserveDates;
-        $this->preserveDates = $preserve;
+        $this->preserveDates = true;
 
         try {
             return $callback();

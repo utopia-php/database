@@ -5754,6 +5754,7 @@ abstract class Base extends TestCase
 
         $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
 
+        // Check the attribute was correctly renamed
         $this->assertEquals('string', $doc->getAttribute('renamed'));
         $this->assertNull($doc->getAttribute('rename_me'));
 
@@ -5780,6 +5781,31 @@ abstract class Base extends TestCase
         // Check the indexes were updated
         $index = $collection->getAttribute('indexes')[0];
         $this->assertEquals('renamed', $index->getAttribute('attributes')[0]);
+
+        // Try and create new document with new key
+        $doc = static::getDatabase()->createDocument('rename_test', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'renamed' => 'string'
+        ]));
+
+        $this->assertEquals('string', $doc->getAttribute('renamed'));
+
+        // Make sure we can't create a new attribute with the old key
+        $this->expectException(StructureException::class);
+        $doc = static::getDatabase()->createDocument('rename_test', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'rename_me' => 'string'
+        ]));
     }
 
     /**

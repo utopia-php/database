@@ -299,14 +299,14 @@ class Database
     protected array $instanceFilters = [];
 
     /**
-     * @var array<string, mixed>
+     * @var array<string, array<string, callable>>
      */
     protected array $listeners = [
         '*' => [],
     ];
 
     /**
-     * Array in which the keys are the names of databse listeners that
+     * Array in which the keys are the names of database listeners that
      * should be skipped when dispatching events. null $silentListeners
      * will skip all listeners.
      *
@@ -347,8 +347,11 @@ class Database
      * @param Cache $cache
      * @param array<string, array{encode: callable, decode: callable}> $filters
      */
-    public function __construct(Adapter $adapter, Cache $cache, array $filters = [])
-    {
+    public function __construct(
+        Adapter $adapter,
+        Cache $cache,
+        array $filters = []
+    ) {
         $this->adapter = $adapter;
         $this->cache = $cache;
         $this->instanceFilters = $filters;
@@ -724,7 +727,6 @@ class Database
     public function enableFilters(): static
     {
         $this->filter = true;
-
         return $this;
     }
 
@@ -736,8 +738,28 @@ class Database
     public function disableFilters(): static
     {
         $this->filter = false;
-
         return $this;
+    }
+
+    /**
+     * Skip filters
+     *
+     * Execute a callback without filters
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function skipFilters(callable $callback): mixed
+    {
+        $initial = $this->filter;
+        $this->disableFilters();
+
+        try {
+            return $callback();
+        } finally {
+            $this->filter = $initial;
+        }
     }
 
     /**
@@ -777,7 +799,7 @@ class Database
     /**
      * Skip Validation
      *
-     * Skips validation for the code to be executed inside the callback
+     * Execute a callback without validation
      *
      * @template T
      * @param callable(): T $callback
@@ -796,7 +818,18 @@ class Database
     }
 
     /**
-     * Set Share Tables
+     * Get shared tables
+     *
+     * Get whether to share tables between tenants
+     * @return bool
+     */
+    public function getSharedTables(): bool
+    {
+        return $this->adapter->getSharedTables();
+    }
+
+    /**
+     * Set shard tables
      *
      * Set whether to share tables between tenants
      *
@@ -837,11 +870,49 @@ class Database
         return $this->adapter->getTenant();
     }
 
+    /**
+     * With Tenant
+     *
+     * Execute a callback with a specific tenant
+     *
+     * @param int|null $tenant
+     * @param callable $callback
+     * @return mixed
+     */
+    public function withTenant(?int $tenant, callable $callback): mixed
+    {
+        $previous = $this->adapter->getTenant();
+        $this->adapter->setTenant($tenant);
+
+        try {
+            return $callback();
+        } finally {
+            $this->adapter->setTenant($previous);
+        }
+    }
+
+    public function getPreserveDates(): bool
+    {
+        return $this->preserveDates;
+    }
+
     public function setPreserveDates(bool $preserve): static
     {
         $this->preserveDates = $preserve;
 
         return $this;
+    }
+
+    public function withPreservedDates(bool $preserve, callable $callback): mixed
+    {
+        $previous = $this->preserveDates;
+        $this->preserveDates = $preserve;
+
+        try {
+            return $callback();
+        } finally {
+            $this->preserveDates = $previous;
+        }
     }
 
     /**
@@ -877,9 +948,11 @@ class Database
     /**
      * Create the database
      *
-     * @throws DatabaseException
-     *
+     * @param string|null $database
      * @return bool
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws Exception
      */
     public function create(?string $database = null): bool
     {
@@ -1129,13 +1202,6 @@ class Database
             Query::offset($offset)
         ]));
 
-        // TODO: Should this be required?
-        //if ($this->adapter->getSharedTables()) {
-        //    $result = \array_filter($result, function ($collection) {
-        //        return $collection->getAttribute('$tenant') == $this->adapter->getTenant();
-        //    });
-        //}
-
         $this->trigger(self::EVENT_COLLECTION_LIST, $result);
 
         return $result;
@@ -1147,6 +1213,7 @@ class Database
      * @param string $collection
      *
      * @return int
+     * @throws Exception
      */
     public function getSizeOfCollection(string $collection): int
     {
@@ -1230,6 +1297,7 @@ class Database
      * @throws DuplicateException
      * @throws LimitException
      * @throws StructureException
+     * @throws Exception
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
     {
@@ -1239,11 +1307,7 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            throw new DatabaseException('Collection not found');
-        }
-
-        // Attribute IDs are case insensitive
+        // Attribute IDs are case-insensitive
         $attributes = $collection->getAttribute('attributes', []);
         /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {
@@ -1252,9 +1316,9 @@ class Database
             }
         }
 
-        /** Ensure required filters for the attribute are passed */
+        // Ensure required filters for the attribute are passed
         $requiredFilters = $this->getRequiredFilters($type);
-        if (!empty(array_diff($requiredFilters, $filters))) {
+        if (!empty(\array_diff($requiredFilters, $filters))) {
             throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
         }
 
@@ -1316,7 +1380,7 @@ class Database
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER .  ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
         }
 
-        // only execute when $default is given
+        // Only execute when $default is given
         if (!\is_null($default)) {
             if ($required === true) {
                 throw new DatabaseException('Cannot set a default value on a required attribute');
@@ -1364,7 +1428,7 @@ class Database
      * @param string $type Type of the attribute
      * @param mixed $default Default value of the attribute
      *
-     * @throws Exception
+     * @throws DatabaseException
      * @return void
      */
     protected function validateDefaultTypes(string $type, mixed $default): void
@@ -2724,7 +2788,6 @@ class Database
 
         /**
          * Bug with function purity in PHPStan means it thinks $this->map is always empty
-         *
          * @phpstan-ignore-next-line
          */
         foreach ($this->map as $key => $value) {
@@ -2740,10 +2803,10 @@ class Database
             }
         }
 
-        // Don't save to cache if it's part of a two-way relationship or a relationship at all
+        // Don't save to cache if it's part of a relationship
         if (!$hasTwoWayRelationship && empty($relationships)) {
             $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
-            //add document reference to the collection key
+            // Add document reference to the collection key
             $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
         }
 
@@ -2754,7 +2817,7 @@ class Database
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
                 foreach ($this->getInternalAttributes() as $internalAttribute) {
-                    if (!in_array($internalAttribute['$id'], $values)) {
+                    if (!\in_array($internalAttribute['$id'], $values)) {
                         $document->removeAttribute($internalAttribute['$id']);
                     }
                 }
@@ -4782,6 +4845,7 @@ class Database
      * @throws DatabaseException
      * @throws QueryException
      * @throws TimeoutException
+     * @throws Exception
      */
     public function find(string $collection, array $queries = []): array
     {
@@ -5067,12 +5131,12 @@ class Database
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
-            // continue on optional param with no default
+            // Continue on optional param with no default
             if (is_null($value) && is_null($default)) {
                 continue;
             }
 
-            // assign default only if no value provided
+            // Assign default only if no value provided
             // False positive "Call to function is_null() with mixed will always evaluate to false"
             // @phpstan-ignore-next-line
             if (is_null($value) && !is_null($default)) {
@@ -5256,7 +5320,7 @@ class Database
         }
 
         try {
-            if (array_key_exists($name, $this->instanceFilters)) {
+            if (\array_key_exists($name, $this->instanceFilters)) {
                 $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
             } else {
                 $value = self::$filters[$name]['encode']($value, $document, $this);

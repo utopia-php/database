@@ -104,4 +104,35 @@ class DateTimeTest extends TestCase
         $this->assertEquals(true, $dateValidator->isValid(DateTime::format(new \DateTime('2100-04-08 19:36:00'))));
         $this->assertEquals('Value must be valid date in future with minutes precision.', $dateValidator->getDescription());
     }
+
+    public function testOffset(): void
+    {
+        $dateValidator = new DatetimeValidator(offset: 60);
+
+        $time = (new \DateTime());
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format($time)));
+        $time = $time->add(new \DateInterval('PT50S'));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format($time)));
+        $time = $time->add(new \DateInterval('PT20S'));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format($time)));
+        $this->assertEquals('Value must be valid date at least 60 seconds in future.', $dateValidator->getDescription());
+
+        $dateValidator = new DatetimeValidator(offset: -60);
+
+        $time = (new \DateTime());
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format($time)));
+        $time = $time->sub(new \DateInterval('PT50S'));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format($time)));
+        $time = $time->sub(new \DateInterval('PT20S'));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format($time)));
+        $this->assertEquals('Value must be valid date at least 60 seconds in past.', $dateValidator->getDescription());
+
+        $dateValidator = new DatetimeValidator(requireDateInFuture: true, offset: 60);
+
+        $time = (new \DateTime());
+        $time = $time->add(new \DateInterval('PT50S'));
+        $time = $time->add(new \DateInterval('PT20S'));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format($time)));
+        $this->assertEquals('Value must be valid date at least 60 seconds in future.', $dateValidator->getDescription());
+    }
 }

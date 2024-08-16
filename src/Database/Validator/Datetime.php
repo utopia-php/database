@@ -22,9 +22,19 @@ class Datetime extends Validator
      */
     protected bool $requireDateInFuture = false;
 
-    public function __construct(?bool $requireDateInFuture = false, ?string $precision = self::PRECISION_ANY)
+
+    /**
+     * @var int minimum offset from now in seconds
+     */
+    protected int $offset = 0;
+
+    /**
+     * @param bool $offset minimum offset from now in seconds
+     */
+    public function __construct(bool $requireDateInFuture = false, string $precision = self::PRECISION_ANY, int $offset = 0)
     {
         $this->requireDateInFuture = $requireDateInFuture;
+        $this->offset = $offset;
         $this->precision = $precision;
     }
 
@@ -36,7 +46,12 @@ class Datetime extends Validator
     {
         $message = 'Value must be valid date';
 
-        if($this->requireDateInFuture) {
+        if($this->offset < 0) {
+            if($this)
+            $message .= " at least " . \abs($this->offset) . " seconds in past";
+        } else if($this->offset > 0) {
+            $message .= " at least " . $this->offset . " seconds in future";
+        } else if($this->requireDateInFuture) {
             $message .= " in future";
         }
 
@@ -66,6 +81,18 @@ class Datetime extends Validator
 
             if ($this->requireDateInFuture === true && $date < $now) {
                 return false;
+            }
+
+            if($this->offset > 0) {
+                $diff = $date->getTimestamp() - $now->getTimestamp();
+                if($diff <= $this->offset) {
+                    return false;
+                }
+            } else if($this->offset < 0) {
+                $diff = $now->getTimestamp() - $date->getTimestamp();
+                if($diff <= \abs($this->offset)) {
+                    return false;
+                }
             }
 
             // Constants from: https://www.php.net/manual/en/datetime.format.php

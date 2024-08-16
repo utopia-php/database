@@ -5731,6 +5731,103 @@ abstract class Base extends TestCase
         $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }
 
+    public function testUpdateAttributeRename(): void
+    {
+        static::getDatabase()->createCollection('rename_test');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('rename_test', 'rename_me', Database::VAR_STRING, 128, true));
+
+        $doc = static::getDatabase()->createDocument('rename_test', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'rename_me' => 'string'
+        ]));
+
+        $this->assertEquals('string', $doc->getAttribute('rename_me'));
+
+        // Create an index to check later
+        static::getDatabase()->createIndex('rename_test', 'renameIndexes', Database::INDEX_KEY, ['rename_me'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
+
+        static::getDatabase()->updateAttribute(
+            collection: 'rename_test',
+            id: 'rename_me',
+            newKey: 'renamed',
+        );
+
+        $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
+
+        // Check the attribute was correctly renamed
+        $this->assertEquals('string', $doc->getAttribute('renamed'));
+        $this->assertArrayNotHasKey('rename_me', $doc);
+
+        // Check we can update the document with the new key
+        $doc->setAttribute('renamed', 'string2');
+        static::getDatabase()->updateDocument('rename_test', $doc->getId(), $doc);
+
+        $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
+        $this->assertEquals('string2', $doc->getAttribute('renamed'));
+
+        // Check collection
+        $collection = static::getDatabase()->getCollection('rename_test');
+        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['key']);
+        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['$id']);
+
+        // Check empty key doesn't cause issues
+        static::getDatabase()->updateAttribute(
+            collection: 'rename_test',
+            id: 'renamed',
+            type: Database::VAR_STRING,
+        );
+
+        $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
+
+        $this->assertEquals('string2', $doc->getAttribute('renamed'));
+        $this->assertArrayNotHasKey('rename_me', $doc->getAttributes());
+
+        // Check the metadata was correctly updated
+        $attribute = $collection->getAttribute('attributes')[0];
+        $this->assertEquals('renamed', $attribute['key']);
+        $this->assertEquals('renamed', $attribute['$id']);
+
+        // Check the indexes were updated
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertEquals('renamed', $index->getAttribute('attributes')[0]);
+        $this->assertEquals(1, count($collection->getAttribute('indexes')));
+
+        // Try and create new document with new key
+        $doc = static::getDatabase()->createDocument('rename_test', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'renamed' => 'string'
+        ]));
+
+        $this->assertEquals('string', $doc->getAttribute('renamed'));
+
+        // Make sure we can't create a new attribute with the old key
+        try {
+            $doc = static::getDatabase()->createDocument('rename_test', new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'rename_me' => 'string'
+            ]));
+            $this->fail('Succeeded creating a document with old key after renaming the attribute');
+        } catch (\Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+    }
+
     /**
      * @depends testCreatedAtUpdatedAt
      */

@@ -15,13 +15,14 @@ FROM php:8.3.3-cli-alpine3.19 AS compile
 
 ENV PHP_REDIS_VERSION=6.0.2 \
     PHP_SWOOLE_VERSION=v5.1.2 \
-    PHP_MONGO_VERSION=1.16.1
+    PHP_MONGO_VERSION=1.16.1 \
+    PHP_XDEBUG_VERSION=3.3.2
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN \
   apk update \
-  && apk add --no-cache postgresql-libs postgresql-dev make automake autoconf gcc g++ git brotli-dev \
+  && apk add --no-cache postgresql-libs postgresql-dev make automake autoconf gcc g++ git brotli-dev linux-headers \
   && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
   && apk del postgresql-dev \
   && rm -rf /var/cache/apk/*
@@ -63,9 +64,21 @@ RUN \
    && ./configure --enable-pcov \
    && make && make install
 
+## XDebug Extension
+FROM compile AS xdebug
+RUN \
+  git clone --depth 1 --branch $PHP_XDEBUG_VERSION https://github.com/xdebug/xdebug && \
+  cd xdebug && \
+  phpize && \
+  ./configure && \
+  make && make install
+
 FROM compile AS final
 
 LABEL maintainer="team@appwrite.io"
+
+ARG DEBUG=false
+ENV DEBUG=$DEBUG
 
 WORKDIR /usr/src/code
 
@@ -85,9 +98,17 @@ COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20230831/swool
 COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20230831/redis.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
 COPY --from=mongodb /usr/local/lib/php/extensions/no-debug-non-zts-20230831/mongodb.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
 COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20230831/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
+COPY --from=xdebug /usr/local/lib/php/extensions/no-debug-non-zts-20230831/xdebug.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
 
 # Add Source Code
 COPY ./bin /usr/src/code/bin
 COPY ./src /usr/src/code/src
+COPY ./dev /usr/src/code/dev
+
+# Add Debug Configs
+RUN if [ "$DEBUG" == "true" ]; then cp /usr/src/code/dev/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini; fi
+RUN if [ "$DEBUG" == "true" ]; then mkdir -p /tmp/xdebug; fi
+RUN if [ "$DEBUG" = "false" ]; then rm -rf /usr/src/code/dev; fi
+RUN if [ "$DEBUG" = "false" ]; then rm -f /usr/local/lib/php/extensions/no-debug-non-zts-20220829/xdebug.so; fi
 
 CMD [ "tail", "-f", "/dev/null" ]

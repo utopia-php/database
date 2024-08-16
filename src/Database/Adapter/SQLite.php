@@ -280,12 +280,17 @@ class SQLite extends MariaDB
      * @param int $size
      * @param bool $signed
      * @param bool $array
+     * @param string $newKey
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
     {
+        if (!empty($newKey) && $newKey !== $id) {
+            return $this->renameAttribute($collection, $id, $newKey);
+        }
+
         return true;
     }
 

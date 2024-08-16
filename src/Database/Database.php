@@ -1724,15 +1724,11 @@ class Database
             if ($altering) {
                 $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
 
-                // Update Indexes
                 if ($id !== $newKey) {
-                    // Grab all collection indexes
                     $indexes = $collectionDoc->getAttribute('indexes');
 
-                    // Check if any of the attributes of the index have the same ID as the Old ID
                     foreach ($indexes as $index) {
                         if (in_array($id, $index['attributes'])) {
-                            // Update the metadata of the index
                             $index['attributes'] = array_map(function ($attribute) use ($id, $newKey) {
                                 return $attribute === $id ? $newKey : $attribute;
                             }, $index['attributes']);

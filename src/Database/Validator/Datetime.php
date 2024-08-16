@@ -29,10 +29,14 @@ class Datetime extends Validator
     protected int $offset = 0;
 
     /**
-     * @param bool $offset minimum offset from now in seconds
+     * @param int $offset minimum offset from now in seconds
      */
     public function __construct(bool $requireDateInFuture = false, string $precision = self::PRECISION_ANY, int $offset = 0)
     {
+        if($offset < 0) {
+            throw new \Exception('Offset must be a positive number.');
+        }
+
         $this->requireDateInFuture = $requireDateInFuture;
         $this->offset = $offset;
         $this->precision = $precision;
@@ -46,12 +50,9 @@ class Datetime extends Validator
     {
         $message = 'Value must be valid date';
 
-        if($this->offset < 0) {
-            if($this)
-            $message .= " at least " . \abs($this->offset) . " seconds in past";
-        } else if($this->offset > 0) {
+        if($this->offset > 0) {
             $message .= " at least " . $this->offset . " seconds in future";
-        } else if($this->requireDateInFuture) {
+        } elseif($this->requireDateInFuture) {
             $message .= " in future";
         }
 
@@ -83,14 +84,9 @@ class Datetime extends Validator
                 return false;
             }
 
-            if($this->offset > 0) {
+            if($this->offset !== 0) {
                 $diff = $date->getTimestamp() - $now->getTimestamp();
                 if($diff <= $this->offset) {
-                    return false;
-                }
-            } else if($this->offset < 0) {
-                $diff = $now->getTimestamp() - $date->getTimestamp();
-                if($diff <= \abs($this->offset)) {
                     return false;
                 }
             }

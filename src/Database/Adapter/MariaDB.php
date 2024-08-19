@@ -91,6 +91,23 @@ class MariaDB extends SQL
                 $attribute->getAttribute('array', false)
             );
 
+            // Ignore relationships with virtual attributes
+            if ($attribute->getAttribute('type') === Database::VAR_RELATIONSHIP) {
+                $options = $attribute->getAttribute('options', []);
+                $relationType = $options['relationType'] ?? null;
+                $twoWay = $options['twoWay'] ?? false;
+                $side = $options['side'] ?? null;
+
+                if (
+                    $relationType === Database::RELATION_MANY_TO_MANY
+                    || ($relationType === Database::RELATION_ONE_TO_ONE && !$twoWay && $side === Database::RELATION_SIDE_CHILD)
+                    || ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT)
+                    || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
+                ) {
+                    continue;
+                }
+            }
+
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
@@ -129,8 +146,8 @@ class MariaDB extends SQL
             $indexStrings[$key] = "{$indexType} `{$indexId}` ({$indexAttributes}),";
         }
 
-        $sql = "
-			CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
+        $collection = "
+			CREATE TABLE {$this->getSQLTable($id)} (
 				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 				_uid VARCHAR(255) NOT NULL,
 				_createdAt DATETIME(3) DEFAULT NULL,
@@ -142,7 +159,7 @@ class MariaDB extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= "
+            $collection .= "
             	_tenant INT(11) UNSIGNED DEFAULT NULL,
 				UNIQUE KEY _uid (_tenant, _uid),
 				KEY _created_at (_tenant, _createdAt),
@@ -150,56 +167,59 @@ class MariaDB extends SQL
 				KEY _tenant_id (_tenant, _id)
 			";
         } else {
-            $sql .= "
+            $collection .= "
 				UNIQUE KEY _uid (_uid),
 				KEY _created_at (_createdAt),
 				KEY _updated_at (_updatedAt)
 			";
         }
 
-        $sql .= ")";
+        $collection .= ")";
+        $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
-        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+        $permissions = "
+            CREATE TABLE {$this->getSQLTable($id . '_perms')} (
+                _id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+                _type VARCHAR(12) NOT NULL,
+                _permission VARCHAR(255) NOT NULL,
+                _document VARCHAR(255) NOT NULL,
+                PRIMARY KEY (_id),
+        ";
+
+        if ($this->sharedTables) {
+            $permissions .= "
+                _tenant INT(11) UNSIGNED DEFAULT NULL,
+                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
+                INDEX _permission (_tenant, _permission, _type)
+            ";
+        } else {
+            $permissions .= "
+                UNIQUE INDEX _index1 (_document, _type, _permission),
+                INDEX _permission (_permission, _type)
+            ";
+        }
+
+        $permissions .= ")";
+        $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
 
         try {
             $this->getPDO()
-                ->prepare($sql)
+                ->prepare($collection)
                 ->execute();
 
-            $sql = "
-				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
-					_id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-					_type VARCHAR(12) NOT NULL,
-					_permission VARCHAR(255) NOT NULL,
-					_document VARCHAR(255) NOT NULL,
-					PRIMARY KEY (_id),
-			";
+            $this->getPDO()
+                ->prepare($permissions)
+                ->execute();
+        } catch (PDOException $e) {
+            $e = $this->processException($e);
 
-            if ($this->sharedTables) {
-                $sql .= "
-                	_tenant INT(11) UNSIGNED DEFAULT NULL,
-					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
-					INDEX _permission (_tenant, _permission, _type)
-				";
-            } else {
-                $sql .= "
-					UNIQUE INDEX _index1 (_document, _type, _permission),
-					INDEX _permission (_permission, _type)
-				";
+            if (!($e instanceof DuplicateException)) {
+                $this->getPDO()
+                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+                    ->execute();
             }
 
-            $sql .= ")";
-
-            $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
-
-            $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-        } catch (\Exception $th) {
-            $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
-                ->execute();
-            throw $th;
+            throw $e;
         }
 
         return true;
@@ -294,8 +314,7 @@ class MariaDB extends SQL
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
-            return false;
+            throw $this->processException($e);
         }
     }
 
@@ -853,7 +872,6 @@ class MariaDB extends SQL
                 }
             }
 
-
             $stmt->execute();
 
             $document['$internalId'] = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])])->getInternalId();
@@ -904,9 +922,9 @@ class MariaDB extends SQL
 
         try {
             $this->getPDO()->beginTransaction();
-
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, max(1, $batchSize));
+            $batches = \array_chunk($documents, \max(1, $batchSize));
+            $internalIds = [];
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;
@@ -920,7 +938,9 @@ class MariaDB extends SQL
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
+
                     if(!empty($document->getInternalId())) {
+                        $internalIds[$document->getId()] = true;
                         $attributes['_id'] = $document->getInternalId();
                     }
 
@@ -1019,6 +1039,16 @@ class MariaDB extends SQL
             throw $e;
         }
 
+        foreach ($documents as $document) {
+            if(!isset($internalIds[$document->getId()])) {
+                $document['$internalId'] = $this->getDocument(
+                    $collection,
+                    $document->getId(),
+                    [Query::select(['$internalId'])]
+                )->getInternalId();
+            }
+        }
+
         return $documents;
     }
 
@@ -1057,7 +1087,7 @@ class MariaDB extends SQL
 			";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -1134,7 +1164,7 @@ class MariaDB extends SQL
                 ";
 
                 if ($this->sharedTables) {
-                    $sql .= ' AND _tenant = :_tenant';
+                    $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
                 }
 
                 $removeQuery = $sql . $removeQuery;
@@ -1221,7 +1251,7 @@ class MariaDB extends SQL
 			";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
@@ -1350,7 +1380,7 @@ class MariaDB extends SQL
                     ";
 
                     if ($this->sharedTables) {
-                        $sql .= ' AND _tenant = :_tenant';
+                        $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
                     }
 
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -1393,7 +1423,7 @@ class MariaDB extends SQL
 
                             $tenantQuery = '';
                             if ($this->sharedTables) {
-                                $tenantQuery = ' AND _tenant = :_tenant';
+                                $tenantQuery = ' AND (_tenant = :_tenant OR _tenant IS NULL)';
                             }
 
                             $removeQuery .= "(
@@ -1574,7 +1604,7 @@ class MariaDB extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
+            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         $sql .= $sqlMax . $sqlMin;
@@ -1616,7 +1646,7 @@ class MariaDB extends SQL
 		    ";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
@@ -1635,7 +1665,7 @@ class MariaDB extends SQL
 		    ";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
@@ -1685,6 +1715,7 @@ class MariaDB extends SQL
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
+     * @throws Exception
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
@@ -1778,7 +1809,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1835,7 +1866,7 @@ class MariaDB extends SQL
         try {
             $stmt->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
 
         $results = $stmt->fetchAll();
@@ -1904,7 +1935,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
         }
 
         $sqlWhere = !empty($where)
@@ -1974,7 +2005,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
         }
 
         $sqlWhere = !empty($where)
@@ -2254,12 +2285,7 @@ class MariaDB extends SQL
         });
     }
 
-    /**
-     * @param PDOException $e
-     * @throws TimeoutException
-     * @throws DuplicateException
-     */
-    protected function processException(PDOException $e): void
+    protected function processException(PDOException $e): \Exception
     {
         /**
          * PDO and Swoole PDOProxy swap error codes and errorInfo
@@ -2267,18 +2293,25 @@ class MariaDB extends SQL
 
         // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
         } elseif ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Duplicate table
+        if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
         // Duplicate column
         if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         } elseif ($e->getCode() === 1060 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S21') {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
-        throw $e;
+        return $e;
     }
 }

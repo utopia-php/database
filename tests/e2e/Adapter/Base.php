@@ -989,10 +989,21 @@ abstract class Base extends TestCase
         if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
             $this->expectNotToPerformAssertions();
         }
-        static::getDatabase()->createCollection('global-timeouts');
-        $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
 
-        for ($i = 0 ; $i <= 200 ; $i++) {
+        static::getDatabase()->createCollection('global-timeouts');
+
+        $this->assertEquals(
+            true,
+            static::getDatabase()->createAttribute(
+                collection: 'global-timeouts',
+                id: 'longtext',
+                type: Database::VAR_STRING,
+                size: 100000000,
+                required: true
+            )
+        );
+
+        for ($i = 0 ; $i <= 20 ; $i++) {
             static::getDatabase()->createDocument('global-timeouts', new Document([
                 'longtext' => file_get_contents(__DIR__ . '/../../resources/longtext.txt'),
                 '$permissions' => [

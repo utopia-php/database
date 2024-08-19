@@ -1059,7 +1059,7 @@ class Mongo extends Adapter
         try {
             $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
         } catch (MongoException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
 
         if (empty($results)) {

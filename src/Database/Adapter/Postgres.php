@@ -300,8 +300,7 @@ class Postgres extends SQL
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
-            return false;
+            throw $this->processException($e);
         }
     }
 
@@ -1661,6 +1660,7 @@ class Postgres extends SQL
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
+     * @throws Exception
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
@@ -1804,7 +1804,7 @@ class Postgres extends SQL
         try {
             $stmt->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
 
         $results = $stmt->fetchAll();

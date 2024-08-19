@@ -1001,18 +1001,18 @@ abstract class Base extends TestCase
                 ]));
             }
 
-            $this->expectException(TimeoutException::class);
-
             static::getDatabase()->setTimeout(1);
 
             try {
                 static::getDatabase()->find('global-timeouts', [
                     Query::notEqual('longtext', 'appwrite'),
                 ]);
-            } catch(TimeoutException $ex) {
+                $this->fail('Failed to throw exception');
+            } catch(\Exception $e) {
+                \var_dump($e);
+                $this->assertInstanceOf(TimeoutException::class, $e);
                 static::getDatabase()->clearTimeout();
                 static::getDatabase()->deleteCollection('global-timeouts');
-                throw $ex;
             }
         }
 

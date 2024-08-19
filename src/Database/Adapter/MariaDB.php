@@ -923,10 +923,8 @@ class MariaDB extends SQL
 
         try {
             $this->getPDO()->beginTransaction();
-
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, \max(1, $batchSize));
-
             $internalIds = [];
 
             foreach ($batches as $batch) {
@@ -1812,7 +1810,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant IN (:_tenant, NULL)";
+            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1938,7 +1936,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant IN (:_tenant, NULL)";
+            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
         }
 
         $sqlWhere = !empty($where)
@@ -2008,7 +2006,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant IN (:_tenant, NULL)";
+            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
         }
 
         $sqlWhere = !empty($where)

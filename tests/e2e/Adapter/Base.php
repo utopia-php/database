@@ -15392,7 +15392,7 @@ abstract class Base extends TestCase
                 $database->setDatabase('hellodb');
                 $database->create();
             } else {
-                array_shift($events);
+                \array_shift($events);
             }
 
             $database->list();

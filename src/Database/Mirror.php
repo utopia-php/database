@@ -226,13 +226,15 @@ class Mirror extends Database
                 $documentSecurity
             );
 
-            $this->createUpgrades();
+            $this->silent(function () use ($id) {
+                $this->createUpgrades();
 
-            $this->source->createDocument('upgrades', new Document([
-                '$id' => $id,
-                'collectionId' => $id,
-                'status' => 'upgraded'
-            ]));
+                $this->source->createDocument('upgrades', new Document([
+                    '$id' => $id,
+                    'collectionId' => $id,
+                    'status' => 'upgraded'
+                ]));
+            });
         } catch (\Throwable $err) {
             $this->logError('createCollection', $err);
         }
@@ -512,7 +514,7 @@ class Mirror extends Database
             return $document;
         }
 
-        $upgrade = $this->getUpgradeStatus($collection);
+        $upgrade = $this->silent(fn() => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $document;
         }
@@ -562,7 +564,7 @@ class Mirror extends Database
             return $documents;
         }
 
-        $upgrade = $this->getUpgradeStatus($collection);
+        $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $documents;
         }
@@ -618,7 +620,8 @@ class Mirror extends Database
             return $document;
         }
 
-        $upgrade = $this->getUpgradeStatus($collection);
+        $upgrade = $this->silent(fn() => $this->getUpgradeStatus($collection));
+
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $document;
         }
@@ -668,7 +671,7 @@ class Mirror extends Database
             return $documents;
         }
 
-        $upgrade = $this->getUpgradeStatus($collection);
+        $upgrade = $this->silent(fn() => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $documents;
         }
@@ -723,7 +726,7 @@ class Mirror extends Database
             return $result;
         }
 
-        $upgrade = $this->getUpgradeStatus($collection);
+        $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $result;
         }
@@ -900,7 +903,7 @@ class Mirror extends Database
             try {
                 return $this->getDocument('upgrades', $collection);
             } catch (\Throwable) {
-                return;
+                return null;
             }
         });
     }

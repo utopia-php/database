@@ -328,17 +328,23 @@ class MariaDB extends SQL
      * @param int $size
      * @param bool $signed
      * @param bool $array
+     * @param string $newKey
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $type = $this->getSQLType($type, $size, $signed, $array);
 
-        $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
+        if (!empty($newKey)) {
+            $newKey = $this->filter($newKey);
+            $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` {$newKey} {$type};";
+        } else {
+            $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
+        }
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 

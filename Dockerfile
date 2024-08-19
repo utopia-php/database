@@ -15,7 +15,7 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
     
-FROM php:8.3.7-cli-alpine3.19 as compile
+FROM php:8.3.10-cli-alpine3.20 as compile
 
 ENV PHP_REDIS_VERSION="6.0.2" \
     PHP_SWOOLE_VERSION="v5.1.3" \
@@ -87,9 +87,12 @@ RUN \
   ./configure && \
   make && make install
 
-FROM compile as final
+FROM compile AS final
 
 LABEL maintainer="team@appwrite.io"
+
+ARG DEBUG=false
+ENV DEBUG=$DEBUG
 
 WORKDIR /usr/src/code
 
@@ -114,5 +117,12 @@ COPY --from=xdebug /usr/local/lib/php/extensions/no-debug-non-zts-20230831/xdebu
 
 COPY ./bin /usr/src/code/bin
 COPY ./src /usr/src/code/src
+COPY ./dev /usr/src/code/dev
+
+# Add Debug Configs
+RUN if [ "$DEBUG" = "true" ]; then cp /usr/src/code/dev/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini; fi
+RUN if [ "$DEBUG" = "true" ]; then mkdir -p /tmp/xdebug; fi
+RUN if [ "$DEBUG" = "false" ]; then rm -rf /usr/src/code/dev; fi
+RUN if [ "$DEBUG" = "false" ]; then rm -f /usr/local/lib/php/extensions/no-debug-non-zts-20220829/xdebug.so; fi
 
 CMD [ "tail", "-f", "/dev/null" ]

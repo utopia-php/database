@@ -367,7 +367,8 @@ class Mirror extends Database
             $array,
             $format,
             $formatOptions,
-            $filters
+            $filters,
+            $newKey,
         );
 
         if ($this->destination === null) {
@@ -396,7 +397,8 @@ class Mirror extends Database
                 $document->getAttribute('array'),
                 $document->getAttribute('format'),
                 $document->getAttribute('formatOptions'),
-                $document->getAttribute('filters')
+                $document->getAttribute('filters'),
+                $newKey,
             );
         } catch (\Throwable $err) {
             $this->logError('updateAttribute', $err);

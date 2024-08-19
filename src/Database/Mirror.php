@@ -514,7 +514,7 @@ class Mirror extends Database
             return $document;
         }
 
-        $upgrade = $this->silent(fn() => $this->getUpgradeStatus($collection));
+        $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $document;
         }
@@ -620,7 +620,7 @@ class Mirror extends Database
             return $document;
         }
 
-        $upgrade = $this->silent(fn() => $this->getUpgradeStatus($collection));
+        $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
 
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $document;
@@ -671,7 +671,7 @@ class Mirror extends Database
             return $documents;
         }
 
-        $upgrade = $this->silent(fn() => $this->getUpgradeStatus($collection));
+        $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
             return $documents;
         }
@@ -903,7 +903,7 @@ class Mirror extends Database
             try {
                 return $this->getDocument('upgrades', $collection);
             } catch (\Throwable) {
-                return null;
+                return;
             }
         });
     }

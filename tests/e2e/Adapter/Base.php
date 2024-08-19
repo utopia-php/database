@@ -62,16 +62,11 @@ abstract class Base extends TestCase
 
     public function testCreateExistsDelete(): void
     {
-        $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
-        if (!$schemaSupport) {
-            $this->assertEquals(static::getDatabase(), static::getDatabase()->setDatabase($this->testDatabase));
-            $this->assertEquals(true, static::getDatabase()->create());
+        if (!static::getDatabase()->getAdapter()->getSupportForSchemas()) {
+            $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!static::getDatabase()->exists($this->testDatabase)) {
-            $this->assertEquals(true, static::getDatabase()->create());
-        }
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));

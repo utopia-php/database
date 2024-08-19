@@ -984,10 +984,19 @@ abstract class Base extends TestCase
     }
 
 
+    /**
+     * @throws AuthorizationException
+     * @throws DuplicateException
+     * @throws ConflictException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws DatabaseException
+     */
     public function testQueryTimeout(): void
     {
         if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         static::getDatabase()->createCollection('global-timeouts');
@@ -1003,7 +1012,7 @@ abstract class Base extends TestCase
             )
         );
 
-        for ($i = 0 ; $i <= 20 ; $i++) {
+        for ($i = 0; $i < 20; $i++) {
             static::getDatabase()->createDocument('global-timeouts', new Document([
                 'longtext' => file_get_contents(__DIR__ . '/../../resources/longtext.txt'),
                 '$permissions' => [

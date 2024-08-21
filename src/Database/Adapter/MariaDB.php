@@ -753,8 +753,6 @@ class MariaDB extends SQL
     public function createDocument(string $collection, Document $document): Document
     {
         try {
-            $this->getPDO()->beginTransaction();
-
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
@@ -861,15 +859,7 @@ class MariaDB extends SQL
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
-
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Throwable $e) {
-            if($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
-
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
@@ -903,8 +893,6 @@ class MariaDB extends SQL
         }
 
         try {
-            $this->getPDO()->beginTransaction();
-
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
@@ -999,15 +987,7 @@ class MariaDB extends SQL
                     $stmtPermissions?->execute();
                 }
             }
-
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Throwable $e) {
-            if($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
-
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
@@ -1036,8 +1016,6 @@ class MariaDB extends SQL
     public function updateDocument(string $collection, Document $document): Document
     {
         try {
-            $this->getPDO()->beginTransaction();
-
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
@@ -1059,6 +1037,8 @@ class MariaDB extends SQL
             if ($this->sharedTables) {
                 $sql .= ' AND _tenant = :_tenant';
             }
+
+            $sql .= ' FOR UPDATE';
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
@@ -1255,14 +1235,7 @@ class MariaDB extends SQL
                 $stmtAddPermissions->execute();
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Throwable $e) {
-            if($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
-
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
@@ -1296,8 +1269,6 @@ class MariaDB extends SQL
         }
 
         try {
-            $this->getPDO()->beginTransaction();
-
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
@@ -1521,15 +1492,7 @@ class MariaDB extends SQL
                     $stmtAddPermissions->execute();
                 }
             }
-
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Throwable $e) {
-            if($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
-
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
@@ -1606,8 +1569,6 @@ class MariaDB extends SQL
     public function deleteDocument(string $collection, string $id): bool
     {
         try {
-            $this->getPDO()->beginTransaction();
-
             $name = $this->filter($collection);
 
             $sql = "
@@ -1656,15 +1617,7 @@ class MariaDB extends SQL
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to delete permissions');
             }
-
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Throwable $e) {
-            if($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
-
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 

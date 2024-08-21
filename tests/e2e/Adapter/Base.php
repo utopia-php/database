@@ -964,37 +964,36 @@ abstract class Base extends TestCase
 
     public function testQueryTimeout(): void
     {
-        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
-            static::getDatabase()->createCollection('global-timeouts');
-            $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
-
-            for ($i = 0 ; $i <= 20 ; $i++) {
-                static::getDatabase()->createDocument('global-timeouts', new Document([
-                    'longtext' => file_get_contents(__DIR__ . '/../../resources/longtext.txt'),
-                    '$permissions' => [
-                        Permission::read(Role::any()),
-                        Permission::update(Role::any()),
-                        Permission::delete(Role::any())
-                    ]
-                ]));
-            }
-
-            $this->expectException(TimeoutException::class);
-
-            static::getDatabase()->setTimeout(1);
-
-            try {
-                static::getDatabase()->find('global-timeouts', [
-                    Query::notEqual('longtext', 'appwrite'),
-                ]);
-            } catch(TimeoutException $ex) {
-                static::getDatabase()->clearTimeout();
-                static::getDatabase()->deleteCollection('global-timeouts');
-                throw $ex;
-            }
+        if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
-        $this->expectNotToPerformAssertions();
+        static::getDatabase()->createCollection('global-timeouts');
+        $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
+
+        for ($i = 0 ; $i <= 20 ; $i++) {
+            static::getDatabase()->createDocument('global-timeouts', new Document([
+                'longtext' => file_get_contents(__DIR__ . '/../../resources/longtext.txt'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any())
+                ]
+            ]));
+        }
+
+        static::getDatabase()->setTimeout(1);
+
+        try {
+            static::getDatabase()->find('global-timeouts', [
+                Query::notEqual('longtext', 'appwrite'),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch(TimeoutException $ex) {
+            static::getDatabase()->clearTimeout();
+            static::getDatabase()->deleteCollection('global-timeouts');
+        }
     }
 
     /**

@@ -4317,7 +4317,12 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
+        /* @var $document Document */
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        if($document->isEmpty()){
+            return false;
+        }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4407,7 +4412,12 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
+        /* @var $document Document */
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        if($document->isEmpty()){
+            return false;
+        }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4494,10 +4504,15 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
+            /* @var $document Document */
             $document = Authorization::skip(fn () => $this->silent(
                 fn () =>
                 $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
+
+            if($document->isEmpty()){
+                return false;
+            }
 
             $validator = new Authorization(self::PERMISSION_DELETE);
 

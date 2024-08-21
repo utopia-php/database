@@ -625,7 +625,7 @@ class Mongo extends Adapter
      * @return Document
      * @throws MongoException
      */
-    public function getDocument(string $collection, string $id, array $queries = []): Document
+    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -1637,6 +1637,11 @@ class Mongo extends Adapter
     }
 
     public function getSupportForRelationships(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForUpdateLock(): bool
     {
         return false;
     }

@@ -2672,7 +2672,7 @@ class Database
      * @throws DatabaseException
      * @throws Exception
      */
-    public function getDocument(string $collection, string $id, array $queries = []): Document
+    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -2780,7 +2780,7 @@ class Database
             return $document;
         }
 
-        $document = $this->adapter->getDocument($collection->getId(), $id, $queries);
+        $document = $this->adapter->getDocument($collection->getId(), $id, $queries, $forUpdate);
 
         if ($document->isEmpty()) {
             return $document;

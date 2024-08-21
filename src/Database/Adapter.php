@@ -460,9 +460,10 @@ abstract class Adapter
      * @param string $collection
      * @param string $id
      * @param array<Query> $queries
+     * @param bool $forUpdate
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id, array $queries = []): Document;
+    abstract public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
 
     /**
      * Create Document

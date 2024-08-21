@@ -34,10 +34,9 @@ abstract class Base extends TestCase
     protected static string $namespace;
 
     /**
-     * @param bool $fresh
      * @return Database
      */
-    abstract protected static function getDatabase(bool $fresh = false): Database;
+    abstract protected static function getDatabase(): Database;
 
     /**
      * @return string

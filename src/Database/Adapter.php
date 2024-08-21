@@ -17,6 +17,8 @@ abstract class Adapter
 
     protected ?int $tenant = null;
 
+    protected int $inTransaction = 0;
+
     /**
      * @var array<string, mixed>
      */
@@ -230,6 +232,70 @@ abstract class Adapter
         $this->metadata = [];
 
         return $this;
+    }
+
+    /**
+     * Start a new transaction.
+     *
+     * If a transaction is already active, this will only increment the transaction count and return true.
+     *
+     * @return bool
+     * @throws DatabaseException
+     */
+    abstract public function startTransaction(): bool;
+
+    /**
+     * Commit a transaction.
+     *
+     * If no transaction is active, this will be a no-op and will return false.
+     * If there is more than one active transaction, this decrement the transaction count and return true.
+     * If the transaction count is 1, it will be commited, the transaction count will be reset to 0, and return true.
+     *
+     * @return bool
+     * @throws DatabaseException
+     */
+    abstract public function commitTransaction(): bool;
+
+    /**
+     * Rollback a transaction.
+     *
+     * If no transaction is active, this will be a no-op and will return false.
+     * If 1 or more transactions are active, this will roll back all transactions, reset the count to 0, and return true.
+     *
+     * @return bool
+     * @throws DatabaseException
+     */
+    abstract public function rollbackTransaction(): bool;
+
+    /**
+     * Check if a transaction is active.
+     *
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function inTransaction(): bool
+    {
+        return $this->inTransaction > 0;
+    }
+
+    /**
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     * @throws \Throwable
+     */
+    public function withTransaction(callable $callback): mixed
+    {
+        $this->startTransaction();
+
+        try {
+            $result = $callback();
+            $this->commitTransaction();
+            return $result;
+        } catch (\Throwable $e) {
+            $this->rollbackTransaction();
+            throw $e;
+        }
     }
 
     /**
@@ -669,6 +735,8 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForRelationships(): bool;
+
+    abstract public function getSupportForUpdateLock(): bool;
 
     /**
      * Get current attribute count from collection document

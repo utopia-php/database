@@ -28,6 +28,81 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * @inheritDoc
+     */
+    public function startTransaction(): bool
+    {
+        try {
+            if ($this->inTransaction === 0) {
+                $result = $this->getPDO()->beginTransaction();
+            } else {
+                $result = true;
+            }
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+        if (!$result) {
+            throw new DatabaseException('Failed to start transaction');
+        }
+
+        $this->inTransaction++;
+
+        return $result;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function commitTransaction(): bool
+    {
+        if ($this->inTransaction === 0) {
+            return false;
+        } elseif ($this->inTransaction > 1) {
+            $this->inTransaction--;
+            return true;
+        }
+
+        try {
+            $result = $this->getPDO()->commit();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        } finally {
+            $this->inTransaction--;
+        }
+
+        if (!$result) {
+            throw new DatabaseException('Failed to commit transaction');
+        }
+
+        return $result;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function rollbackTransaction(): bool
+    {
+        if ($this->inTransaction === 0) {
+            return false;
+        }
+
+        try {
+            $result = $this->getPDO()->rollBack();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        } finally {
+            $this->inTransaction = 0;
+        }
+
+        if (!$result) {
+            throw new DatabaseException('Failed to rollback transaction');
+        }
+
+        return $result;
+    }
+
+    /**
      * Ping Database
      *
      * @return bool

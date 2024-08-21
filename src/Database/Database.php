@@ -853,6 +853,59 @@ class Database
     }
 
     /**
+     * Start a new transaction.
+     *
+     * If a transaction is already active, this will only increment the transaction count and return true.
+     *
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function startTransaction(): bool
+    {
+        return $this->adapter->startTransaction();
+    }
+
+    /**
+     * Commit a transaction.
+     *
+     * If no transaction is active, this will be a no-op and will return false.
+     * If there is more than one active transaction, this decrement the transaction count and return true.
+     * If the transaction count is 1, it will be commited, the transaction count will be reset to 0, and return true.
+     *
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function commitTransaction(): bool
+    {
+        return $this->adapter->startTransaction();
+    }
+
+    /**
+     * Rollback a transaction.
+     *
+     * If no transaction is active, this will be a no-op and will return false.
+     * If 1 or more transactions are active, this will roll back all transactions, reset the count to 0, and return true.
+     *
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function rollbackTransaction(): bool
+    {
+        return $this->adapter->rollbackTransaction();
+    }
+
+    /**
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     * @throws \Throwable
+     */
+    public function withTransaction(callable $callback): mixed
+    {
+        return $this->adapter->withTransaction($callback);
+    }
+
+    /**
      * Ping Database
      *
      * @return bool

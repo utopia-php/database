@@ -58,6 +58,21 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    public function startTransaction(): bool
+    {
+        return true;
+    }
+
+    public function commitTransaction(): bool
+    {
+        return true;
+    }
+
+    public function rollbackTransaction(): bool
+    {
+        return true;
+    }
+
     /**
      * Ping Database
      *

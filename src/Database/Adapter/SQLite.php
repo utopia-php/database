@@ -167,6 +167,9 @@ class SQLite extends MariaDB
             $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
             $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
+            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
+            $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
+
             if ($this->sharedTables) {
                 $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
             }
@@ -249,13 +252,7 @@ class SQLite extends MariaDB
     {
         $id = $this->filter($id);
 
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
-
-        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id)}";
+        $sql = "DROP TABLE IF EXISTS `{$this->getSQLTable($id)}`";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         $this->getPDO()
@@ -268,8 +265,6 @@ class SQLite extends MariaDB
         $this->getPDO()
             ->prepare($sql)
             ->execute();
-
-        $this->getPDO()->commit();
 
         return true;
     }
@@ -472,12 +467,6 @@ class SQLite extends MariaDB
         $columns = ['_uid'];
         $values = ['_uid'];
 
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
-
         /**
          * Insert Attributes
          */
@@ -562,16 +551,12 @@ class SQLite extends MariaDB
                 $stmtPermissions->execute();
             }
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
             throw match ($e->getCode()) {
                 "1062", "23000" => new Duplicate('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
 
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
-        }
 
         return $document;
     }
@@ -599,7 +584,6 @@ class SQLite extends MariaDB
 
         $name = $this->filter($collection);
         $columns = '';
-
 
         $sql = "
 			SELECT _type, _permission
@@ -637,12 +621,6 @@ class SQLite extends MariaDB
 
             return $carry;
         }, $initial);
-
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
 
         /**
          * Get removed Permissions
@@ -798,17 +776,11 @@ class SQLite extends MariaDB
                 $stmtAddPermissions->execute();
             }
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-
             throw match ($e->getCode()) {
                 '1062',
                 '23000' => new Duplicate('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -830,8 +802,6 @@ class SQLite extends MariaDB
         if (empty($documents)) {
             return $documents;
         }
-
-        $this->getPDO()->beginTransaction();
 
         try {
             $name = $this->filter($collection);
@@ -1061,14 +1031,8 @@ class SQLite extends MariaDB
                 }
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
-
             return $documents;
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-
             throw match ($e->getCode()) {
                 1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
                 default => $e,
@@ -1122,6 +1086,11 @@ class SQLite extends MariaDB
     }
 
     public function getSupportForRelationships(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForUpdateLock(): bool
     {
         return false;
     }

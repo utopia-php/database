@@ -28,6 +28,81 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * @inheritDoc
+     */
+    public function startTransaction(): bool
+    {
+        try {
+            if ($this->inTransaction === 0) {
+                $result = $this->getPDO()->beginTransaction();
+            } else {
+                $result = true;
+            }
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+        if (!$result) {
+            throw new DatabaseException('Failed to start transaction');
+        }
+
+        $this->inTransaction++;
+
+        return $result;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function commitTransaction(): bool
+    {
+        if ($this->inTransaction === 0) {
+            return false;
+        } elseif ($this->inTransaction > 1) {
+            $this->inTransaction--;
+            return true;
+        }
+
+        try {
+            $result = $this->getPDO()->commit();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        } finally {
+            $this->inTransaction--;
+        }
+
+        if (!$result) {
+            throw new DatabaseException('Failed to commit transaction');
+        }
+
+        return $result;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function rollbackTransaction(): bool
+    {
+        if ($this->inTransaction === 0) {
+            return false;
+        }
+
+        try {
+            $result = $this->getPDO()->rollBack();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        } finally {
+            $this->inTransaction = 0;
+        }
+
+        if (!$result) {
+            throw new DatabaseException('Failed to rollback transaction');
+        }
+
+        return $result;
+    }
+
+    /**
      * Ping Database
      *
      * @return bool
@@ -101,22 +176,29 @@ abstract class SQL extends Adapter
      * @param string $collection
      * @param string $id
      * @param Query[] $queries
+     * @param bool $forUpdate
      * @return Document
-     * @throws Exception
+     * @throws DatabaseException
      */
-    public function getDocument(string $collection, string $id, array $queries = []): Document
+    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $name = $this->filter($collection);
         $selections = $this->getAttributeSelections($queries);
 
+        $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
+
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections)} 
+		    SELECT {$this->getAttributeProjection($selections)}
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid 
 		";
 
         if ($this->sharedTables) {
             $sql .= "AND (_tenant = :_tenant OR _tenant IS NULL)";
+        }
+
+        if ($this->getSupportForUpdateLock()) {
+            $sql .= " {$forUpdate}";
         }
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -255,6 +337,16 @@ abstract class SQL extends Adapter
      * @return bool
      */
     public function getSupportForFulltextIndex(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Are FOR UPDATE locks supported?
+     *
+     * @return bool
+     */
+    public function getSupportForUpdateLock(): bool
     {
         return true;
     }

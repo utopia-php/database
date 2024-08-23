@@ -681,9 +681,14 @@ class Postgres extends SQL
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**

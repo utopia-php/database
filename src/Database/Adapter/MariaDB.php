@@ -703,9 +703,14 @@ class MariaDB extends SQL
         $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection->getId())} ({$attributes})";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -2229,6 +2234,13 @@ class MariaDB extends SQL
         if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
             throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         } elseif ($e->getCode() === 1060 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S21') {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Duplicate index
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 1061 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42000') {
             throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 

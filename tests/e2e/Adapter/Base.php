@@ -1219,7 +1219,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'socialAccountForYoutubeSubscribersss', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '5f058a89258075f058a89258075f058t9214', Database::VAR_BOOLEAN, 0, true));
 
-        // Test shared tables duplicates throw duplicate
+        // Test non-shared tables duplicates throw duplicate
         static::getDatabase()->createAttribute('attributes', 'duplicate', Database::VAR_STRING, 128, true);
         try {
             static::getDatabase()->createAttribute('attributes', 'duplicate', Database::VAR_STRING, 128, true);
@@ -1268,6 +1268,7 @@ abstract class Base extends TestCase
      */
     public function testAttributeCaseInsensitivity(): void
     {
+
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
         $this->expectException(DuplicateException::class);
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'CaseSensitive', Database::VAR_STRING, 128, true));
@@ -1425,6 +1426,15 @@ abstract class Base extends TestCase
 
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        // Test non-shared tables duplicates throw duplicate
+        static::getDatabase()->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
+        try {
+            static::getDatabase()->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
 
         static::getDatabase()->deleteCollection('indexes');
     }
@@ -15292,7 +15302,7 @@ abstract class Base extends TestCase
         $database->setDatabase($this->testDatabase);
     }
 
-    public function testSharedTablesDuplicateAttributesDontThrow(): void
+    public function testSharedTablesDuplicatesDontThrow(): void
     {
         $database = static::getDatabase();
 
@@ -15315,22 +15325,28 @@ abstract class Base extends TestCase
         // Create collection
         $database->createCollection('duplicates', documentSecurity: false);
         $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+        $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
 
         $database->setTenant(2);
+
         try {
             $database->createCollection('duplicates', documentSecurity: false);
         } catch (DuplicateException) {
             // Ignore
         }
+
         $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+        $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
 
         $collection = $database->getCollection('duplicates');
         $this->assertEquals(1, \count($collection->getAttribute('attributes')));
+        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
 
         $database->setTenant(1);
 
         $collection = $database->getCollection('duplicates');
         $this->assertEquals(1, \count($collection->getAttribute('attributes')));
+        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
 
         $database->setSharedTables(false);
         $database->setNamespace(static::$namespace);

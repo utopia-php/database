@@ -2660,7 +2660,18 @@ class Database
             }
         }
 
-        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+        try {
+            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+
+            if (!$created) {
+                throw new DatabaseException('Failed to create index');
+            }
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw $e;
+            }
+        }
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
@@ -2668,7 +2679,7 @@ class Database
 
         $this->trigger(self::EVENT_INDEX_CREATE, $index);
 
-        return $index;
+        return true;
     }
 
     /**

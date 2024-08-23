@@ -2664,7 +2664,7 @@ class Database
             $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
 
             if (!$created) {
-                throw new DatabaseException('Failed to create attribute');
+                throw new DatabaseException('Failed to create index');
             }
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.

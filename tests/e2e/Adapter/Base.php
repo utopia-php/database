@@ -5829,7 +5829,7 @@ abstract class Base extends TestCase
         }
     }
 
-    public function createRandomString($length = 10)
+    public function createRandomString($length = 10): string
     {
         $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
         $charactersLength = strlen($characters);
@@ -5840,7 +5840,7 @@ abstract class Base extends TestCase
         return $randomString;
     }
 
-    public function updateStringAttributeSize(int $originalSize, int $newSize, Document $document)
+    public function updateStringAttributeSize(int $originalSize, int $newSize, Document $document): Document
     {
         static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $originalSize, true, newSize: $newSize);
 

@@ -334,7 +334,7 @@ class Postgres extends SQL
 
     /**
      * Truncate String Attribute
-     * 
+     *
      * @param string $collection
      * @param string $id
      * @param int $size

@@ -333,6 +333,30 @@ class Postgres extends SQL
     }
 
     /**
+     * Truncate String Attribute
+     * 
+     * @param string $collection
+     * @param string $id
+     * @param int $size
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function truncateStringAttribute(string $collection, string $id, int $size): bool
+    {
+        $name = $this->filter($collection);
+        $id = $this->filter($id);
+
+        $sql = "UPDATE {$this->getSQLTable($name)} SET \"{$id}\" = substr(\"{$id}\", 1, {$size})";
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
      * Update Attribute
      *
      * @param string $collection
@@ -342,15 +366,21 @@ class Postgres extends SQL
      * @param bool $signed
      * @param bool $array
      * @param string $newKey
+     * @param int $newSize
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null, int $newSize = null): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed, $array);
+
+        if (!empty($newSize) && $size > $newSize && $type == Database::VAR_STRING) {
+            $this->truncateStringAttribute($name, $id, $newSize);
+        };
+
+        $type = $this->getSQLType($type, $newSize ?? $size, $signed, $array);
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";

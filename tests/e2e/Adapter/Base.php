@@ -29,6 +29,8 @@ use Utopia\Database\Validator\Index;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 
+ini_set('memory_limit', '2048M');
+
 abstract class Base extends TestCase
 {
     protected static string $namespace;
@@ -5825,6 +5827,89 @@ abstract class Base extends TestCase
         } catch (\Exception $e) {
             $this->assertInstanceOf(StructureException::class, $e);
         }
+    }
+
+    public function createRandomString($length = 10)
+    {
+        $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        $charactersLength = strlen($characters);
+        $randomString = '';
+        for ($i = 0; $i < $length; $i++) {
+            $randomString .= $characters[rand(0, $charactersLength - 1)];
+        }
+        return $randomString;
+    }
+
+    public function updateStringAttributeSize(int $originalSize, int $newSize, Document $document)
+    {
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $originalSize, true, newSize: $newSize);
+
+        // Check truncation if the new size is smaller
+        if ($originalSize > $newSize) {
+            $checkDoc = static::getDatabase()->getDocument('resize_test', $document->getId());
+            $this->assertEquals(
+                substr($document->getAttribute('resize_me'), 0, $newSize),
+                $checkDoc->getAttribute('resize_me')
+            );
+
+            // Check we get a structure exception when we reduce the size
+            try {
+                $document->setAttribute('resize_me', $this->createRandomString($newSize + 1));
+                static::getDatabase()->updateDocument('resize_test', $document->getId(), $document);
+            } catch (StructureException $e) {
+                $this->assertEquals('Invalid document structure: Attribute "resize_me" has invalid type. Value must be a valid string and no longer than ' . $newSize . ' chars', $e->getMessage());
+            }
+        }
+
+        $document = $document->setAttribute('resize_me', $this->createRandomString($newSize));
+
+        static::getDatabase()->updateDocument('resize_test', $document->getId(), $document);
+        $checkDoc = static::getDatabase()->getDocument('resize_test', $document->getId());
+
+        $this->assertEquals($document->getAttribute('resize_me'), $checkDoc->getAttribute('resize_me'));
+        $this->assertEquals($newSize, strlen($checkDoc->getAttribute('resize_me')));
+
+        return $checkDoc;
+    }
+
+    public function testUpdateAttributeSize(): void
+    {
+        static::getDatabase()->createCollection('resize_test');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true));
+        $document = static::getDatabase()->createDocument('resize_test', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'resize_me' => $this->createRandomString(128)
+        ]));
+
+        // Go up in size
+
+        // 0-16381 to 16382-65535
+        $document = $this->updateStringAttributeSize(128, 16382, $document);
+
+        // 16382-65535 to 65536-16777215
+        $document = $this->updateStringAttributeSize(16382, 65536, $document);
+
+        // 65536-16777216 to PHP_INT_MAX or adapter limit
+        $maxStringSize = 16777217;
+        $document = $this->updateStringAttributeSize(65536, $maxStringSize, $document);
+
+        // Go down in size
+
+        // PHP_INT_MAX or adapter limit to 65536-16777216
+        $document = $this->updateStringAttributeSize($maxStringSize, 65536, $document);
+
+        // 65536-16777216 to 16382-65535
+        $document = $this->updateStringAttributeSize(65536, 16382, $document);
+
+        // 16382-65535 to 0-16381
+        $document = $this->updateStringAttributeSize(16382, 128, $document);
     }
 
     /**

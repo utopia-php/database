@@ -420,10 +420,11 @@ abstract class Adapter
      * @param bool $signed
      * @param bool $array
      * @param string $newKey
+     * @param int $newSize
      *
      * @return bool
      */
-    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool;
+    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null, int $newSize = null): bool;
 
     /**
      * Delete Attribute

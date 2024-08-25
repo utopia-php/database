@@ -5829,7 +5829,7 @@ abstract class Base extends TestCase
         }
     }
 
-    public function createRandomString($length = 10): string
+    public function createRandomString(int $length = 10): string
     {
         $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
         $charactersLength = strlen($characters);

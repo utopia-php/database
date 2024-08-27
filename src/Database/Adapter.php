@@ -740,7 +740,7 @@ abstract class Adapter
     abstract public function getSupportForUpdateLock(): bool;
 
     /**
-     * Is Attribute Resizing Supported?
+     * Is attribute resizing supported?
      *
      * @return bool
      */

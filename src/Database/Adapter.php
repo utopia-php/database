@@ -741,7 +741,7 @@ abstract class Adapter
 
     /**
      * Is Attribute Resizing Supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForAttributeResizing(): bool;

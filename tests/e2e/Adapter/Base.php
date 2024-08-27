@@ -5829,9 +5829,9 @@ abstract class Base extends TestCase
         }
     }
 
-    function createRandomString(int $length = 10): string
+    public function createRandomString(int $length = 10): string
     {
-        return \substr(\bin2hex(\random_bytes(\intval(($length + 1) / 2))), 0, $length);
+        return \substr(\bin2hex(\random_bytes(\max(1, \intval(($length + 1) / 2)))), 0, $length);
     }
 
     public function updateStringAttributeSize(int $originalSize, int $newSize, Document $document): Document

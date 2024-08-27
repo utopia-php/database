@@ -353,7 +353,7 @@ abstract class SQL extends Adapter
 
     /**
      * Is Attribute Resizing Supported?
-     * 
+     *
      * @return bool
      */
     public function getSupportForAttributeResizing(): bool

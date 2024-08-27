@@ -284,6 +284,29 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Truncate String Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param int $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function truncateStringAttribute(string $collection, string $id, int $new): bool
+    {
+        $collection = $this->filter($collection);
+        $id = $this->filter($id);
+
+        $sql = "UPDATE {$this->getSQLTable($collection)} SET `{$id}` = substr(`{$id}`, 1, {$new})";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+        return $this->getPDO()
+            ->prepare($sql)
+            ->execute();
+    }
+
+    /**
      * Delete Attribute
      *
      * @param string $collection

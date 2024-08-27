@@ -327,9 +327,9 @@ class MariaDB extends SQL
 
         if (!empty($newKey)) {
             $newKey = $this->filter($newKey);
-            $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` {$newKey} {$type}, LOCK=NONE;";
+            $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` {$newKey} {$type};";
         } else {
-            $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type}, LOCK=NONE;";
+            $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
         }
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
@@ -402,8 +402,14 @@ class MariaDB extends SQL
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
+        $type = $this->getSQLType(Database::VAR_STRING, $new);
 
-        $sql = "UPDATE {$this->getSQLTable($collection)} SET `{$id}` = substr(`{$id}`, 1, {$new})";
+        $sql = "
+            ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN `new_{$id}` {$type};
+            UPDATE {$this->getSQLTable($collection)} SET `new_{$id}` = substr(`{$id}`, 1, {$new});
+            ALTER TABLE {$this->getSQLTable($collection)} DROP COLUMN `{$id}`;
+            ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `new_{$id}` TO `{$id}`;
+        ";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
         return $this->getPDO()

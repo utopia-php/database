@@ -6109,7 +6109,7 @@ abstract class Base extends TestCase
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
             $this->assertEquals('Reserved:' . $keyword, $documents[0]->getAttribute($keyword));
 
-            $documents = $database->find($collectionName, [Query::equal($keyword, ["Reserved:${keyword}"])]);
+            $documents = $database->find($collectionName, [Query::equal($keyword, ["Reserved:{$keyword}"])]);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 

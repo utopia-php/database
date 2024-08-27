@@ -928,11 +928,6 @@ class Mongo extends Adapter
             return $this->renameAttribute($collection, $id, $newKey);
         }
 
-        // TODO
-        // if (!empty($newSize) && $newSize !== $size) {
-        //     return $this->resizeAttribute($collection, $id, $newSize);
-        // }
-
         return true;
     }
 

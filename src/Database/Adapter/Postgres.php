@@ -359,17 +359,19 @@ class Postgres extends SQL
 
         if (!empty($newSize) && $size > $newSize) {
             $sql = "
-                ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN \"new_{$id}\" {$type};
-                UPDATE {$this->getSQLTable($collection)} SET \"new_{$id}\" = LEFT(\"{$id}\", {$newSize});
-                ALTER TABLE {$this->getSQLTable($collection)} DROP COLUMN \"{$id}\";
-                ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN \"new_{$id}\" TO \"". ($newKey ?? $id) ."\";
+                BEGIN;
+                LOCK TABLE ONLY {$this->getSQLTable($collection)} IN ACCESS EXCLUSIVE MODE;
+                UPDATE {$this->getSQLTable($collection)} SET \"{$id}\" = LEFT(\"{$id}\", {$newSize});
+                COMMIT;
             ";
 
-            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-            return $this->getPDO()
+            $result = $this->getPDO()
                 ->prepare($sql)
                 ->execute();
+
+            if (!$result) {
+                return false;
+            }
         };
 
         if (!empty($newKey) && $id !== $newKey) {

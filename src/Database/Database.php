@@ -1717,7 +1717,7 @@ class Database
                         throw new DatabaseException('Size length is required');
                     }
 
-                    if ($size > $this->adapter->getLimitForString()) {
+                    if ($size > $this->adapter->getLimitForString() && $newSize > $this->adapter->getLimitForString()) {
                         throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                     }
                     break;

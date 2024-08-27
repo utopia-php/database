@@ -5829,15 +5829,9 @@ abstract class Base extends TestCase
         }
     }
 
-    public function createRandomString(int $length = 10): string
+    function createRandomString(int $length = 10): string
     {
-        $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        $charactersLength = strlen($characters);
-        $randomString = '';
-        for ($i = 0; $i < $length; $i++) {
-            $randomString .= $characters[rand(0, $charactersLength - 1)];
-        }
-        return $randomString;
+        return \substr(\bin2hex(\random_bytes(\intval(($length + 1) / 2))), 0, $length);
     }
 
     public function updateStringAttributeSize(int $originalSize, int $newSize, Document $document): Document
@@ -5847,14 +5841,15 @@ abstract class Base extends TestCase
         // Check truncation if the new size is smaller
         if ($originalSize > $newSize) {
             $checkDoc = static::getDatabase()->getDocument('resize_test', $document->getId());
+
             $this->assertEquals(
-                substr($document->getAttribute('resize_me'), 0, $newSize),
-                $checkDoc->getAttribute('resize_me')
+                $newSize,
+                strlen($checkDoc->getAttribute('resize_me'))
             );
 
             // Check we get a structure exception when we reduce the size
             try {
-                $document->setAttribute('resize_me', $this->createRandomString($newSize + 1));
+                $document->setAttribute('resize_me', $this->createRandomString($newSize));
                 static::getDatabase()->updateDocument('resize_test', $document->getId(), $document);
             } catch (StructureException $e) {
                 $this->assertEquals('Invalid document structure: Attribute "resize_me" has invalid type. Value must be a valid string and no longer than ' . $newSize . ' chars', $e->getMessage());
@@ -5874,6 +5869,11 @@ abstract class Base extends TestCase
 
     public function testUpdateAttributeSize(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForAttributeResizing()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection('resize_test');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true));

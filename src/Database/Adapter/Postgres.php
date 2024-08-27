@@ -333,30 +333,6 @@ class Postgres extends SQL
     }
 
     /**
-     * Truncate String Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param int $size
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function truncateStringAttribute(string $collection, string $id, int $size): bool
-    {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-
-        $sql = "UPDATE {$this->getSQLTable($name)} SET \"{$id}\" = substr(\"{$id}\", 1, {$size})";
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
-    }
-
-    /**
      * Update Attribute
      *
      * @param string $collection
@@ -375,16 +351,26 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-
-        if (!empty($newSize) && $size > $newSize && $type == Database::VAR_STRING) {
-            $this->truncateStringAttribute($name, $id, $newSize);
-        };
-
         $type = $this->getSQLType($type, $newSize ?? $size, $signed, $array);
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
         }
+
+        if (!empty($newSize) && $size > $newSize) {
+            $sql = "
+                ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN \"new_{$id}\" {$type};
+                UPDATE {$this->getSQLTable($collection)} SET \"new_{$id}\" = LEFT(\"{$id}\", {$newSize});
+                ALTER TABLE {$this->getSQLTable($collection)} DROP COLUMN \"{$id}\";
+                ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN \"new_{$id}\" TO \"". ($newKey ?? $id) ."\";
+            ";
+
+            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        };
 
         if (!empty($newKey) && $id !== $newKey) {
             $newKey = $this->filter($newKey);

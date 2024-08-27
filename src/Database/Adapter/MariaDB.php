@@ -318,15 +318,25 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-
-        if (!empty($newSize) && $size > $newSize && $type === Database::VAR_STRING) {
-            $this->truncateStringAttribute($name, $id, $newSize);
-        }
-
+        $newKey = empty($newKey) ? null : $this->filter($newKey);
         $type = $this->getSQLType($type, $newSize ?? $size, $signed, $array);
 
+        if (!empty($newSize) && $size > $newSize) {
+            $sql = "
+                ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN `new_{$id}` {$type};
+                UPDATE {$this->getSQLTable($collection)} SET `new_{$id}` = LEFT(`{$id}`, {$newSize});
+                ALTER TABLE {$this->getSQLTable($collection)} DROP COLUMN `{$id}`;
+                ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `new_{$id}` TO `". ($newKey ?? $id) ."`;
+            ";
+
+            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        }
+
         if (!empty($newKey)) {
-            $newKey = $this->filter($newKey);
             $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` {$newKey} {$type};";
         } else {
             $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
@@ -381,35 +391,6 @@ class MariaDB extends SQL
 
         $sql = "ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;";
 
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
-    }
-
-    /**
-     * Truncate String Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param int $new
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function truncateStringAttribute(string $collection, string $id, int $new): bool
-    {
-        $collection = $this->filter($collection);
-        $id = $this->filter($id);
-        $type = $this->getSQLType(Database::VAR_STRING, $new);
-
-        $sql = "
-            ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN `new_{$id}` {$type};
-            UPDATE {$this->getSQLTable($collection)} SET `new_{$id}` = substr(`{$id}`, 1, {$new});
-            ALTER TABLE {$this->getSQLTable($collection)} DROP COLUMN `{$id}`;
-            ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `new_{$id}` TO `{$id}`;
-        ";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
         return $this->getPDO()

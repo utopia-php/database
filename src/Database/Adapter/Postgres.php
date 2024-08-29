@@ -2210,13 +2210,9 @@ class Postgres extends SQL
 
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             throw new Timeout($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014') {
-            throw new Timeout($e->getMessage(), $e->getCode(), $e);
         }
 
         if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42701') {
             throw new Duplicate($e->getMessage(), $e->getCode(), $e);
         }
 

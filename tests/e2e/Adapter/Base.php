@@ -2903,7 +2903,6 @@ abstract class Base extends TestCase
                 Permission::delete(Role::user('1x')),
                 Permission::delete(Role::user('2x')),
             ],
-            '$id' => 'wip2',
             'name' => 'Work in Progress 2',
             'director' => 'TBD',
             'year' => 2026,

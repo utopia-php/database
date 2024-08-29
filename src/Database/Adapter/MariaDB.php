@@ -1651,6 +1651,8 @@ class MariaDB extends SQL
         $where = [];
         $orders = [];
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
             '$internalId' => '_id',
@@ -1852,6 +1854,8 @@ class MariaDB extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $conditions = $this->getSQLConditions($queries);
         if(!empty($conditions)) {
             $where[] = $conditions;
@@ -1922,6 +1926,8 @@ class MariaDB extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);

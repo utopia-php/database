@@ -4150,6 +4150,67 @@ abstract class Base extends TestCase
         $this->assertEquals(3, $count);
     }
 
+    public function testNestedIDQueries(): void
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        static::getDatabase()->createCollection('movies_nested_id', permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::users())
+        ]);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies_nested_id', 'name', Database::VAR_STRING, 128, true));
+
+        static::getDatabase()->createDocument('movies_nested_id', new Document([
+            '$id' => ID::custom('1'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => '1',
+        ]));
+
+        static::getDatabase()->createDocument('movies_nested_id', new Document([
+            '$id' => ID::custom('2'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => '2',
+        ]));
+
+        static::getDatabase()->createDocument('movies_nested_id', new Document([
+            '$id' => ID::custom('3'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => '3',
+        ]));
+
+        $queries = [
+            Query::or([
+                Query::equal('$id', ["1"]),
+                Query::equal('$id', ["2"])
+            ])
+        ];
+
+        $documents = static::getDatabase()->find('movies_nested_id', $queries);
+        $this->assertCount(2, $documents);
+
+        // Make sure the query was not modified by reference
+        $this->assertEquals($queries[0]->getValues()[0]->getAttribute(), '$id');
+
+        $count = static::getDatabase()->count('movies_nested_id', $queries);
+        $this->assertEquals(2, $count);
+    }
+
     /**
      * @depends testFind
      */

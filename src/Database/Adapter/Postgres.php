@@ -357,6 +357,27 @@ class Postgres extends SQL
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
         }
 
+        if (!empty($newKey) && $id !== $newKey) {
+            $newKey = $this->filter($newKey);
+
+            $sql = "
+                    ALTER TABLE {$this->getSQLTable($name)}
+                    RENAME COLUMN \"{$id}\" TO \"{$newKey}\"
+                ";
+
+            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+            $result = $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+
+            if (!$result) {
+                return false;
+            }
+
+            $id = $newKey;
+        }
+
         $sql = "
                 ALTER TABLE {$this->getSQLTable($name)}
                 ALTER COLUMN \"{$id}\" TYPE {$type}

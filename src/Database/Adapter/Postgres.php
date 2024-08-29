@@ -686,9 +686,14 @@ class Postgres extends SQL
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -1578,6 +1583,8 @@ class Postgres extends SQL
         $where = [];
         $orders = [];
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
             '$internalId' => '_id',
@@ -1773,6 +1780,8 @@ class Postgres extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $conditions = $this->getSQLConditions($queries);
         if(!empty($conditions)) {
             $where[] = $conditions;
@@ -1836,6 +1845,8 @@ class Postgres extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);

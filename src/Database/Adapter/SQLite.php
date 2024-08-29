@@ -1367,12 +1367,14 @@ class SQLite extends MariaDB
          * PDO and Swoole PDOProxy swap error codes and errorInfo
          */
 
+        // Timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
             throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         } elseif ($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000") {
             throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
+        // Duplicate
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1) {
             throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         } elseif ($e->getCode() === 1 && isset($e->errorInfo[0]) && $e->errorInfo[0] === 'HY000') {

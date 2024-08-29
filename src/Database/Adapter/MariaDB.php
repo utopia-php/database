@@ -708,9 +708,14 @@ class MariaDB extends SQL
         $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection->getId())} ({$attributes})";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -1651,6 +1656,8 @@ class MariaDB extends SQL
         $where = [];
         $orders = [];
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
             '$internalId' => '_id',
@@ -1852,6 +1859,8 @@ class MariaDB extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $conditions = $this->getSQLConditions($queries);
         if(!empty($conditions)) {
             $where[] = $conditions;
@@ -1922,6 +1931,8 @@ class MariaDB extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
@@ -2240,6 +2251,13 @@ class MariaDB extends SQL
         // Data is too big for column resize
         if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) {
             throw new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
+        }
+
+        // Duplicate index
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        } elseif ($e->getCode() === 1061 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42000') {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;

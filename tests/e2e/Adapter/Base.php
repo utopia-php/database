@@ -5834,35 +5834,17 @@ abstract class Base extends TestCase
         return \substr(\bin2hex(\random_bytes(\max(1, \intval(($length + 1) / 2)))), 0, $length);
     }
 
-    public function updateStringAttributeSize(int $originalSize, int $newSize, Document $document): Document
+    public function updateStringAttributeSize(int $size, Document $document): Document
     {
-        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $originalSize, true, newSize: $newSize);
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $size, true);
 
-        // Check truncation if the new size is smaller
-        if ($originalSize > $newSize) {
-            $checkDoc = static::getDatabase()->getDocument('resize_test', $document->getId());
-
-            $this->assertEquals(
-                $newSize,
-                strlen($checkDoc->getAttribute('resize_me'))
-            );
-
-            // Check we get a structure exception when we reduce the size
-            try {
-                $document->setAttribute('resize_me', $this->createRandomString($newSize));
-                static::getDatabase()->updateDocument('resize_test', $document->getId(), $document);
-            } catch (StructureException $e) {
-                $this->assertEquals('Invalid document structure: Attribute "resize_me" has invalid type. Value must be a valid string and no longer than ' . $newSize . ' chars', $e->getMessage());
-            }
-        }
-
-        $document = $document->setAttribute('resize_me', $this->createRandomString($newSize));
+        $document = $document->setAttribute('resize_me', $this->createRandomString($size));
 
         static::getDatabase()->updateDocument('resize_test', $document->getId(), $document);
         $checkDoc = static::getDatabase()->getDocument('resize_test', $document->getId());
 
         $this->assertEquals($document->getAttribute('resize_me'), $checkDoc->getAttribute('resize_me'));
-        $this->assertEquals($newSize, strlen($checkDoc->getAttribute('resize_me')));
+        $this->assertEquals($size, strlen($checkDoc->getAttribute('resize_me')));
 
         return $checkDoc;
     }
@@ -5891,18 +5873,18 @@ abstract class Base extends TestCase
         // Go up in size
 
         // 0-16381 to 16382-65535
-        $document = $this->updateStringAttributeSize(128, 16382, $document);
+        $document = $this->updateStringAttributeSize(16382, $document);
 
         // 16382-65535 to 65536-16777215
-        $document = $this->updateStringAttributeSize(16382, 65536, $document);
+        $document = $this->updateStringAttributeSize(65536, $document);
 
         // 65536-16777216 to PHP_INT_MAX or adapter limit
         $maxStringSize = 16777217;
-        $document = $this->updateStringAttributeSize(65536, $maxStringSize, $document);
+        $document = $this->updateStringAttributeSize($maxStringSize, $document);
 
         // Test going down in size with data that is too big (Expect Failure)
         try {
-            static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $maxStringSize, true, newSize: 128);
+            static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
             $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
         } catch (DatabaseException $e) {
             $this->assertEquals('Resize would result in data truncation', $e->getMessage());
@@ -5910,7 +5892,7 @@ abstract class Base extends TestCase
 
         // Test going down in size when data isn't too big.
         static::getDatabase()->updateDocument('resize_test', $document->getId(), $document->setAttribute('resize_me', $this->createRandomString(128)));
-        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $maxStringSize, true, newSize: 128);
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
     }
 
     /**

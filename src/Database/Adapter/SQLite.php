@@ -276,18 +276,6 @@ class SQLite extends MariaDB
             return $this->renameAttribute($collection, $id, $newKey);
         }
 
-        if (!empty($newSize) && $newSize < $size) {
-            $collection = $this->filter($collection);
-            $id = $this->filter($id);
-
-            $sql = "UPDATE {$this->getSQLTable($collection)} SET `{$id}` = substr(`{$id}`, 1, {$newSize})";
-            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-        }
-
         return true;
     }
 
@@ -1093,6 +1081,16 @@ class SQLite extends MariaDB
     }
 
     public function getSupportForUpdateLock(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is attribute resizing supported?
+     *
+     * @return bool
+     */
+    public function getSupportForAttributeResizing(): bool
     {
         return false;
     }

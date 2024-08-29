@@ -357,44 +357,6 @@ class Postgres extends SQL
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
         }
 
-        if (!empty($newSize) && $size > $newSize) {
-            $sql = "
-                BEGIN;
-                LOCK TABLE ONLY {$this->getSQLTable($collection)} IN ACCESS EXCLUSIVE MODE;
-                UPDATE {$this->getSQLTable($collection)} SET \"{$id}\" = LEFT(\"{$id}\", {$newSize});
-                COMMIT;
-            ";
-
-            $result = $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-
-            if (!$result) {
-                return false;
-            }
-        };
-
-        if (!empty($newKey) && $id !== $newKey) {
-            $newKey = $this->filter($newKey);
-
-            $sql = "
-                    ALTER TABLE {$this->getSQLTable($name)}
-                    RENAME COLUMN \"{$id}\" TO \"{$newKey}\"
-                ";
-
-            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-            $result = $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-
-            if (!$result) {
-                return false;
-            }
-
-            $id = $newKey;
-        }
-
         $sql = "
                 ALTER TABLE {$this->getSQLTable($name)}
                 ALTER COLUMN \"{$id}\" TYPE {$type}
@@ -402,11 +364,16 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        $result = $this->getPDO()
+        try {
+            $result = $this->getPDO()
             ->prepare($sql)
             ->execute();
 
-        return $result;
+            return $result;
+        } catch (Exception $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -2220,6 +2187,11 @@ class Postgres extends SQL
             throw new Duplicate($e->getMessage(), $e->getCode(), $e);
         } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42701') {
             throw new Duplicate($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Data is too big for column resize
+        if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            throw new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
         throw $e;

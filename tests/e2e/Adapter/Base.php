@@ -5900,16 +5900,17 @@ abstract class Base extends TestCase
         $maxStringSize = 16777217;
         $document = $this->updateStringAttributeSize(65536, $maxStringSize, $document);
 
-        // Go down in size
+        // Test going down in size with data that is too big (Expect Failure)
+        try {
+            static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $maxStringSize, true, newSize: 128);
+            $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
+        } catch (DatabaseException $e) {
+            $this->assertEquals('Resize would result in data truncation', $e->getMessage());
+        }
 
-        // PHP_INT_MAX or adapter limit to 65536-16777216
-        $document = $this->updateStringAttributeSize($maxStringSize, 65536, $document);
-
-        // 65536-16777216 to 16382-65535
-        $document = $this->updateStringAttributeSize(65536, 16382, $document);
-
-        // 16382-65535 to 0-16381
-        $document = $this->updateStringAttributeSize(16382, 128, $document);
+        // Test going down in size when data isn't too big.
+        static::getDatabase()->updateDocument('resize_test', $document->getId(), $document->setAttribute('resize_me', $this->createRandomString(128)));
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $maxStringSize, true, newSize: 128);
     }
 
     /**

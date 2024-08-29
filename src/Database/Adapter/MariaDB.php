@@ -321,22 +321,6 @@ class MariaDB extends SQL
         $newKey = empty($newKey) ? null : $this->filter($newKey);
         $type = $this->getSQLType($type, $newSize ?? $size, $signed, $array);
 
-        if (!empty($newSize) && $size > $newSize) {
-            $sql = "
-                LOCK TABLES {$this->getSQLTable($collection)} WRITE;
-                UPDATE {$this->getSQLTable($collection)} SET `{$id}` = LEFT(`{$id}`, {$newSize});
-                UNLOCK TABLES;
-            ";
-
-            $result = $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-
-            if (!$result) {
-                return false;
-            }
-        }
-
         if (!empty($newKey)) {
             $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` {$newKey} {$type};";
         } else {
@@ -345,9 +329,14 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        return $this->getPDO()
+        try {
+            return $this->getPDO()
             ->prepare($sql)
             ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -2247,6 +2236,11 @@ class MariaDB extends SQL
             throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         } elseif ($e->getCode() === 1060 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S21') {
             throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Data is too big for column resize
+        if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) {
+            throw new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
         throw $e;

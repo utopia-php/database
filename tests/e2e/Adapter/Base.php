@@ -5964,6 +5964,17 @@ abstract class Base extends TestCase
         // Test going down in size when data isn't too big.
         static::getDatabase()->updateDocument('resize_test', $document->getId(), $document->setAttribute('resize_me', $this->createRandomString(128)));
         static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
+
+        // VARCHAR -> VARCHAR Truncation Test
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 1000, true);
+        static::getDatabase()->updateDocument('resize_test', $document->getId(), $document->setAttribute('resize_me', $this->createRandomString(1000)));
+
+        try {
+            static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
+            $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
+        } catch (DatabaseException $e) {
+            $this->assertEquals('Resize would result in data truncation', $e->getMessage());
+        }
     }
 
     /**

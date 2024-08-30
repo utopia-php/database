@@ -110,7 +110,8 @@ class MySQL extends MariaDB
         }
 
         // Data is too big for column resize
-        if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) {
+        if (($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) ||
+            ($e->getCode() === '01000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1265)) {
             throw new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
         }
 

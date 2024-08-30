@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -2218,7 +2219,7 @@ class Postgres extends SQL
 
         // Data is too big for column resize
         if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            throw new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
+            throw new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
         throw $e;

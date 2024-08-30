@@ -10,6 +10,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -2247,7 +2248,7 @@ class MariaDB extends SQL
         // Data is too big for column resize
         if (($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) ||
             ($e->getCode() === '01000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1265)) {
-            throw new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
+            throw new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
         // Duplicate index

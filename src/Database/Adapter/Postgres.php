@@ -390,7 +390,7 @@ class Postgres extends SQL
             ->execute();
 
             return $result;
-        } catch (Exception $e) {
+        } catch (PDOException $e) {
             $this->processException($e);
             return false;
         }

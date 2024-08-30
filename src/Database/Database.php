@@ -1761,7 +1761,7 @@ class Database
                 ->setAttribute('$id', $newKey ?? $id)
                 ->setattribute('key', $newKey ?? $id)
                 ->setAttribute('type', $type)
-                ->setAttribute('size',  $size)
+                ->setAttribute('size', $size)
                 ->setAttribute('signed', $signed)
                 ->setAttribute('array', $array)
                 ->setAttribute('format', $format)

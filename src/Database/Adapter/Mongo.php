@@ -1665,6 +1665,11 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForAttributeResizing(): bool
+    {
+        return false;
+    }
+
     /**
      * Get current attribute count from collection document
      *

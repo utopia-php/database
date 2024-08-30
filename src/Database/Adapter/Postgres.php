@@ -384,11 +384,16 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        $result = $this->getPDO()
+        try {
+            $result = $this->getPDO()
             ->prepare($sql)
             ->execute();
 
-        return $result;
+            return $result;
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -2205,14 +2210,15 @@ class Postgres extends SQL
 
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             throw new Timeout($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014') {
-            throw new Timeout($e->getMessage(), $e->getCode(), $e);
         }
 
         if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             throw new Duplicate($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42701') {
-            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Data is too big for column resize
+        if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            throw new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
         throw $e;

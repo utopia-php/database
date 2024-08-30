@@ -40,6 +40,7 @@ services:
   mariadb:
     image: mariadb:10.11
     container_name: utopia-mariadb
+    command: mariadbd --max_allowed_packet=1G
     networks:
       - database
     ports:

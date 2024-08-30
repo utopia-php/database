@@ -19,6 +19,7 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -5922,8 +5923,7 @@ abstract class Base extends TestCase
         try {
             static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
             $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
-        } catch (DatabaseException $e) {
-            $this->assertEquals('Resize would result in data truncation', $e->getMessage());
+        } catch (TruncateException $e) {
         }
 
         // Test going down in size when data isn't too big.
@@ -5937,8 +5937,7 @@ abstract class Base extends TestCase
         try {
             static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
             $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
-        } catch (DatabaseException $e) {
-            $this->assertEquals('Resize would result in data truncation', $e->getMessage());
+        } catch (TruncateException $e) {
         }
     }
 

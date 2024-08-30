@@ -739,6 +739,13 @@ abstract class Adapter
     abstract public function getSupportForUpdateLock(): bool;
 
     /**
+     * Is attribute resizing supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForAttributeResizing(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

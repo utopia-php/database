@@ -281,6 +281,7 @@ class Postgres extends SQL
      * @param bool $array
      *
      * @return bool
+     * @throws Exception
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
@@ -312,6 +313,7 @@ class Postgres extends SQL
      * @param bool $array
      *
      * @return bool
+     * @throws DatabaseException
      */
     public function deleteAttribute(string $collection, string $id, bool $array = false): bool
     {
@@ -410,11 +412,15 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        $result = $this->getPDO()
+        try {
+            $result = $this->getPDO()
             ->prepare($sql)
             ->execute();
 
-        return $result;
+            return $result;
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -2228,8 +2234,8 @@ class Postgres extends SQL
 			";
         });
     }
-
-    /**
+	
+	/**
      * @return string
      */
     public function getLikeOperator(): string
@@ -2242,22 +2248,21 @@ class Postgres extends SQL
         // Timeout
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new TimeoutException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014') {
-            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         // Duplicate table
         if ($e->getCode() === '42P07' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42P07') {
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
         // Duplicate column
         if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42701') {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Data is too big for column resize
+        if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
         return $e;

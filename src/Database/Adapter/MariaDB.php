@@ -336,10 +336,10 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
+        $newKey = empty($newKey) ? null : $this->filter($newKey);
         $type = $this->getSQLType($type, $size, $signed, $array);
 
         if (!empty($newKey)) {
-            $newKey = $this->filter($newKey);
             $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` {$newKey} {$type};";
         } else {
             $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
@@ -347,9 +347,13 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        return $this->getPDO()
+        try {
+            return $this->getPDO()
             ->prepare($sql)
             ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -2241,28 +2245,28 @@ class MariaDB extends SQL
 
     protected function processException(PDOException $e): \Exception
     {
-        /**
-         * PDO and Swoole PDOProxy swap error codes and errorInfo
-         */
-
         // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
-            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
             return new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         // Duplicate table
         if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
         // Duplicate column
         if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 1060 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S21') {
+        }
+
+        // Data is too big for column resize
+        if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) {
+            return new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
+        }
+
+        // Duplicate index
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 

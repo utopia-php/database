@@ -352,6 +352,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Is Attribute Resizing Supported?
+     *
+     * @return bool
+     */
+    public function getSupportForAttributeResizing(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

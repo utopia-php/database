@@ -88,22 +88,26 @@ class MySQL extends MariaDB
         // Timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
             return new TimeoutException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 3024 && isset($e->errorInfo[0]) && $e->errorInfo[0] === "HY000") {
-            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         // Duplicate table
         if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 1050 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S01') {
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
         // Duplicate column
         if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        } elseif ($e->getCode() === 1060 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '42S21') {
+        }
+
+        // Duplicate index
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Data is too big for column resize
+        if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) {
+            return new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
         return $e;

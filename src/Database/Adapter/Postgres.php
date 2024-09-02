@@ -998,8 +998,6 @@ class Postgres extends SQL
             $sql .= ' AND _tenant = :_tenant';
         }
 
-        $sql .= ' FOR UPDATE';
-
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
         /**

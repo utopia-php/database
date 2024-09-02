@@ -1074,8 +1074,6 @@ class MariaDB extends SQL
                 $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
             }
 
-            $sql .= ' FOR UPDATE';
-
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
             /**
@@ -1231,9 +1229,9 @@ class MariaDB extends SQL
             }
 
             $sql = "
-			UPDATE {$this->getSQLTable($name)}
-			SET {$columns} _uid = :_uid 
-			WHERE _uid = :_uid
+                UPDATE {$this->getSQLTable($name)}
+                SET {$columns} _uid = :_uid 
+                WHERE _uid = :_uid
 			";
 
             if ($this->sharedTables) {

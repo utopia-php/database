@@ -4163,7 +4163,7 @@ abstract class Base extends TestCase
 
     public function testNestedIDQueries(): void
     {
-        Authorization::setRole(Role::any()->toString());
+        self::$authorization->addRole(Role::any()->toString());
 
         static::getDatabase()->createCollection('movies_nested_id', permissions: [
             Permission::create(Role::any()),

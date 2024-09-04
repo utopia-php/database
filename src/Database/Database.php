@@ -3688,11 +3688,10 @@ class Database
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () =>
-                $this->getDocument($collection->getId(), $id, forUpdate: true
+                $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
         $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             if ($this->adapter->getSharedTables()) {
                 $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant

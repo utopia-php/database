@@ -10,6 +10,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
 
 class MariaDB extends SQL
@@ -288,9 +289,14 @@ class MariaDB extends SQL
         $sql = "ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -302,23 +308,34 @@ class MariaDB extends SQL
      * @param int $size
      * @param bool $signed
      * @param bool $array
+     * @param string $newKey
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
+        $newKey = empty($newKey) ? null : $this->filter($newKey);
         $type = $this->getSQLType($type, $size, $signed, $array);
 
-        $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
+        if (!empty($newKey)) {
+            $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` {$newKey} {$type};";
+        } else {
+            $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
+        }
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        return $this->getPDO()
+        try {
+            return $this->getPDO()
             ->prepare($sql)
             ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -691,9 +708,14 @@ class MariaDB extends SQL
         $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection->getId())} ({$attributes})";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -741,8 +763,6 @@ class MariaDB extends SQL
     public function createDocument(string $collection, Document $document): Document
     {
         try {
-            $this->getPDO()->beginTransaction();
-
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
@@ -849,15 +869,7 @@ class MariaDB extends SQL
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
-
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Throwable $e) {
-            if($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
-
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
@@ -891,8 +903,6 @@ class MariaDB extends SQL
         }
 
         try {
-            $this->getPDO()->beginTransaction();
-
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
@@ -987,15 +997,7 @@ class MariaDB extends SQL
                     $stmtPermissions?->execute();
                 }
             }
-
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Throwable $e) {
-            if($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
-
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
@@ -1024,8 +1026,6 @@ class MariaDB extends SQL
     public function updateDocument(string $collection, Document $document): Document
     {
         try {
-            $this->getPDO()->beginTransaction();
-
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
@@ -1203,9 +1203,9 @@ class MariaDB extends SQL
             }
 
             $sql = "
-			UPDATE {$this->getSQLTable($name)}
-			SET {$columns} _uid = :_uid 
-			WHERE _uid = :_uid
+                UPDATE {$this->getSQLTable($name)}
+                SET {$columns} _uid = :_uid 
+                WHERE _uid = :_uid
 			";
 
             if ($this->sharedTables) {
@@ -1243,14 +1243,7 @@ class MariaDB extends SQL
                 $stmtAddPermissions->execute();
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Throwable $e) {
-            if($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
-
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
@@ -1284,8 +1277,6 @@ class MariaDB extends SQL
         }
 
         try {
-            $this->getPDO()->beginTransaction();
-
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, max(1, $batchSize));
 
@@ -1509,15 +1500,7 @@ class MariaDB extends SQL
                     $stmtAddPermissions->execute();
                 }
             }
-
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Throwable $e) {
-            if($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
-
             if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
@@ -1539,12 +1522,13 @@ class MariaDB extends SQL
      * @param string $id
      * @param string $attribute
      * @param int|float $value
+     * @param string $updatedAt
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
     {
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
@@ -1554,7 +1538,9 @@ class MariaDB extends SQL
 
         $sql = "
 			UPDATE {$this->getSQLTable($name)} 
-			SET `{$attribute}` = `{$attribute}` + :val 
+			SET 
+			    `{$attribute}` = `{$attribute}` + :val,
+			    `_updatedAt` = :updatedAt
 			WHERE _uid = :_uid
 		";
 
@@ -1569,6 +1555,7 @@ class MariaDB extends SQL
         $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
+        $stmt->bindValue(':updatedAt', $updatedAt);
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
@@ -1590,8 +1577,6 @@ class MariaDB extends SQL
     public function deleteDocument(string $collection, string $id): bool
     {
         try {
-            $this->getPDO()->beginTransaction();
-
             $name = $this->filter($collection);
 
             $sql = "
@@ -1640,15 +1625,7 @@ class MariaDB extends SQL
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to delete permissions');
             }
-
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
         } catch (\Throwable $e) {
-            if($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
-
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
@@ -1676,6 +1653,8 @@ class MariaDB extends SQL
         $roles = $this->authorization->getRoles();
         $where = [];
         $orders = [];
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
@@ -1878,6 +1857,8 @@ class MariaDB extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $conditions = $this->getSQLConditions($queries);
         if(!empty($conditions)) {
             $where[] = $conditions;
@@ -1948,6 +1929,8 @@ class MariaDB extends SQL
         $roles = $this->authorization->getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
@@ -2241,17 +2224,33 @@ class MariaDB extends SQL
     /**
      * @param PDOException $e
      * @throws TimeoutException
+     * @throws DuplicateException
      */
     protected function processException(PDOException $e): void
     {
-        // Regular PDO
+        /**
+         * PDO and Swoole PDOProxy swap error codes and errorInfo
+         */
+
+        // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
             throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
-        // PDOProxy switches errorInfo PDOProxy.php line 64
-        if ($e->getCode() === 1969 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '70100') {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        // Duplicate column
+        if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Data is too big for column resize
+        if (($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) ||
+            ($e->getCode() === '01000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1265)) {
+            throw new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
+        }
+
+        // Duplicate index
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
         throw $e;

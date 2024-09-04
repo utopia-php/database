@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
 
 class Postgres extends SQL
@@ -83,8 +84,6 @@ class Postgres extends SQL
 
         /** @var array<string> $attributeStrings */
         $attributeStrings = [];
-
-        $this->getPDO()->beginTransaction();
 
         /** @var array<string> $attributeStrings */
         $attributeStrings = [];
@@ -186,12 +185,7 @@ class Postgres extends SQL
                 );
             }
         } catch (Exception $e) {
-            $this->getPDO()->rollBack();
             throw new DatabaseException('Failed to create collection: ' . $e->getMessage());
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return true;
@@ -274,9 +268,14 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -342,11 +341,12 @@ class Postgres extends SQL
      * @param int $size
      * @param bool $signed
      * @param bool $array
+     * @param string $newKey
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
@@ -356,16 +356,44 @@ class Postgres extends SQL
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
         }
 
+        if (!empty($newKey) && $id !== $newKey) {
+            $newKey = $this->filter($newKey);
+
+            $sql = "
+                    ALTER TABLE {$this->getSQLTable($name)}
+                    RENAME COLUMN \"{$id}\" TO \"{$newKey}\"
+                ";
+
+            $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+            $result = $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+
+            if (!$result) {
+                return false;
+            }
+
+            $id = $newKey;
+        }
+
         $sql = "
-			ALTER TABLE {$this->getSQLTable($name)}
-			ALTER COLUMN \"{$id}\" TYPE {$type}
-		";
+                ALTER TABLE {$this->getSQLTable($name)}
+                ALTER COLUMN \"{$id}\" TYPE {$type}
+            ";
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        return $this->getPDO()
+        try {
+            $result = $this->getPDO()
             ->prepare($sql)
             ->execute();
+
+            return $result;
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -658,9 +686,14 @@ class Postgres extends SQL
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -737,8 +770,6 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $columns = '';
         $columnNames = '';
-
-        $this->getPDO()->beginTransaction();
 
         /**
          * Insert Attributes
@@ -825,15 +856,10 @@ class Postgres extends SQL
         } catch (Throwable $e) {
             switch ($e->getCode()) {
                 case 23505:
-                    $this->getPDO()->rollBack();
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
                 default:
                     throw $e;
             }
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -855,8 +881,6 @@ class Postgres extends SQL
         if (empty($documents)) {
             return $documents;
         }
-
-        $this->getPDO()->beginTransaction();
 
         try {
             $name = $this->filter($collection);
@@ -931,15 +955,9 @@ class Postgres extends SQL
                 }
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
-
             return $documents;
 
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-
             throw match ($e->getCode()) {
                 1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
                 default => $e,
@@ -1005,8 +1023,6 @@ class Postgres extends SQL
 
             return $carry;
         }, $initial);
-
-        $this->getPDO()->beginTransaction();
 
         /**
          * Get removed Permissions
@@ -1162,19 +1178,13 @@ class Postgres extends SQL
                 $stmtAddPermissions->execute();
             }
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
             switch ($e->getCode()) {
                 case 1062:
                 case 23505:
                     throw new Duplicate('Duplicated document: ' . $e->getMessage());
-
                 default:
                     throw $e;
             }
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -1196,8 +1206,6 @@ class Postgres extends SQL
         if (empty($documents)) {
             return $documents;
         }
-
-        $this->getPDO()->beginTransaction();
 
         try {
             $name = $this->filter($collection);
@@ -1421,13 +1429,8 @@ class Postgres extends SQL
                 }
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
-
             return $documents;
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
 
             throw match ($e->getCode()) {
                 1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
@@ -1443,12 +1446,13 @@ class Postgres extends SQL
      * @param string $id
      * @param string $attribute
      * @param int|float $value
+     * @param string $updatedAt
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
     {
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
@@ -1458,7 +1462,9 @@ class Postgres extends SQL
 
         $sql = "
 			UPDATE {$this->getSQLTable($name)} 
-			SET \"{$attribute}\" = \"{$attribute}\" + :val 
+			SET 
+			    \"{$attribute}\" = \"{$attribute}\" + :val,
+                \"_updatedAt\" = :updatedAt
 			WHERE _uid = :_uid 
 		";
 
@@ -1473,6 +1479,7 @@ class Postgres extends SQL
         $stmt = $this->getPDO()->prepare($sql);
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
+        $stmt->bindValue(':updatedAt', $updatedAt);
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
@@ -1493,8 +1500,6 @@ class Postgres extends SQL
     public function deleteDocument(string $collection, string $id): bool
     {
         $name = $this->filter($collection);
-
-        $this->getPDO()->beginTransaction();
 
         $sql = "
 			DELETE FROM {$this->getSQLTable($name)} 
@@ -1544,12 +1549,7 @@ class Postgres extends SQL
                 throw new DatabaseException('Failed to delete permissions');
             }
         } catch (\Throwable $th) {
-            $this->getPDO()->rollBack();
             throw new DatabaseException($th->getMessage());
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $deleted;
@@ -1580,6 +1580,8 @@ class Postgres extends SQL
         $roles = $this->authorization->getRoles();
         $where = [];
         $orders = [];
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
@@ -1776,6 +1778,8 @@ class Postgres extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $conditions = $this->getSQLConditions($queries);
         if(!empty($conditions)) {
             $where[] = $conditions;
@@ -1839,6 +1843,8 @@ class Postgres extends SQL
         $roles = $this->authorization->getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
@@ -2192,17 +2198,25 @@ class Postgres extends SQL
     /**
      * @param PDOException $e
      * @throws Timeout
+     * @throws Duplicate
      */
     protected function processException(PDOException $e): void
     {
-        // Regular PDO
+        /**
+         * PDO and Swoole PDOProxy swap error codes and errorInfo
+         */
+
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             throw new Timeout($e->getMessage(), $e->getCode(), $e);
         }
 
-        // PDOProxy switches errorInfo PDOProxy.php line 64
-        if ($e->getCode() === 7 && isset($e->errorInfo[0]) && $e->errorInfo[0] === '57014') {
-            throw new Timeout($e->getMessage(), $e->getCode(), $e);
+        if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Data is too big for column resize
+        if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            throw new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
         throw $e;

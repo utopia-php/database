@@ -41,14 +41,14 @@
         "utopia-php/mongo": "0.3.*"
     },
     "require-dev": {
-        "fakerphp/faker": "^1.14",
-        "phpunit/phpunit": "^9.4",
-        "pcov/clobber": "^2.0",
-        "swoole/ide-helper": "4.8.0",
+        "fakerphp/faker": "1.23.*",
+        "phpunit/phpunit": "9.6.*",
+        "pcov/clobber": "2.0.*",
+        "swoole/ide-helper": "5.1.3",
         "utopia-php/cli": "1.0.*",
-        "laravel/pint": "1.13.*",
-        "phpstan/phpstan": "1.10.*",
-        "rregeer/phpunit-coverage-check": "^0.3.1"
+        "laravel/pint": "1.17.*",
+        "phpstan/phpstan": "1.11.*",
+        "rregeer/phpunit-coverage-check": "0.3.*"
     },
     "suggests": {
         "ext-mongodb": "Needed to support MongoDB Database Adapter",

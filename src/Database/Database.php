@@ -884,6 +884,59 @@ class Database
     }
 
     /**
+     * Start a new transaction.
+     *
+     * If a transaction is already active, this will only increment the transaction count and return true.
+     *
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function startTransaction(): bool
+    {
+        return $this->adapter->startTransaction();
+    }
+
+    /**
+     * Commit a transaction.
+     *
+     * If no transaction is active, this will be a no-op and will return false.
+     * If there is more than one active transaction, this decrement the transaction count and return true.
+     * If the transaction count is 1, it will be commited, the transaction count will be reset to 0, and return true.
+     *
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function commitTransaction(): bool
+    {
+        return $this->adapter->startTransaction();
+    }
+
+    /**
+     * Rollback a transaction.
+     *
+     * If no transaction is active, this will be a no-op and will return false.
+     * If 1 or more transactions are active, this will roll back all transactions, reset the count to 0, and return true.
+     *
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function rollbackTransaction(): bool
+    {
+        return $this->adapter->rollbackTransaction();
+    }
+
+    /**
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     * @throws \Throwable
+     */
+    public function withTransaction(callable $callback): mixed
+    {
+        return $this->adapter->withTransaction($callback);
+    }
+
+    /**
      * Ping Database
      *
      * @return bool
@@ -1300,7 +1353,7 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        // attribute IDs are case insensitive
+        // Attribute IDs are case insensitive
         $attributes = $collection->getAttribute('attributes', []);
         /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {
@@ -1382,10 +1435,17 @@ class Database
             $this->validateDefaultTypes($type, $default);
         }
 
-        $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+        try {
+            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
-        if (!$created) {
-            throw new DatabaseException('Failed to create attribute');
+            if (!$created) {
+                throw new DatabaseException('Failed to create attribute');
+            }
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw $e;
+            }
         }
 
         if ($collection->getId() !== self::METADATA) {
@@ -1507,7 +1567,7 @@ class Database
      *
      * @param string $collection
      * @param string $id
-     * @param callable $updateCallback method that receives document, and returns it with changes applied
+     * @param callable(Document, Document, int|string): void $updateCallback method that receives document, and returns it with changes applied
      *
      * @return Document
      * @throws ConflictException
@@ -1654,16 +1714,18 @@ class Database
      * @param string|null $format
      * @param array<string, mixed>|null $formatOptions
      * @param array<string>|null $filters
+     * @param string|null $newKey
      * @return Document
      * @throws Exception
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null): Document
+    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
-        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters) {
+        return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, $newKey) {
             $altering = !\is_null($type)
                 || !\is_null($size)
                 || !\is_null($signed)
-                || !\is_null($array);
+                || !\is_null($array)
+                || !\is_null($newKey);
             $type ??= $attribute->getAttribute('type');
             $size ??= $attribute->getAttribute('size');
             $signed ??= $attribute->getAttribute('signed');
@@ -1727,6 +1789,8 @@ class Database
             }
 
             $attribute
+                ->setAttribute('$id', $newKey ?? $id)
+                ->setattribute('key', $newKey ?? $id)
                 ->setAttribute('type', $type)
                 ->setAttribute('size', $size)
                 ->setAttribute('signed', $signed)
@@ -1749,7 +1813,19 @@ class Database
             }
 
             if ($altering) {
-                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array);
+                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
+
+                if ($id !== $newKey) {
+                    $indexes = $collectionDoc->getAttribute('indexes');
+
+                    foreach ($indexes as $index) {
+                        if (in_array($id, $index['attributes'])) {
+                            $index['attributes'] = array_map(function ($attribute) use ($id, $newKey) {
+                                return $attribute === $id ? $newKey : $attribute;
+                            }, $index['attributes']);
+                        }
+                    }
+                }
 
                 if (!$updated) {
                     throw new DatabaseException('Failed to update attribute');
@@ -2615,7 +2691,18 @@ class Database
             }
         }
 
-        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+        try {
+            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+
+            if (!$created) {
+                throw new DatabaseException('Failed to create index');
+            }
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw $e;
+            }
+        }
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
@@ -2623,7 +2710,7 @@ class Database
 
         $this->trigger(self::EVENT_INDEX_CREATE, $index);
 
-        return $index;
+        return true;
     }
 
     /**
@@ -2680,7 +2767,7 @@ class Database
      * @throws DatabaseException
      * @throws Exception
      */
-    public function getDocument(string $collection, string $id, array $queries = []): Document
+    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -2789,7 +2876,7 @@ class Database
             return $document;
         }
 
-        $document = $this->adapter->getDocument($collection->getId(), $id, $queries);
+        $document = $this->adapter->getDocument($collection->getId(), $id, $queries, $forUpdate);
 
         if ($document->isEmpty()) {
             return $document;
@@ -3163,15 +3250,18 @@ class Database
             throw new StructureException($structure->getDescription());
         }
 
-        if ($this->resolveRelationships) {
-            $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
-        }
+        $document = $this->withTransaction(function () use ($collection, $document) {
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
+            }
 
-        $document = $this->adapter->createDocument($collection->getId(), $document);
+            return $this->adapter->createDocument($collection->getId(), $document);
+        });
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
+
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
@@ -3222,12 +3312,22 @@ class Database
                 throw new StructureException($validator->getDescription());
             }
 
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
+            }
+
             $documents[$key] = $document;
         }
 
-        $documents = $this->adapter->createDocuments($collection->getId(), $documents, $batchSize);
+        $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
+            return $this->adapter->createDocuments($collection->getId(), $documents, $batchSize);
+        });
 
         foreach ($documents as $key => $document) {
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+            }
+
             $documents[$key] = $this->decode($collection, $document);
         }
 
@@ -3381,6 +3481,16 @@ class Database
 
                     case 'NULL':
                         // TODO: This might need to depend on the relation type, to be either set to null or removed?
+
+                        if (
+                            ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD) ||
+                            ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_ONE_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                            ($relationType === Database::RELATION_ONE_TO_ONE && $side === Database::RELATION_SIDE_CHILD && $twoWay === true)
+                        ) {
+                            break;
+                        }
+
                         $document->removeAttribute($key);
                         // No related document
                         break;
@@ -3572,159 +3682,168 @@ class Database
             throw new DatabaseException('Must define $id attribute');
         }
 
-        $time = DateTime::now();
-        $old = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
-        $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-        $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
-        if ($this->adapter->getSharedTables()) {
-            $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
-        }
-        $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
-        $document = new Document($document);
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
-            return $attribute['type'] === Database::VAR_RELATIONSHIP;
-        });
+        $document = $this->withTransaction(function () use ($collection, $id, $document) {
+            $time = DateTime::now();
+            $old = $this->authorization->skip(fn () => $this->silent(
+                fn () =>
+                $this->getDocument($collection->getId(), $id, forUpdate: true
+            ));
 
-        $shouldUpdate = false;
-
-        if ($collection->getId() !== self::METADATA) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
-
-            foreach ($relationships as $relationship) {
-                $relationships[$relationship->getAttribute('key')] = $relationship;
+        $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+            $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
+            if ($this->adapter->getSharedTables()) {
+                $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
             }
+            $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
+            $document = new Document($document);
 
-            // Compare if the document has any changes
-            foreach ($document as $key => $value) {
-                // Skip the nested documents as they will be checked later in recursions.
-                if (\array_key_exists($key, $relationships)) {
-                    // No need to compare nested documents more than max depth.
-                    if (count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
-                        continue;
-                    }
-                    $relationType = (string) $relationships[$key]['options']['relationType'];
-                    $side = (string) $relationships[$key]['options']['side'];
-                    switch ($relationType) {
-                        case Database::RELATION_ONE_TO_ONE:
-                            $oldValue = $old->getAttribute($key) instanceof Document
-                                ? $old->getAttribute($key)->getId()
-                                : $old->getAttribute($key);
+            $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+                return $attribute['type'] === Database::VAR_RELATIONSHIP;
+            });
 
-                            if ((\is_null($value) !== \is_null($oldValue))
-                                || (\is_string($value) && $value !== $oldValue)
-                                || ($value instanceof Document && $value->getId() !== $oldValue)
-                            ) {
-                                $shouldUpdate = true;
-                            }
-                            break;
-                        case Database::RELATION_ONE_TO_MANY:
-                        case Database::RELATION_MANY_TO_ONE:
-                        case Database::RELATION_MANY_TO_MANY:
-                            if (
-                                ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
-                                ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD)
-                            ) {
+            $shouldUpdate = false;
+
+            if ($collection->getId() !== self::METADATA) {
+                $documentSecurity = $collection->getAttribute('documentSecurity', false);
+
+                foreach ($relationships as $relationship) {
+                    $relationships[$relationship->getAttribute('key')] = $relationship;
+                }
+
+                // Compare if the document has any changes
+                foreach ($document as $key => $value) {
+                    // Skip the nested documents as they will be checked later in recursions.
+                    if (\array_key_exists($key, $relationships)) {
+                        // No need to compare nested documents more than max depth.
+                        if (count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
+                            continue;
+                        }
+                        $relationType = (string)$relationships[$key]['options']['relationType'];
+                        $side = (string)$relationships[$key]['options']['side'];
+                        switch ($relationType) {
+                            case Database::RELATION_ONE_TO_ONE:
                                 $oldValue = $old->getAttribute($key) instanceof Document
                                     ? $old->getAttribute($key)->getId()
                                     : $old->getAttribute($key);
 
                                 if ((\is_null($value) !== \is_null($oldValue))
                                     || (\is_string($value) && $value !== $oldValue)
-                                    || ($value instanceof Document &&  $value->getId() !== $oldValue)
+                                    || ($value instanceof Document && $value->getId() !== $oldValue)
                                 ) {
                                     $shouldUpdate = true;
                                 }
                                 break;
-                            }
-
-                            if(!\is_array($value) || !\array_is_list($value)) {
-                                throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
-                            }
-
-                            if (\count($old->getAttribute($key)) !== \count($value)) {
-                                $shouldUpdate = true;
-                                break;
-                            }
-
-                            foreach ($value as $index => $relation) {
-                                $oldValue = $old->getAttribute($key)[$index] instanceof Document
-                                    ? $old->getAttribute($key)[$index]->getId()
-                                    : $old->getAttribute($key)[$index];
-
+                            case Database::RELATION_ONE_TO_MANY:
+                            case Database::RELATION_MANY_TO_ONE:
+                            case Database::RELATION_MANY_TO_MANY:
                                 if (
-                                    (\is_string($relation) && $relation !== $oldValue) ||
-                                    ($relation instanceof Document && $relation->getId() !== $oldValue)
+                                    ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT) ||
+                                    ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD)
                                 ) {
+                                    $oldValue = $old->getAttribute($key) instanceof Document
+                                        ? $old->getAttribute($key)->getId()
+                                        : $old->getAttribute($key);
+
+                                    if ((\is_null($value) !== \is_null($oldValue))
+                                        || (\is_string($value) && $value !== $oldValue)
+                                        || ($value instanceof Document && $value->getId() !== $oldValue)
+                                    ) {
+                                        $shouldUpdate = true;
+                                    }
+                                    break;
+                                }
+
+                                if (!\is_array($value) || !\array_is_list($value)) {
+                                    throw new RelationshipException('Invalid relationship value. Must be either an array of documents or document IDs, ' . \gettype($value) . ' given.');
+                                }
+
+                                if (\count($old->getAttribute($key)) !== \count($value)) {
                                     $shouldUpdate = true;
                                     break;
                                 }
-                            }
+
+                                foreach ($value as $index => $relation) {
+                                    $oldValue = $old->getAttribute($key)[$index] instanceof Document
+                                        ? $old->getAttribute($key)[$index]->getId()
+                                        : $old->getAttribute($key)[$index];
+
+                                    if (
+                                        (\is_string($relation) && $relation !== $oldValue) ||
+                                        ($relation instanceof Document && $relation->getId() !== $oldValue)
+                                    ) {
+                                        $shouldUpdate = true;
+                                        break;
+                                    }
+                                }
+                                break;
+                        }
+
+                        if ($shouldUpdate) {
                             break;
+                        }
+
+                        continue;
                     }
 
-                    if ($shouldUpdate) {
+                    $oldValue = $old->getAttribute($key);
+
+                    // If values are not equal we need to update document.
+                    if ($value !== $oldValue) {
+                        $shouldUpdate = true;
                         break;
                     }
-
-                    continue;
                 }
-
-                $oldValue = $old->getAttribute($key);
-
-                // If values are not equal we need to update document.
-                if ($value !== $oldValue) {
-                    $shouldUpdate = true;
-                    break;
-                }
-            }
 
             $updateValidator = new Input(self::PERMISSION_UPDATE, [
-                ...$collection->getUpdate(),
-                ...($documentSecurity ? $old->getUpdate() : [])
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $old->getUpdate() : [])
             ]);
 
             $readValidator = new Input(self::PERMISSION_READ, [
-                ...$collection->getRead(),
-                ...($documentSecurity ? $old->getRead() : [])
+                    ...$collection->getRead(),
+                    ...($documentSecurity ? $old->getRead() : [])
             ]);
 
             if (($shouldUpdate && !$this->authorization->isValid($updateValidator))
                         || (!$shouldUpdate && !$this->authorization->isValid($readValidator))) {
                 throw new AuthorizationException($this->authorization->getDescription());
+                }
             }
-        }
 
-        if ($old->isEmpty()) {
-            return new Document();
-        }
+            if ($old->isEmpty()) {
+                return new Document();
+            }
 
-        if ($shouldUpdate) {
-            $updatedAt = $document->getUpdatedAt();
-            $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
-        }
+            if ($shouldUpdate) {
+                $updatedAt = $document->getUpdatedAt();
+                $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+            }
 
-        // Check if document was updated after the request timestamp
-        $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
-        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-            throw new ConflictException('Document was updated after the request timestamp');
-        }
+            // Check if document was updated after the request timestamp
+            $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
+            if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                throw new ConflictException('Document was updated after the request timestamp');
+            }
 
-        $document = $this->encode($collection, $document);
+            $document = $this->encode($collection, $document);
 
-        $structureValidator = new Structure($collection);
+            $structureValidator = new Structure($collection);
 
-        if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
-            throw new StructureException($structureValidator->getDescription());
-        }
+            if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+                throw new StructureException($structureValidator->getDescription());
+            }
 
-        if ($this->resolveRelationships) {
-            $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
-        }
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
+            }
 
-        $this->adapter->updateDocument($collection->getId(), $document);
+            $this->adapter->updateDocument($collection->getId(), $document);
+
+            return $document;
+        });
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
@@ -3733,9 +3852,7 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->purgeRelatedDocuments($collection, $id);
-
         $this->purgeCachedDocument($collection->getId(), $id);
-
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
         return $document;
@@ -3764,41 +3881,53 @@ class Database
             return [];
         }
 
-        $time = DateTime::now();
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        foreach ($documents as $document) {
-            if (!$document->getId()) {
-                throw new DatabaseException('Must define $id attribute for each document');
-            }
+        $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
+            $time = DateTime::now();
 
-            $updatedAt = $document->getUpdatedAt();
-            $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
-            $document = $this->encode($collection, $document);
+            foreach ($documents as $key => $document) {
+                if (!$document->getId()) {
+                    throw new DatabaseException('Must define $id attribute for each document');
+                }
+
+                $updatedAt = $document->getUpdatedAt();
+                $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+                $document = $this->encode($collection, $document);
 
             $old = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->getDocument(
-                    $collection->getId(),
-                    $document->getId()
-                )
-            ));
+                    fn () => $this->getDocument(
+                        $collection->getId(),
+                        $document->getId(),
+                        forUpdate: true
+                    )
+                ));
 
-            if (
-                $collection->getId() !== self::METADATA
+                if (
+                    $collection->getId() !== self::METADATA
                 && !$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $old->getUpdate()))
-            ) {
+                ) {
                 throw new AuthorizationException($this->authorization->getDescription());
+                }
+
+                $validator = new Structure($collection);
+                if (!$validator->isValid($document)) {
+                    throw new StructureException($validator->getDescription());
+                }
+
+                if ($this->resolveRelationships) {
+                    $documents[$key] = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
+                }
             }
 
-            $validator = new Structure($collection);
-            if (!$validator->isValid($document)) {
-                throw new StructureException($validator->getDescription());
-            }
-        }
-
-        $documents = $this->adapter->updateDocuments($collection->getId(), $documents, $batchSize);
+            return $this->adapter->updateDocuments($collection->getId(), $documents, $batchSize);
+        });
 
         foreach ($documents as $key => $document) {
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+            }
+
             $documents[$key] = $this->decode($collection, $document);
 
             $this->purgeCachedDocument($collection->getId(), $document->getId());
@@ -4216,6 +4345,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws DatabaseException
+     * @throws Exception
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
     {
@@ -4227,7 +4357,12 @@ class Database
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
 
+        /* @var $document Document */
         $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        if($document->isEmpty()) {
+            return false;
+        }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4255,7 +4390,7 @@ class Database
         /**
          * @var Document $attr
          */
-        $attr = end($attr);
+        $attr = \end($attr);
         if (!in_array($attr->getAttribute('type'), $whiteList)) {
             throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
         }
@@ -4264,8 +4399,26 @@ class Database
             throw new DatabaseException('Attribute value exceeds maximum limit: ' . $max);
         }
 
+        $time = DateTime::now();
+        $updatedAt = $document->getUpdatedAt();
+        $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+
+        // Check if document was updated after the request timestamp
+        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            throw new ConflictException('Document was updated after the request timestamp');
+        }
+
         $max = $max ? $max - $value : null;
-        $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value, null, $max);
+
+        $result = $this->adapter->increaseDocumentAttribute(
+            $collection->getId(),
+            $id,
+            $attribute,
+            $value,
+            $updatedAt,
+            max: $max
+        );
 
         $this->purgeCachedDocument($collection->getId(), $id);
 
@@ -4297,8 +4450,12 @@ class Database
         if ($value <= 0) { // Can be a float
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
-
+        /* @var $document Document */
         $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        if($document->isEmpty()) {
+            return false;
+        }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4326,7 +4483,7 @@ class Database
         /**
          * @var Document $attr
          */
-        $attr = end($attr);
+        $attr = \end($attr);
         if (!in_array($attr->getAttribute('type'), $whiteList)) {
             throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
         }
@@ -4335,9 +4492,26 @@ class Database
             throw new DatabaseException('Attribute value Exceeds minimum limit ' . $min);
         }
 
+        $time = DateTime::now();
+        $updatedAt = $document->getUpdatedAt();
+        $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+
+        // Check if document was updated after the request timestamp
+        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            throw new ConflictException('Document was updated after the request timestamp');
+        }
+
         $min = $min ? $min + $value : null;
 
-        $result = $this->adapter->increaseDocumentAttribute($collection->getId(), $id, $attribute, $value * -1, $min);
+        $result = $this->adapter->increaseDocumentAttribute(
+            $collection->getId(),
+            $id,
+            $attribute,
+            $value * -1,
+            $updatedAt,
+            min: $min
+        );
 
         $this->purgeCachedDocument($collection->getId(), $id);
 
@@ -4366,37 +4540,47 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id)));
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        if ($collection->getId() !== self::METADATA) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
+            /* @var $document Document */
+            $document = $this->authorization->skip(fn () => $this->silent(
+                fn () =>
+                $this->getDocument($collection->getId(), $id, forUpdate: true)
+            ));
+
+            if($document->isEmpty()) {
+                return false;
+            }
+
+            if ($collection->getId() !== self::METADATA) {
+                $documentSecurity = $collection->getAttribute('documentSecurity', false);
             $isValid = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
-                ...$collection->getDelete(),
-                ...($documentSecurity ? $document->getDelete() : [])
+                    ...$collection->getDelete(),
+                    ...($documentSecurity ? $document->getDelete() : [])
             ]));
             if (!$isValid) {
                 throw new AuthorizationException($this->authorization->getDescription());
+                }
             }
-        }
 
-        // Check if document was updated after the request timestamp
-        try {
-            $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-        } catch (Exception $e) {
-            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-        }
+            // Check if document was updated after the request timestamp
+            try {
+                $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+            } catch (Exception $e) {
+                throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+            }
 
-        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-            throw new ConflictException('Document was updated after the request timestamp');
-        }
+            if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                throw new ConflictException('Document was updated after the request timestamp');
+            }
 
-        if ($this->resolveRelationships) {
-            $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
-        }
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
+            }
 
-        $deleted = $this->adapter->deleteDocument($collection->getId(), $id);
+            return $this->adapter->deleteDocument($collection->getId(), $id);
+        });
 
         $this->purgeRelatedDocuments($collection, $id);
         $this->purgeCachedDocument($collection->getId(), $id);

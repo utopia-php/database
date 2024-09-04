@@ -19,6 +19,7 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -28,6 +29,8 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Index;
 use Utopia\Database\Validator\Structure;
 use Utopia\Http\Validator\Range;
+
+ini_set('memory_limit', '2048M');
 
 abstract class Base extends TestCase
 {
@@ -973,37 +976,36 @@ abstract class Base extends TestCase
 
     public function testQueryTimeout(): void
     {
-        if ($this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
-            $this->getDatabase()->createCollection('global-timeouts');
-            $this->assertEquals(true, $this->getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
-
-            for ($i = 0 ; $i <= 20 ; $i++) {
-                $this->getDatabase()->createDocument('global-timeouts', new Document([
-                    'longtext' => file_get_contents(__DIR__ . '/../../resources/longtext.txt'),
-                    '$permissions' => [
-                        Permission::read(Role::any()),
-                        Permission::update(Role::any()),
-                        Permission::delete(Role::any())
-                    ]
-                ]));
-            }
-
-            $this->expectException(TimeoutException::class);
-
-            $this->getDatabase()->setTimeout(1);
-
-            try {
-                $this->getDatabase()->find('global-timeouts', [
-                    Query::notEqual('longtext', 'appwrite'),
-                ]);
-            } catch(TimeoutException $ex) {
-                $this->getDatabase()->clearTimeout();
-                $this->getDatabase()->deleteCollection('global-timeouts');
-                throw $ex;
-            }
+        if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
-        $this->expectNotToPerformAssertions();
+        static::getDatabase()->createCollection('global-timeouts');
+        $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
+
+        for ($i = 0 ; $i <= 20 ; $i++) {
+                $this->getDatabase()->createDocument('global-timeouts', new Document([
+                'longtext' => file_get_contents(__DIR__ . '/../../resources/longtext.txt'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any())
+                ]
+            ]));
+        }
+
+            static::getDatabase()->setTimeout(1);
+
+        try {
+                $this->getDatabase()->find('global-timeouts', [
+                Query::notEqual('longtext', 'appwrite'),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch(TimeoutException $ex) {
+            static::getDatabase()->clearTimeout();
+            static::getDatabase()->deleteCollection('global-timeouts');
+        }
     }
 
     /**
@@ -1229,8 +1231,14 @@ abstract class Base extends TestCase
         $this->assertEquals(true, $this->getDatabase()->createAttribute('attributes', 'socialAccountForYoutubeSubscribersss', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, $this->getDatabase()->createAttribute('attributes', '5f058a89258075f058a89258075f058t9214', Database::VAR_BOOLEAN, 0, true));
 
-        // Using this collection to test invalid default values
-        // $this->getDatabase()->deleteCollection('attributes');
+        // Test non-shared tables duplicates throw duplicate
+        static::getDatabase()->createAttribute('attributes', 'duplicate', Database::VAR_STRING, 128, true);
+        try {
+            static::getDatabase()->createAttribute('attributes', 'duplicate', Database::VAR_STRING, 128, true);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
     }
 
     /**
@@ -1272,7 +1280,7 @@ abstract class Base extends TestCase
      */
     public function testAttributeCaseInsensitivity(): void
     {
-        $this->assertEquals(true, $this->getDatabase()->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
         $this->expectException(DuplicateException::class);
         $this->assertEquals(true, $this->getDatabase()->createAttribute('attributes', 'CaseSensitive', Database::VAR_STRING, 128, true));
     }
@@ -1430,7 +1438,16 @@ abstract class Base extends TestCase
         $collection = $this->getDatabase()->getCollection('indexes');
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        $this->getDatabase()->deleteCollection('indexes');
+        // Test non-shared tables duplicates throw duplicate
+        static::getDatabase()->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
+        try {
+            static::getDatabase()->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+
+        static::getDatabase()->deleteCollection('indexes');
     }
 
     public function testCreateCollectionWithSchema(): void
@@ -2016,10 +2033,13 @@ abstract class Base extends TestCase
             ]
         ]));
 
-        $this->assertEquals(true, $this->getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101));
+        $updatedAt = $document->getUpdatedAt();
+
+        $this->assertEquals(true, static::getDatabase()->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101));
 
         $document = $this->getDatabase()->getDocument($collection, $document->getId());
         $this->assertEquals(101, $document->getAttribute('increase'));
+        $this->assertNotEquals($updatedAt, $document->getUpdatedAt());
 
         $this->assertEquals(true, $this->getDatabase()->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
         $document = $this->getDatabase()->getDocument($collection, $document->getId());
@@ -4141,6 +4161,67 @@ abstract class Base extends TestCase
         $this->assertEquals(3, $count);
     }
 
+    public function testNestedIDQueries(): void
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        static::getDatabase()->createCollection('movies_nested_id', permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::users())
+        ]);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies_nested_id', 'name', Database::VAR_STRING, 128, true));
+
+        static::getDatabase()->createDocument('movies_nested_id', new Document([
+            '$id' => ID::custom('1'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => '1',
+        ]));
+
+        static::getDatabase()->createDocument('movies_nested_id', new Document([
+            '$id' => ID::custom('2'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => '2',
+        ]));
+
+        static::getDatabase()->createDocument('movies_nested_id', new Document([
+            '$id' => ID::custom('3'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => '3',
+        ]));
+
+        $queries = [
+            Query::or([
+                Query::equal('$id', ["1"]),
+                Query::equal('$id', ["2"])
+            ])
+        ];
+
+        $documents = static::getDatabase()->find('movies_nested_id', $queries);
+        $this->assertCount(2, $documents);
+
+        // Make sure the query was not modified by reference
+        $this->assertEquals($queries[0]->getValues()[0]->getAttribute(), '$id');
+
+        $count = static::getDatabase()->count('movies_nested_id', $queries);
+        $this->assertEquals(2, $count);
+    }
+
     /**
      * @depends testFind
      */
@@ -5730,6 +5811,178 @@ abstract class Base extends TestCase
         $this->assertEquals('2000-06-12T14:12:55.000+00:00', $doc->getAttribute('date'));
     }
 
+    public function testUpdateAttributeRename(): void
+    {
+        static::getDatabase()->createCollection('rename_test');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('rename_test', 'rename_me', Database::VAR_STRING, 128, true));
+
+        $doc = static::getDatabase()->createDocument('rename_test', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'rename_me' => 'string'
+        ]));
+
+        $this->assertEquals('string', $doc->getAttribute('rename_me'));
+
+        // Create an index to check later
+        static::getDatabase()->createIndex('rename_test', 'renameIndexes', Database::INDEX_KEY, ['rename_me'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
+
+        static::getDatabase()->updateAttribute(
+            collection: 'rename_test',
+            id: 'rename_me',
+            newKey: 'renamed',
+        );
+
+        $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
+
+        // Check the attribute was correctly renamed
+        $this->assertEquals('string', $doc->getAttribute('renamed'));
+        $this->assertArrayNotHasKey('rename_me', $doc);
+
+        // Check we can update the document with the new key
+        $doc->setAttribute('renamed', 'string2');
+        static::getDatabase()->updateDocument('rename_test', $doc->getId(), $doc);
+
+        $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
+        $this->assertEquals('string2', $doc->getAttribute('renamed'));
+
+        // Check collection
+        $collection = static::getDatabase()->getCollection('rename_test');
+        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['key']);
+        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['$id']);
+
+        // Check empty key doesn't cause issues
+        static::getDatabase()->updateAttribute(
+            collection: 'rename_test',
+            id: 'renamed',
+            type: Database::VAR_STRING,
+        );
+
+        $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
+
+        $this->assertEquals('string2', $doc->getAttribute('renamed'));
+        $this->assertArrayNotHasKey('rename_me', $doc->getAttributes());
+
+        // Check the metadata was correctly updated
+        $attribute = $collection->getAttribute('attributes')[0];
+        $this->assertEquals('renamed', $attribute['key']);
+        $this->assertEquals('renamed', $attribute['$id']);
+
+        // Check the indexes were updated
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertEquals('renamed', $index->getAttribute('attributes')[0]);
+        $this->assertEquals(1, count($collection->getAttribute('indexes')));
+
+        // Try and create new document with new key
+        $doc = static::getDatabase()->createDocument('rename_test', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'renamed' => 'string'
+        ]));
+
+        $this->assertEquals('string', $doc->getAttribute('renamed'));
+
+        // Make sure we can't create a new attribute with the old key
+        try {
+            $doc = static::getDatabase()->createDocument('rename_test', new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'rename_me' => 'string'
+            ]));
+            $this->fail('Succeeded creating a document with old key after renaming the attribute');
+        } catch (\Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+    }
+
+    public function createRandomString(int $length = 10): string
+    {
+        return \substr(\bin2hex(\random_bytes(\max(1, \intval(($length + 1) / 2)))), 0, $length);
+    }
+
+    public function updateStringAttributeSize(int $size, Document $document): Document
+    {
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $size, true);
+
+        $document = $document->setAttribute('resize_me', $this->createRandomString($size));
+
+        static::getDatabase()->updateDocument('resize_test', $document->getId(), $document);
+        $checkDoc = static::getDatabase()->getDocument('resize_test', $document->getId());
+
+        $this->assertEquals($document->getAttribute('resize_me'), $checkDoc->getAttribute('resize_me'));
+        $this->assertEquals($size, strlen($checkDoc->getAttribute('resize_me')));
+
+        return $checkDoc;
+    }
+
+    public function testUpdateAttributeSize(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForAttributeResizing()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('resize_test');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true));
+        $document = static::getDatabase()->createDocument('resize_test', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'resize_me' => $this->createRandomString(128)
+        ]));
+
+        // Go up in size
+
+        // 0-16381 to 16382-65535
+        $document = $this->updateStringAttributeSize(16382, $document);
+
+        // 16382-65535 to 65536-16777215
+        $document = $this->updateStringAttributeSize(65536, $document);
+
+        // 65536-16777216 to PHP_INT_MAX or adapter limit
+        $maxStringSize = 16777217;
+        $document = $this->updateStringAttributeSize($maxStringSize, $document);
+
+        // Test going down in size with data that is too big (Expect Failure)
+        try {
+            static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
+            $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
+        } catch (TruncateException $e) {
+        }
+
+        // Test going down in size when data isn't too big.
+        static::getDatabase()->updateDocument('resize_test', $document->getId(), $document->setAttribute('resize_me', $this->createRandomString(128)));
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
+
+        // VARCHAR -> VARCHAR Truncation Test
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 1000, true);
+        static::getDatabase()->updateDocument('resize_test', $document->getId(), $document->setAttribute('resize_me', $this->createRandomString(1000)));
+
+        try {
+            static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
+            $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
+        } catch (TruncateException $e) {
+        }
+    }
+
     /**
      * @depends testCreatedAtUpdatedAt
      */
@@ -5927,7 +6180,7 @@ abstract class Base extends TestCase
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
             $this->assertEquals('Reserved:' . $keyword, $documents[0]->getAttribute($keyword));
 
-            $documents = $database->find($collectionName, [Query::equal($keyword, ["Reserved:${keyword}"])]);
+            $documents = $database->find($collectionName, [Query::equal($keyword, ["Reserved:{$keyword}"])]);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 
@@ -15016,7 +15269,7 @@ abstract class Base extends TestCase
      * @throws StructureException
      * @throws TimeoutException
      */
-    public function testIsolationModes(): void
+    public function testSharedTables(): void
     {
         /**
          * Default mode already tested, we'll test 'schema' and 'table' isolation here
@@ -15190,6 +15443,57 @@ abstract class Base extends TestCase
         }
 
         // Reset state
+        $database->setSharedTables(false);
+        $database->setNamespace(static::$namespace);
+        $database->setDatabase($this->testDatabase);
+    }
+
+    public function testSharedTablesDuplicatesDontThrow(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if ($database->exists('sharedTables')) {
+            $database->setDatabase('sharedTables')->delete();
+        }
+
+        $database
+            ->setDatabase('sharedTables')
+            ->setNamespace('')
+            ->setSharedTables(true)
+            ->setTenant(1)
+            ->create();
+
+        // Create collection
+        $database->createCollection('duplicates', documentSecurity: false);
+        $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+        $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+
+        $database->setTenant(2);
+
+        try {
+            $database->createCollection('duplicates', documentSecurity: false);
+        } catch (DuplicateException) {
+            // Ignore
+        }
+
+        $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+        $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+
+        $collection = $database->getCollection('duplicates');
+        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
+        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
+
+        $database->setTenant(1);
+
+        $collection = $database->getCollection('duplicates');
+        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
+        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
+
         $database->setSharedTables(false);
         $database->setNamespace(static::$namespace);
         $database->setDatabase($this->testDatabase);

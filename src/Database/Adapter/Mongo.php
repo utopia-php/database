@@ -58,6 +58,21 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    public function startTransaction(): bool
+    {
+        return true;
+    }
+
+    public function commitTransaction(): bool
+    {
+        return true;
+    }
+
+    public function rollbackTransaction(): bool
+    {
+        return true;
+    }
+
     /**
      * Ping Database
      *
@@ -165,7 +180,7 @@ class Mongo extends Adapter
         try {
             $this->getClient()->createCollection($id);
         } catch (MongoException $e) {
-            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
         }
 
         $indexesCreated = $this->client->createIndexes($id, [[
@@ -625,7 +640,7 @@ class Mongo extends Adapter
      * @return Document
      * @throws MongoException
      */
-    public function getDocument(string $collection, string $id, array $queries = []): Document
+    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -833,12 +848,15 @@ class Mongo extends Adapter
      * @param string $id
      * @param string $attribute
      * @param int|float $value
+     * @param string $updatedAt
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
+     * @throws DatabaseException
+     * @throws MongoException
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, int|float|null $min = null, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
     {
         $attribute = $this->filter($attribute);
         $filters = ['_uid' => $id];
@@ -858,7 +876,10 @@ class Mongo extends Adapter
         $this->client->update(
             $this->getNamespace() . '_' . $this->filter($collection),
             $filters,
-            ['$inc' => [$attribute => $value]],
+            [
+                '$inc' => [$attribute => $value],
+                '$set' => ['_updatedAt' => $this->toMongoDatetime($updatedAt)],
+            ],
         );
 
         return true;
@@ -896,11 +917,16 @@ class Mongo extends Adapter
      * @param int $size
      * @param bool $signed
      * @param bool $array
+     * @param string $newKey
      *
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
     {
+        if (!empty($newKey) && $newKey !== $id) {
+            return $this->renameAttribute($collection, $id, $newKey);
+        }
+
         return true;
     }
 
@@ -925,6 +951,7 @@ class Mongo extends Adapter
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         $filters = $this->buildFilters($queries);
 
@@ -1186,6 +1213,8 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $filters = [];
         $options = [];
 
@@ -1226,6 +1255,7 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         // queries
+        $queries = array_map(fn ($query) => clone $query, $queries);
         $filters = $this->buildFilters($queries);
 
         // permissions
@@ -1556,6 +1586,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Are attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForAttributes(): bool
+    {
+        return false;
+    }
+
+    /**
      * Is index supported?
      *
      * @return bool
@@ -1616,6 +1656,16 @@ class Mongo extends Adapter
     }
 
     public function getSupportForRelationships(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForUpdateLock(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForAttributeResizing(): bool
     {
         return false;
     }

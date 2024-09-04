@@ -9,6 +9,8 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 
 /**
@@ -108,12 +110,6 @@ class SQLite extends MariaDB
     {
         $id = $this->filter($name);
 
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
-
         /** @var array<string> $attributeStrings */
         $attributeStrings = [];
 
@@ -187,8 +183,6 @@ class SQLite extends MariaDB
         $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
         $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
-        $this->getPDO()->commit();
-
         // Update $this->getCountOfIndexes when adding another default index
         return true;
     }
@@ -244,12 +238,6 @@ class SQLite extends MariaDB
     {
         $id = $this->filter($id);
 
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
-
         $sql = "DROP TABLE IF EXISTS `{$this->getSQLTable($id)}`";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
@@ -264,8 +252,6 @@ class SQLite extends MariaDB
             ->prepare($sql)
             ->execute();
 
-        $this->getPDO()->commit();
-
         return true;
     }
 
@@ -278,12 +264,17 @@ class SQLite extends MariaDB
      * @param int $size
      * @param bool $signed
      * @param bool $array
+     * @param string $newKey
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
     {
+        if (!empty($newKey) && $newKey !== $id) {
+            return $this->renameAttribute($collection, $id, $newKey);
+        }
+
         return true;
     }
 
@@ -465,12 +456,6 @@ class SQLite extends MariaDB
         $columns = ['_uid'];
         $values = ['_uid'];
 
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
-
         /**
          * Insert Attributes
          */
@@ -555,16 +540,12 @@ class SQLite extends MariaDB
                 $stmtPermissions->execute();
             }
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
             throw match ($e->getCode()) {
                 "1062", "23000" => new Duplicate('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
 
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
-        }
 
         return $document;
     }
@@ -592,7 +573,6 @@ class SQLite extends MariaDB
 
         $name = $this->filter($collection);
         $columns = '';
-
 
         $sql = "
 			SELECT _type, _permission
@@ -630,12 +610,6 @@ class SQLite extends MariaDB
 
             return $carry;
         }, $initial);
-
-        try {
-            $this->getPDO()->beginTransaction();
-        } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-        }
 
         /**
          * Get removed Permissions
@@ -791,17 +765,11 @@ class SQLite extends MariaDB
                 $stmtAddPermissions->execute();
             }
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-
             throw match ($e->getCode()) {
                 '1062',
                 '23000' => new Duplicate('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
-        }
-
-        if (!$this->getPDO()->commit()) {
-            throw new DatabaseException('Failed to commit transaction');
         }
 
         return $document;
@@ -823,8 +791,6 @@ class SQLite extends MariaDB
         if (empty($documents)) {
             return $documents;
         }
-
-        $this->getPDO()->beginTransaction();
 
         try {
             $name = $this->filter($collection);
@@ -1054,14 +1020,8 @@ class SQLite extends MariaDB
                 }
             }
 
-            if (!$this->getPDO()->commit()) {
-                throw new DatabaseException('Failed to commit transaction');
-            }
-
             return $documents;
         } catch (PDOException $e) {
-            $this->getPDO()->rollBack();
-
             throw match ($e->getCode()) {
                 1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
                 default => $e,
@@ -1115,6 +1075,21 @@ class SQLite extends MariaDB
     }
 
     public function getSupportForRelationships(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForUpdateLock(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is attribute resizing supported?
+     *
+     * @return bool
+     */
+    public function getSupportForAttributeResizing(): bool
     {
         return false;
     }
@@ -1379,5 +1354,29 @@ class SQLite extends MariaDB
             'WITH',
             'WITHOUT',
         ];
+    }
+
+    /**
+     * @param PDOException $e
+     * @throws TimeoutException
+     * @throws DuplicateException
+     */
+    protected function processException(PDOException $e): void
+    {
+        /**
+         * PDO and Swoole PDOProxy swap error codes and errorInfo
+         */
+
+        // Timeout
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Duplicate
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1) {
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        throw $e;
     }
 }

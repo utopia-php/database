@@ -29,6 +29,7 @@ class DateTimeTest extends TestCase
         $now = DateTime::now();
         $this->assertEquals(23, strlen($now));
         $this->assertGreaterThan('2020-1-1 11:31:52.680', $now);
+        $this->assertEquals('Value must be valid date.', $dateValidator->getDescription());
 
         $date = '2022-07-02 18:31:52.680';
         $dateObject = new \DateTime($date);
@@ -55,14 +56,81 @@ class DateTimeTest extends TestCase
     public function testPastDateValidation(): void
     {
         $dateValidator = new DatetimeValidator(requireDateInFuture: true);
-
         $this->assertEquals(false, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), -3)));
         $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), 5)));
-
+        $this->assertEquals('Value must be valid date in future.', $dateValidator->getDescription());
 
         $dateValidator = new DatetimeValidator(requireDateInFuture: false);
-
         $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), -3)));
         $this->assertEquals(true, $dateValidator->isValid(DateTime::addSeconds(new \DateTime(), 5)));
+        $this->assertEquals('Value must be valid date.', $dateValidator->getDescription());
+    }
+
+    public function testDatePrecision(): void
+    {
+        $dateValidator = new DatetimeValidator(precision: DatetimeValidator::PRECISION_SECONDS);
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26.255'))));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26.000'))));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26'))));
+        $this->assertEquals('Value must be valid date with seconds precision.', $dateValidator->getDescription());
+
+        $dateValidator = new DatetimeValidator(precision: DatetimeValidator::PRECISION_MINUTES);
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26.255'))));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26.000'))));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26'))));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:00'))));
+        $this->assertEquals('Value must be valid date with minutes precision.', $dateValidator->getDescription());
+
+        $dateValidator = new DatetimeValidator(precision: DatetimeValidator::PRECISION_HOURS);
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26.255'))));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26.000'))));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26'))));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:00'))));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:00:00'))));
+        $this->assertEquals('Value must be valid date with hours precision.', $dateValidator->getDescription());
+
+        $dateValidator = new DatetimeValidator(precision: DatetimeValidator::PRECISION_DAYS);
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26.255'))));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26.000'))));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26'))));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:00'))));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:00:00'))));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 00:00:00'))));
+        $this->assertEquals('Value must be valid date with days precision.', $dateValidator->getDescription());
+
+        $dateValidator = new DatetimeValidator(true, DatetimeValidator::PRECISION_MINUTES);
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2019-04-08 19:36:26.255'))));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format(new \DateTime('2100-04-08 19:36:26.255'))));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format(new \DateTime('2100-04-08 19:36:00'))));
+        $this->assertEquals('Value must be valid date in future with minutes precision.', $dateValidator->getDescription());
+    }
+
+    public function testOffset(): void
+    {
+        $dateValidator = new DatetimeValidator(offset: 60);
+
+        $time = (new \DateTime());
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format($time)));
+        $time = $time->add(new \DateInterval('PT50S'));
+        $this->assertEquals(false, $dateValidator->isValid(DateTime::format($time)));
+        $time = $time->add(new \DateInterval('PT20S'));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format($time)));
+        $this->assertEquals('Value must be valid date at least 60 seconds in future.', $dateValidator->getDescription());
+
+        $dateValidator = new DatetimeValidator(requireDateInFuture: true, offset: 60);
+
+        $time = (new \DateTime());
+        $time = $time->add(new \DateInterval('PT50S'));
+        $time = $time->add(new \DateInterval('PT20S'));
+        $this->assertEquals(true, $dateValidator->isValid(DateTime::format($time)));
+        $this->assertEquals('Value must be valid date at least 60 seconds in future.', $dateValidator->getDescription());
+
+        $threwException = false;
+        try {
+            $dateValidator = new DatetimeValidator(offset: -60);
+        } catch(\Exception $e) {
+            $threwException = true;
+        }
+        $this->assertTrue($threwException);
     }
 }

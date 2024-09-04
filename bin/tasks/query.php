@@ -14,9 +14,9 @@ use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Database;
 use Utopia\Database\Query;
-use Utopia\Mongo\Client;
 use Utopia\Http\Validator\Numeric;
 use Utopia\Http\Validator\Text;
+use Utopia\Mongo\Client;
 
 /**
  * @Example

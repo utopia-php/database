@@ -13,8 +13,8 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Database;
-use Utopia\Mongo\Client;
 use Utopia\Http\Validator\Text;
+use Utopia\Mongo\Client;
 
 /**
  * @Example

@@ -21,9 +21,9 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Mongo\Client;
 use Utopia\Http\Validator\Numeric;
 use Utopia\Http\Validator\Text;
+use Utopia\Mongo\Client;
 
 $authorization = new Authorization();
 

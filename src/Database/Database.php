@@ -3691,7 +3691,7 @@ class Database
                 $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
-        $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             if ($this->adapter->getSharedTables()) {
                 $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
@@ -3796,19 +3796,19 @@ class Database
                     }
                 }
 
-            $updateValidator = new Input(self::PERMISSION_UPDATE, [
+                $updateValidator = new Input(self::PERMISSION_UPDATE, [
                     ...$collection->getUpdate(),
                     ...($documentSecurity ? $old->getUpdate() : [])
-            ]);
+                ]);
 
-            $readValidator = new Input(self::PERMISSION_READ, [
+                $readValidator = new Input(self::PERMISSION_READ, [
                     ...$collection->getRead(),
                     ...($documentSecurity ? $old->getRead() : [])
-            ]);
+                ]);
 
-            if (($shouldUpdate && !$this->authorization->isValid($updateValidator))
-                        || (!$shouldUpdate && !$this->authorization->isValid($readValidator))) {
-                throw new AuthorizationException($this->authorization->getDescription());
+                if (($shouldUpdate && !$this->authorization->isValid($updateValidator))
+                            || (!$shouldUpdate && !$this->authorization->isValid($readValidator))) {
+                    throw new AuthorizationException($this->authorization->getDescription());
                 }
             }
 
@@ -3894,7 +3894,7 @@ class Database
                 $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
                 $document = $this->encode($collection, $document);
 
-            $old = $this->authorization->skip(fn () => $this->silent(
+                $old = $this->authorization->skip(fn () => $this->silent(
                     fn () => $this->getDocument(
                         $collection->getId(),
                         $document->getId(),
@@ -3906,7 +3906,7 @@ class Database
                     $collection->getId() !== self::METADATA
                 && !$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $old->getUpdate()))
                 ) {
-                throw new AuthorizationException($this->authorization->getDescription());
+                    throw new AuthorizationException($this->authorization->getDescription());
                 }
 
                 $validator = new Structure($collection);
@@ -4554,12 +4554,12 @@ class Database
 
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            $isValid = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
+                $isValid = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
                     ...$collection->getDelete(),
                     ...($documentSecurity ? $document->getDelete() : [])
-            ]));
-            if (!$isValid) {
-                throw new AuthorizationException($this->authorization->getDescription());
+                ]));
+                if (!$isValid) {
+                    throw new AuthorizationException($this->authorization->getDescription());
                 }
             }
 

@@ -985,7 +985,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
 
         for ($i = 0 ; $i <= 20 ; $i++) {
-                $this->getDatabase()->createDocument('global-timeouts', new Document([
+            $this->getDatabase()->createDocument('global-timeouts', new Document([
                 'longtext' => file_get_contents(__DIR__ . '/../../resources/longtext.txt'),
                 '$permissions' => [
                     Permission::read(Role::any()),
@@ -995,10 +995,10 @@ abstract class Base extends TestCase
             ]));
         }
 
-            static::getDatabase()->setTimeout(1);
+        static::getDatabase()->setTimeout(1);
 
         try {
-                $this->getDatabase()->find('global-timeouts', [
+            $this->getDatabase()->find('global-timeouts', [
                 Query::notEqual('longtext', 'appwrite'),
             ]);
             $this->fail('Failed to throw exception');

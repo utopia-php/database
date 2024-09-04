@@ -686,7 +686,7 @@ class MariaDB extends SQL
 
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
-            if(!empty($collectionAttribute['array']) && $this->castIndexArray()) {
+            if (!empty($collectionAttribute['array']) && $this->castIndexArray()) {
                 $attributes[$i] = '(CAST(' . $attr . ' AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
@@ -870,7 +870,7 @@ class MariaDB extends SQL
                 $stmtPermissions->execute();
             }
         } catch (\Throwable $e) {
-            if($e instanceof PDOException) {
+            if ($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -918,7 +918,7 @@ class MariaDB extends SQL
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
-                    if(!empty($document->getInternalId())) {
+                    if (!empty($document->getInternalId())) {
                         $attributes['_id'] = $document->getInternalId();
                     }
 
@@ -998,7 +998,7 @@ class MariaDB extends SQL
                 }
             }
         } catch (\Throwable $e) {
-            if($e instanceof PDOException) {
+            if ($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -1244,7 +1244,7 @@ class MariaDB extends SQL
             }
 
         } catch (\Throwable $e) {
-            if($e instanceof PDOException) {
+            if ($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -1501,7 +1501,7 @@ class MariaDB extends SQL
                 }
             }
         } catch (\Throwable $e) {
-            if($e instanceof PDOException) {
+            if ($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -1732,7 +1732,7 @@ class MariaDB extends SQL
         }
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -1860,7 +1860,7 @@ class MariaDB extends SQL
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -2077,7 +2077,7 @@ class MariaDB extends SQL
                 return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
-                if($this->getSupportForJSONOverlaps() && $query->onArray()) {
+                if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
                     return "JSON_OVERLAPS(`table_main`.{$attribute}, :{$placeholder}_0)";
                 }
 
@@ -2103,7 +2103,7 @@ class MariaDB extends SQL
      */
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
-        if($array === true) {
+        if ($array === true) {
             return 'JSON';
         }
 

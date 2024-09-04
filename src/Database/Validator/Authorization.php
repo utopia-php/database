@@ -51,7 +51,7 @@ class Authorization extends Validator
     */
     public function isValid(mixed $input): bool // any, CREATE
     {
-        if(!($input instanceof Input)) {
+        if (!($input instanceof Input)) {
             $this->message = 'Invalid input provided';
             return false;
         }

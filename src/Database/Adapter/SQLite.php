@@ -448,7 +448,7 @@ class SQLite extends MariaDB
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
-        if($this->sharedTables) {
+        if ($this->sharedTables) {
             $attributes['_tenant'] = $this->tenant;
         }
 
@@ -522,7 +522,7 @@ class SQLite extends MariaDB
 
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
 
-            if($this->sharedTables) {
+            if ($this->sharedTables) {
                 $stmtPermissions->bindValue(':_tenant', $this->tenant);
             }
         }
@@ -567,7 +567,7 @@ class SQLite extends MariaDB
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
-        if($this->sharedTables) {
+        if ($this->sharedTables) {
             $attributes['_tenant'] = $this->tenant;
         }
 
@@ -701,7 +701,7 @@ class SQLite extends MariaDB
             $stmtAddPermissions = $this->getPDO()->prepare($sql);
 
             $stmtAddPermissions->bindValue(":_uid", $document->getId());
-            if($this->sharedTables) {
+            if ($this->sharedTables) {
                 $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
             }
 
@@ -814,7 +814,7 @@ class SQLite extends MariaDB
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
 
-                    if($this->sharedTables) {
+                    if ($this->sharedTables) {
                         $attributes['_tenant'] = $this->tenant;
                     }
 
@@ -1012,7 +1012,7 @@ class SQLite extends MariaDB
                         $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
 
-                    if($this->sharedTables) {
+                    if ($this->sharedTables) {
                         $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
                     }
 

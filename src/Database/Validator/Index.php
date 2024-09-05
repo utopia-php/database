@@ -5,7 +5,7 @@ namespace Utopia\Database\Validator;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Validator;
+use Utopia\Http\Validator;
 
 class Index extends Validator
 {
@@ -126,30 +126,30 @@ class Index extends Validator
         foreach ($attributes as $attributePosition => $attributeName) {
             $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
 
-            if($attribute->getAttribute('array', false)) {
+            if ($attribute->getAttribute('array', false)) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
-                if($index->getAttribute('type') != Database::INDEX_KEY) {
+                if ($index->getAttribute('type') != Database::INDEX_KEY) {
                     $this->message = '"' . ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
                     return false;
                 }
 
-                if(empty($lengths[$attributePosition])) {
+                if (empty($lengths[$attributePosition])) {
                     $this->message = 'Index length for array not specified';
                     return false;
                 }
 
                 $arrayAttributes[] = $attribute->getAttribute('key', '');
-                if(count($arrayAttributes) > 1) {
+                if (count($arrayAttributes) > 1) {
                     $this->message = 'An index may only contain one array attribute';
                     return false;
                 }
 
                 $direction = $orders[$attributePosition] ?? '';
-                if(!empty($direction)) {
+                if (!empty($direction)) {
                     $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
                     return false;
                 }
-            } elseif($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
+            } elseif ($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
                 $this->message = 'Cannot set a length on "'. $attribute->getAttribute('type') . '" attributes';
                 return false;
             }
@@ -188,7 +188,7 @@ class Index extends Validator
                     break;
             }
 
-            if($attribute->getAttribute('array', false)) {
+            if ($attribute->getAttribute('array', false)) {
                 $attributeSize = Database::ARRAY_INDEX_LENGTH;
                 $indexLength = Database::ARRAY_INDEX_LENGTH;
             }

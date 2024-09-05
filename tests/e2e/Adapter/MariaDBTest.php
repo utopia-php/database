@@ -28,7 +28,7 @@ class MariaDBTest extends Base
     /**
      * @return Database
      */
-    public static function getDatabase(bool $fresh = false): Database
+    public function getDatabase(bool $fresh = false): Database
     {
         if (!is_null(self::$database) && !$fresh) {
             return self::$database;
@@ -46,9 +46,9 @@ class MariaDBTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MariaDB($pdo), $cache);
-        $database
-            ->setDatabase('utopiaTests')
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+        $database->setAuthorization(self::$authorization);
+        $database->setDatabase('utopiaTests');
+        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         if ($database->exists()) {
             $database->delete();

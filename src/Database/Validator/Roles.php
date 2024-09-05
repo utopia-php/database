@@ -3,7 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Helpers\Role;
-use Utopia\Validator;
+use Utopia\Http\Validator;
 
 class Roles extends Validator
 {

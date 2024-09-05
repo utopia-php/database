@@ -297,7 +297,7 @@ class Query
     {
         $array = ['method' => $this->method];
 
-        if(!empty($this->attribute)) {
+        if (!empty($this->attribute)) {
             $array['attribute'] = $this->attribute;
         }
 
@@ -690,7 +690,7 @@ class Query
      */
     public function isNested(): bool
     {
-        if(in_array($this->getMethod(), self::LOGICAL_TYPES)) {
+        if (in_array($this->getMethod(), self::LOGICAL_TYPES)) {
             return true;
         }
 

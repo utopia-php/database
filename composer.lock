@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a5ffc9e423ebf50ba55260295fb404fa",
+    "content-hash": "62684826df21956b2d48dc2c42cc3e07",
     "packages": [
         {
             "name": "jean85/pretty-package-versions",
@@ -2637,16 +2637,16 @@
         },
         {
             "name": "utopia-php/cli",
-            "version": "1.0.0-RC1",
+            "version": "0.19.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cli.git",
-                "reference": "7664161dcdb9b76a3ece0ae2f36a9aca1e548e80"
+                "reference": "f8af1d6087f498bc1f0191750a118d357ded9948"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cli/zipball/7664161dcdb9b76a3ece0ae2f36a9aca1e548e80",
-                "reference": "7664161dcdb9b76a3ece0ae2f36a9aca1e548e80",
+                "url": "https://api.github.com/repos/utopia-php/cli/zipball/f8af1d6087f498bc1f0191750a118d357ded9948",
+                "reference": "f8af1d6087f498bc1f0191750a118d357ded9948",
                 "shasum": ""
             },
             "require": {
@@ -2682,13 +2682,13 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cli/issues",
-                "source": "https://github.com/utopia-php/cli/tree/1.0.0-RC1"
+                "source": "https://github.com/utopia-php/cli/tree/0.19.0"
             },
-            "time": "2024-08-09T17:35:04+00:00"
+            "time": "2024-09-05T15:46:56+00:00"
         }
     ],
     "aliases": [],
-    "minimum-stability": "RC",
+    "minimum-stability": "stable",
     "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,

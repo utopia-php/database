@@ -4945,6 +4945,84 @@ class Database
     }
 
     /**
+     * Delete Documents
+     *
+     * Deletes all documents which match the given query, will respect the relationship's onDelete optin.
+     *
+     * @param string $collection
+     * @param array<Query> $queries
+     *
+     * @return bool
+     *
+     * @throws AuthorizationException
+     * @throws DatabaseException
+     * @throws RestrictedException
+     */
+    public function deleteDocuments(string $collection, array $queries = []): bool
+    {
+        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        $deleted = $this->withTransaction(function () use ($collection, $queries) {
+            $lastDocument = null;
+            while (true) {
+                $affectedDocuments = $this->find($collection->getId(), array_merge(
+                    empty($lastDocument) ? [
+                        Query::limit(100),
+                    ] : [
+                        Query::limit(100),
+                        Query::cursorAfter($lastDocument),
+                    ],
+                    $queries,
+                ));
+
+                if (empty($affectedDocuments)) {
+                    break;
+                }
+
+                foreach ($affectedDocuments as $document) {
+                    $validator = new Authorization(self::PERMISSION_DELETE);
+
+                    if ($collection->getId() !== self::METADATA) {
+                        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                        if (!$validator->isValid([
+                            ...$collection->getDelete(),
+                            ...($documentSecurity ? $document->getDelete() : [])
+                        ])) {
+                            throw new AuthorizationException($validator->getDescription());
+                        }
+                    }
+
+                    // Delete Relationships
+                    if ($this->resolveRelationships) {
+                        $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
+                    }
+
+                    // Fire events
+                    $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
+
+                    $this->purgeRelatedDocuments($collection, $document->getId());
+                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                }
+
+                if (count($affectedDocuments) < 100) {
+                    break;
+                } else {
+                    $lastDocument = end($affectedDocuments);
+                }
+            }
+
+            // Mass delete using adapter with query
+            return $this->adapter->deleteDocuments($collection->getId(), $queries);
+        });
+
+        return $deleted;
+    }
+
+    /**
      * Cleans the all the collection's documents from the cache
      * And the all related cached documents.
      *

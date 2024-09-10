@@ -15608,4 +15608,149 @@ abstract class Base extends TestCase
             $database->delete('hellodb');
         });
     }
+
+    public function propegateBulkDocuments(bool $documentSecurity = false): void
+    {
+        for ($i = 0; $i < 10; $i++) {
+            var_dump(new Document(
+                array_merge([
+                    '$id' => 'doc' . $i,
+                    'text' => 'value' . $i,
+                    'integer' => $i
+                ], $documentSecurity ? [
+                    '$permissions' => [
+                        Permission::delete(Role::any()),
+                        Permission::create(Role::any()),
+                        Permission::read(Role::any()),
+                    ],
+                ] : [])
+            ));
+
+            static::getDatabase()->createDocument('bulk_delete', new Document(
+                array_merge([
+                    '$id' => 'doc' . $i,
+                    'text' => 'value' . $i,
+                    'integer' => $i
+                ], $documentSecurity ? [
+                    '$permissions' => [
+                        Permission::create(Role::any()),
+                        Permission::read(Role::any()),
+                    ],
+                ] : [])
+            ));
+        }
+    }
+
+    public function testDeleteBulkDocuments(): void
+    {
+        static::getDatabase()->createCollection(
+            'bulk_delete',
+            attributes: [
+                new Document([
+                    '$id' => 'text',
+                    'type' => Database::VAR_STRING,
+                    'size' => 100,
+                    'required' => true,
+                ]),
+                new Document([
+                    '$id' => 'integer',
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 10,
+                    'required' => true,
+                ])
+            ],
+            documentSecurity: false,
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::delete(Role::any())
+            ]
+        );
+
+        $this->propegateBulkDocuments();
+
+        $docs = static::getDatabase()->find('bulk_delete');
+        $this->assertCount(10, $docs);
+
+        // TEST: Bulk Delete All Documents
+        static::getDatabase()->deleteDocuments('bulk_delete');
+
+        $docs = static::getDatabase()->find('bulk_delete');
+        $this->assertCount(0, $docs);
+
+        // TEST: Bulk delete documents with queries.
+        $this->propegateBulkDocuments();
+
+        static::getDatabase()->deleteDocuments('bulk_delete', [
+            Query::greaterThanEqual('integer', 5)
+        ]);
+
+        $docs = static::getDatabase()->find('bulk_delete');
+        $this->assertCount(5, $docs);
+
+        // TEST (FAIL): Bulk delete all documents with invalid collection permission
+        static::getDatabase()->updateCollection('bulk_delete', [], false);
+        try {
+            static::getDatabase()->deleteDocuments('bulk_delete');
+            $this->fail('Bulk deleted documents with invalid collection permission');
+        } catch (\Utopia\Database\Exception\Authorization) {
+        }
+
+        static::getDatabase()->updateCollection('bulk_delete', [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::delete(Role::any())
+        ], false);
+        static::getDatabase()->deleteDocuments('bulk_delete');
+        $this->assertEquals(0, count($this->getDatabase()->find('bulk_delete')));
+
+        // TEST (FAIL): Bulk delete all documents with invalid document permissions
+        // Authorization::setRole(Role::any()->toString());
+        static::getDatabase()->updateCollection('bulk_delete', [
+            Permission::create(Role::any()),
+        ], true);
+        $this->propegateBulkDocuments(true);
+
+        try {
+            static::getDatabase()->deleteDocuments('bulk_delete');
+            $this->fail('Bulk deleted documents with invalid document permission');
+        } catch (\Utopia\Database\Exception\Authorization) {
+        }
+
+        static::getDatabase()->updateCollection('bulk_delete', [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::delete(Role::any())
+        ], false);
+        static::getDatabase()->deleteDocuments('bulk_delete');
+        $this->assertEquals(0, count($this->getDatabase()->find('bulk_delete')));
+
+        // Teardown
+        static::getDatabase()->deleteCollection('bulk_delete');
+    }
+
+
+    public function testDeleteBulkDocumentsRelationships(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('bulk_delete_r_1');
+        static::getDatabase()->createCollection('bulk_delete_r_2');
+
+        // ONE_TO_ONE
+        static::getDatabase()->createRelationship(
+            collection: 'bulk_delete_r_1',
+            relatedCollection: 'bulk_delete_r_2',
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        // Restrict
+
+        // NULL
+
+        // Cascade
+    }
 }

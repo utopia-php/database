@@ -910,6 +910,19 @@ class Mongo extends Adapter
     }
 
     /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<\Utopia\Database\Query> $queries
+     *
+     * @return bool
+     */
+    public function deleteDocuments(string $collection, array $queries): bool
+    {
+        throw new \Exception('Not Implemented');
+    }
+
+    /**
      * Update Attribute.
      * @param string $collection
      * @param string $id

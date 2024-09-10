@@ -1558,6 +1558,61 @@ class Postgres extends SQL
         return $deleted;
     }
 
+
+    /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<\Utopia\Database\Query> $queries
+     *
+     * @return bool
+     */
+    public function deleteDocuments(string $collection, array $queries): bool
+    {
+        $name = $this->filter($collection);
+        $where = [];
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
+        $conditions = $this->getSQLConditions($queries);
+        if(!empty($conditions)) {
+            $where[] = $conditions;
+        }
+
+        if ($this->sharedTables) {
+            $where[] = "table_main._tenant = :_tenant";
+        }
+
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $selections = $this->getAttributeSelections($queries);
+
+        $sql = "
+            SELECT {$this->getAttributeProjection($selections, 'table_main')}
+            FROM {$this->getSQLTable($name)} as table_main
+            {$sqlWhere}
+        ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($queries as $query) {
+            $this->bindConditionValue($stmt, $query);
+        }
+        if ($this->sharedTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
+        }
+
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+        }
+
+        return true;
+    }
+
     /**
      * Find Documents
      *

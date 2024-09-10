@@ -379,6 +379,7 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
+        $newKey = empty($newKey) ? null : $this->filter($newKey);
         $type = $this->getSQLType($type, $size, $signed, $array);
 
         if ($type == 'TIMESTAMP(3)') {

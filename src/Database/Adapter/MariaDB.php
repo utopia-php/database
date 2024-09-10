@@ -1664,9 +1664,7 @@ class MariaDB extends SQL
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
-            USE {$this->database};
-            DELETE {$this->getAttributeProjection($selections, 'table_main')}
-            FROM {$this->getSQLTable($name)} as table_main
+            DELETE FROM {$this->getSQLTable($name)}
             {$sqlWhere};
         ";
 

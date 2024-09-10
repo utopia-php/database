@@ -321,7 +321,7 @@ class MariaDB extends SQL
         $type = $this->getSQLType($type, $size, $signed, $array);
 
         if (!empty($newKey)) {
-            $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` {$newKey} {$type};";
+            $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` `{$newKey}` {$type};";
         } else {
             $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
         }

@@ -5906,6 +5906,18 @@ abstract class Base extends TestCase
         } catch (\Exception $e) {
             $this->assertInstanceOf(StructureException::class, $e);
         }
+
+        // Check new key filtering
+        static::getDatabase()->updateAttribute(
+            collection: 'rename_test',
+            id: 'renamed',
+            newKey: 'renamed-test',
+        );
+
+        $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
+
+        $this->assertEquals('string', $doc->getAttribute('renamed-test'));
+        $this->assertArrayNotHasKey('renamed', $doc->getAttributes());
     }
 
     public function createRandomString(int $length = 10): string

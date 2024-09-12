@@ -11,7 +11,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -864,7 +863,7 @@ class Postgres extends SQL
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-            if($sqlTenant) {
+            if ($sqlTenant) {
                 $stmtPermissions->bindValue(':_tenant', $this->tenant);
             }
         }
@@ -880,7 +879,7 @@ class Postgres extends SQL
         } catch (Throwable $e) {
             switch ($e->getCode()) {
                 case 23505:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
                 default:
                     throw $e;
             }
@@ -924,12 +923,12 @@ class Postgres extends SQL
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                    if(!empty($document->getInternalId())) {
+                    if (!empty($document->getInternalId())) {
                         $internalIds[$document->getId()] = true;
                         $attributes['_id'] = $document->getInternalId();
                     }
 
-                    if($this->sharedTables) {
+                    if ($this->sharedTables) {
                         $attributes['_tenant'] = $this->tenant;
                     }
 
@@ -984,8 +983,6 @@ class Postgres extends SQL
                     $stmtPermissions?->execute();
                 }
             }
-
-            return $documents;
         } catch (PDOException $e) {
             throw match ($e->getCode()) {
                 1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
@@ -994,7 +991,7 @@ class Postgres extends SQL
         }
 
         foreach ($documents as $document) {
-            if(!isset($internalIds[$document->getId()])) {
+            if (!isset($internalIds[$document->getId()])) {
                 $document['$internalId'] = $this->getDocument(
                     $collection,
                     $document->getId(),
@@ -1271,7 +1268,7 @@ class Postgres extends SQL
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
 
-                    if($this->sharedTables) {
+                    if ($this->sharedTables) {
                         $attributes['_tenant'] = $this->tenant;
                     }
 
@@ -1463,7 +1460,7 @@ class Postgres extends SQL
                         $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
 
-                    if($this->sharedTables) {
+                    if ($this->sharedTables) {
                         $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1697,7 +1694,7 @@ class Postgres extends SQL
         }
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -1823,7 +1820,7 @@ class Postgres extends SQL
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -2061,7 +2058,7 @@ class Postgres extends SQL
      */
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
-        if($array === true) {
+        if ($array === true) {
             return 'JSONB';
         }
 
@@ -2234,8 +2231,8 @@ class Postgres extends SQL
 			";
         });
     }
-	
-	/**
+
+    /**
      * @return string
      */
     public function getLikeOperator(): string

@@ -132,29 +132,29 @@ class Filter extends Base
             }
         }
 
-        if($attributeSchema['type'] === 'relationship') {
+        if ($attributeSchema['type'] === 'relationship') {
             /**
              * We can not disable relationship query since we have logic that use it,
              * so instead we validate against the relation type
              */
             $options = $attributeSchema['options'];
 
-            if($options['relationType'] === Database::RELATION_ONE_TO_ONE && $options['twoWay'] === false && $options['side'] === Database::RELATION_SIDE_CHILD) {
+            if ($options['relationType'] === Database::RELATION_ONE_TO_ONE && $options['twoWay'] === false && $options['side'] === Database::RELATION_SIDE_CHILD) {
                 $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
 
-            if($options['relationType'] === Database::RELATION_ONE_TO_MANY && $options['side'] === Database::RELATION_SIDE_PARENT) {
+            if ($options['relationType'] === Database::RELATION_ONE_TO_MANY && $options['side'] === Database::RELATION_SIDE_PARENT) {
                 $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
 
-            if($options['relationType'] === Database::RELATION_MANY_TO_ONE && $options['side'] === Database::RELATION_SIDE_CHILD) {
+            if ($options['relationType'] === Database::RELATION_MANY_TO_ONE && $options['side'] === Database::RELATION_SIDE_CHILD) {
                 $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
 
-            if($options['relationType'] === Database::RELATION_MANY_TO_MANY) {
+            if ($options['relationType'] === Database::RELATION_MANY_TO_MANY) {
                 $this->message = 'Cannot query on virtual relationship attribute';
                 return false;
             }
@@ -162,7 +162,7 @@ class Filter extends Base
 
         $array = $attributeSchema['array'] ?? false;
 
-        if(
+        if (
             !$array &&
             $method === Query::TYPE_CONTAINS &&
             $attributeSchema['type'] !==  Database::VAR_STRING
@@ -171,7 +171,7 @@ class Filter extends Base
             return false;
         }
 
-        if(
+        if (
             $array &&
             !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
         ) {
@@ -254,12 +254,12 @@ class Filter extends Base
             case Query::TYPE_AND:
                 $filters = Query::groupByType($value->getValues())['filters'];
 
-                if(count($value->getValues()) !== count($filters)) {
+                if (count($value->getValues()) !== count($filters)) {
                     $this->message = \ucfirst($method) . ' queries can only contain filter queries';
                     return false;
                 }
 
-                if(count($filters) < 2) {
+                if (count($filters) < 2) {
                     $this->message = \ucfirst($method) . ' queries require at least two queries';
                     return false;
                 }

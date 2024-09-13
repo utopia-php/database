@@ -34,6 +34,10 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
+                if ($this->getPDO()->inTransaction()) {
+                    $this->getPDO()->rollBack();
+                }
+
                 $result = $this->getPDO()->beginTransaction();
             } else {
                 $result = true;
@@ -66,12 +70,18 @@ abstract class SQL extends Adapter
         try {
             $result = $this->getPDO()->commit();
         } catch (PDOException $e) {
+            if ($this->getPDO()->inTransaction()) {
+                $this->getPDO()->rollBack();
+            }
             throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
         } finally {
             $this->inTransaction--;
         }
 
         if (!$result) {
+            if ($this->getPDO()->inTransaction()) {
+                $this->getPDO()->rollBack();
+            }
             throw new DatabaseException('Failed to commit transaction');
         }
 

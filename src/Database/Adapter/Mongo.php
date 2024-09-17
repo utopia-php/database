@@ -919,7 +919,32 @@ class Mongo extends Adapter
      */
     public function deleteDocuments(string $collection, array $queries): bool
     {
-        throw new \Exception('Not Implemented');
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
+        $filters = $this->buildFilters($queries);
+
+        if ($this->sharedTables) {
+            $filters['_tenant'] = (string)$this->getTenant();
+        }
+
+        $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
+        $filters = $this->timeFilter($filters);
+
+        $options = [];
+
+        try {
+            $res = $this->client->delete(
+                collection: $name, 
+                filters: $filters, 
+                options: $options,
+                limit: 0
+            );
+        } catch (MongoException $e) {
+            $this->processException($e);
+        }
+
+        return true;
     }
 
     /**

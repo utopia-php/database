@@ -4951,6 +4951,7 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
+     * @param int $batchSize
      *
      * @return bool
      *
@@ -4958,22 +4959,23 @@ class Database
      * @throws DatabaseException
      * @throws RestrictedException
      */
-    public function deleteDocuments(string $collection, array $queries = []): bool
+    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = 100): bool
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
+        $queries = Query::groupByType($queries)['filters'];
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $deleted = $this->withTransaction(function () use ($collection, $queries) {
+        $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize) {
             $lastDocument = null;
             while (true) {
                 $affectedDocuments = $this->find($collection->getId(), array_merge(
                     empty($lastDocument) ? [
-                        Query::limit(100),
+                        Query::limit($batchSize),
                     ] : [
-                        Query::limit(100),
+                        Query::limit($batchSize),
                         Query::cursorAfter($lastDocument),
                     ],
                     $queries,

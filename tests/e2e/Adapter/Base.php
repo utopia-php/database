@@ -15612,20 +15612,6 @@ abstract class Base extends TestCase
     public function propegateBulkDocuments(bool $documentSecurity = false): void
     {
         for ($i = 0; $i < 10; $i++) {
-            var_dump(new Document(
-                array_merge([
-                    '$id' => 'doc' . $i,
-                    'text' => 'value' . $i,
-                    'integer' => $i
-                ], $documentSecurity ? [
-                    '$permissions' => [
-                        Permission::delete(Role::any()),
-                        Permission::create(Role::any()),
-                        Permission::read(Role::any()),
-                    ],
-                ] : [])
-            ));
-
             static::getDatabase()->createDocument('bulk_delete', new Document(
                 array_merge([
                     '$id' => 'doc' . $i,

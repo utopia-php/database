@@ -1585,11 +1585,8 @@ class Postgres extends SQL
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        $selections = $this->getAttributeSelections($queries);
-
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, 'table_main')}
-            FROM {$this->getSQLTable($name)} as table_main
+            DELETE FROM {$this->getSQLTable($name)}
             {$sqlWhere}
         ";
 

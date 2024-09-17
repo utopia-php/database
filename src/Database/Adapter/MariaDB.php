@@ -1661,8 +1661,6 @@ class MariaDB extends SQL
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        $selections = $this->getAttributeSelections($queries);
-
         $sql = "
             DELETE FROM {$this->getSQLTable($name)}
             {$sqlWhere};

@@ -3,7 +3,6 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
-
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
@@ -291,7 +290,7 @@ class Mongo extends Adapter
             } else {
                 throw new DatabaseException('No size found');
             }
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
     }
@@ -935,8 +934,8 @@ class Mongo extends Adapter
 
         try {
             $res = $this->client->delete(
-                collection: $name, 
-                filters: $filters, 
+                collection: $name,
+                filters: $filters,
                 options: $options,
                 limit: 0
             );
@@ -1406,7 +1405,7 @@ class Mongo extends Adapter
         $queries = Query::groupByType($queries)['filters'];
         foreach ($queries as $query) {
             /* @var $query Query */
-            if($query->isNested()) {
+            if ($query->isNested()) {
                 $operator = $this->getQueryOperator($query->getMethod());
                 $filters[$separator][] = $this->buildFilters($query->getValues(), $operator);
             } else {
@@ -1460,7 +1459,7 @@ class Mongo extends Adapter
         } elseif ($operator == '$ne' && \is_array($value)) {
             $filter[$attribute]['$nin'] = $value;
         } elseif ($operator == '$in') {
-            if($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
+            if ($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
                 $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
             } else {
                 $filter[$attribute]['$in'] = $query->getValues();

@@ -841,7 +841,7 @@ class Postgres extends SQL
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-            if($sqlTenant) {
+            if ($sqlTenant) {
                 $stmtPermissions->bindValue(':_tenant', $this->tenant);
             }
         }
@@ -900,7 +900,7 @@ class Postgres extends SQL
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                    if($this->sharedTables) {
+                    if ($this->sharedTables) {
                         $attributes['_tenant'] = $this->tenant;
                     }
 
@@ -1232,7 +1232,7 @@ class Postgres extends SQL
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = json_encode($document->getPermissions());
 
-                    if($this->sharedTables) {
+                    if ($this->sharedTables) {
                         $attributes['_tenant'] = $this->tenant;
                     }
 
@@ -1424,7 +1424,7 @@ class Postgres extends SQL
                         $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                     }
 
-                    if($this->sharedTables) {
+                    if ($this->sharedTables) {
                         $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
                     }
 
@@ -1575,7 +1575,7 @@ class Postgres extends SQL
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -1708,7 +1708,7 @@ class Postgres extends SQL
         }
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -1836,7 +1836,7 @@ class Postgres extends SQL
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -2076,7 +2076,7 @@ class Postgres extends SQL
      */
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
-        if($array === true) {
+        if ($array === true) {
             return 'JSONB';
         }
 

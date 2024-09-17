@@ -4331,7 +4331,7 @@ class Database
         /* @var $document Document */
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
-        if($document->isEmpty()) {
+        if ($document->isEmpty()) {
             return false;
         }
 
@@ -4426,7 +4426,7 @@ class Database
         /* @var $document Document */
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
-        if($document->isEmpty()) {
+        if ($document->isEmpty()) {
             return false;
         }
 
@@ -4521,7 +4521,7 @@ class Database
                 $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
-            if($document->isEmpty()) {
+            if ($document->isEmpty()) {
                 return false;
             }
 
@@ -5190,7 +5190,7 @@ class Database
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        foreach ($results as  &$node) {
+        foreach ($results as &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }

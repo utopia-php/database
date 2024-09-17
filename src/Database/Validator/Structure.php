@@ -8,12 +8,12 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
-use Utopia\Validator;
-use Utopia\Validator\Boolean;
-use Utopia\Validator\FloatValidator;
-use Utopia\Validator\Integer;
-use Utopia\Validator\Range;
-use Utopia\Validator\Text;
+use Utopia\Http\Validator;
+use Utopia\Http\Validator\Boolean;
+use Utopia\Http\Validator\FloatValidator;
+use Utopia\Http\Validator\Integer;
+use Utopia\Http\Validator\Range;
+use Utopia\Http\Validator\Text;
 
 class Structure extends Validator
 {
@@ -126,7 +126,7 @@ class Structure extends Validator
      * Stores a callback and required params to create Validator
      *
      * @param string $name
-     * @param Closure $callback Callback that accepts $params in order and returns \Utopia\Validator
+     * @param Closure $callback Callback that accepts $params in order and returns \Utopia\Http\Validator
      * @param string $type Primitive data type for validation
      */
     public static function addFormat(string $name, Closure $callback, string $type): void

@@ -28,7 +28,7 @@ class SQLiteTest extends Base
     /**
      * @return Database
      */
-    public static function getDatabase(): Database
+    public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -51,9 +51,9 @@ class SQLiteTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new SQLite($pdo), $cache);
-        $database
-            ->setDatabase('utopiaTests')
-            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
+        $database->setAuthorization(self::$authorization);
+        $database->setDatabase('utopiaTests');
+        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         if ($database->exists()) {
             $database->delete();

@@ -13,7 +13,6 @@ use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 class Postgres extends SQL
 {
@@ -351,6 +350,7 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
+        $newKey = empty($newKey) ? null : $this->filter($newKey);
         $type = $this->getSQLType($type, $size, $signed, $array);
 
         if ($type == 'TIMESTAMP(3)') {
@@ -998,8 +998,6 @@ class Postgres extends SQL
             $sql .= ' AND _tenant = :_tenant';
         }
 
-        $sql .= ' FOR UPDATE';
-
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
         /**
@@ -1632,7 +1630,7 @@ class Postgres extends SQL
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $orders = [];
 
@@ -1716,7 +1714,7 @@ class Postgres extends SQL
             $where[] = "table_main._tenant = :_tenant";
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -1829,7 +1827,7 @@ class Postgres extends SQL
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
@@ -1844,7 +1842,7 @@ class Postgres extends SQL
             $where[] = "table_main._tenant = :_tenant";
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -1895,7 +1893,7 @@ class Postgres extends SQL
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
@@ -1909,7 +1907,7 @@ class Postgres extends SQL
             $where[] = "table_main._tenant = :_tenant";
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 

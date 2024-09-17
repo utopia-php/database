@@ -993,7 +993,7 @@ abstract class Base extends TestCase
                 Query::notEqual('longtext', 'appwrite'),
             ]);
             $this->fail('Failed to throw exception');
-        } catch(TimeoutException $ex) {
+        } catch (TimeoutException $ex) {
             static::getDatabase()->clearTimeout();
             static::getDatabase()->deleteCollection('global-timeouts');
         }
@@ -1843,7 +1843,7 @@ abstract class Base extends TestCase
                 'empty' => [],
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertTrue($e instanceof StructureException);
             $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
         }
@@ -1862,7 +1862,7 @@ abstract class Base extends TestCase
                 'empty' => [],
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertTrue($e instanceof StructureException);
             $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
         }
@@ -2253,7 +2253,7 @@ abstract class Base extends TestCase
 
     public function testEmptyTenant(): void
     {
-        if(static::getDatabase()->getAdapter()->getSharedTables()) {
+        if (static::getDatabase()->getAdapter()->getSharedTables()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2432,7 +2432,7 @@ abstract class Base extends TestCase
                 return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
             });
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertTrue($e instanceof ConflictException);
             $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
         }
@@ -2573,7 +2573,7 @@ abstract class Base extends TestCase
         try {
             $database->createDocument($collection, new Document([]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
         }
 
@@ -2593,7 +2593,7 @@ abstract class Base extends TestCase
                 'short' => ['More than 5 size'],
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid document structure: Attribute "short[\'0\']" has invalid type. Value must be a valid string and no longer than 5 chars', $e->getMessage());
         }
 
@@ -2602,7 +2602,7 @@ abstract class Base extends TestCase
                 'names' => ['Joe', 100],
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 255 chars', $e->getMessage());
         }
 
@@ -2611,7 +2611,7 @@ abstract class Base extends TestCase
                 'age' => 1.5,
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
         }
 
@@ -2620,7 +2620,7 @@ abstract class Base extends TestCase
                 'age' => -100,
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
         }
 
@@ -2649,7 +2649,7 @@ abstract class Base extends TestCase
         try {
             $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
                 $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
             } else {
@@ -2660,7 +2660,7 @@ abstract class Base extends TestCase
         try {
             $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
         }
 
@@ -2681,7 +2681,7 @@ abstract class Base extends TestCase
             try {
                 $database->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
                 $this->fail('Failed to throw exception');
-            } catch(Throwable $e) {
+            } catch (Throwable $e) {
                 $this->assertEquals('Index length is longer than the maximum: 768', $e->getMessage());
             }
         }
@@ -2692,7 +2692,7 @@ abstract class Base extends TestCase
         try {
             $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
         }
 
@@ -2705,7 +2705,7 @@ abstract class Base extends TestCase
                     Query::equal('names', ['Joe']),
                 ]);
                 $this->fail('Failed to throw exception');
-            } catch(Throwable $e) {
+            } catch (Throwable $e) {
                 $this->assertEquals('Invalid query: Cannot query equal on attribute "names" because it is an array.', $e->getMessage());
             }
 
@@ -2714,7 +2714,7 @@ abstract class Base extends TestCase
                     Query::contains('age', [10])
                 ]);
                 $this->fail('Failed to throw exception');
-            } catch(Throwable $e) {
+            } catch (Throwable $e) {
                 $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array or string.', $e->getMessage());
             }
 
@@ -3150,7 +3150,7 @@ abstract class Base extends TestCase
                 Query::contains('price', [10.5]),
             ]);
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid query: Cannot query contains on attribute "price" because it is not an array or string.', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
@@ -4057,7 +4057,7 @@ abstract class Base extends TestCase
                 ])
             ]);
             $this->fail('Failed to throw exception');
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             $this->assertEquals('Invalid query: Or queries require at least two queries', $e->getMessage());
         }
     }
@@ -4117,7 +4117,7 @@ abstract class Base extends TestCase
                 ])
             ]);
             $this->fail('Failed to throw exception');
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             $this->assertEquals('Invalid query: And queries require at least two queries', $e->getMessage());
         }
     }
@@ -4965,7 +4965,7 @@ abstract class Base extends TestCase
                 'name' => 'Frozen', // Unknown attribute 'name' after relation attribute
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             $this->assertInstanceOf(StructureException::class, $e);
         }
     }
@@ -5040,7 +5040,7 @@ abstract class Base extends TestCase
         try {
             static::getDatabase()->updateDocument('level1', $level1->getId(), $level1->setAttribute('name', 'haha'));
             $this->fail('Failed to throw exception');
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             $this->assertInstanceOf(AuthorizationException::class, $e);
         }
         $level1->setAttribute('name', 'Level 1');
@@ -15517,98 +15517,6 @@ abstract class Base extends TestCase
         $this->assertTrue($result->isEmpty());
     }
 
-    public function testEvents(): void
-    {
-        Authorization::skip(function () {
-            $database = static::getDatabase();
-
-            $events = [
-                Database::EVENT_DATABASE_CREATE,
-                Database::EVENT_DATABASE_LIST,
-                Database::EVENT_COLLECTION_CREATE,
-                Database::EVENT_COLLECTION_LIST,
-                Database::EVENT_COLLECTION_READ,
-                Database::EVENT_ATTRIBUTE_CREATE,
-                Database::EVENT_ATTRIBUTE_UPDATE,
-                Database::EVENT_INDEX_CREATE,
-                Database::EVENT_DOCUMENT_CREATE,
-                Database::EVENT_DOCUMENT_UPDATE,
-                Database::EVENT_DOCUMENT_READ,
-                Database::EVENT_DOCUMENT_FIND,
-                Database::EVENT_DOCUMENT_FIND,
-                Database::EVENT_DOCUMENT_COUNT,
-                Database::EVENT_DOCUMENT_SUM,
-                Database::EVENT_DOCUMENT_INCREASE,
-                Database::EVENT_DOCUMENT_DECREASE,
-                Database::EVENT_INDEX_DELETE,
-                Database::EVENT_DOCUMENT_DELETE,
-                Database::EVENT_ATTRIBUTE_DELETE,
-                Database::EVENT_COLLECTION_DELETE,
-                Database::EVENT_DATABASE_DELETE,
-            ];
-
-            $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
-                $shifted = array_shift($events);
-
-                $this->assertEquals($shifted, $event);
-            });
-
-            if ($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
-                $database->setDatabase('hellodb');
-                $database->create();
-            } else {
-                array_shift($events);
-            }
-
-            $database->list();
-
-            $database->setDatabase($this->testDatabase);
-
-            $collectionId = ID::unique();
-            $database->createCollection($collectionId);
-            $database->listCollections();
-            $database->getCollection($collectionId);
-            $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
-            $database->updateAttributeRequired($collectionId, 'attr1', true);
-            $indexId1 = 'index2_' . uniqid();
-            $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
-
-            $document = $database->createDocument($collectionId, new Document([
-                '$id' => 'doc1',
-                'attr1' => 10,
-                '$permissions' => [
-                    Permission::delete(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::read(Role::any()),
-                ],
-            ]));
-
-            $executed = false;
-            $database->on(Database::EVENT_ALL, 'should-not-execute', function ($event, $data) use (&$executed) {
-                $executed = true;
-            });
-
-            $database->silent(function () use ($database, $collectionId, $document) {
-                $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
-                $database->getDocument($collectionId, 'doc1');
-                $database->find($collectionId);
-                $database->findOne($collectionId);
-                $database->count($collectionId);
-                $database->sum($collectionId, 'attr1');
-                $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-                $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-            }, ['should-not-execute']);
-
-            $this->assertFalse($executed);
-
-            $database->deleteIndex($collectionId, $indexId1);
-            $database->deleteDocument($collectionId, 'doc1');
-            $database->deleteAttribute($collectionId, 'attr1');
-            $database->deleteCollection($collectionId);
-            $database->delete('hellodb');
-        });
-    }
-
     public function propegateBulkDocuments(bool $documentSecurity = false): void
     {
         for ($i = 0; $i < 10; $i++) {
@@ -15738,5 +15646,97 @@ abstract class Base extends TestCase
         // NULL
 
         // Cascade
+    }
+
+    public function testEvents(): void
+    {
+        Authorization::skip(function () {
+            $database = static::getDatabase();
+
+            $events = [
+                Database::EVENT_DATABASE_CREATE,
+                Database::EVENT_DATABASE_LIST,
+                Database::EVENT_COLLECTION_CREATE,
+                Database::EVENT_COLLECTION_LIST,
+                Database::EVENT_COLLECTION_READ,
+                Database::EVENT_ATTRIBUTE_CREATE,
+                Database::EVENT_ATTRIBUTE_UPDATE,
+                Database::EVENT_INDEX_CREATE,
+                Database::EVENT_DOCUMENT_CREATE,
+                Database::EVENT_DOCUMENT_UPDATE,
+                Database::EVENT_DOCUMENT_READ,
+                Database::EVENT_DOCUMENT_FIND,
+                Database::EVENT_DOCUMENT_FIND,
+                Database::EVENT_DOCUMENT_COUNT,
+                Database::EVENT_DOCUMENT_SUM,
+                Database::EVENT_DOCUMENT_INCREASE,
+                Database::EVENT_DOCUMENT_DECREASE,
+                Database::EVENT_INDEX_DELETE,
+                Database::EVENT_DOCUMENT_DELETE,
+                Database::EVENT_ATTRIBUTE_DELETE,
+                Database::EVENT_COLLECTION_DELETE,
+                Database::EVENT_DATABASE_DELETE,
+            ];
+
+            $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
+                $shifted = array_shift($events);
+
+                $this->assertEquals($shifted, $event);
+            });
+
+            if ($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
+                $database->setDatabase('hellodb');
+                $database->create();
+            } else {
+                array_shift($events);
+            }
+
+            $database->list();
+
+            $database->setDatabase($this->testDatabase);
+
+            $collectionId = ID::unique();
+            $database->createCollection($collectionId);
+            $database->listCollections();
+            $database->getCollection($collectionId);
+            $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
+            $database->updateAttributeRequired($collectionId, 'attr1', true);
+            $indexId1 = 'index2_' . uniqid();
+            $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
+
+            $document = $database->createDocument($collectionId, new Document([
+                '$id' => 'doc1',
+                'attr1' => 10,
+                '$permissions' => [
+                    Permission::delete(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+            ]));
+
+            $executed = false;
+            $database->on(Database::EVENT_ALL, 'should-not-execute', function ($event, $data) use (&$executed) {
+                $executed = true;
+            });
+
+            $database->silent(function () use ($database, $collectionId, $document) {
+                $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
+                $database->getDocument($collectionId, 'doc1');
+                $database->find($collectionId);
+                $database->findOne($collectionId);
+                $database->count($collectionId);
+                $database->sum($collectionId, 'attr1');
+                $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+                $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+            }, ['should-not-execute']);
+
+            $this->assertFalse($executed);
+
+            $database->deleteIndex($collectionId, $indexId1);
+            $database->deleteDocument($collectionId, 'doc1');
+            $database->deleteAttribute($collectionId, 'attr1');
+            $database->deleteCollection($collectionId);
+            $database->delete('hellodb');
+        });
     }
 }

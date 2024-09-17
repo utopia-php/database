@@ -5012,15 +5012,14 @@ class Database
                 }
 
                 foreach ($affectedDocuments as $document) {
-                    $validator = new Authorization(self::PERMISSION_DELETE);
-
                     if ($collection->getId() !== self::METADATA) {
                         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-                        if (!$validator->isValid([
+                        $isValid = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
                             ...$collection->getDelete(),
                             ...($documentSecurity ? $document->getDelete() : [])
-                        ])) {
-                            throw new AuthorizationException($validator->getDescription());
+                        ]));
+                        if (!$isValid) {
+                            throw new AuthorizationException($this->authorization->getDescription());
                         }
                     }
 

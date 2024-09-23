@@ -295,7 +295,7 @@ class Mongo extends Adapter
         }
     }
 
-        /**
+    /**
      * Get Collection Size
      * @param string $collection
      * @return int

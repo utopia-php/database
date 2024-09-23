@@ -669,7 +669,7 @@ abstract class Adapter
 
     /**
      * Get Collection Size of the raw data
-     * 
+     *
      * @param string $collection
      * @return int
      * @throws DatabaseException

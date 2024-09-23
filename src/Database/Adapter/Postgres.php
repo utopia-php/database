@@ -226,7 +226,7 @@ class Postgres extends SQL
         return  $size;
     }
 
-        /**
+    /**
      * Get Collection Size
      * @param string $collection
      * @return int

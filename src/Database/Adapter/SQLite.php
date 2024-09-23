@@ -227,7 +227,7 @@ class SQLite extends MariaDB
         return $size;
     }
 
-        /**
+    /**
      * Get Collection Size
      * @param string $collection
      * @return int

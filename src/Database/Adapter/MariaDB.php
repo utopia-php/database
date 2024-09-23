@@ -248,7 +248,7 @@ class MariaDB extends SQL
 
     /**
      * Get Collection Size of the raw data
-     * 
+     *
      * @param string $collection
      * @return int
      * @throws DatabaseException

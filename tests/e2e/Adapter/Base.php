@@ -1154,13 +1154,13 @@ abstract class Base extends TestCase
             ]));
         }
 
-        $size2 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+        $size2 = static::getDatabase()->getSizeOfCollectionOnDisk('fullTextSizeTest');
 
         $this->assertGreaterThan($size1, $size2);
 
         static::getDatabase()->createIndex('fullTextSizeTest', 'fulltext_index', Database::INDEX_FULLTEXT, ['string1']);
 
-        $size3 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+        $size3 = static::getDatabase()->getSizeOfCollectionOnDisk('fullTextSizeTest');
 
         $this->assertGreaterThan($size2, $size3);
     }

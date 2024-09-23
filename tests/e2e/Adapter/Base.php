@@ -1076,6 +1076,39 @@ abstract class Base extends TestCase
         $this->assertGreaterThan($size1, $size2);
     }
 
+    public function testSizeCollectionData(): void
+    {
+        $this->getDatabase()->createCollection('sizeTest1');
+        $this->getDatabase()->createCollection('sizeTest2');
+
+        $size1 = $this->getDatabase()->getSizeOfCollectionData('sizeTest1');
+        $size2 = $this->getDatabase()->getSizeOfCollectionData('sizeTest2');
+        $sizeDifference = abs($size1 - $size2);
+        // Size of an empty collection returns either 172032 or 167936 bytes randomly
+        // Therefore asserting with a tolerance of 5000 bytes
+        $byteDifference = 5000;
+        $this->assertLessThan($byteDifference, $sizeDifference);
+
+        $this->getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 20000, true);
+        $this->getDatabase()->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);
+        $this->getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
+        $this->getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+
+        $loopCount = 40;
+
+        for ($i = 0; $i < $loopCount; $i++) {
+            $this->getDatabase()->createDocument('sizeTest2', new Document([
+                'string1' => 'string1' . $i,
+                'string2' => 'string2' . $i,
+                'string3' => 'string3' . $i,
+            ]));
+        }
+
+        $size2 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
+
+        $this->assertGreaterThan($size1, $size2);
+    }
+
     public function testSizeFullText(): void
     {
         // SQLite does not support fulltext indexes

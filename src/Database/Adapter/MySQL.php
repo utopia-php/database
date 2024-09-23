@@ -77,6 +77,17 @@ class MySQL extends MariaDB
     }
 
     /**
+     * Get Collection Size on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
      * @return bool
      */
     public function castIndexArray(): bool

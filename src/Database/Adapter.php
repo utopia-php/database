@@ -638,6 +638,15 @@ abstract class Adapter
     abstract public function getSizeOfCollection(string $collection): int;
 
     /**
+     * Get Collection Size on the disk
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
+
+    /**
      * Get max STRING limit
      *
      * @return int

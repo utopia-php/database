@@ -228,6 +228,17 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Get Collection Size on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
      * Delete Collection
      * @param string $id
      * @return bool

@@ -1079,13 +1079,9 @@ abstract class Base extends TestCase
             for ($i = 0; $i < $loopCount; $i++) {
                 $this->getDatabase()->deleteDocument('sizeTest2', 'doc' . $i);
             }
-
-            $this->getDatabase()->createDocument('sizeTest2', new Document([
-                'string1' => 'string1',
-                'string2' => 'string2',
-                'string3' => 'string3',
-            ]));
         });
+
+        sleep(5);
 
         static::getDatabase()->analyzeCollection('sizeTest2');
 

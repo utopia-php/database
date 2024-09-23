@@ -206,13 +206,13 @@ class MariaDB extends SQL
     }
 
     /**
-     * Get collection size
+     * Get collection size on disk
      *
      * @param string $collection
      * @return int
      * @throws DatabaseException
      */
-    public function getSizeOfCollection(string $collection): int
+    public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
         $collection = $this->getNamespace() . '_' . $collection;
@@ -253,7 +253,7 @@ class MariaDB extends SQL
      * @return int
      * @throws DatabaseException
      */
-    public function getSizeOfCollectionData(string $collection): int
+    public function getSizeOfCollection(string $collection): int
     {
         $collection = $this->filter($collection);
         $collection = $this->getNamespace() . '_' . $collection;

@@ -267,12 +267,12 @@ class Mongo extends Adapter
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
      * @param string $collection
      * @return int
      * @throws DatabaseException
      */
-    public function getSizeOfCollection(string $collection): int
+    public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $namespace = $this->getNamespace();
         $collection = $this->filter($collection);
@@ -296,12 +296,12 @@ class Mongo extends Adapter
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size of raw data
      * @param string $collection
      * @return int
      * @throws DatabaseException
      */
-    public function getSizeOfCollectionData(string $collection): int
+    public function getSizeOfCollection(string $collection): int
     {
         $namespace = $this->getNamespace();
         $collection = $this->filter($collection);

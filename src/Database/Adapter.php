@@ -665,7 +665,7 @@ abstract class Adapter
      * @return int
      * @throws DatabaseException
      */
-    abstract public function getSizeOfCollection(string $collection): int;
+    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
 
     /**
      * Get Collection Size of the raw data
@@ -674,7 +674,7 @@ abstract class Adapter
      * @return int
      * @throws DatabaseException
      */
-    abstract public function getSizeOfCollectionData(string $collection): int;
+    abstract public function getSizeOfCollection(string $collection): int;
 
     /**
      * Get max STRING limit

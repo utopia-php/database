@@ -1076,13 +1076,13 @@ abstract class Base extends TestCase
         $this->assertGreaterThan($size1, $size2);
     }
 
-    public function testSizeCollectionData(): void
+    public function testSizeCollectionOnDisk(): void
     {
         $this->getDatabase()->createCollection('sizeTest1');
         $this->getDatabase()->createCollection('sizeTest2');
 
-        $size1 = $this->getDatabase()->getSizeOfCollectionData('sizeTest1');
-        $size2 = $this->getDatabase()->getSizeOfCollectionData('sizeTest2');
+        $size1 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTest1');
+        $size2 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTest2');
         $sizeDifference = abs($size1 - $size2);
         // Size of an empty collection returns either 172032 or 167936 bytes randomly
         // Therefore asserting with a tolerance of 5000 bytes

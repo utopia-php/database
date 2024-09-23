@@ -188,13 +188,13 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
      * @param string $collection
      * @return int
      * @throws DatabaseException
      *
      */
-    public function getSizeOfCollection(string $collection): int
+    public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
         $namespace = $this->getNamespace();
@@ -228,13 +228,13 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size of raw data
      * @param string $collection
      * @return int
      * @throws DatabaseException
      *
      */
-    public function getSizeOfCollectionData(string $collection): int
+    public function getSizeOfCollection(string $collection): int
     {
         $collection = $this->filter($collection);
         $namespace = $this->getNamespace();

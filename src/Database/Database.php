@@ -1240,7 +1240,33 @@ class Database
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
+     *
+     * @param string $collection
+     *
+     * @return int
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        return $this->adapter->getSizeOfCollectionOnDisk($collection->getId());
+    }
+
+    /**
+     * Get Collection Size of Data
      *
      * @param string $collection
      *
@@ -1263,32 +1289,6 @@ class Database
         }
 
         return $this->adapter->getSizeOfCollection($collection->getId());
-    }
-
-    /**
-     * Get Collection Size Data
-     *
-     * @param string $collection
-     *
-     * @return int
-     */
-    public function getSizeOfCollectionData(string $collection): int
-    {
-        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
-            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-        }
-
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
-        }
-
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            throw new DatabaseException('Collection not found');
-        }
-
-        return $this->adapter->getSizeOfCollectionData($collection->getId());
     }
 
     /**

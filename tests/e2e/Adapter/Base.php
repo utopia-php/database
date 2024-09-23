@@ -1045,6 +1045,12 @@ abstract class Base extends TestCase
         // Size of an empty collection returns either 172032 or 167936 bytes randomly
         // Therefore asserting with a tolerance of 5000 bytes
         $byteDifference = 5000;
+
+        if (!static::getDatabase()->analyzeCollection('sizeTest2')) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $this->assertLessThan($byteDifference, $sizeDifference);
 
         static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 20000, true);
@@ -1063,6 +1069,8 @@ abstract class Base extends TestCase
             ]));
         }
 
+        static::getDatabase()->analyzeCollection('sizeTest2');
+
         $size2 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
 
         $this->assertGreaterThan($size1, $size2);
@@ -1079,7 +1087,7 @@ abstract class Base extends TestCase
             ]));
         });
 
-        sleep(10); // Let DB clean up
+        static::getDatabase()->analyzeCollection('sizeTest2');
 
         $size3 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
 

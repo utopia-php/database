@@ -936,4 +936,12 @@ abstract class Adapter
         // Clear existing callback
         $this->before($event, 'timeout', null);
     }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     * 
+     * @param string $collection
+     * @return bool
+     */
+    abstract public function analyzeCollection(string $collection): bool;
 }

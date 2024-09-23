@@ -2300,4 +2300,20 @@ class MariaDB extends SQL
 
         throw $e;
     }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     * 
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+
+        $sql = "ANALYZE TABLE {$this->getSQLTable($name)}";
+
+        $stmt = $this->getPDO()->prepare($sql);
+        return $stmt->execute();
+    }
 }

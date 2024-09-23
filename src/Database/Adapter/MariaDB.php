@@ -2303,7 +2303,7 @@ class MariaDB extends SQL
 
     /**
      * Analyze a collection updating it's metadata on the database engine
-     * 
+     *
      * @param string $collection
      * @return bool
      */

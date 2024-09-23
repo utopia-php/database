@@ -52,7 +52,7 @@ class MySQL extends MariaDB
 
         $collectionSize = $this->getPDO()->prepare("
             SELECT SUM(data_length + index_length)  
-            FROM information_schema.TABLES
+            FROM INFORMATION_SCHEMA.TABLES
             WHERE table_name = :name AND
             table_schema = :database
          ");

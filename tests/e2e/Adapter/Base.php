@@ -1052,7 +1052,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
 
-        $loopCount = 40;
+        $loopCount = 100;
 
         for ($i = 0; $i < $loopCount; $i++) {
             static::getDatabase()->createDocument('sizeTest2', new Document([
@@ -1071,6 +1071,12 @@ abstract class Base extends TestCase
             for ($i = 0; $i < $loopCount; $i++) {
                 $this->getDatabase()->deleteDocument('sizeTest2', 'doc' . $i);
             }
+
+            $this->getDatabase()->createDocument('sizeTest2', new Document([
+                'string1' => 'string1',
+                'string2' => 'string2',
+                'string3' => 'string3',
+            ]));
         });
 
         sleep(10); // Let DB clean up

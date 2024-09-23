@@ -258,7 +258,6 @@ class MariaDB extends SQL
         $collection = $this->filter($collection);
         $collection = $this->getNamespace() . '_' . $collection;
         $database = $this->getDatabase();
-        $name = $collection;
         $permissions = $collection . '_perms';
 
         $collectionSize = $this->getPDO()->prepare("

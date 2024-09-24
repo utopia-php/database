@@ -993,7 +993,7 @@ abstract class Base extends TestCase
                 Query::notEqual('longtext', 'appwrite'),
             ]);
             $this->fail('Failed to throw exception');
-        } catch(TimeoutException $ex) {
+        } catch (TimeoutException $ex) {
             static::getDatabase()->clearTimeout();
             static::getDatabase()->deleteCollection('global-timeouts');
         }
@@ -1045,6 +1045,12 @@ abstract class Base extends TestCase
         // Size of an empty collection returns either 172032 or 167936 bytes randomly
         // Therefore asserting with a tolerance of 5000 bytes
         $byteDifference = 5000;
+
+        if (!static::getDatabase()->analyzeCollection('sizeTest2')) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $this->assertLessThan($byteDifference, $sizeDifference);
 
         static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 20000, true);
@@ -1052,17 +1058,67 @@ abstract class Base extends TestCase
         static::getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
 
-        $loopCount = 40;
+        $loopCount = 100;
 
         for ($i = 0; $i < $loopCount; $i++) {
             static::getDatabase()->createDocument('sizeTest2', new Document([
+                '$id' => 'doc' . $i,
+                'string1' => 'string1' . $i . str_repeat('A', 10000),
+                'string2' => 'string2',
+                'string3' => 'string3',
+            ]));
+        }
+
+        static::getDatabase()->analyzeCollection('sizeTest2');
+
+        $size2 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
+
+        $this->assertGreaterThan($size1, $size2);
+
+        Authorization::skip(function () use ($loopCount) {
+            for ($i = 0; $i < $loopCount; $i++) {
+                $this->getDatabase()->deleteDocument('sizeTest2', 'doc' . $i);
+            }
+        });
+
+        sleep(5);
+
+        static::getDatabase()->analyzeCollection('sizeTest2');
+
+        $size3 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
+
+        $this->assertLessThan($size2, $size3);
+    }
+
+    public function testSizeCollectionOnDisk(): void
+    {
+        $this->getDatabase()->createCollection('sizeTestDisk1');
+        $this->getDatabase()->createCollection('sizeTestDisk2');
+
+        $size1 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTestDisk1');
+        $size2 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTestDisk2');
+        $sizeDifference = abs($size1 - $size2);
+        // Size of an empty collection returns either 172032 or 167936 bytes randomly
+        // Therefore asserting with a tolerance of 5000 bytes
+        $byteDifference = 5000;
+        $this->assertLessThan($byteDifference, $sizeDifference);
+
+        $this->getDatabase()->createAttribute('sizeTestDisk2', 'string1', Database::VAR_STRING, 20000, true);
+        $this->getDatabase()->createAttribute('sizeTestDisk2', 'string2', Database::VAR_STRING, 254 + 1, true);
+        $this->getDatabase()->createAttribute('sizeTestDisk2', 'string3', Database::VAR_STRING, 254 + 1, true);
+        $this->getDatabase()->createIndex('sizeTestDisk2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+
+        $loopCount = 40;
+
+        for ($i = 0; $i < $loopCount; $i++) {
+            $this->getDatabase()->createDocument('sizeTestDisk2', new Document([
                 'string1' => 'string1' . $i,
                 'string2' => 'string2' . $i,
                 'string3' => 'string3' . $i,
             ]));
         }
 
-        $size2 = static::getDatabase()->getSizeOfCollection('sizeTest2');
+        $size2 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTestDisk2');
 
         $this->assertGreaterThan($size1, $size2);
     }
@@ -1094,13 +1150,13 @@ abstract class Base extends TestCase
             ]));
         }
 
-        $size2 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+        $size2 = static::getDatabase()->getSizeOfCollectionOnDisk('fullTextSizeTest');
 
         $this->assertGreaterThan($size1, $size2);
 
         static::getDatabase()->createIndex('fullTextSizeTest', 'fulltext_index', Database::INDEX_FULLTEXT, ['string1']);
 
-        $size3 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+        $size3 = static::getDatabase()->getSizeOfCollectionOnDisk('fullTextSizeTest');
 
         $this->assertGreaterThan($size2, $size3);
     }
@@ -1843,7 +1899,7 @@ abstract class Base extends TestCase
                 'empty' => [],
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertTrue($e instanceof StructureException);
             $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
         }
@@ -1862,7 +1918,7 @@ abstract class Base extends TestCase
                 'empty' => [],
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertTrue($e instanceof StructureException);
             $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
         }
@@ -2253,7 +2309,7 @@ abstract class Base extends TestCase
 
     public function testEmptyTenant(): void
     {
-        if(static::getDatabase()->getAdapter()->getSharedTables()) {
+        if (static::getDatabase()->getAdapter()->getSharedTables()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -2432,7 +2488,7 @@ abstract class Base extends TestCase
                 return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
             });
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertTrue($e instanceof ConflictException);
             $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
         }
@@ -2573,7 +2629,7 @@ abstract class Base extends TestCase
         try {
             $database->createDocument($collection, new Document([]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
         }
 
@@ -2593,7 +2649,7 @@ abstract class Base extends TestCase
                 'short' => ['More than 5 size'],
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid document structure: Attribute "short[\'0\']" has invalid type. Value must be a valid string and no longer than 5 chars', $e->getMessage());
         }
 
@@ -2602,7 +2658,7 @@ abstract class Base extends TestCase
                 'names' => ['Joe', 100],
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 255 chars', $e->getMessage());
         }
 
@@ -2611,7 +2667,7 @@ abstract class Base extends TestCase
                 'age' => 1.5,
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
         }
 
@@ -2620,7 +2676,7 @@ abstract class Base extends TestCase
                 'age' => -100,
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
         }
 
@@ -2649,7 +2705,7 @@ abstract class Base extends TestCase
         try {
             $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
                 $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
             } else {
@@ -2660,7 +2716,7 @@ abstract class Base extends TestCase
         try {
             $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
         }
 
@@ -2681,7 +2737,7 @@ abstract class Base extends TestCase
             try {
                 $database->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
                 $this->fail('Failed to throw exception');
-            } catch(Throwable $e) {
+            } catch (Throwable $e) {
                 $this->assertEquals('Index length is longer than the maximum: 768', $e->getMessage());
             }
         }
@@ -2692,7 +2748,7 @@ abstract class Base extends TestCase
         try {
             $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
         }
 
@@ -2705,7 +2761,7 @@ abstract class Base extends TestCase
                     Query::equal('names', ['Joe']),
                 ]);
                 $this->fail('Failed to throw exception');
-            } catch(Throwable $e) {
+            } catch (Throwable $e) {
                 $this->assertEquals('Invalid query: Cannot query equal on attribute "names" because it is an array.', $e->getMessage());
             }
 
@@ -2714,7 +2770,7 @@ abstract class Base extends TestCase
                     Query::contains('age', [10])
                 ]);
                 $this->fail('Failed to throw exception');
-            } catch(Throwable $e) {
+            } catch (Throwable $e) {
                 $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array or string.', $e->getMessage());
             }
 
@@ -3150,7 +3206,7 @@ abstract class Base extends TestCase
                 Query::contains('price', [10.5]),
             ]);
             $this->fail('Failed to throw exception');
-        } catch(Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertEquals('Invalid query: Cannot query contains on attribute "price" because it is not an array or string.', $e->getMessage());
             $this->assertTrue($e instanceof DatabaseException);
         }
@@ -4057,7 +4113,7 @@ abstract class Base extends TestCase
                 ])
             ]);
             $this->fail('Failed to throw exception');
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             $this->assertEquals('Invalid query: Or queries require at least two queries', $e->getMessage());
         }
     }
@@ -4117,7 +4173,7 @@ abstract class Base extends TestCase
                 ])
             ]);
             $this->fail('Failed to throw exception');
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             $this->assertEquals('Invalid query: And queries require at least two queries', $e->getMessage());
         }
     }
@@ -4965,7 +5021,7 @@ abstract class Base extends TestCase
                 'name' => 'Frozen', // Unknown attribute 'name' after relation attribute
             ]));
             $this->fail('Failed to throw exception');
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             $this->assertInstanceOf(StructureException::class, $e);
         }
     }
@@ -5040,7 +5096,7 @@ abstract class Base extends TestCase
         try {
             static::getDatabase()->updateDocument('level1', $level1->getId(), $level1->setAttribute('name', 'haha'));
             $this->fail('Failed to throw exception');
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             $this->assertInstanceOf(AuthorizationException::class, $e);
         }
         $level1->setAttribute('name', 'Level 1');

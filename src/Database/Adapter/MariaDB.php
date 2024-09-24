@@ -207,13 +207,13 @@ class MariaDB extends SQL
     }
 
     /**
-     * Get collection size
+     * Get collection size on disk
      *
      * @param string $collection
      * @return int
      * @throws DatabaseException
      */
-    public function getSizeOfCollection(string $collection): int
+    public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
         $collection = $this->getNamespace() . '_' . $collection;
@@ -235,6 +235,50 @@ class MariaDB extends SQL
 
         $collectionSize->bindParam(':name', $name);
         $permissionsSize->bindParam(':permissions', $permissions);
+
+        try {
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+
+        return $size;
+    }
+
+    /**
+     * Get Collection Size of the raw data
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $collection = $this->getNamespace() . '_' . $collection;
+        $database = $this->getDatabase();
+        $permissions = $collection . '_perms';
+
+        $collectionSize = $this->getPDO()->prepare("
+            SELECT SUM(data_length + index_length)  
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE table_name = :name AND
+            table_schema = :database
+         ");
+
+        $permissionsSize = $this->getPDO()->prepare("
+            SELECT SUM(data_length + index_length)  
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE table_name = :permissions AND
+            table_schema = :database
+        ");
+
+        $collectionSize->bindParam(':name', $collection);
+        $collectionSize->bindParam(':database', $database);
+        $permissionsSize->bindParam(':permissions', $permissions);
+        $permissionsSize->bindParam(':database', $database);
 
         try {
             $collectionSize->execute();
@@ -687,7 +731,7 @@ class MariaDB extends SQL
 
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
-            if(!empty($collectionAttribute['array']) && $this->castIndexArray()) {
+            if (!empty($collectionAttribute['array']) && $this->castIndexArray()) {
                 $attributes[$i] = '(CAST(' . $attr . ' AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
@@ -871,7 +915,7 @@ class MariaDB extends SQL
                 $stmtPermissions->execute();
             }
         } catch (\Throwable $e) {
-            if($e instanceof PDOException) {
+            if ($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -919,7 +963,7 @@ class MariaDB extends SQL
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
-                    if(!empty($document->getInternalId())) {
+                    if (!empty($document->getInternalId())) {
                         $attributes['_id'] = $document->getInternalId();
                     }
 
@@ -999,7 +1043,7 @@ class MariaDB extends SQL
                 }
             }
         } catch (\Throwable $e) {
-            if($e instanceof PDOException) {
+            if ($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -1245,7 +1289,7 @@ class MariaDB extends SQL
             }
 
         } catch (\Throwable $e) {
-            if($e instanceof PDOException) {
+            if ($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -1502,7 +1546,7 @@ class MariaDB extends SQL
                 }
             }
         } catch (\Throwable $e) {
-            if($e instanceof PDOException) {
+            if ($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -1733,7 +1777,7 @@ class MariaDB extends SQL
         }
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -1861,7 +1905,7 @@ class MariaDB extends SQL
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -2078,7 +2122,7 @@ class MariaDB extends SQL
                 return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
-                if($this->getSupportForJSONOverlaps() && $query->onArray()) {
+                if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
                     return "JSON_OVERLAPS(`table_main`.{$attribute}, :{$placeholder}_0)";
                 }
 
@@ -2104,7 +2148,7 @@ class MariaDB extends SQL
      */
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
-        if($array === true) {
+        if ($array === true) {
             return 'JSON';
         }
 
@@ -2255,5 +2299,21 @@ class MariaDB extends SQL
         }
 
         throw $e;
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+
+        $sql = "ANALYZE TABLE {$this->getSQLTable($name)}";
+
+        $stmt = $this->getPDO()->prepare($sql);
+        return $stmt->execute();
     }
 }

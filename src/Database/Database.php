@@ -1235,6 +1235,32 @@ class Database
     }
 
     /**
+     * Get Collection Size on disk
+     *
+     * @param string $collection
+     *
+     * @return int
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        return $this->adapter->getSizeOfCollectionOnDisk($collection->getId());
+    }
+
+    /**
      * Delete Collection
      *
      * @param string $id
@@ -4331,7 +4357,7 @@ class Database
         /* @var $document Document */
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
-        if($document->isEmpty()) {
+        if ($document->isEmpty()) {
             return false;
         }
 
@@ -4426,7 +4452,7 @@ class Database
         /* @var $document Document */
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
-        if($document->isEmpty()) {
+        if ($document->isEmpty()) {
             return false;
         }
 
@@ -4521,7 +4547,7 @@ class Database
                 $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
-            if($document->isEmpty()) {
+            if ($document->isEmpty()) {
                 return false;
             }
 
@@ -5110,7 +5136,7 @@ class Database
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        foreach ($results as  &$node) {
+        foreach ($results as &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
@@ -5690,5 +5716,16 @@ class Database
         }
 
         return $attributes;
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return $this->adapter->analyzeCollection($collection);
     }
 }

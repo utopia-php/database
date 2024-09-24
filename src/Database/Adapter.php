@@ -638,6 +638,15 @@ abstract class Adapter
     abstract public function getSizeOfCollection(string $collection): int;
 
     /**
+     * Get Collection Size on the disk
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
+
+    /**
      * Get max STRING limit
      *
      * @return int
@@ -927,4 +936,12 @@ abstract class Adapter
         // Clear existing callback
         $this->before($event, 'timeout', null);
     }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    abstract public function analyzeCollection(string $collection): bool;
 }

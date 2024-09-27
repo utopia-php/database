@@ -196,7 +196,6 @@ class Postgres extends SQL
      * @param string $collection
      * @return int
      * @throws DatabaseException
-     *
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
@@ -240,11 +239,11 @@ class Postgres extends SQL
         $permissions = $this->getSQLTable($collection . '_perms');
 
         $collectionSize = $this->getPDO()->prepare("
-             SELECT pg_total_relation_size(:name);
+             SELECT pg_relation_size(:name);
         ");
 
         $permissionsSize = $this->getPDO()->prepare("
-             SELECT pg_total_relation_size(:permissions);
+             SELECT pg_relation_size(:permissions);
         ");
 
         $collectionSize->bindParam(':name', $name);
@@ -2264,5 +2263,22 @@ class Postgres extends SQL
     public function getLikeOperator(): string
     {
         return 'ILIKE';
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database.
+     * This Locks the table and should be avoided if possible
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+
+        $sql = "ANALYZE {$this->getSQLTable($name)}";
+
+        $stmt = $this->getPDO()->prepare($sql);
+        return $stmt->execute();
     }
 }

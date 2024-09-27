@@ -262,7 +262,7 @@ class MariaDB extends SQL
 
         $collectionSize = $this->getPDO()->prepare("
             SELECT SUM(data_length + index_length)  
-            FROM information_schema.TABLES
+            FROM INFORMATION_SCHEMA.TABLES
             WHERE table_name = :name AND
             table_schema = :database
          ");
@@ -2298,5 +2298,23 @@ class MariaDB extends SQL
         }
 
         throw $e;
+    }
+
+
+    /**
+     * Analyze a collection updating it's metadata on the database.
+     * This Locks the table and should be avoided if possible
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+
+        $sql = "ANALYZE TABLE {$this->getSQLTable($name)}";
+
+        $stmt = $this->getPDO()->prepare($sql);
+        return $stmt->execute();
     }
 }

@@ -274,25 +274,7 @@ class Mongo extends Adapter
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
-        $namespace = $this->getNamespace();
-        $collection = $this->filter($collection);
-        $collection = $namespace. '_' . $collection;
-
-        $command = [
-            'collStats' => $collection,
-            'scale' => 1
-        ];
-
-        try {
-            $result = $this->getClient()->query($command);
-            if (is_object($result)) {
-                return $result->totalSize;
-            } else {
-                throw new DatabaseException('No size found');
-            }
-        } catch (Exception $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
-        }
+        return $this->getSizeOfCollection($collection);
     }
 
     /**
@@ -1862,5 +1844,17 @@ class Mongo extends Adapter
         parent::clearTimeout($event);
 
         $this->timeout = null;
+    }
+
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
     }
 }

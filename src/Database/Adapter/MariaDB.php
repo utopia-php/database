@@ -1696,16 +1696,14 @@ class MariaDB extends SQL
                 throw new DatabaseException('Failed to delete documents');
             }
 
-            $deleted = $stmt->rowCount();
-
             if (!$stmtPermissions->execute()) {
                 throw new DatabaseException('Failed to delete permissions');
-            } 
+            }
         } catch (\Throwable $e) {
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
-        return $deleted;
+        return true;
     }
 
     /**

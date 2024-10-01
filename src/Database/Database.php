@@ -4998,7 +4998,7 @@ class Database
         $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds) {
             $lastDocument = null;
             while (true) {
-                $affectedDocuments = $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) { 
+                $affectedDocuments = $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) {
                     return $this->find($collection->getId(), array_merge(
                         empty($lastDocument) ? [
                             Query::limit($batchSize),

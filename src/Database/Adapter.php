@@ -621,7 +621,7 @@ abstract class Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $ids 
+     * @param array<string> $ids
      *
      * @return bool
      */

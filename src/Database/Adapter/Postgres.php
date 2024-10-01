@@ -1561,51 +1561,76 @@ class Postgres extends SQL
      * Delete Documents
      *
      * @param string $collection
-     * @param array<\Utopia\Database\Query> $queries
+     * @param array<string> $ids
      *
      * @return bool
      */
-    public function deleteDocuments(string $collection, array $queries): bool
+    public function deleteDocuments(string $collection, array $ids): bool
     {
-        $name = $this->filter($collection);
-        $where = [];
-
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
-        $conditions = $this->getSQLConditions($queries);
-        if (!empty($conditions)) {
-            $where[] = $conditions;
-        }
-
-        if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
-        }
-
-        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-
-        $sql = "
-            DELETE FROM {$this->getSQLTable($name)}
-            {$sqlWhere}
-        ";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
         try {
-            $stmt->execute();
-        } catch (PDOException $e) {
-            $this->processException($e);
+            $name = $this->filter($collection);
+            $where = [];
+
+            if ($this->sharedTables) {
+                $where[] = "_tenant = :_tenant";
+            }
+
+            $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($id) => ":_id_{$id}", \array_keys($ids))) . ")";
+
+            $sqlWhere = !empty($where) ? 'WHERE ' . \implode(' AND ', $where) : '';
+
+            $sql = "
+                DELETE FROM {$this->getSQLTable($name)}
+                {$sqlWhere};
+            ";
+
+            $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
+
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($ids as $id => $value) {
+                $stmt->bindValue(":_id_{$id}", $value);
+            }
+
+            if ($this->sharedTables) {
+                $stmt->bindValue(':_tenant', $this->tenant);
+            }
+
+            $sql = "
+                DELETE FROM {$this->getSQLTable($name . '_perms')} 
+                WHERE _document IN (" . \implode(', ', \array_map(fn ($id) => ":_id_{$id}", \array_keys($ids))) . ")
+            ";
+
+            if ($this->sharedTables) {
+                $sql .= ' AND _tenant = :_tenant';
+            }
+
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
+
+            $stmtPermissions = $this->getPDO()->prepare($sql);
+
+            foreach ($ids as $id => $value) {
+                $stmtPermissions->bindValue(":_id_{$id}", $value);
+            }
+
+            if ($this->sharedTables) {
+                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+            }
+
+            if (!$stmt->execute()) {
+                throw new DatabaseException('Failed to delete documents');
+            }
+
+            $deleted = $stmt->rowCount();
+
+            if (!$stmtPermissions->execute()) {
+                throw new DatabaseException('Failed to delete permissions');
+            } 
+        } catch (\Throwable $e) {
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
-        return true;
+        return $deleted;
     }
 
     /**

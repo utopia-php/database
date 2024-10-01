@@ -15642,27 +15642,105 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('bulk_delete');
     }
 
-
-    public function testDeleteBulkDocumentsRelationships(): void
+    public function testDeleteBulkDocumentsOneToOneRelationship(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('bulk_delete_r_1');
-        static::getDatabase()->createCollection('bulk_delete_r_2');
+        $this->getDatabase()->createCollection('bulk_delete_person');
+        $this->getDatabase()->createCollection('bulk_delete_library');
 
-        // ONE_TO_ONE
-        static::getDatabase()->createRelationship(
-            collection: 'bulk_delete_r_1',
-            relatedCollection: 'bulk_delete_r_2',
-            type: Database::RELATION_ONE_TO_ONE,
-        );
+        $this->getDatabase()->createAttribute('bulk_delete_person', 'name', Database::VAR_STRING, 255, true);
+        $this->getDatabase()->createAttribute('bulk_delete_library', 'name', Database::VAR_STRING, 255, true);
+        $this->getDatabase()->createAttribute('bulk_delete_library', 'area', Database::VAR_STRING, 255, true);
 
         // Restrict
+        $this->getDatabase()->createRelationship(
+            collection: 'bulk_delete_person',
+            relatedCollection: 'bulk_delete_library',
+            type: Database::RELATION_ONE_TO_ONE,
+            onDelete: Database::RELATION_MUTATE_RESTRICT
+        );
+
+        $person1 = $this->getDatabase()->createDocument('bulk_delete_person', new Document([
+            '$id' => 'person1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Person 1',
+            'bulk_delete_library' => [
+                '$id' => 'library1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Library 1',
+                'area' => 'Area 1',
+            ],
+        ]));
+
+        $person1 = $this->getDatabase()->getDocument('bulk_delete_person', 'person1');
+        $library = $person1->getAttribute('bulk_delete_library');
+        $this->assertEquals('library1', $library['$id']);
+        $this->assertArrayNotHasKey('bulk_delete_person', $library);
+
+        // Delete person
+        try {
+            $this->getDatabase()->deleteDocuments('bulk_delete_person');
+            $this->fail('Failed to throw exception');
+        } catch (RestrictedException $e) {
+            $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
+        }
+
+        $this->getDatabase()->updateDocument('bulk_delete_person', 'person1', new Document([
+            '$id' => 'person1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Person 1',
+            'bulk_delete_library' => null,
+        ]));
+
+        $this->getDatabase()->deleteDocuments('bulk_delete_person');
+        $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person'));
+        $this->getDatabase()->deleteDocuments('bulk_delete_library');
+        $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library'));
+        $this->assertTrue($this->getDatabase()->deleteRelationship('bulk_delete_person', 'bulk_delete_library'));
 
         // NULL
+        $this->getDatabase()->createRelationship(
+            collection: 'bulk_delete_person',
+            relatedCollection: 'bulk_delete_library',
+            type: Database::RELATION_ONE_TO_ONE,
+            onDelete: Database::RELATION_MUTATE_SET_NULL
+        );
+
+        $person1 = $this->getDatabase()->createDocument('bulk_delete_person', new Document([
+            '$id' => 'person1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Person 1',
+            'bulk_delete_library' => [
+                '$id' => 'library1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Library 1',
+                'area' => 'Area 1',
+            ],
+        ]));
 
         // Cascade
     }

@@ -621,11 +621,11 @@ abstract class Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<\Utopia\Database\Query> $queries
+     * @param array<string> $ids 
      *
      * @return bool
      */
-    abstract public function deleteDocuments(string $collection, array $queries): bool;
+    abstract public function deleteDocuments(string $collection, array $ids): bool;
 
     /**
      * Find Documents

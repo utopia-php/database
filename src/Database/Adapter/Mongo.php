@@ -912,16 +912,15 @@ class Mongo extends Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<\Utopia\Database\Query> $queries
+     * @param array<string> $ids
      *
      * @return bool
      */
-    public function deleteDocuments(string $collection, array $queries): bool
+    public function deleteDocuments(string $collection, array $ids): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-        $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $filters = $this->buildFilters($queries);
+        $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_uid', $ids)]);
 
         if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();

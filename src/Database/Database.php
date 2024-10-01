@@ -4993,23 +4993,28 @@ class Database
 
         $queries = Query::groupByType($queries)['filters'];
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $affectedDocumentIds = [];
 
-        $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize) {
+        $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds) {
             $lastDocument = null;
             while (true) {
-                $affectedDocuments = $this->find($collection->getId(), array_merge(
-                    empty($lastDocument) ? [
-                        Query::limit($batchSize),
-                    ] : [
-                        Query::limit($batchSize),
-                        Query::cursorAfter($lastDocument),
-                    ],
-                    $queries,
-                ));
+                $affectedDocuments = $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) { 
+                    return $this->find($collection->getId(), array_merge(
+                        empty($lastDocument) ? [
+                            Query::limit($batchSize),
+                        ] : [
+                            Query::limit($batchSize),
+                            Query::cursorAfter($lastDocument),
+                        ],
+                        $queries,
+                    ));
+                });
 
                 if (empty($affectedDocuments)) {
                     break;
                 }
+
+                $affectedDocumentIds = array_merge($affectedDocumentIds, array_map(fn ($document) => $document->getId(), $affectedDocuments));
 
                 foreach ($affectedDocuments as $document) {
                     if ($collection->getId() !== self::METADATA) {
@@ -5035,7 +5040,7 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
 
-                if (count($affectedDocuments) < 100) {
+                if (count($affectedDocuments) < $batchSize) {
                     break;
                 } else {
                     $lastDocument = end($affectedDocuments);
@@ -5043,7 +5048,7 @@ class Database
             }
 
             // Mass delete using adapter with query
-            return $this->adapter->deleteDocuments($collection->getId(), $queries);
+            return $this->adapter->deleteDocuments($collection->getId(), $affectedDocumentIds);
         });
 
         return $deleted;

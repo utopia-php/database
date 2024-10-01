@@ -1577,12 +1577,7 @@ class Postgres extends SQL
 
             $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($id) => ":_id_{$id}", \array_keys($ids))) . ")";
 
-            $sqlWhere = !empty($where) ? 'WHERE ' . \implode(' AND ', $where) : '';
-
-            $sql = "
-                DELETE FROM {$this->getSQLTable($name)}
-                {$sqlWhere};
-            ";
+            $sql = "DELETE FROM {$this->getSQLTable($name)} WHERE " . \implode(' AND ', $where);
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
 

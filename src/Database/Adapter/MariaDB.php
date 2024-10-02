@@ -1642,6 +1642,10 @@ class MariaDB extends SQL
      */
     public function deleteDocuments(string $collection, array $ids): bool
     {
+        if (empty($ids)) {
+            return true;
+        }
+
         try {
             $name = $this->filter($collection);
             $where = [];

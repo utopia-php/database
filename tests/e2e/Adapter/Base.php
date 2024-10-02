@@ -15742,7 +15742,78 @@ abstract class Base extends TestCase
             ],
         ]));
 
+        $person1 = $this->getDatabase()->getDocument('bulk_delete_person', 'person1');
+        $library = $person1->getAttribute('bulk_delete_library');
+        $this->assertEquals('library1', $library['$id']);
+        $this->assertArrayNotHasKey('bulk_delete_person', $library);
+
+        $person = $this->getDatabase()->getDocument('bulk_delete_person', 'person1');
+
+        $this->getDatabase()->deleteDocuments('bulk_delete_library');
+        $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library'));
+        $this->assertCount(1, $this->getDatabase()->find('bulk_delete_person'));
+
+        $person = $this->getDatabase()->getDocument('bulk_delete_person', 'person1');
+        $library = $person->getAttribute('bulk_delete_library');
+        $this->assertNull($library);
+
+        // NULL - Cleanup
+        $this->getDatabase()->deleteDocuments('bulk_delete_person');
+        $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person'));
+        $this->getDatabase()->deleteDocuments('bulk_delete_library');
+        $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library'));
+        $this->assertTrue($this->getDatabase()->deleteRelationship('bulk_delete_person', 'bulk_delete_library'));
+    
         // Cascade
+        $this->getDatabase()->createRelationship(
+            collection: 'bulk_delete_person',
+            relatedCollection: 'bulk_delete_library',
+            type: Database::RELATION_ONE_TO_ONE,
+            onDelete: Database::RELATION_MUTATE_CASCADE
+        );
+
+        $person1 = $this->getDatabase()->createDocument('bulk_delete_person', new Document([
+            '$id' => 'person1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Person 1',
+            'bulk_delete_library' => [
+                '$id' => 'library1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Library 1',
+                'area' => 'Area 1',
+            ],
+        ]));
+
+        $person1 = $this->getDatabase()->getDocument('bulk_delete_person', 'person1');
+        $library = $person1->getAttribute('bulk_delete_library');
+        $this->assertEquals('library1', $library['$id']);
+        $this->assertArrayNotHasKey('bulk_delete_person', $library);
+
+        $person = $this->getDatabase()->getDocument('bulk_delete_person', 'person1');
+
+        $this->getDatabase()->deleteDocuments('bulk_delete_library');
+        $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library'));
+        $this->assertCount(1, $this->getDatabase()->find('bulk_delete_person'));
+
+        $person = $this->getDatabase()->getDocument('bulk_delete_person', 'person1');
+        $library = $person->getAttribute('bulk_delete_library');
+        $this->assertEmpty($library);
+        $this->assertNotNull($library);
+
+        // Cascade - Cleanup
+        $this->getDatabase()->deleteDocuments('bulk_delete_person');
+        $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person'));
+        $this->getDatabase()->deleteDocuments('bulk_delete_library');
+        $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library'));
+        $this->assertTrue($this->getDatabase()->deleteRelationship('bulk_delete_person', 'bulk_delete_library'));
     }
 
     public function testEvents(): void

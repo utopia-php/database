@@ -4895,7 +4895,7 @@ class Database
 
                     $this->deleteDocument(
                         $relatedCollection->getId(),
-                        $value->getId()
+                        ($value instanceof Document) ? $value->getId() : $value
                     );
 
                     \array_pop($this->relationshipDeleteStack);

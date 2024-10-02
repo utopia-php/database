@@ -15760,7 +15760,7 @@ abstract class Base extends TestCase
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person'));
         $this->getDatabase()->deleteDocuments('bulk_delete_library');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library'));
-    
+
         // Cascade
         $this->getDatabase()->updateRelationship(
             collection: 'bulk_delete_person',

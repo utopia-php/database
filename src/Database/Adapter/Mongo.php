@@ -267,7 +267,18 @@ class Mongo extends Adapter
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
+     * Get Collection Size of raw data
      * @param string $collection
      * @return int
      * @throws DatabaseException
@@ -1833,5 +1844,17 @@ class Mongo extends Adapter
         parent::clearTimeout($event);
 
         $this->timeout = null;
+    }
+
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
     }
 }

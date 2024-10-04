@@ -5976,53 +5976,53 @@ abstract class Base extends TestCase
             return;
         }
 
-        static::getDatabase()->createCollection('rename_relationship_test_a');
-        static::getDatabase()->createCollection('rename_relationship_test_b');
+        static::getDatabase()->createCollection('rn_rs_test_a');
+        static::getDatabase()->createCollection('rn_rs_test_b');
 
-        static::getDatabase()->createAttribute('rename_relationship_test_b', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('rn_rs_test_b', 'name', Database::VAR_STRING, 255, true);
 
         static::getDatabase()->createRelationship(
-            'rename_relationship_test_a',
-            'rename_relationship_test_b',
+            'rn_rs_test_a',
+            'rn_rs_test_b',
             Database::RELATION_ONE_TO_ONE,
             true
         );
 
-        $docA = static::getDatabase()->createDocument('rename_relationship_test_a', new Document([
+        $docA = static::getDatabase()->createDocument('rn_rs_test_a', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
                 Permission::update(Role::any()),
                 Permission::delete(Role::any()),
             ],
-            'rename_relationship_test_b' => [
+            'rn_rs_test_b' => [
                 '$id' => 'b1',
                 'name' => 'B1'
             ]
         ]));
 
-        $docB = static::getDatabase()->getDocument('rename_relationship_test_b', 'b1');
-        $this->assertArrayHasKey('rename_relationship_test_a', $docB->getAttributes());
+        $docB = static::getDatabase()->getDocument('rn_rs_test_b', 'b1');
+        $this->assertArrayHasKey('rn_rs_test_a', $docB->getAttributes());
         $this->assertEquals('B1', $docB->getAttribute('name'));
 
         // Rename attribute
         static::getDatabase()->updateRelationship(
-            collection: 'rename_relationship_test_a',
-            id: 'rename_relationship_test_b',
-            newKey: 'rename_relationship_test_b_renamed'
+            collection: 'rn_rs_test_a',
+            id: 'rn_rs_test_b',
+            newKey: 'rn_rs_test_b_renamed'
         );
 
         // Rename again
         static::getDatabase()->updateRelationship(
-            collection: 'rename_relationship_test_a',
-            id: 'rename_relationship_test_b_renamed',
-            newKey: 'rename_relationship_test_b_renamed_2'
+            collection: 'rn_rs_test_a',
+            id: 'rn_rs_test_b_renamed',
+            newKey: 'rn_rs_test_b_renamed_2'
         );
 
         // Check our data is OK
-        $docA = static::getDatabase()->getDocument('rename_relationship_test_a', $docA->getId());
-        $this->assertArrayHasKey('rename_relationship_test_b_renamed_2', $docA->getAttributes());
-        $this->assertEquals($docB->getId(), $docA->getAttribute('rename_relationship_test_b_renamed_2')['$id']);
+        $docA = static::getDatabase()->getDocument('rn_rs_test_a', $docA->getId());
+        $this->assertArrayHasKey('rn_rs_test_b_renamed_2', $docA->getAttributes());
+        $this->assertEquals($docB->getId(), $docA->getAttribute('rn_rs_test_b_renamed_2')['$id']);
     }
 
     public function createRandomString(int $length = 10): string

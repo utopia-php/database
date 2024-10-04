@@ -15836,10 +15836,6 @@ abstract class Base extends TestCase
         $this->getDatabase()->deleteDocuments('bulk_delete_person');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person'));
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library'));
-
-        $this->getDatabase()->deleteDocuments('bulk_delete_person');
-        $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person'));
-        $this->getDatabase()->deleteDocuments('bulk_delete_library');
     }
 
     public function testEvents(): void

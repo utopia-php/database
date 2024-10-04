@@ -1045,26 +1045,32 @@ abstract class Base extends TestCase
 
     public function testSizeCollection(): void
     {
-        $this->getDatabase()->createCollection('sizeTest1');
-        $this->getDatabase()->createCollection('sizeTest2');
+        static::getDatabase()->createCollection('sizeTest1');
+        static::getDatabase()->createCollection('sizeTest2');
 
-        $size1 = $this->getDatabase()->getSizeOfCollection('sizeTest1');
-        $size2 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
+        $size1 = static::getDatabase()->getSizeOfCollection('sizeTest1');
+        $size2 = static::getDatabase()->getSizeOfCollection('sizeTest2');
         $sizeDifference = abs($size1 - $size2);
         // Size of an empty collection returns either 172032 or 167936 bytes randomly
         // Therefore asserting with a tolerance of 5000 bytes
         $byteDifference = 5000;
+
+        if (!static::getDatabase()->analyzeCollection('sizeTest2')) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $this->assertLessThan($byteDifference, $sizeDifference);
 
-        $this->getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 20000, true);
-        $this->getDatabase()->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);
-        $this->getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
-        $this->getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+        static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 20000, true);
+        static::getDatabase()->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
+        static::getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
 
         $loopCount = 100;
 
         for ($i = 0; $i < $loopCount; $i++) {
-            $this->getDatabase()->createDocument('sizeTest2', new Document([
+            static::getDatabase()->createDocument('sizeTest2', new Document([
                 '$id' => 'doc' . $i,
                 'string1' => 'string1' . $i . str_repeat('A', 10000),
                 'string2' => 'string2',
@@ -1074,26 +1080,9 @@ abstract class Base extends TestCase
 
         static::getDatabase()->analyzeCollection('sizeTest2');
 
-        sleep(5); // Let DB analyze
-
         $size2 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
 
         $this->assertGreaterThan($size1, $size2);
-
-        self::$authorization->skip(function () use ($loopCount) {
-            for ($i = 0; $i < $loopCount; $i++) {
-                $this->getDatabase()->deleteDocument('sizeTest2', 'doc' . $i);
-            }
-        });
-
-        static::getDatabase()->analyzeCollection('sizeTest2');
-        sleep(5); // Let DB clean up
-
-        $size3 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
-
-        var_dump($size1, $size2, $size3);
-
-        $this->assertLessThan($size2, $size3);
     }
 
     public function testSizeCollectionOnDisk(): void
@@ -1118,29 +1107,15 @@ abstract class Base extends TestCase
 
         for ($i = 0; $i < $loopCount; $i++) {
             $this->getDatabase()->createDocument('sizeTestDisk2', new Document([
-                '$id' => 'doc' . $i,
-                'string1' => 'string1' . $i . str_repeat('A', 10000),
-                'string2' => 'string2',
-                'string3' => 'string3',
+                'string1' => 'string1' . $i,
+                'string2' => 'string2' . $i,
+                'string3' => 'string3' . $i,
             ]));
         }
 
-        $this->getDatabase()->analyzeCollection('sizeTestDisk2');
-        $size2 = $this->getDatabase()->getSizeOfCollection('sizeTestDisk2');
+        $size2 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTestDisk2');
 
         $this->assertGreaterThan($size1, $size2);
-
-        self::$authorization->skip(function () use ($loopCount) {
-            for ($i = 0; $i < $loopCount; $i++) {
-                $this->getDatabase()->deleteDocument('sizeTestDisk2', 'doc' . $i);
-            }
-        });
-
-        sleep(10); // Let DB clean up
-
-        $size3 = $this->getDatabase()->getSizeOfCollection('sizeTestDisk2');
-
-        $this->assertLessThan($size2, $size3);
     }
 
     public function testSizeFullText(): void

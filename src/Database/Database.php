@@ -2250,7 +2250,20 @@ class Database
             throw new DuplicateException('Attribute already exists');
         }
 
-        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
+        $attributeIndex = array_search($id, array_map(fn ($attribute) => $attribute['$id'], $attributes));
+
+        if ($attributeIndex === false) {
+            throw new DatabaseException('Attribute not found');
+        }
+
+        $attribute = $attributes[$attributeIndex];
+        $type = $attribute['options']['relationType'];
+        $side = $attribute['options']['side'];
+
+        $relatedCollectionId = $attribute['options']['relatedCollection'];
+        $relatedCollection = $this->getCollection($relatedCollectionId);
+
+        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete, $type, $side) {
             $altering = (!\is_null($newKey) && $newKey !== $id)
                 || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
 
@@ -2264,9 +2277,6 @@ class Database
             ) {
                 throw new DuplicateException('Related attribute already exists');
             }
-
-            $type = $attribute['options']['relationType'];
-            $side = $attribute['options']['side'];
 
             $newKey ??= $attribute['key'];
             $twoWayKey = $attribute['options']['twoWayKey'];
@@ -2329,68 +2339,76 @@ class Database
                     throw new DatabaseException('Failed to update relationship');
                 }
             }
+        });
 
-            $this->purgeCachedCollection($collection->getId());
-            $this->purgeCachedCollection($relatedCollection->getId());
+        // Update Indexes
+        $renameIndex = function (string $collection, string $key, string $newKey) {
+            $this->updateIndexMeta(
+                $collection,
+                '_index_' . $key,
+                function ($index) use ($newKey) {
+                    $index->setAttribute('attributes', [$newKey]);
+                }
+            );
+            $this->silent(
+                fn () =>
+                $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
+            );
+        };
 
-            $renameIndex = function (string $collection, string $key, string $newKey) {
-                $this->updateIndexMeta(
-                    $collection,
-                    '_index_' . $key,
-                    fn ($index) =>
-                    $index->setAttribute('attributes', [$newKey])
-                );
-                $this->silent(
-                    fn () =>
-                    $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
-                );
-            };
+        $newKey ??= $attribute['key'];
+        $twoWayKey = $attribute['options']['twoWayKey'];
+        $newTwoWayKey ??= $attribute['options']['twoWayKey'];
+        $twoWay ??= $attribute['options']['twoWay'];
+        $onDelete ??= $attribute['options']['onDelete'];
 
-            switch ($type) {
-                case self::RELATION_ONE_TO_ONE:
+        switch ($type) {
+            case self::RELATION_ONE_TO_ONE:
+                if ($id !== $newKey) {
+                    $renameIndex($collection->getId(), $id, $newKey);
+                }
+                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                    $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            case self::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                    }
+                } else {
                     if ($id !== $newKey) {
                         $renameIndex($collection->getId(), $id, $newKey);
                     }
-                    if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                }
+                break;
+            case self::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($id !== $newKey) {
+                        $renameIndex($collection->getId(), $id, $newKey);
+                    }
+                } else {
+                    if ($twoWayKey !== $newTwoWayKey) {
                         $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
                     }
-                    break;
-                case self::RELATION_ONE_TO_MANY:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if ($twoWayKey !== $newTwoWayKey) {
-                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                        }
-                    } else {
-                        if ($id !== $newKey) {
-                            $renameIndex($collection->getId(), $id, $newKey);
-                        }
-                    }
-                    break;
-                case self::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if ($id !== $newKey) {
-                            $renameIndex($collection->getId(), $id, $newKey);
-                        }
-                    } else {
-                        if ($twoWayKey !== $newTwoWayKey) {
-                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                        }
-                    }
-                    break;
-                case self::RELATION_MANY_TO_MANY:
-                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+                }
+                break;
+            case self::RELATION_MANY_TO_MANY:
+                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                    if ($id !== $newKey) {
-                        $renameIndex($junction, $id, $newKey);
-                    }
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($junction, $twoWayKey, $newTwoWayKey);
-                    }
-                    break;
-                default:
-                    throw new RelationshipException('Invalid relationship type.');
-            }
-        });
+                if ($id !== $newKey) {
+                    $renameIndex($junction, $id, $newKey);
+                }
+                if ($twoWayKey !== $newTwoWayKey) {
+                    $renameIndex($junction, $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            default:
+                throw new RelationshipException('Invalid relationship type.');
+        }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedCollection($relatedCollection->getId());
 
         return true;
     }

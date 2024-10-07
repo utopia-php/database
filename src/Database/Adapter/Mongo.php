@@ -301,9 +301,20 @@ class Mongo extends Adapter
             } else {
                 throw new DatabaseException('No size found');
             }
-        } catch (Exception $e) {
+        } catch(Exception $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
+    }
+
+    /**
+    * Get Collection Size on disk
+    * @param string $collection
+    * @return int
+    * @throws DatabaseException
+    */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
     }
 
     /**
@@ -791,12 +802,13 @@ class Mongo extends Adapter
      * Update Document
      *
      * @param string $collection
+     * @param string $id
      * @param Document $document
      *
      * @return Document
      * @throws Exception
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -805,7 +817,7 @@ class Mongo extends Adapter
         $record = $this->timeToMongo($record);
 
         $filters = [];
-        $filters['_uid'] = $document->getId();
+        $filters['_uid'] = $id;
         if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
@@ -1846,7 +1858,6 @@ class Mongo extends Adapter
         $this->timeout = null;
     }
 
-
     /**
      * Analyze a collection updating it's metadata on the database engine
      *
@@ -1857,4 +1868,5 @@ class Mongo extends Adapter
     {
         return false;
     }
+
 }

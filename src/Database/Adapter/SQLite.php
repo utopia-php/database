@@ -268,6 +268,17 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Get Collection Size on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
      * Delete Collection
      * @param string $id
      * @return bool
@@ -600,7 +611,7 @@ class SQLite extends MariaDB
      * @throws PDOException
      * @throws Duplicate
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -765,8 +776,8 @@ class SQLite extends MariaDB
 
         $sql = "
 			UPDATE `{$this->getNamespace()}_{$name}`
-			SET {$columns} _uid = :_uid 
-			WHERE _uid = :_uid
+			SET {$columns} _uid = :_newUid 
+			WHERE _uid = :_existingUid
 		";
 
         if ($this->sharedTables) {
@@ -777,7 +788,8 @@ class SQLite extends MariaDB
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        $stmt->bindValue(':_uid', $document->getId());
+        $stmt->bindValue(':_existingUid', $id);
+        $stmt->bindValue(':_newUid', $document->getId());
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);

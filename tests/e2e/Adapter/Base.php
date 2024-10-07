@@ -2420,6 +2420,18 @@ abstract class Base extends TestCase
         $this->assertNotContains('guests', $new->getUpdate());
         $this->assertNotContains('guests', $new->getDelete());
 
+        // Test change document ID
+        $id = $new->getId();
+        $newId = 'new-id';
+        $new->setAttribute('$id', $newId);
+        $new = $this->getDatabase()->updateDocument($new->getCollection(), $id, $new);
+        $this->assertEquals($newId, $new->getId());
+
+        // Reset ID
+        $new->setAttribute('$id', $id);
+        $new = $this->getDatabase()->updateDocument($new->getCollection(), $newId, $new);
+        $this->assertEquals($id, $new->getId());
+
         return $document;
     }
 

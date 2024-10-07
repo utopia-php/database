@@ -1096,7 +1096,12 @@ class Database
             }
         }
 
-        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        $createdCollection = new Document();
+        try {
+            $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        } catch(DuplicateException) {
+            $createdCollection = $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        }
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 
@@ -1393,7 +1398,22 @@ class Database
             'filters' => $filters,
         ]);
 
-        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+        $existingAttributes = [];
+        $exists = false;
+        foreach ($collection->getAttribute('attributes', []) as $existingAttribute) {
+            if($existingAttribute->getId() === $attribute->getId()) {
+                $existingAttributes[] = $attribute;
+                $exists = true;
+            } else {
+                $existingAttributes[] = $existingAttribute;
+            }
+        }
+
+        if($exists) {
+            $collection->setAttribute('attributes', $existingAttributes);
+        } else {
+            $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+        }
 
         if (
             $this->adapter->getDocumentSizeLimit() > 0 &&
@@ -2677,7 +2697,22 @@ class Database
             'orders' => $orders,
         ]);
 
-        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
+        $existingIndexes = [];
+        $exists = false;
+        foreach ($collection->getAttribute('indexes', []) as $existingIndex) {
+            if($existingIndex->getId() === $index->getId()) {
+                $existingIndexes[] = $index;
+                $exists = true;
+            } else {
+                $existingIndexes[] = $existingIndex;
+            }
+        }
+
+        if($exists) {
+            $collection->setAttribute('indexes', $existingIndexes);
+        } else {
+            $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
+        }
 
         if ($this->validate) {
             $validator = new IndexValidator(

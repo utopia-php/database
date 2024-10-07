@@ -1934,7 +1934,7 @@ class Database
         $deleted = false;
         try {
             $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
-        } catch (DuplicateException $e) {
+        } catch (\Throwable $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables()) {
                 throw $e;
@@ -2766,7 +2766,7 @@ class Database
         $deleted = false;
         try {
             $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
-        } catch (DuplicateException $e) {
+        } catch (\Throwable $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables()) {
                 throw $e;

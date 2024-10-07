@@ -187,45 +187,6 @@ class SQLite extends MariaDB
         return true;
     }
 
-    /**
-     * Get Collection Size on disk
-     * @param string $collection
-     * @return int
-     * @throws DatabaseException
-     *
-     */
-    public function getSizeOfCollectionOnDisk(string $collection): int
-    {
-        $collection = $this->filter($collection);
-        $namespace = $this->getNamespace();
-        $name = $namespace . '_' . $collection;
-        $permissions = $namespace . '_' . $collection . '_perms';
-
-        $collectionSize = $this->getPDO()->prepare("
-             SELECT SUM(\"pgsize\") 
-             FROM \"dbstat\" 
-             WHERE name = :name;
-        ");
-
-        $permissionsSize = $this->getPDO()->prepare("
-             SELECT SUM(\"pgsize\") 
-             FROM \"dbstat\"
-             WHERE name = :name;
-        ");
-
-        $collectionSize->bindParam(':name', $name);
-        $permissionsSize->bindParam(':name', $permissions);
-
-        try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
-        } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
-        }
-
-        return $size;
-    }
 
     /**
      * Get Collection Size of raw data

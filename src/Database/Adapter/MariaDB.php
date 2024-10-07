@@ -262,50 +262,6 @@ class MariaDB extends SQL
 
         $collectionSize = $this->getPDO()->prepare("
             SELECT SUM(data_length + index_length)  
-            FROM INFORMATION_SCHEMA.TABLES 
-            WHERE table_name = :name AND
-            table_schema = :database
-         ");
-
-        $permissionsSize = $this->getPDO()->prepare("
-            SELECT SUM(data_length + index_length)  
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE table_name = :permissions AND
-            table_schema = :database
-        ");
-
-        $collectionSize->bindParam(':name', $collection);
-        $collectionSize->bindParam(':database', $database);
-        $permissionsSize->bindParam(':permissions', $permissions);
-        $permissionsSize->bindParam(':database', $database);
-
-        try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
-        } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
-        }
-
-        return $size;
-    }
-
-    /**
-     * Get Collection Size of the raw data
-     *
-     * @param string $collection
-     * @return int
-     * @throws DatabaseException
-     */
-    public function getSizeOfCollection(string $collection): int
-    {
-        $collection = $this->filter($collection);
-        $collection = $this->getNamespace() . '_' . $collection;
-        $database = $this->getDatabase();
-        $permissions = $collection . '_perms';
-
-        $collectionSize = $this->getPDO()->prepare("
-            SELECT SUM(data_length + index_length)  
             FROM INFORMATION_SCHEMA.TABLES
             WHERE table_name = :name AND
             table_schema = :database

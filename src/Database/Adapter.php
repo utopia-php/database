@@ -659,15 +659,6 @@ abstract class Adapter
     abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
 
     /**
-     * Get Collection Size on the disk
-     *
-     * @param string $collection
-     * @return int
-     * @throws DatabaseException
-     */
-    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
-
-    /**
      * Get Collection Size of the raw data
      *
      * @param string $collection

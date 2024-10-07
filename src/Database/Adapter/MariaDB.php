@@ -210,7 +210,7 @@ class MariaDB extends SQL
         }
 
         $diff = \microtime(true) - $ctime;
-        var_dump("DB lib after creating createCollection('".$key."') : " . $diff . " sec");
+        var_dump("DB lib after creating createCollection('".$name."') : " . $diff . " sec");
 
         return true;
     }

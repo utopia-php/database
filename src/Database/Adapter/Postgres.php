@@ -2267,20 +2267,15 @@ class Postgres extends SQL
         return 'ILIKE';
     }
 
+
     /**
-     * Analyze a collection updating it's metadata on the database.
-     * This Locks the table and should be avoided if possible
+     * Analyze a collection updating it's metadata on the database engine
      *
      * @param string $collection
      * @return bool
      */
     public function analyzeCollection(string $collection): bool
     {
-        $name = $this->filter($collection);
-
-        $sql = "ANALYZE {$this->getSQLTable($name)}";
-
-        $stmt = $this->getPDO()->prepare($sql);
-        return $stmt->execute();
+        return false;
     }
 }

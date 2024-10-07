@@ -3685,10 +3685,12 @@ class Database
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
-            if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
-            }
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
+
+            if ($this->adapter->getSharedTables()) {
+                $document['$tenant'] = $old->getAttribute('$tenant');       // Make sure user doesn't switch tenant
+            }
+
             $document = new Document($document);
 
             $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
@@ -3825,7 +3827,6 @@ class Database
             $document = $this->encode($collection, $document);
 
             $structureValidator = new Structure($collection);
-
             if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                 throw new StructureException($structureValidator->getDescription());
             }
@@ -3834,7 +3835,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document);
 
             return $document;
         });

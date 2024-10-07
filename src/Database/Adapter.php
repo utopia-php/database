@@ -592,7 +592,7 @@ abstract class Adapter
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, Document $document): Document;
+    abstract public function updateDocument(string $collection, string $id, Document $document): Document;
 
     /**
      * Update Documents in batches
@@ -659,15 +659,6 @@ abstract class Adapter
     abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
 
     /**
-     * Get Collection Size on the disk
-     *
-     * @param string $collection
-     * @return int
-     * @throws DatabaseException
-     */
-    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
-
-    /**
      * Get Collection Size of the raw data
      *
      * @param string $collection
@@ -675,6 +666,15 @@ abstract class Adapter
      * @throws DatabaseException
      */
     abstract public function getSizeOfCollection(string $collection): int;
+
+    /**
+     * Get Collection Size on the disk
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
 
     /**
      * Get max STRING limit

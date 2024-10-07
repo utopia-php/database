@@ -262,7 +262,7 @@ class MariaDB extends SQL
 
         $collectionSize = $this->getPDO()->prepare("
             SELECT SUM(data_length + index_length)  
-            FROM INFORMATION_SCHEMA.TABLES 
+            FROM INFORMATION_SCHEMA.TABLES
             WHERE table_name = :name AND
             table_schema = :database
          ");
@@ -1060,6 +1060,7 @@ class MariaDB extends SQL
      * Update Document
      *
      * @param string $collection
+     * @param string $id
      * @param Document $document
      * @return Document
      * @throws Exception
@@ -1067,7 +1068,7 @@ class MariaDB extends SQL
      * @throws DuplicateException
      * @throws \Throwable
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         try {
             $attributes = $document->getAttributes();
@@ -1248,8 +1249,8 @@ class MariaDB extends SQL
 
             $sql = "
                 UPDATE {$this->getSQLTable($name)}
-                SET {$columns} _uid = :_uid 
-                WHERE _uid = :_uid
+                SET {$columns} _uid = :_newUid
+                WHERE _uid = :_existingUid
 			";
 
             if ($this->sharedTables) {
@@ -1260,7 +1261,8 @@ class MariaDB extends SQL
 
             $stmt = $this->getPDO()->prepare($sql);
 
-            $stmt->bindValue(':_uid', $document->getId());
+            $stmt->bindValue(':_existingUid', $id);
+            $stmt->bindValue(':_newUid', $document->getId());
 
             if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant);
@@ -2300,10 +2302,8 @@ class MariaDB extends SQL
         throw $e;
     }
 
-
     /**
-     * Analyze a collection updating it's metadata on the database.
-     * This Locks the table and should be avoided if possible
+     * Analyze a collection updating it's metadata on the database engine
      *
      * @param string $collection
      * @return bool
@@ -2317,4 +2317,5 @@ class MariaDB extends SQL
         $stmt = $this->getPDO()->prepare($sql);
         return $stmt->execute();
     }
+
 }

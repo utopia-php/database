@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\System\System;
 
 class MariaDB extends SQL
 {
@@ -74,6 +75,11 @@ class MariaDB extends SQL
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
+
+        $ctime = \microtime(true);
+        var_dump("DB lib before creating createCollection('".$name."')");
+
+
         $id = $this->filter($name);
 
         /** @var array<string> $attributeStrings */
@@ -202,6 +208,9 @@ class MariaDB extends SQL
                 ->execute();
             throw $th;
         }
+
+        $diff = \microtime(true) - $ctime;
+        var_dump("DB lib after creating createCollection('".$key."') : " . $diff . " sec");
 
         return true;
     }

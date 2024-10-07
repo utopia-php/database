@@ -301,7 +301,7 @@ class Mongo extends Adapter
             } else {
                 throw new DatabaseException('No size found');
             }
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
     }

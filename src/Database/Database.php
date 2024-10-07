@@ -1041,7 +1041,10 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if (!$collection->isEmpty() && $id !== self::METADATA) {
-            throw new DuplicateException('Collection ' . $id . ' already exists');
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw new DuplicateException('Collection ' . $id . ' already exists');
+            }
         }
 
         $collection = new Document([
@@ -1065,14 +1068,7 @@ class Database
             }
         }
 
-        try {
-            $this->adapter->createCollection($id, $attributes, $indexes);
-        } catch (DuplicateException $e) {
-            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if (!$this->adapter->getSharedTables()) {
-                throw $e;
-            }
-        }
+        $this->adapter->createCollection($id, $attributes, $indexes);
 
         if ($id === self::METADATA) {
             return new Document(self::COLLECTION);
@@ -1303,7 +1299,7 @@ class Database
 
         try {
             $this->adapter->deleteCollection($id);
-        } catch (DuplicateException $e) {
+        } catch (\Throwable $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables()) {
                 throw $e;

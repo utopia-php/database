@@ -1065,7 +1065,14 @@ class Database
             }
         }
 
-        $this->adapter->createCollection($id, $attributes, $indexes);
+        try {
+            $this->adapter->createCollection($id, $attributes, $indexes);
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw $e;
+            }
+        }
 
         if ($id === self::METADATA) {
             return new Document(self::COLLECTION);
@@ -1294,7 +1301,14 @@ class Database
             $this->deleteRelationship($collection->getId(), $relationship->getId());
         }
 
-        $this->adapter->deleteCollection($id);
+        try {
+            $this->adapter->deleteCollection($id);
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw $e;
+            }
+        }
 
         if ($id === self::METADATA) {
             $deleted = true;
@@ -1921,7 +1935,15 @@ class Database
             }
         }
 
-        $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
+        $deleted = false;
+        try {
+            $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw $e;
+            }
+        }
 
         if (!$deleted) {
             throw new DatabaseException('Failed to delete attribute');
@@ -2744,7 +2766,16 @@ class Database
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
-        $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+
+        $deleted = false;
+        try {
+            $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw $e;
+            }
+        }
 
         $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
 

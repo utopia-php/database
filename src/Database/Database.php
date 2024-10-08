@@ -2900,6 +2900,10 @@ class Database
 
         var_dump("at this->adapter->getDocument");
         var_dump($id);
+        var_dump("collection id");
+        var_dump($collection->getId());
+        var_dump("queries");
+        var_dump($queries);
         $document = $this->adapter->getDocument($collection->getId(), $id, $queries, $forUpdate);
         var_dump($document);
 

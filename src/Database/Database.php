@@ -3218,11 +3218,18 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
+        var_dump('collection');
+        var_dump($collection);
+        var_dump('document');
+        var_dump($document);
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
+        var_dump("get collection call");
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        var_dump($collection);
 
         if ($collection->getId() !== self::METADATA) {
             $authorization = new Authorization(self::PERMISSION_CREATE);

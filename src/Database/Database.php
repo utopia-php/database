@@ -3223,15 +3223,12 @@ class Database
     {
         var_dump('collection');
         var_dump($collection);
-        var_dump('document');
-        var_dump($document);
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        var_dump("get collection call");
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        var_dump("result of getCollection('executions')");
         var_dump($collection);
 
         if ($collection->getId() !== self::METADATA) {
@@ -3245,6 +3242,9 @@ class Database
 
         $createdAt = $document->getCreatedAt();
         $updatedAt = $document->getUpdatedAt();
+
+        var_dump("before setting attribute");
+        var_dump($collection->getId());
 
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())

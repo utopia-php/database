@@ -5214,9 +5214,9 @@ class Database
 
         if (!$found) {
             return new Document();
-        } else {
-            return $found;
         }
+
+        return $found;
     }
 
     /**

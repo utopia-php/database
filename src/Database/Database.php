@@ -2795,6 +2795,7 @@ class Database
         }
 
         if ($collection === self::METADATA && $id === self::METADATA) {
+            var_dump("entered this condition");
             return new Document(self::COLLECTION);
         }
 
@@ -2897,7 +2898,10 @@ class Database
             return $document;
         }
 
+        var_dump("at this->adapter->getDocument");
+        var_dump($id);
         $document = $this->adapter->getDocument($collection->getId(), $id, $queries, $forUpdate);
+        var_dump($document);
 
         if ($document->isEmpty()) {
             return $document;

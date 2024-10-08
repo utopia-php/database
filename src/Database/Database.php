@@ -1067,23 +1067,16 @@ class Database
 
         $this->adapter->createCollection($id, $attributes, $indexes);
 
-        $ctime = \microtime(true);
-        var_dump("DB lib after creating createCollection('".$id."') 1");
 
         if ($id === self::METADATA) {
             return new Document(self::COLLECTION);
         }
-        $ttime = \microtime(true);
-        var_dump("DB lib after creating createCollection('".$id."') 1.1");
+
         // Check index limits, if given
         if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
         }
-        $diff = \microtime(true) - $ttime;
-        var_dump("DB lib after creating createCollection('".$id."') 1.1 : " . $diff . " sec");
 
-        $ttime = \microtime(true);
-        var_dump("DB lib after creating createCollection('".$id."') 1.2");
         // Check attribute limits, if given
         if ($attributes) {
             if (
@@ -1093,36 +1086,18 @@ class Database
                 throw new LimitException('Column limit of ' . $this->adapter->getLimitForAttributes() . ' exceeded. Cannot create collection.');
             }
 
-            $diff = \microtime(true) - $ttime;
-            var_dump("DB lib after creating createCollection('".$id."') 1.2 : " . $diff . " sec");
 
-
-            $ttime = \microtime(true);
-            var_dump("DB lib after creating createCollection('".$id."') 1.3");
             if (
                 $this->adapter->getDocumentSizeLimit() > 0 &&
                 $this->adapter->getAttributeWidth($collection) > $this->adapter->getDocumentSizeLimit()
             ) {
                 throw new LimitException('Row width limit of ' . $this->adapter->getDocumentSizeLimit() . ' exceeded. Cannot create collection.');
             }
-            $diff = \microtime(true) - $ttime;
-            var_dump("DB lib after creating createCollection('".$id."') 1.3 : " . $diff . " sec");
+
         }
-        $ttime = \microtime(true);
-        var_dump("DB lib after creating createCollection('".$id."') 1.4");
+
         $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
-        $diff = \microtime(true) - $ttime;
-        var_dump("DB lib after creating createCollection('".$id."') 1.4 : " . $diff . " sec");
-
-        $ttime = \microtime(true);
-        var_dump("DB lib after creating createCollection('".$id."') 1.5");
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
-        $diff = \microtime(true) - $ttime;
-        var_dump("DB lib after creating createCollection('".$id."') 1.5 : " . $diff . " sec");
-
-
-        $diff = \microtime(true) - $ctime;
-        var_dump("DB lib after creating createCollection('".$id."') 1 : " . $diff . " sec");
 
         return $createdCollection;
     }
@@ -2881,7 +2856,7 @@ class Database
         }
 
         if ($cache = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash)) {
-            var_dump('*******Hitting cache******');
+            var_dump('*******Hitting cache  '.$documentCacheKey. '******');
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {
@@ -3232,16 +3207,9 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        $ttime = \microtime(true);
-        var_dump("DB lib  creating createDocument('".$collection."') 1.1");
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $diff = \microtime(true) - $ttime;
-        var_dump("DB lib after creating createDocument('".$id."') 1.1 : " . $diff . " sec");
-
-        $ttime = \microtime(true);
-        var_dump("DB lib  creating createDocument('".$collection."') 1.1");
 
         if ($collection->getId() !== self::METADATA) {
             $authorization = new Authorization(self::PERMISSION_CREATE);
@@ -3249,8 +3217,7 @@ class Database
                 throw new AuthorizationException($authorization->getDescription());
             }
         }
-        $diff = \microtime(true) - $ttime;
-        var_dump("DB lib after creating createCollection('".$id."') 1.1 : " . $diff . " sec");
+
 
         $time = DateTime::now();
 

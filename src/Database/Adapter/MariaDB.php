@@ -75,8 +75,7 @@ class MariaDB extends SQL
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        $ctime = \microtime(true);
-        var_dump("DB lib maria db adapter before creating createCollection('".$name."')");
+
         $id = $this->filter($name);
 
         /** @var array<string> $attributeStrings */
@@ -169,7 +168,6 @@ class MariaDB extends SQL
             $this->getPDO()
                 ->prepare($sql)
                 ->execute();
-            var_dump($sql);
             $sql = "
 				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
 					_id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -196,21 +194,17 @@ class MariaDB extends SQL
 
             $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
 
-            var_dump($sql);
             $this->getPDO()
                 ->prepare($sql)
                 ->execute();
 
         } catch (\Exception $th) {
-            var_dump("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};");
             $this->getPDO()
                 ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
                 ->execute();
             throw $th;
         }
 
-        $diff = \microtime(true) - $ctime;
-        var_dump("DB lib maria db adapter after creating createCollection('".$name."') : " . $diff . " sec");
 
         return true;
     }

@@ -1067,6 +1067,11 @@ class Database
 
         $this->adapter->createCollection($id, $attributes, $indexes);
 
+        $ctime = \microtime(true);
+        var_dump("DB lib after creating createCollection('".$name."')");
+
+
+
         if ($id === self::METADATA) {
             return new Document(self::COLLECTION);
         }
@@ -1096,6 +1101,9 @@ class Database
         $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
+
+        $diff = \microtime(true) - $ctime;
+        var_dump("DB lib after creating createCollection('".$name."') : " . $diff . " sec");
 
         return $createdCollection;
     }

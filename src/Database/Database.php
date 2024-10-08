@@ -2881,6 +2881,7 @@ class Database
         }
 
         if ($cache = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash)) {
+            var_dump('*******Hitting cache******');
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {
@@ -3231,7 +3232,16 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
+        $ttime = \microtime(true);
+        var_dump("DB lib  creating createDocument('".$collection."') 1.1");
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        $diff = \microtime(true) - $ttime;
+        var_dump("DB lib after creating createDocument('".$id."') 1.1 : " . $diff . " sec");
+
+        $ttime = \microtime(true);
+        var_dump("DB lib  creating createDocument('".$collection."') 1.1");
 
         if ($collection->getId() !== self::METADATA) {
             $authorization = new Authorization(self::PERMISSION_CREATE);
@@ -3239,6 +3249,8 @@ class Database
                 throw new AuthorizationException($authorization->getDescription());
             }
         }
+        $diff = \microtime(true) - $ttime;
+        var_dump("DB lib after creating createCollection('".$id."') 1.1 : " . $diff . " sec");
 
         $time = DateTime::now();
 

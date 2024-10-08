@@ -4054,10 +4054,10 @@ class Database
                                 }
                                 if (
                                     $oldValue?->getId() !== $value
-                                    && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
+                                    && !($this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
                                         Query::select(['$id']),
                                         Query::equal($twoWayKey, [$value]),
-                                    ]))
+                                    ]))->isEmpty())
                                 ) {
                                     // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                     throw new DuplicateException('Document already has a related document');
@@ -4075,10 +4075,10 @@ class Database
 
                                     if (
                                         $oldValue?->getId() !== $value->getId()
-                                        && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
+                                        && !($this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
                                             Query::select(['$id']),
                                             Query::equal($twoWayKey, [$value->getId()]),
-                                        ]))
+                                        ]))->isEmpty())
                                     ) {
                                         // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                         throw new DuplicateException('Document already has a related document');
@@ -4745,7 +4745,7 @@ class Database
                     Query::equal($twoWayKey, [$document->getId()])
                 ]);
 
-                if (!$related instanceof Document) {
+                if ($related->isEmpty()) {
                     return;
                 }
 
@@ -4768,7 +4768,7 @@ class Database
                 Query::equal($twoWayKey, [$document->getId()])
             ]));
 
-            if ($related) {
+            if (!$related->isEmpty()) {
                 throw new RestrictedException('Cannot delete document because it has at least one related document.');
             }
         }
@@ -4812,7 +4812,7 @@ class Database
                         $related = $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])]);
                     }
 
-                    if (!$related instanceof Document) {
+                    if ($related->isEmpty()) {
                         return;
                     }
 
@@ -5191,10 +5191,10 @@ class Database
     /**
      * @param string $collection
      * @param array<Query> $queries
-     * @return false|Document
+     * @return Document
      * @throws DatabaseException
      */
-    public function findOne(string $collection, array $queries = []): false|Document
+    public function findOne(string $collection, array $queries = []): Document
     {
         $results = $this->silent(fn () => $this->find($collection, \array_merge([
             Query::limit(1)
@@ -5203,6 +5203,10 @@ class Database
         $found = \reset($results);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
+
+        if (!$found) {
+            return new Document();
+        }
 
         return $found;
     }

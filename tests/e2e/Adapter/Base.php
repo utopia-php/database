@@ -4292,13 +4292,13 @@ abstract class Base extends TestCase
             Query::orderAsc('name')
         ]);
 
-        $this->assertTrue($document instanceof Document);
+        $this->assertFalse($document->isEmpty());
         $this->assertEquals('Frozen', $document->getAttribute('name'));
 
         $document = static::getDatabase()->findOne('movies', [
             Query::offset(10)
         ]);
-        $this->assertEquals(false, $document);
+        $this->assertTrue($document->isEmpty());
     }
 
     public function testFindNull(): void
@@ -5536,7 +5536,7 @@ abstract class Base extends TestCase
 
         // Document should be there if adapter migrated properly
         $document = $database->findOne('colors');
-        $this->assertTrue($document instanceof Document);
+        $this->assertFalse($document->isEmpty());
         $this->assertEquals('black', $document->getAttribute('verbose'));
         $this->assertEquals('#000000', $document->getAttribute('hex'));
         $this->assertEquals(null, $document->getAttribute('name'));
@@ -6636,7 +6636,7 @@ abstract class Base extends TestCase
             Query::select(['*', 'library.name'])
         ]);
 
-        if (!$person instanceof Document) {
+        if ($person->isEmpty()) {
             throw new Exception('Person not found');
         }
 
@@ -7112,7 +7112,7 @@ abstract class Base extends TestCase
             Query::select(['*', 'city.name'])
         ]);
 
-        if (!$country instanceof Document) {
+        if ($country->isEmpty()) {
             throw new Exception('Country not found');
         }
 
@@ -7686,7 +7686,7 @@ abstract class Base extends TestCase
             Query::select(['*', 'albums.name'])
         ]);
 
-        if (!$artist instanceof Document) {
+        if ($artist->isEmpty()) {
             $this->fail('Artist not found');
         }
 
@@ -8119,7 +8119,7 @@ abstract class Base extends TestCase
             Query::select(['*', 'accounts.name'])
         ]);
 
-        if (!$customer instanceof Document) {
+        if ($customer->isEmpty()) {
             throw new Exception('Customer not found');
         }
 
@@ -8531,7 +8531,7 @@ abstract class Base extends TestCase
             Query::select(['*', 'movie.name'])
         ]);
 
-        if (!$review instanceof Document) {
+        if ($review->isEmpty()) {
             throw new Exception('Review not found');
         }
 
@@ -8908,7 +8908,7 @@ abstract class Base extends TestCase
             Query::select(['*', 'store.name'])
         ]);
 
-        if (!$product instanceof Document) {
+        if ($product->isEmpty()) {
             throw new Exception('Product not found');
         }
 
@@ -9290,7 +9290,7 @@ abstract class Base extends TestCase
             Query::select(['*', 'songs.name'])
         ]);
 
-        if (!$playlist instanceof Document) {
+        if ($playlist->isEmpty()) {
             throw new Exception('Playlist not found');
         }
 
@@ -9672,7 +9672,7 @@ abstract class Base extends TestCase
             Query::select(['*', 'classes.name'])
         ]);
 
-        if (!$student instanceof Document) {
+        if ($student->isEmpty()) {
             throw new Exception('Student not found');
         }
 
@@ -9976,7 +9976,7 @@ abstract class Base extends TestCase
             Query::select(['name', 'models.name']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
@@ -9998,7 +9998,7 @@ abstract class Base extends TestCase
             Query::select(['name', '$id']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
@@ -10013,7 +10013,7 @@ abstract class Base extends TestCase
             Query::select(['name', '$internalId']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
@@ -10028,7 +10028,7 @@ abstract class Base extends TestCase
             Query::select(['name', '$collection']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
@@ -10043,7 +10043,7 @@ abstract class Base extends TestCase
             Query::select(['name', '$createdAt']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
@@ -10058,7 +10058,7 @@ abstract class Base extends TestCase
             Query::select(['name', '$updatedAt']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
@@ -10073,7 +10073,7 @@ abstract class Base extends TestCase
             Query::select(['name', '$permissions']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
@@ -10089,7 +10089,7 @@ abstract class Base extends TestCase
             Query::select(['*', 'models.year']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
@@ -10105,7 +10105,7 @@ abstract class Base extends TestCase
             Query::select(['*', 'models.*']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
@@ -10122,7 +10122,7 @@ abstract class Base extends TestCase
             Query::select(['models.*']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
@@ -10138,7 +10138,7 @@ abstract class Base extends TestCase
             Query::select(['name']),
         ]);
 
-        if (!$make instanceof Document) {
+        if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 

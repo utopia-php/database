@@ -3234,11 +3234,17 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
+        var_dump("collection name");
+        var_dump($collection);
+        var_dump("document");
+        var_dump($document);
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        var_dump("after get collection");
+        var_dump($collection);
 
         if ($collection->getId() !== self::METADATA) {
             $isValid = $this->authorization->isValid(new Input(self::PERMISSION_CREATE, $collection->getCreate()));
@@ -3271,6 +3277,7 @@ class Database
             }
         }
 
+        var_dump("flow reached here");
         $structure = new Structure($collection);
         if (!$structure->isValid($document)) {
             throw new StructureException($structure->getDescription());

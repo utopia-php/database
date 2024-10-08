@@ -1068,7 +1068,7 @@ class Database
         $this->adapter->createCollection($id, $attributes, $indexes);
 
         $ctime = \microtime(true);
-        var_dump("DB lib after creating createCollection('".$id."')");
+        var_dump("DB lib after creating createCollection('".$id."') 1");
 
 
 
@@ -1103,7 +1103,7 @@ class Database
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 
         $diff = \microtime(true) - $ctime;
-        var_dump("DB lib after creating createCollection('".$id."') : " . $diff . " sec");
+        var_dump("DB lib after creating createCollection('".$id."') 2 : " . $diff . " sec");
 
         return $createdCollection;
     }

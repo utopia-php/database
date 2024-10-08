@@ -2785,6 +2785,11 @@ class Database
      */
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
+        var_dump("inside get document");
+        var_dump("printing collection name");
+        var_dump($id);
+        var_dump("printng collection also");
+        var_dump($collection);
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
@@ -2802,6 +2807,7 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        var_dump("abcd");
 
         if ($collection->isEmpty()) {
             throw new DatabaseException('Collection not found');

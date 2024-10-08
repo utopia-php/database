@@ -1070,17 +1070,20 @@ class Database
         $ctime = \microtime(true);
         var_dump("DB lib after creating createCollection('".$id."') 1");
 
-
-
         if ($id === self::METADATA) {
             return new Document(self::COLLECTION);
         }
-
+        $ttime = \microtime(true);
+        var_dump("DB lib after creating createCollection('".$id."') 1.1");
         // Check index limits, if given
         if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
         }
+        $diff = \microtime(true) - $ttime;
+        var_dump("DB lib after creating createCollection('".$id."') 1.1 : " . $diff . " sec");
 
+        $ttime = \microtime(true);
+        var_dump("DB lib after creating createCollection('".$id."') 1.2");
         // Check attribute limits, if given
         if ($attributes) {
             if (
@@ -1090,20 +1093,36 @@ class Database
                 throw new LimitException('Column limit of ' . $this->adapter->getLimitForAttributes() . ' exceeded. Cannot create collection.');
             }
 
+            $diff = \microtime(true) - $ttime;
+            var_dump("DB lib after creating createCollection('".$id."') 1.2 : " . $diff . " sec");
+
+
+            $ttime = \microtime(true);
+            var_dump("DB lib after creating createCollection('".$id."') 1.3");
             if (
                 $this->adapter->getDocumentSizeLimit() > 0 &&
                 $this->adapter->getAttributeWidth($collection) > $this->adapter->getDocumentSizeLimit()
             ) {
                 throw new LimitException('Row width limit of ' . $this->adapter->getDocumentSizeLimit() . ' exceeded. Cannot create collection.');
             }
+            $diff = \microtime(true) - $ttime;
+            var_dump("DB lib after creating createCollection('".$id."') 1.3 : " . $diff . " sec");
         }
-
+        $ttime = \microtime(true);
+        var_dump("DB lib after creating createCollection('".$id."') 1.4");
         $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        $diff = \microtime(true) - $ttime;
+        var_dump("DB lib after creating createCollection('".$id."') 1.4 : " . $diff . " sec");
 
+        $ttime = \microtime(true);
+        var_dump("DB lib after creating createCollection('".$id."') 1.5");
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
+        $diff = \microtime(true) - $ttime;
+        var_dump("DB lib after creating createCollection('".$id."') 1.5 : " . $diff . " sec");
+
 
         $diff = \microtime(true) - $ctime;
-        var_dump("DB lib after creating createCollection('".$id."') 2 : " . $diff . " sec");
+        var_dump("DB lib after creating createCollection('".$id."') 1 : " . $diff . " sec");
 
         return $createdCollection;
     }

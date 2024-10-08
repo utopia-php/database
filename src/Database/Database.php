@@ -1162,7 +1162,10 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
+        var_dump("inside get collection");
+        var_dump(self::METADATA);
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        var_dump($collection);
 
         if (
             $id !== self::METADATA

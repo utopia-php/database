@@ -3241,7 +3241,7 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        $collection = $this->silent(fn () => $this->getCollection($collection));
+        $collection = $this->silent(fn () => Authorization::skip(fn () => $this->getCollection($collection)));
         var_dump("result of getCollection('executions')");
         var_dump($collection);
 

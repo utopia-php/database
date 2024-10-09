@@ -2856,7 +2856,7 @@ class Database
         }
 
         if ($cache = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash)) {
-            var_dump('*******Hitting cache  '.$documentCacheKey. '******');
+            //var_dump('*******Hitting cache  '.$documentCacheKey. '******');
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {

@@ -595,17 +595,17 @@ abstract class Adapter
     abstract public function updateDocument(string $collection, Document $document): Document;
 
     /**
-     * Update Documents in batches
+     * Batch update documents
      *
      * @param string $collection
-     * @param array<Document> $documents
-     * @param int $batchSize
+     * @param Document $update
+     * @param array<Query> $queries
      *
-     * @return array<Document>
+     * @return bool
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, array $documents, int $batchSize): array;
+    abstract public function updateDocuments(string $collection, Document $update, array $queries): bool;
 
     /**
      * Delete Document

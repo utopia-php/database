@@ -20,6 +20,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
@@ -3884,83 +3885,97 @@ class Database
     }
 
     /**
-     * Update Documents in a batch
-     *
+     * Batch update documents
+     * 
      * @param string $collection
-     * @param array<Document> $documents
-     * @param int $batchSize
-     *
-     * @return array<Document>
-     *
-     * @throws AuthorizationException
-     * @throws Exception
-     * @throws StructureException
+     * @param Document $updates
+     * @param array<Query> $queries
+     * 
+     * @return bool
+     * 
+     * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
+    public function updateDocuments(string $collection, Document $update, array $queries, int $batchSize = self::INSERT_BATCH_SIZE): bool
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        if (empty($documents)) {
-            return [];
+        if (empty($update)) {
+            return true;
         }
 
+        $queries = Query::groupByType($queries)['filters'];
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
-            $time = DateTime::now();
-
-            foreach ($documents as $key => $document) {
-                if (!$document->getId()) {
-                    throw new DatabaseException('Must define $id attribute for each document');
-                }
-
-                $updatedAt = $document->getUpdatedAt();
-                $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
-                $document = $this->encode($collection, $document);
-
-                $old = $this->authorization->skip(fn () => $this->silent(
-                    fn () => $this->getDocument(
-                        $collection->getId(),
-                        $document->getId(),
-                        forUpdate: true
-                    )
-                ));
-
-                if (
-                    $collection->getId() !== self::METADATA
-                && !$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $old->getUpdate()))
-                ) {
-                    throw new AuthorizationException($this->authorization->getDescription());
-                }
-
-                $validator = new Structure($collection);
-                if (!$validator->isValid($document)) {
-                    throw new StructureException($validator->getDescription());
-                }
-
-                if ($this->resolveRelationships) {
-                    $documents[$key] = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
-                }
-            }
-
-            return $this->adapter->updateDocuments($collection->getId(), $documents, $batchSize);
-        });
-
-        foreach ($documents as $key => $document) {
-            if ($this->resolveRelationships) {
-                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
-            }
-
-            $documents[$key] = $this->decode($collection, $document);
-
-            $this->purgeCachedDocument($collection->getId(), $document->getId());
+        // Check new document structure
+        $validator = new PartialStructure($collection);
+        if (!$validator->isValid($update)) {
+            throw new StructureException($validator->getDescription());
         }
 
-        $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
+        $affectedDocumentIds = [];
 
-        return $documents;
+        $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds, $update) {
+            $lastDocument = null;
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+
+            while (true) {
+                $affectedDocuments = $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) {
+                    return $this->find($collection->getId(), array_merge(
+                        empty($lastDocument) ? [
+                            Query::limit($batchSize),
+                        ] : [
+                            Query::limit($batchSize),
+                            Query::cursorAfter($lastDocument),
+                        ],
+                        $queries,
+                    ));
+                });
+
+                if (empty($affectedDocuments)) {
+                    break;
+                }
+
+                $affectedDocumentIds = array_merge($affectedDocumentIds, array_map(fn ($document) => $document->getId(), $affectedDocuments));
+
+                foreach ($affectedDocuments as $document) {
+                    // Check permissions for document security
+                    if ($collection->getId() !== self::METADATA) {
+                        $isValid = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
+                            ...$collection->getUpdate(),
+                            ...($documentSecurity ? $document->getUpdate() : [])
+                        ]));
+                        if (!$isValid) {
+                            throw new AuthorizationException($this->authorization->getDescription());
+                        }
+                    }
+
+                    // Update relationship, TODO: Figure out.
+                    if ($this->resolveRelationships) {
+
+                    }
+                }
+
+                if (count($affectedDocuments) < $batchSize) {
+                    break;
+                } else {
+                    $lastDocument = end($affectedDocuments);
+                }
+            }
+
+            $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $affectedDocumentIds);
+
+            $this->adapter->updateDocuments(
+                $collection->getId(),
+                $update,
+                $queries
+            );
+        });
+
+        $this->purgeCachedCollection($collection->getId());
+
+        return true;
     }
 
     /**

@@ -820,35 +820,19 @@ class Mongo extends Adapter
     }
 
     /**
-     * Update Documents in batches
+     * Batch update documents
      *
      * @param string $collection
-     * @param array<Document> $documents
-     * @param int $batchSize
+     * @param Document $update
+     * @param array<Query> $queries
      *
-     * @return array<Document>
+     * @return bool
      *
-     * @throws Duplicate
+     * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, array $documents, int $batchSize): array
+    public function updateDocuments(string $collection, Document $update, array $queries): bool
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
-
-        foreach ($documents as $index => $document) {
-            $document = $document->getArrayCopy();
-            $document = $this->replaceChars('$', '_', $document);
-            $document = $this->timeToMongo($document);
-
-            $filters = [];
-            $filters['_uid'] = $document['_uid'];
-            if ($this->sharedTables) {
-                $filters['_tenant'] = (string)$this->getTenant();
-            }
-
-            $this->client->update($name, $filters, $document);
-        }
-
-        return $documents;
+        throw new Exception('Not implemented');
     }
 
     /**

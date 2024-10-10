@@ -15964,7 +15964,7 @@ abstract class Base extends TestCase
         // NULL - Cleanup
         $this->getDatabase()->deleteDocuments('bulk_delete_person_o2m');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person_o2m'));
-        
+
 
         // Cascade
         $this->getDatabase()->updateRelationship(
@@ -16023,14 +16023,14 @@ abstract class Base extends TestCase
             $this->expectNotToPerformAssertions();
             return;
         }
-    
+
         $this->getDatabase()->createCollection('bulk_delete_person_m2m');
         $this->getDatabase()->createCollection('bulk_delete_library_m2m');
-    
+
         $this->getDatabase()->createAttribute('bulk_delete_person_m2m', 'name', Database::VAR_STRING, 255, true);
         $this->getDatabase()->createAttribute('bulk_delete_library_m2m', 'name', Database::VAR_STRING, 255, true);
         $this->getDatabase()->createAttribute('bulk_delete_library_m2m', 'area', Database::VAR_STRING, 255, true);
-    
+
         // Many-to-Many Relationship
         $this->getDatabase()->createRelationship(
             collection: 'bulk_delete_person_m2m',
@@ -16038,7 +16038,7 @@ abstract class Base extends TestCase
             type: Database::RELATION_MANY_TO_MANY,
             onDelete: Database::RELATION_MUTATE_RESTRICT
         );
-    
+
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_m2m', new Document([
             '$id' => 'person1',
             '$permissions' => [
@@ -16070,11 +16070,11 @@ abstract class Base extends TestCase
                 ],
             ],
         ]));
-    
+
         $person1 = $this->getDatabase()->getDocument('bulk_delete_person_m2m', 'person1');
         $libraries = $person1->getAttribute('bulk_delete_library_m2m');
         $this->assertCount(2, $libraries);
-    
+
         // Delete person
         try {
             $this->getDatabase()->deleteDocuments('bulk_delete_person_m2m');
@@ -16082,30 +16082,30 @@ abstract class Base extends TestCase
         } catch (RestrictedException $e) {
             $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
         }
-    
+
         // Restrict Cleanup
         $this->getDatabase()->deleteRelationship('bulk_delete_person_m2m', 'bulk_delete_library_m2m');
         $this->getDatabase()->deleteDocuments('bulk_delete_library_m2m');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library_m2m'));
-    
+
         $this->getDatabase()->deleteDocuments('bulk_delete_person_m2m');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person_m2m'));
     }
-    
+
     public function testDeleteBulkDocumentsManyToOneRelationship(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
-    
+
         $this->getDatabase()->createCollection('bulk_delete_person_m2o');
         $this->getDatabase()->createCollection('bulk_delete_library_m2o');
-    
+
         $this->getDatabase()->createAttribute('bulk_delete_person_m2o', 'name', Database::VAR_STRING, 255, true);
         $this->getDatabase()->createAttribute('bulk_delete_library_m2o', 'name', Database::VAR_STRING, 255, true);
         $this->getDatabase()->createAttribute('bulk_delete_library_m2o', 'area', Database::VAR_STRING, 255, true);
-    
+
         // Many-to-One Relationship
         $this->getDatabase()->createRelationship(
             collection: 'bulk_delete_person_m2o',
@@ -16113,7 +16113,7 @@ abstract class Base extends TestCase
             type: Database::RELATION_MANY_TO_ONE,
             onDelete: Database::RELATION_MUTATE_RESTRICT
         );
-    
+
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_m2o', new Document([
             '$id' => 'person1',
             '$permissions' => [
@@ -16146,11 +16146,11 @@ abstract class Base extends TestCase
                 '$id' => 'library1',
             ]
         ]));
-    
+
         $person1 = $this->getDatabase()->getDocument('bulk_delete_person_m2o', 'person1');
         $library = $person1->getAttribute('bulk_delete_library_m2o');
         $this->assertEquals('library1', $library['$id']);
-    
+
         // Delete library
         try {
             $this->getDatabase()->deleteDocuments('bulk_delete_library_m2o');
@@ -16164,11 +16164,11 @@ abstract class Base extends TestCase
         // Test delete people
         $this->getDatabase()->deleteDocuments('bulk_delete_person_m2o');
         $this->assertEquals(0, count($this->getDatabase()->find('bulk_delete_person_m2o')));
-    
+
         // Restrict Cleanup
         $this->getDatabase()->deleteDocuments('bulk_delete_library_m2o');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library_m2o'));
-    
+
         $this->getDatabase()->deleteDocuments('bulk_delete_person_m2o');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person_m2o'));
     }

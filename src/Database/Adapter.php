@@ -618,6 +618,16 @@ abstract class Adapter
     abstract public function deleteDocument(string $collection, string $id): bool;
 
     /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<string> $ids
+     *
+     * @return bool
+     */
+    abstract public function deleteDocuments(string $collection, array $ids): bool;
+
+    /**
      * Find Documents
      *
      * Find data sets using chosen queries

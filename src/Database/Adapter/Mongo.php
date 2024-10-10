@@ -921,6 +921,43 @@ class Mongo extends Adapter
     }
 
     /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<string> $ids
+     *
+     * @return bool
+     */
+    public function deleteDocuments(string $collection, array $ids): bool
+    {
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_uid', $ids)]);
+
+        if ($this->sharedTables) {
+            $filters['_tenant'] = (string)$this->getTenant();
+        }
+
+        $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
+        $filters = $this->timeFilter($filters);
+
+        $options = [];
+
+        try {
+            $res = $this->client->delete(
+                collection: $name,
+                filters: $filters,
+                options: $options,
+                limit: 0
+            );
+        } catch (MongoException $e) {
+            $this->processException($e);
+        }
+
+        return true;
+    }
+
+    /**
      * Update Attribute.
      * @param string $collection
      * @param string $id

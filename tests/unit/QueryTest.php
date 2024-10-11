@@ -9,13 +9,9 @@ use Utopia\Database\Query;
 
 class QueryTest extends TestCase
 {
-    public function setUp(): void
-    {
-    }
+    public function setUp(): void {}
 
-    public function tearDown(): void
-    {
-    }
+    public function tearDown(): void {}
 
     public function testCreate(): void
     {
@@ -67,7 +63,7 @@ class QueryTest extends TestCase
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals([10], $query->getValues());
 
-        $cursor = new Document();
+        $cursor = new Document;
         $query = Query::cursorAfter($cursor);
 
         $this->assertEquals(Query::TYPE_CURSOR_AFTER, $query->getMethod());
@@ -88,7 +84,6 @@ class QueryTest extends TestCase
     }
 
     /**
-     * @return void
      * @throws QueryException
      */
     public function testParse(): void
@@ -200,7 +195,7 @@ class QueryTest extends TestCase
 
         $json = Query::or([
             Query::equal('actors', ['Brad Pitt']),
-            Query::equal('actors', ['Johnny Depp'])
+            Query::equal('actors', ['Johnny Depp']),
         ])->toString();
 
         $query = Query::parse($json);
@@ -274,5 +269,25 @@ class QueryTest extends TestCase
 
         $this->assertFalse(Query::isMethod('invalid'));
         $this->assertFalse(Query::isMethod('lte '));
+    }
+
+    /**
+     * @throws QueryException
+     */
+    public function testJoins(): void
+    {
+        $query =
+            Query::join(
+                'users',
+                'u',
+                [
+                    Query::relation('u.id', Query::TYPE_EQUAL, 'd.user_id'),
+                    Query::equal('u.id', ['usa']),
+                ]
+            );
+
+        $this->assertEquals(Query::TYPE_EQUAL, $query->getMethod());
+        $this->assertEquals('title', $query->getAttribute());
+        $this->assertEquals('Iron Man', $query->getValues()[0]);
     }
 }

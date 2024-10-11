@@ -21,6 +21,7 @@ class Query
     public const TYPE_BETWEEN = 'between';
     public const TYPE_STARTS_WITH = 'startsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
+    public const TYPE_RELATION = 'relation';
 
     public const TYPE_SELECT = 'select';
 
@@ -37,6 +38,11 @@ class Query
     // Logical methods
     public const TYPE_AND = 'and';
     public const TYPE_OR = 'or';
+
+    // Join methods
+    public const TYPE_INNER_JOIN = 'join';
+    public const TYPE_LEFT_JOIN = 'leftJoin';
+    public const TYPE_RIGHT_JOIN = 'rightJoin';
 
     public const TYPES = [
         self::TYPE_EQUAL,
@@ -71,6 +77,7 @@ class Query
     protected string $method = '';
     protected string $attribute = '';
     protected bool $onArray = false;
+    protected bool $isRelation = false;
 
     /**
      * @var array<mixed>
@@ -565,6 +572,50 @@ class Query
     public static function and(array $queries): self
     {
         return new self(self::TYPE_AND, '', $queries);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $conditions
+     * @return Query
+     */
+    public static function join(string $collection, string $alias, array $conditions = []): self
+    {
+        $value = [
+            'collection' => $collection,
+            'alias' => $alias,
+            'conditions' => $conditions,
+        ];
+
+        return new self(self::TYPE_INNER_JOIN, '', $value);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $conditions
+     * @return Query
+     */
+    public static function relation(string $leftColumn, string $method, string $rightColumn): self
+    {
+        if (in_array($method, [
+            self::TYPE_EQUAL,
+            self::TYPE_NOT_EQUAL,
+            self::TYPE_GREATER,
+            self::TYPE_GREATER_EQUAL,
+            self::TYPE_LESSER,
+            self::TYPE_LESSER_EQUAL,
+        ])) {
+            throw new QueryException('Invalid query method: ' . $method);
+        }
+
+        $value = [
+            'operator' => $method,
+            'rightColumn' => $rightColumn,
+        ];
+
+        return new self(self::TYPE_RELATION, $leftColumn, $value);
     }
 
     /**

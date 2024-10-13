@@ -3644,7 +3644,7 @@ class Database
         // Get the related document, will be empty on permissions failure
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId));
 
-        if ($related->isEmpty()) {
+        if ($related->isEmpty() && Database::RELATION_MANY_TO_MANY !== $relationType) {
             return;
         }
 
@@ -3673,7 +3673,7 @@ class Database
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $this->skipRelationships(fn () => $this->createDocument($junction, new Document([
-                    $key => $related->getId(),
+                    $key => $relationId,
                     $twoWayKey => $documentId,
                     '$permissions' => [
                         Permission::read(Role::any()),

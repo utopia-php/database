@@ -267,7 +267,18 @@ class Mongo extends Adapter
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
+     * Get Collection Size of raw data
      * @param string $collection
      * @return int
      * @throws DatabaseException
@@ -293,17 +304,6 @@ class Mongo extends Adapter
         } catch (Exception $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
-    }
-
-    /**
-    * Get Collection Size on disk
-    * @param string $collection
-    * @return int
-    * @throws DatabaseException
-    */
-    public function getSizeOfCollectionOnDisk(string $collection): int
-    {
-        return $this->getSizeOfCollection($collection);
     }
 
     /**
@@ -971,8 +971,8 @@ class Mongo extends Adapter
         }
 
         // permissions
-        if (Authorization::$status) { // skip if authorization is disabled
-            $roles = \implode('|', Authorization::getRoles());
+        if ($this->authorization->getStatus()) { // skip if authorization is disabled
+            $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
@@ -1242,8 +1242,8 @@ class Mongo extends Adapter
         $filters = $this->buildFilters($queries);
 
         // permissions
-        if (Authorization::$status) { // skip if authorization is disabled
-            $roles = \implode('|', Authorization::getRoles());
+        if ($this->authorization->getStatus()) { // skip if authorization is disabled
+            $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
@@ -1270,8 +1270,8 @@ class Mongo extends Adapter
         $filters = $this->buildFilters($queries);
 
         // permissions
-        if (Authorization::$status) { // skip if authorization is disabled
-            $roles = \implode('|', Authorization::getRoles());
+        if ($this->authorization->getStatus()) { // skip if authorization is disabled
+            $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
@@ -1857,4 +1857,5 @@ class Mongo extends Adapter
     {
         return false;
     }
+
 }

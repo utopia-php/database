@@ -13,7 +13,6 @@ use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 class Postgres extends SQL
 {
@@ -193,13 +192,12 @@ class Postgres extends SQL
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
      * @param string $collection
      * @return int
      * @throws DatabaseException
-     *
      */
-    public function getSizeOfCollection(string $collection): int
+    public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
         $name = $this->getSQLTable($collection);
@@ -228,14 +226,38 @@ class Postgres extends SQL
     }
 
     /**
-     * Get Collection Size on disk
+     * Get Collection Size of raw data
      * @param string $collection
      * @return int
      * @throws DatabaseException
+     *
      */
-    public function getSizeOfCollectionOnDisk(string $collection): int
+    public function getSizeOfCollection(string $collection): int
     {
-        return $this->getSizeOfCollection($collection);
+        $collection = $this->filter($collection);
+        $name = $this->getSQLTable($collection);
+        $permissions = $this->getSQLTable($collection . '_perms');
+
+        $collectionSize = $this->getPDO()->prepare("
+             SELECT pg_relation_size(:name);
+        ");
+
+        $permissionsSize = $this->getPDO()->prepare("
+             SELECT pg_relation_size(:permissions);
+        ");
+
+        $collectionSize->bindParam(':name', $name);
+        $permissionsSize->bindParam(':permissions', $permissions);
+
+        try {
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+
+        return  $size;
     }
 
     /**
@@ -1592,7 +1614,7 @@ class Postgres extends SQL
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $orders = [];
 
@@ -1676,7 +1698,7 @@ class Postgres extends SQL
             $where[] = "table_main._tenant = :_tenant";
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -1789,7 +1811,7 @@ class Postgres extends SQL
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
@@ -1804,7 +1826,7 @@ class Postgres extends SQL
             $where[] = "table_main._tenant = :_tenant";
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -1855,7 +1877,7 @@ class Postgres extends SQL
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
@@ -1869,7 +1891,7 @@ class Postgres extends SQL
             $where[] = "table_main._tenant = :_tenant";
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -2244,6 +2266,7 @@ class Postgres extends SQL
     {
         return 'ILIKE';
     }
+
 
     /**
      * Analyze a collection updating it's metadata on the database engine

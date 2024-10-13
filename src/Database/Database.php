@@ -3644,7 +3644,7 @@ class Database
         // Get the related document, will be empty on permissions failure
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId));
 
-        if ($related->isEmpty() && Database::RELATION_MANY_TO_MANY !== $relationType) {
+        if ($related->isEmpty() && $relationType !== Database::RELATION_MANY_TO_MANY) {
             return;
         }
 

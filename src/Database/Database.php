@@ -1076,6 +1076,8 @@ class Database
             'deleted' => $deleted
         ]);
 
+        $this->cache->flush();
+
         return $deleted;
     }
 

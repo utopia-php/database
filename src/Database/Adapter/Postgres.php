@@ -904,9 +904,8 @@ class Postgres extends SQL
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
-        } catch (Throwable $e) {
+        } catch (PDOException $e) {
             throw $this->processException($e);
-
         }
 
         return $document;
@@ -1007,9 +1006,6 @@ class Postgres extends SQL
                     $stmtPermissions?->execute();
                 }
             }
-
-            return $documents;
-
         } catch (PDOException $e) {
             throw $this->processException($e);
         }

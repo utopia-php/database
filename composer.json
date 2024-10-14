@@ -29,7 +29,7 @@
         ],
         "lint": "./vendor/bin/pint --test",
         "format": "./vendor/bin/pint",
-        "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 512M",
+        "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 2G",
         "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
     },
     "require": {

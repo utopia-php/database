@@ -15535,6 +15535,8 @@ abstract class Base extends TestCase
     public function testUpdateDocuments(): void
     {
         $collection = 'testUpdateDocuments';
+        self::$authorization->cleanRoles();
+        self::$authorization->addRole(Role::any()->toString());
 
         $this->getDatabase()->createCollection($collection, attributes: [
             new Document([
@@ -15559,19 +15561,18 @@ abstract class Base extends TestCase
                 'array' => false,
                 'filters' => [],
             ]),
-        ]);
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ], documentSecurity: false);
 
         for ($i = 0; $i < 10; $i++) {
             $this->getDatabase()->createDocument($collection, new Document([
                 '$id' => 'doc' . $i,
                 'string' => 'text📝 ' . $i,
-                'integer' => $i,
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
+                'integer' => $i
             ]));
         }
 
@@ -15629,7 +15630,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (AuthorizationException $e) {
-            $this->assertEquals('Missing "read" permission for role "user:asd". Only "["any"]" scopes are allowed and "["user:asd"]" was given.', $e->getMessage());
+            $this->assertStringStartsWith('Missing "update" permission for role "user:asd".', $e->getMessage());
         }
 
         // Check document level permissions

@@ -1339,7 +1339,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "_tenant = :_tenant";
+            $where[] = "table_main._tenant = :_tenant";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';

@@ -3919,19 +3919,24 @@ class Database
 
         $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds, $update) {
             $lastDocument = null;
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
+            // Check Collection Security
+            $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $collection->getUpdate()));
+
+            // Resolve and update relationships
             while (true) {
-                $affectedDocuments = $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) {
-                    return $this->find($collection->getId(), array_merge(
-                        empty($lastDocument) ? [
-                            Query::limit($batchSize),
-                        ] : [
-                            Query::limit($batchSize),
-                            Query::cursorAfter($lastDocument),
-                        ],
-                        $queries,
-                    ));
+                $affectedDocuments = $this->authorization->skip(function () use ($collection, $queries, $batchSize, $lastDocument) {
+                    $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) {
+                        return $this->find($collection->getId(), array_merge(
+                            empty($lastDocument) ? [
+                                Query::limit($batchSize),
+                            ] : [
+                                Query::limit($batchSize),
+                                Query::cursorAfter($lastDocument),
+                            ],
+                            $queries,
+                        ));
+                    });
                 });
 
                 if (empty($affectedDocuments)) {
@@ -3941,17 +3946,6 @@ class Database
                 $affectedDocumentIds = array_merge($affectedDocumentIds, array_map(fn ($document) => $document->getId(), $affectedDocuments));
 
                 foreach ($affectedDocuments as $document) {
-                    // Check permissions for document security
-                    if ($collection->getId() !== self::METADATA) {
-                        $isValid = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
-                            ...$collection->getUpdate(),
-                            ...($documentSecurity ? $document->getUpdate() : [])
-                        ]));
-                        if (!$isValid) {
-                            throw new AuthorizationException($this->authorization->getDescription());
-                        }
-                    }
-
                     // Update relationship, TODO: Figure out.
                     if ($this->resolveRelationships) {
 
@@ -3967,11 +3961,13 @@ class Database
 
             $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $affectedDocumentIds);
 
-            $this->adapter->updateDocuments(
+            $getResults = fn () => $this->adapter->updateDocuments(
                 $collection->getId(),
                 $update,
                 $queries
             );
+
+            $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
         });
 
         $this->purgeCachedCollection($collection->getId());

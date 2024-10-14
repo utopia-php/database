@@ -227,13 +227,13 @@ class MariaDB extends SQL
     }
 
     /**
-     * Get collection size
+     * Get collection size on disk
      *
      * @param string $collection
      * @return int
      * @throws DatabaseException
      */
-    public function getSizeOfCollection(string $collection): int
+    public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
         $collection = $this->getNamespace() . '_' . $collection;
@@ -265,6 +265,67 @@ class MariaDB extends SQL
         }
 
         return $size;
+    }
+
+    /**
+     * Get Collection Size of the raw data
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollection(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $collection = $this->getNamespace() . '_' . $collection;
+        $database = $this->getDatabase();
+        $permissions = $collection . '_perms';
+
+        $collectionSize = $this->getPDO()->prepare("
+            SELECT SUM(data_length + index_length)  
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE table_name = :name AND
+            table_schema = :database
+         ");
+
+        $permissionsSize = $this->getPDO()->prepare("
+            SELECT SUM(data_length + index_length)  
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE table_name = :permissions AND
+            table_schema = :database
+        ");
+
+        $collectionSize->bindParam(':name', $collection);
+        $collectionSize->bindParam(':database', $database);
+        $permissionsSize->bindParam(':permissions', $permissions);
+        $permissionsSize->bindParam(':database', $database);
+
+        try {
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+
+        return $size;
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+
+        $sql = "ANALYZE TABLE {$this->getSQLTable($name)}";
+
+        $stmt = $this->getPDO()->prepare($sql);
+        return $stmt->execute();
     }
 
     /**
@@ -727,9 +788,14 @@ class MariaDB extends SQL
         $sql =  "CREATE {$sqlType} `{$id}` ON {$this->getSQLTable($collection->getId())} ({$attributes})";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -1042,6 +1108,7 @@ class MariaDB extends SQL
      * Update Document
      *
      * @param string $collection
+     * @param string $id
      * @param Document $document
      * @return Document
      * @throws Exception
@@ -1049,7 +1116,7 @@ class MariaDB extends SQL
      * @throws DuplicateException
      * @throws \Throwable
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         try {
             $attributes = $document->getAttributes();
@@ -1230,8 +1297,8 @@ class MariaDB extends SQL
 
             $sql = "
                 UPDATE {$this->getSQLTable($name)}
-                SET {$columns} _uid = :_uid 
-                WHERE _uid = :_uid
+                SET {$columns} _uid = :_newUid
+                WHERE _uid = :_existingUid
 			";
 
             if ($this->sharedTables) {
@@ -1242,7 +1309,8 @@ class MariaDB extends SQL
 
             $stmt = $this->getPDO()->prepare($sql);
 
-            $stmt->bindValue(':_uid', $document->getId());
+            $stmt->bindValue(':_existingUid', $id);
+            $stmt->bindValue(':_newUid', $document->getId());
 
             if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant);
@@ -1681,6 +1749,8 @@ class MariaDB extends SQL
         $where = [];
         $orders = [];
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
             '$internalId' => '_id',
@@ -1882,6 +1952,8 @@ class MariaDB extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $conditions = $this->getSQLConditions($queries);
         if (!empty($conditions)) {
             $where[] = $conditions;
@@ -1952,6 +2024,8 @@ class MariaDB extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
@@ -2259,16 +2333,18 @@ class MariaDB extends SQL
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
+        // Duplicate index
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
         // Data is too big for column resize
         if (($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) ||
             ($e->getCode() === '01000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1265)) {
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
-        // Duplicate index
-        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        }
+
 
         return $e;
     }

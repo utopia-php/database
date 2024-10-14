@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -251,6 +252,28 @@ class Postgres extends SQL
         }
 
         return  $size;
+    }
+
+    /**
+     * Get Collection Size on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
     }
 
     /**
@@ -714,9 +737,14 @@ class Postgres extends SQL
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            $this->processException($e);
+            return false;
+        }
     }
 
     /**
@@ -877,12 +905,8 @@ class Postgres extends SQL
                 $stmtPermissions->execute();
             }
         } catch (Throwable $e) {
-            switch ($e->getCode()) {
-                case 23505:
-                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
-                default:
-                    throw $e;
-            }
+            throw $this->processException($e);
+
         }
 
         return $document;
@@ -983,11 +1007,11 @@ class Postgres extends SQL
                     $stmtPermissions?->execute();
                 }
             }
+
+            return $documents;
+
         } catch (PDOException $e) {
-            throw match ($e->getCode()) {
-                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            throw $this->processException($e);
         }
 
         foreach ($documents as $document) {
@@ -1007,13 +1031,14 @@ class Postgres extends SQL
      * Update Document
      *
      * @param string $collection
+     * @param string $id
      * @param Document $document
      *
      * @return Document
      * @throws DatabaseException
      * @throws DuplicateException
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1179,8 +1204,8 @@ class Postgres extends SQL
 
         $sql = "
 			UPDATE {$this->getSQLTable($name)}
-			SET {$columns} _uid = :_uid 
-			WHERE _uid = :_uid
+			SET {$columns} _uid = :_newUid 
+			WHERE _uid = :_existingUid
 		";
 
         if ($this->sharedTables) {
@@ -1191,7 +1216,8 @@ class Postgres extends SQL
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        $stmt->bindValue(':_uid', $document->getId());
+        $stmt->bindValue(':_existingUid', $id);
+        $stmt->bindValue(':_newUid', $document->getId());
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
@@ -1218,13 +1244,8 @@ class Postgres extends SQL
                 $stmtAddPermissions->execute();
             }
         } catch (PDOException $e) {
-            switch ($e->getCode()) {
-                case 1062:
-                case 23505:
-                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
-                default:
-                    throw $e;
-            }
+            throw $this->processException($e);
+
         }
 
         return $document;
@@ -1624,6 +1645,8 @@ class Postgres extends SQL
         $where = [];
         $orders = [];
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
             '$internalId' => '_id',
@@ -1819,6 +1842,8 @@ class Postgres extends SQL
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $conditions = $this->getSQLConditions($queries);
         if (!empty($conditions)) {
             $where[] = $conditions;
@@ -1882,6 +1907,8 @@ class Postgres extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         foreach ($queries as $query) {
             $where[] = $this->getSQLCondition($query);
@@ -2259,7 +2286,7 @@ class Postgres extends SQL
 
         // Data is too big for column resize
         if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            return new DatabaseException('Resize would result in data truncation', $e->getCode(), $e);
+            return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
         return $e;

@@ -296,6 +296,17 @@ class Mongo extends Adapter
     }
 
     /**
+    * Get Collection Size on disk
+    * @param string $collection
+    * @return int
+    * @throws DatabaseException
+    */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
      * Delete Collection
      *
      * @param string $id
@@ -780,12 +791,13 @@ class Mongo extends Adapter
      * Update Document
      *
      * @param string $collection
+     * @param string $id
      * @param Document $document
      *
      * @return Document
      * @throws Exception
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -794,7 +806,7 @@ class Mongo extends Adapter
         $record = $this->timeToMongo($record);
 
         $filters = [];
-        $filters['_uid'] = $document->getId();
+        $filters['_uid'] = $id;
         if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
@@ -950,6 +962,7 @@ class Mongo extends Adapter
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
         $filters = $this->buildFilters($queries);
 
@@ -1211,6 +1224,8 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
         $filters = [];
         $options = [];
 
@@ -1251,6 +1266,7 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         // queries
+        $queries = array_map(fn ($query) => clone $query, $queries);
         $filters = $this->buildFilters($queries);
 
         // permissions
@@ -1825,5 +1841,16 @@ class Mongo extends Adapter
         parent::clearTimeout($event);
 
         $this->timeout = null;
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
     }
 }

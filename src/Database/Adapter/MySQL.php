@@ -37,12 +37,12 @@ class MySQL extends MariaDB
     }
 
     /**
-    * Get Collection Size
-    * @param string $collection
-    * @return int
-    * @throws DatabaseException
-    */
-    public function getSizeOfCollection(string $collection): int
+     * Get size of collection on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
         $collection = $this->getNamespace() . '_' . $collection;

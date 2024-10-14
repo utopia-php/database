@@ -1284,6 +1284,32 @@ class Database
     }
 
     /**
+     * Get Collection Size on disk
+     *
+     * @param string $collection
+     *
+     * @return int
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        return $this->adapter->getSizeOfCollectionOnDisk($collection->getId());
+    }
+
+    /**
      * Delete Collection
      *
      * @param string $id
@@ -2227,7 +2253,20 @@ class Database
             throw new DuplicateException('Attribute already exists');
         }
 
-        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
+        $attributeIndex = array_search($id, array_map(fn ($attribute) => $attribute['$id'], $attributes));
+
+        if ($attributeIndex === false) {
+            throw new DatabaseException('Attribute not found');
+        }
+
+        $attribute = $attributes[$attributeIndex];
+        $type = $attribute['options']['relationType'];
+        $side = $attribute['options']['side'];
+
+        $relatedCollectionId = $attribute['options']['relatedCollection'];
+        $relatedCollection = $this->getCollection($relatedCollectionId);
+
+        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete, $type, $side) {
             $altering = (!\is_null($newKey) && $newKey !== $id)
                 || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
 
@@ -2241,9 +2280,6 @@ class Database
             ) {
                 throw new DuplicateException('Related attribute already exists');
             }
-
-            $type = $attribute['options']['relationType'];
-            $side = $attribute['options']['side'];
 
             $newKey ??= $attribute['key'];
             $twoWayKey = $attribute['options']['twoWayKey'];
@@ -2306,68 +2342,76 @@ class Database
                     throw new DatabaseException('Failed to update relationship');
                 }
             }
+        });
 
-            $this->purgeCachedCollection($collection->getId());
-            $this->purgeCachedCollection($relatedCollection->getId());
+        // Update Indexes
+        $renameIndex = function (string $collection, string $key, string $newKey) {
+            $this->updateIndexMeta(
+                $collection,
+                '_index_' . $key,
+                function ($index) use ($newKey) {
+                    $index->setAttribute('attributes', [$newKey]);
+                }
+            );
+            $this->silent(
+                fn () =>
+                $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
+            );
+        };
 
-            $renameIndex = function (string $collection, string $key, string $newKey) {
-                $this->updateIndexMeta(
-                    $collection,
-                    '_index_' . $key,
-                    fn ($index) =>
-                    $index->setAttribute('attributes', [$newKey])
-                );
-                $this->silent(
-                    fn () =>
-                    $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
-                );
-            };
+        $newKey ??= $attribute['key'];
+        $twoWayKey = $attribute['options']['twoWayKey'];
+        $newTwoWayKey ??= $attribute['options']['twoWayKey'];
+        $twoWay ??= $attribute['options']['twoWay'];
+        $onDelete ??= $attribute['options']['onDelete'];
 
-            switch ($type) {
-                case self::RELATION_ONE_TO_ONE:
+        switch ($type) {
+            case self::RELATION_ONE_TO_ONE:
+                if ($id !== $newKey) {
+                    $renameIndex($collection->getId(), $id, $newKey);
+                }
+                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                    $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            case self::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                    }
+                } else {
                     if ($id !== $newKey) {
                         $renameIndex($collection->getId(), $id, $newKey);
                     }
-                    if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                }
+                break;
+            case self::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($id !== $newKey) {
+                        $renameIndex($collection->getId(), $id, $newKey);
+                    }
+                } else {
+                    if ($twoWayKey !== $newTwoWayKey) {
                         $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
                     }
-                    break;
-                case self::RELATION_ONE_TO_MANY:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if ($twoWayKey !== $newTwoWayKey) {
-                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                        }
-                    } else {
-                        if ($id !== $newKey) {
-                            $renameIndex($collection->getId(), $id, $newKey);
-                        }
-                    }
-                    break;
-                case self::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if ($id !== $newKey) {
-                            $renameIndex($collection->getId(), $id, $newKey);
-                        }
-                    } else {
-                        if ($twoWayKey !== $newTwoWayKey) {
-                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                        }
-                    }
-                    break;
-                case self::RELATION_MANY_TO_MANY:
-                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+                }
+                break;
+            case self::RELATION_MANY_TO_MANY:
+                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                    if ($id !== $newKey) {
-                        $renameIndex($junction, $id, $newKey);
-                    }
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($junction, $twoWayKey, $newTwoWayKey);
-                    }
-                    break;
-                default:
-                    throw new RelationshipException('Invalid relationship type.');
-            }
-        });
+                if ($id !== $newKey) {
+                    $renameIndex($junction, $id, $newKey);
+                }
+                if ($twoWayKey !== $newTwoWayKey) {
+                    $renameIndex($junction, $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            default:
+                throw new RelationshipException('Invalid relationship type.');
+        }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedCollection($relatedCollection->getId());
 
         return true;
     }
@@ -2651,7 +2695,18 @@ class Database
             }
         }
 
-        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+        try {
+            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+
+            if (!$created) {
+                throw new DatabaseException('Failed to create index');
+            }
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw $e;
+            }
+        }
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
@@ -2659,7 +2714,7 @@ class Database
 
         $this->trigger(self::EVENT_INDEX_CREATE, $index);
 
-        return $index;
+        return true;
     }
 
     /**
@@ -3630,7 +3685,7 @@ class Database
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
+                $document['$tenant'] = $old->getAttribute('$tenant');       // Make sure user doesn't switch tenant
             }
 
             $document = new Document($document);
@@ -3769,7 +3824,6 @@ class Database
             $document = $this->encode($collection, $document);
 
             $structureValidator = new Structure($collection);
-
             if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                 throw new StructureException($structureValidator->getDescription());
             }
@@ -3778,7 +3832,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document);
 
             return $document;
         });
@@ -4290,7 +4344,12 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
+        /* @var $document Document */
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        if ($document->isEmpty()) {
+            return false;
+        }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4376,7 +4435,12 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
+        /* @var $document Document */
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        if ($document->isEmpty()) {
+            return false;
+        }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4466,6 +4530,10 @@ class Database
                 $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
+            if ($document->isEmpty()) {
+                return false;
+            }
+
             $validator = new Authorization(self::PERMISSION_DELETE);
 
             if ($collection->getId() !== self::METADATA) {
@@ -4485,7 +4553,7 @@ class Database
                 throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
             }
 
-            if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
@@ -5620,5 +5688,16 @@ class Database
         }
 
         return $attributes;
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return $this->adapter->analyzeCollection($collection);
     }
 }

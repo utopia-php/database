@@ -1081,6 +1081,12 @@ abstract class Base extends TestCase
         // Size of an empty collection returns either 172032 or 167936 bytes randomly
         // Therefore asserting with a tolerance of 5000 bytes
         $byteDifference = 5000;
+
+        if (!static::getDatabase()->analyzeCollection('sizeTest2')) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $this->assertLessThan($byteDifference, $sizeDifference);
 
         static::getDatabase()->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 20000, true);
@@ -1088,17 +1094,67 @@ abstract class Base extends TestCase
         static::getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
 
-        $loopCount = 40;
+        $loopCount = 100;
 
         for ($i = 0; $i < $loopCount; $i++) {
             static::getDatabase()->createDocument('sizeTest2', new Document([
+                '$id' => 'doc' . $i,
+                'string1' => 'string1' . $i . str_repeat('A', 10000),
+                'string2' => 'string2',
+                'string3' => 'string3',
+            ]));
+        }
+
+        static::getDatabase()->analyzeCollection('sizeTest2');
+
+        $size2 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
+
+        $this->assertGreaterThan($size1, $size2);
+
+        Authorization::skip(function () use ($loopCount) {
+            for ($i = 0; $i < $loopCount; $i++) {
+                $this->getDatabase()->deleteDocument('sizeTest2', 'doc' . $i);
+            }
+        });
+
+        sleep(5);
+
+        static::getDatabase()->analyzeCollection('sizeTest2');
+
+        $size3 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
+
+        $this->assertLessThan($size2, $size3);
+    }
+
+    public function testSizeCollectionOnDisk(): void
+    {
+        $this->getDatabase()->createCollection('sizeTestDisk1');
+        $this->getDatabase()->createCollection('sizeTestDisk2');
+
+        $size1 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTestDisk1');
+        $size2 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTestDisk2');
+        $sizeDifference = abs($size1 - $size2);
+        // Size of an empty collection returns either 172032 or 167936 bytes randomly
+        // Therefore asserting with a tolerance of 5000 bytes
+        $byteDifference = 5000;
+        $this->assertLessThan($byteDifference, $sizeDifference);
+
+        $this->getDatabase()->createAttribute('sizeTestDisk2', 'string1', Database::VAR_STRING, 20000, true);
+        $this->getDatabase()->createAttribute('sizeTestDisk2', 'string2', Database::VAR_STRING, 254 + 1, true);
+        $this->getDatabase()->createAttribute('sizeTestDisk2', 'string3', Database::VAR_STRING, 254 + 1, true);
+        $this->getDatabase()->createIndex('sizeTestDisk2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+
+        $loopCount = 40;
+
+        for ($i = 0; $i < $loopCount; $i++) {
+            $this->getDatabase()->createDocument('sizeTestDisk2', new Document([
                 'string1' => 'string1' . $i,
                 'string2' => 'string2' . $i,
                 'string3' => 'string3' . $i,
             ]));
         }
 
-        $size2 = static::getDatabase()->getSizeOfCollection('sizeTest2');
+        $size2 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTestDisk2');
 
         $this->assertGreaterThan($size1, $size2);
     }
@@ -1130,13 +1186,13 @@ abstract class Base extends TestCase
             ]));
         }
 
-        $size2 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+        $size2 = static::getDatabase()->getSizeOfCollectionOnDisk('fullTextSizeTest');
 
         $this->assertGreaterThan($size1, $size2);
 
         static::getDatabase()->createIndex('fullTextSizeTest', 'fulltext_index', Database::INDEX_FULLTEXT, ['string1']);
 
-        $size3 = static::getDatabase()->getSizeOfCollection('fullTextSizeTest');
+        $size3 = static::getDatabase()->getSizeOfCollectionOnDisk('fullTextSizeTest');
 
         $this->assertGreaterThan($size2, $size3);
     }
@@ -1258,7 +1314,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'socialAccountForYoutubeSubscribersss', Database::VAR_BOOLEAN, 0, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', '5f058a89258075f058a89258075f058t9214', Database::VAR_BOOLEAN, 0, true));
 
-        // Test shared tables duplicates throw duplicate
+        // Test non-shared tables duplicates throw duplicate
         static::getDatabase()->createAttribute('attributes', 'duplicate', Database::VAR_STRING, 128, true);
         try {
             static::getDatabase()->createAttribute('attributes', 'duplicate', Database::VAR_STRING, 128, true);
@@ -1307,6 +1363,7 @@ abstract class Base extends TestCase
      */
     public function testAttributeCaseInsensitivity(): void
     {
+
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
         $this->expectException(DuplicateException::class);
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'CaseSensitive', Database::VAR_STRING, 128, true));
@@ -1464,6 +1521,15 @@ abstract class Base extends TestCase
 
         $collection = static::getDatabase()->getCollection('indexes');
         $this->assertCount(0, $collection->getAttribute('indexes'));
+
+        // Test non-shared tables duplicates throw duplicate
+        static::getDatabase()->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
+        try {
+            static::getDatabase()->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
 
         static::getDatabase()->deleteCollection('indexes');
     }
@@ -2389,6 +2455,18 @@ abstract class Base extends TestCase
         $this->assertNotContains('guests', $new->getCreate());
         $this->assertNotContains('guests', $new->getUpdate());
         $this->assertNotContains('guests', $new->getDelete());
+
+        // Test change document ID
+        $id = $new->getId();
+        $newId = 'new-id';
+        $new->setAttribute('$id', $newId);
+        $new = $this->getDatabase()->updateDocument($new->getCollection(), $id, $new);
+        $this->assertEquals($newId, $new->getId());
+
+        // Reset ID
+        $new->setAttribute('$id', $id);
+        $new = $this->getDatabase()->updateDocument($new->getCollection(), $newId, $new);
+        $this->assertEquals($id, $new->getId());
 
         return $document;
     }
@@ -4179,6 +4257,67 @@ abstract class Base extends TestCase
         $this->assertEquals(3, $count);
     }
 
+    public function testNestedIDQueries(): void
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        static::getDatabase()->createCollection('movies_nested_id', permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::users())
+        ]);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('movies_nested_id', 'name', Database::VAR_STRING, 128, true));
+
+        static::getDatabase()->createDocument('movies_nested_id', new Document([
+            '$id' => ID::custom('1'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => '1',
+        ]));
+
+        static::getDatabase()->createDocument('movies_nested_id', new Document([
+            '$id' => ID::custom('2'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => '2',
+        ]));
+
+        static::getDatabase()->createDocument('movies_nested_id', new Document([
+            '$id' => ID::custom('3'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => '3',
+        ]));
+
+        $queries = [
+            Query::or([
+                Query::equal('$id', ["1"]),
+                Query::equal('$id', ["2"])
+            ])
+        ];
+
+        $documents = static::getDatabase()->find('movies_nested_id', $queries);
+        $this->assertCount(2, $documents);
+
+        // Make sure the query was not modified by reference
+        $this->assertEquals($queries[0]->getValues()[0]->getAttribute(), '$id');
+
+        $count = static::getDatabase()->count('movies_nested_id', $queries);
+        $this->assertEquals(2, $count);
+    }
+
     /**
      * @depends testFind
      */
@@ -5876,6 +6015,62 @@ abstract class Base extends TestCase
 
         $this->assertEquals('string', $doc->getAttribute('renamed-test'));
         $this->assertArrayNotHasKey('renamed', $doc->getAttributes());
+    }
+
+    public function testUpdateAttributeRenameRelationshipTwoWay(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('rn_rs_test_a');
+        static::getDatabase()->createCollection('rn_rs_test_b');
+
+        static::getDatabase()->createAttribute('rn_rs_test_b', 'name', Database::VAR_STRING, 255, true);
+
+        static::getDatabase()->createRelationship(
+            'rn_rs_test_a',
+            'rn_rs_test_b',
+            Database::RELATION_ONE_TO_ONE,
+            true
+        );
+
+        $docA = static::getDatabase()->createDocument('rn_rs_test_a', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'rn_rs_test_b' => [
+                '$id' => 'b1',
+                'name' => 'B1'
+            ]
+        ]));
+
+        $docB = static::getDatabase()->getDocument('rn_rs_test_b', 'b1');
+        $this->assertArrayHasKey('rn_rs_test_a', $docB->getAttributes());
+        $this->assertEquals('B1', $docB->getAttribute('name'));
+
+        // Rename attribute
+        static::getDatabase()->updateRelationship(
+            collection: 'rn_rs_test_a',
+            id: 'rn_rs_test_b',
+            newKey: 'rn_rs_test_b_renamed'
+        );
+
+        // Rename again
+        static::getDatabase()->updateRelationship(
+            collection: 'rn_rs_test_a',
+            id: 'rn_rs_test_b_renamed',
+            newKey: 'rn_rs_test_b_renamed_2'
+        );
+
+        // Check our data is OK
+        $docA = static::getDatabase()->getDocument('rn_rs_test_a', $docA->getId());
+        $this->assertArrayHasKey('rn_rs_test_b_renamed_2', $docA->getAttributes());
+        $this->assertEquals($docB->getId(), $docA->getAttribute('rn_rs_test_b_renamed_2')['$id']);
     }
 
     public function createRandomString(int $length = 10): string
@@ -15412,6 +15607,57 @@ abstract class Base extends TestCase
         }
 
         // Reset state
+        $database->setSharedTables(false);
+        $database->setNamespace(static::$namespace);
+        $database->setDatabase($this->testDatabase);
+    }
+
+    public function testSharedTablesDuplicatesDontThrow(): void
+    {
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if ($database->exists('sharedTables')) {
+            $database->setDatabase('sharedTables')->delete();
+        }
+
+        $database
+            ->setDatabase('sharedTables')
+            ->setNamespace('')
+            ->setSharedTables(true)
+            ->setTenant(1)
+            ->create();
+
+        // Create collection
+        $database->createCollection('duplicates', documentSecurity: false);
+        $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+        $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+
+        $database->setTenant(2);
+
+        try {
+            $database->createCollection('duplicates', documentSecurity: false);
+        } catch (DuplicateException) {
+            // Ignore
+        }
+
+        $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+        $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+
+        $collection = $database->getCollection('duplicates');
+        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
+        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
+
+        $database->setTenant(1);
+
+        $collection = $database->getCollection('duplicates');
+        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
+        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
+
         $database->setSharedTables(false);
         $database->setNamespace(static::$namespace);
         $database->setDatabase($this->testDatabase);

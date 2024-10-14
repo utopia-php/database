@@ -91,6 +91,15 @@ class Query
         $this->values = $values;
     }
 
+    public function __clone(): void
+    {
+        foreach ($this->values as $index => $value) {
+            if ($value instanceof self) {
+                $this->values[$index] = clone $value;
+            }
+        }
+    }
+
     /**
      * @return string
      */

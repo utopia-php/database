@@ -396,6 +396,14 @@ abstract class Adapter
     abstract public function deleteCollection(string $id): bool;
 
     /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    abstract public function analyzeCollection(string $collection): bool;
+
+    /**
      * Create Attribute
      *
      * @param string $collection
@@ -562,7 +570,7 @@ abstract class Adapter
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, Document $document): Document;
+    abstract public function updateDocument(string $collection, string $id, Document $document): Document;
 
     /**
      * Update Documents in batches
@@ -636,6 +644,15 @@ abstract class Adapter
      * @throws DatabaseException
      */
     abstract public function getSizeOfCollection(string $collection): int;
+
+    /**
+     * Get Collection Size on the disk
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
 
     /**
      * Get max STRING limit

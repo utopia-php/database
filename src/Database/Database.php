@@ -4516,12 +4516,9 @@ class Database
      * @throws ConflictException
      * @throws DatabaseException
      * @throws RestrictedException
-     * @throws StructureException
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id)));
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {

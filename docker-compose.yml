@@ -50,6 +50,7 @@ services:
   mariadb-mirror:
     image: mariadb:10.11
     container_name: utopia-mariadb-mirror
+    command: mariadbd --max_allowed_packet=1G
     networks:
       - database
     ports:

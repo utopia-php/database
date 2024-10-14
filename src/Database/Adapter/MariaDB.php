@@ -1816,7 +1816,7 @@ class MariaDB extends SQL
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, 'table_main')}
-            FROM {$this->getSQLTable($name)} as table_main
+            FROM {$this->getSQLTable($name)} AS table_main
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};

@@ -6123,8 +6123,7 @@ abstract class Base extends TestCase
         $document = $this->updateStringAttributeSize(65536, $document);
 
         // 65536-16777216 to PHP_INT_MAX or adapter limit
-        $maxStringSize = 16777217;
-        $document = $this->updateStringAttributeSize($maxStringSize, $document);
+        $document = $this->updateStringAttributeSize(16777217, $document);
 
         // Test going down in size with data that is too big (Expect Failure)
         try {

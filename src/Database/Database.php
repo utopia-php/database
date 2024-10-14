@@ -1722,7 +1722,7 @@ class Database
 
     /**
      * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
-     * To update attribute key (ID), use renameAttribute instead.
+     *
      * @param string $collection
      * @param string $id
      * @param string|null $type

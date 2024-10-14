@@ -1322,6 +1322,7 @@ class MariaDB extends SQL
         }
 
         $name = $this->filter($collection);
+        $roles = $this->authorization->getRoles();
         $columns = '';
 
         $where = [];
@@ -1331,6 +1332,10 @@ class MariaDB extends SQL
         $conditions = $this->getSQLConditions($queries);
         if (!empty($conditions)) {
             $where[] = $conditions;
+        }
+
+        if ($this->authorization->getStatus()) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, 'update');
         }
 
         if ($this->sharedTables) {
@@ -1353,7 +1358,7 @@ class MariaDB extends SQL
         }
 
         $sql = "
-            UPDATE {$this->getSQLTable($name)}
+            UPDATE {$this->getSQLTable($name)} AS table_main
             SET {$columns}
             {$sqlWhere}
         ";

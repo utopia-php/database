@@ -840,6 +840,12 @@ class Mongo extends Adapter
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
+        // permissions
+        if ($this->authorization->getStatus()) { // skip if authorization is disabled
+            $roles = \implode('|', $this->authorization->getRoles());
+            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
+        }
+
         $updateQuery = [
             '$set' => $update->getArrayCopy(),
         ];

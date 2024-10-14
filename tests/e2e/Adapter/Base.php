@@ -15614,6 +15614,48 @@ abstract class Base extends TestCase
         foreach ($updatedDocuments as $document) {
             $this->assertEquals('text📝 updated all', $document->getAttribute('string'));
         }
+
+        // Check collection level permissions
+        $this->getDatabase()->updateCollection($collection, permissions: [
+            Permission::read(Role::user('asd')),
+            Permission::create(Role::user('asd')),
+            Permission::update(Role::user('asd')),
+            Permission::delete(Role::user('asd')),
+        ], documentSecurity: false);
+
+        try {
+            $this->getDatabase()->updateDocuments($collection, new Document([
+                'string' => 'text📝 updated all',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (AuthorizationException $e) {
+            $this->assertEquals('Missing "read" permission for role "user:asd". Only "["any"]" scopes are allowed and "["user:asd"]" was given.', $e->getMessage());
+        }
+
+        // Check document level permissions
+        $this->getDatabase()->updateCollection($collection, permissions: [], documentSecurity: true);
+
+        $this->getDatabase()->updateDocument($collection, 'doc0', new Document([
+            'string' => 'text📝 updated all',
+            '$permissions' => [
+                Permission::read(Role::user('asd')),
+                Permission::create(Role::user('asd')),
+                Permission::update(Role::user('asd')),
+                Permission::delete(Role::user('asd')),
+            ],
+        ]));
+
+        $this->getDatabase()->updateDocuments($collection, new Document([
+            'string' => 'permission text',
+        ]));
+
+        self::$authorization->skip(function () use ($collection) {
+            $documents = $this->getDatabase()->find($collection, [
+                Query::equal('string', ['permission text']),
+            ]);
+
+            $this->assertCount(9, $documents);
+        });
     }
 
     public function testEvents(): void

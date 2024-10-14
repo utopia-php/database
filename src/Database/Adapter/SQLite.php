@@ -963,14 +963,14 @@ class SQLite extends MariaDB
      * @return string
      * @throws Exception
      */
-    protected function getSQLPermissionsCondition(string $collection, array $roles): string
+    protected function getSQLPermissionsCondition(string $collection, array $roles, string $type = 'read'): string
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
         return "table_main._uid IN (
                     SELECT distinct(_document)
                     FROM `{$this->getNamespace()}_{$collection}_perms`
                     WHERE _permission IN (" . implode(', ', $roles) . ")
-                    AND _type = 'read'
+                    AND _type = '{$type}'
                 )";
     }
 

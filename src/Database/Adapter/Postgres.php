@@ -1245,6 +1245,7 @@ class Postgres extends SQL
         }
 
         $name = $this->filter($collection);
+        $roles = $this->authorization->getRoles();
         $columns = '';
 
         $where = [];
@@ -1254,6 +1255,10 @@ class Postgres extends SQL
         $conditions = $this->getSQLConditions($queries);
         if (!empty($conditions)) {
             $where[] = $conditions;
+        }
+
+        if ($this->authorization->getStatus()) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, 'update');
         }
 
         if ($this->sharedTables) {
@@ -1276,7 +1281,7 @@ class Postgres extends SQL
         }
 
         $sql = "
-            UPDATE {$this->getSQLTable($name)}
+            UPDATE {$this->getSQLTable($name)} AS table_main
             SET {$columns}
             {$sqlWhere}
         ";

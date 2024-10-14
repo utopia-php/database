@@ -91,27 +91,6 @@ class MySQL extends MariaDB
             return new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
-        // Duplicate table
-        if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        // Duplicate column
-        if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        // Duplicate index
-        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        // Data is too big for column resize
-        if (($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) ||
-            ($e->getCode() === '01000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1265)) {
-            return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
-        }
-
-        return $e;
+        return parent::processException($e);
     }
 }

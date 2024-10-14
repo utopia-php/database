@@ -1260,6 +1260,7 @@ class Postgres extends SQL
      * @return array<Document>
      * @throws DatabaseException
      * @throws DuplicateException
+     * @throws Exception
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -1491,15 +1492,7 @@ class Postgres extends SQL
 
             return $documents;
         } catch (PDOException $e) {
-
-            // Must be a switch for loose match
-            switch ($e->getCode()) {
-                case 1062:
-                case 23505:
-                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
-                default:
-                    throw $e;
-            }
+            throw $this->processException($e);
         }
     }
 

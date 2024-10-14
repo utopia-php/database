@@ -948,16 +948,8 @@ class MariaDB extends SQL
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
-        } catch (\Throwable $e) {
-            if ($e instanceof PDOException) {
-                switch ($e->getCode()) {
-                    case 1062:
-                    case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
-                }
-            }
-
-            throw $e;
+        } catch (PDOException $e) {
+            throw $this->processException($e);
         }
 
         return $document;
@@ -1079,16 +1071,8 @@ class MariaDB extends SQL
                     $stmtPermissions?->execute();
                 }
             }
-        } catch (\Throwable $e) {
-            if ($e instanceof PDOException) {
-                switch ($e->getCode()) {
-                    case 1062:
-                    case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
-                }
-            }
-
-            throw $e;
+        } catch (PDOException $e) {
+            throw $this->processException($e);
         }
 
         foreach ($documents as $document) {
@@ -1337,16 +1321,8 @@ class MariaDB extends SQL
                 $stmtAddPermissions->execute();
             }
 
-        } catch (\Throwable $e) {
-            if ($e instanceof PDOException) {
-                switch ($e->getCode()) {
-                    case 1062:
-                    case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
-                }
-            }
-
-            throw $e;
+        } catch (PDOException $e) {
+            throw $this->processException($e);
         }
 
         return $document;
@@ -1594,16 +1570,8 @@ class MariaDB extends SQL
                     $stmtAddPermissions->execute();
                 }
             }
-        } catch (\Throwable $e) {
-            if ($e instanceof PDOException) {
-                switch ($e->getCode()) {
-                    case 1062:
-                    case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
-                }
-            }
-
-            throw $e;
+        } catch (PDOException $e) {
+            $this->processException($e);
         }
 
         return $documents;

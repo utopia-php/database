@@ -1334,7 +1334,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "_tenant = :_tenant";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1357,7 +1357,7 @@ class MariaDB extends SQL
             SET {$columns}
             {$sqlWhere}
         ";
-        
+
         $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
         $stmt = $this->getPDO()->prepare($sql);
 

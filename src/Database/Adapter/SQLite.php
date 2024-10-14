@@ -815,21 +815,7 @@ class SQLite extends MariaDB
         return $document;
     }
 
-    /**
-     * Batch update documents
-     *
-     * @param string $collection
-     * @param Document $update
-     * @param array<Query> $queries
-     *
-     * @return bool
-     *
-     * @throws DatabaseException
-     */
-    public function updateDocuments(string $collection, Document $update, array $queries): bool
-    {
-        throw new Exception('Not implemented');
-    }
+
 
     /**
      * Is schemas supported?

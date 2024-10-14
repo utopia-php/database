@@ -342,11 +342,11 @@ class Structure extends Validator
 
     /**
      * Is Update Valid
-     * 
+     *
      * Returns true if an update is valid or false if not. Ignores fields not in the update.
-     * 
+     *
      * @param mixed $document
-     * 
+     *
      * @return bool
      */
     public function isUpdateValid($document): bool

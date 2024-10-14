@@ -762,7 +762,8 @@ abstract class Base extends TestCase
 
         $doc2->setAttribute('$updatedAt', $newDate);
         $doc3->setAttribute('$updatedAt', $newDate);
-        $this->getDatabase()->updateDocuments('preserve_update_dates', [$doc2, $doc3], 2);
+        $this->getDatabase()->updateDocument('preserve_update_dates', 'doc2', $doc2);
+        $this->getDatabase()->updateDocument('preserve_update_dates', 'doc3', $doc3);
 
         $doc2 = $this->getDatabase()->getDocument('preserve_update_dates', 'doc2');
         $doc3 = $this->getDatabase()->getDocument('preserve_update_dates', 'doc3');
@@ -15531,6 +15532,90 @@ abstract class Base extends TestCase
         $this->assertTrue($result->isEmpty());
     }
 
+    public function testUpdateDocuments(): void
+    {
+        $collection = 'testUpdateDocuments';
+
+        $this->getDatabase()->createCollection($collection, attributes: [
+            new Document([
+                '$id' => ID::custom('string'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('integer'),
+                'type' => Database::VAR_INTEGER,
+                'format' => '',
+                'size' => 10000,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ]);
+
+        for ($i = 0; $i < 10; $i++) {
+            $this->getDatabase()->createDocument($collection, new Document([
+                '$id' => 'doc' . $i,
+                'string' => 'text📝 ' . $i,
+                'integer' => $i,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]));
+        }
+
+        // Test Update half of the documents
+        $this->getDatabase()->updateDocuments($collection, new Document([
+            'string' => 'text📝 updated',
+        ]), [
+            Query::greaterThanEqual('integer', 5),
+        ]);
+
+        $updatedDocuments = $this->getDatabase()->find($collection, [
+            Query::greaterThanEqual('integer', 5),
+        ]);
+
+        $this->assertEquals(count($updatedDocuments), 5);
+
+        foreach ($updatedDocuments as $document) {
+            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+        }
+
+        $controlDocuments = $this->getDatabase()->find($collection, [
+            Query::lessThan('integer', 5),
+        ]);
+
+        $this->assertEquals(count($controlDocuments), 5);
+
+        foreach ($controlDocuments as $document) {
+            $this->assertNotEquals('text📝 updated', $document->getAttribute('string'));
+        }
+
+        // Test Update all documents
+        $this->getDatabase()->updateDocuments($collection, new Document([
+            'string' => 'text📝 updated all',
+        ]));
+
+        $updatedDocuments = $this->getDatabase()->find($collection);
+
+        $this->assertEquals(count($updatedDocuments), 10);
+
+        foreach ($updatedDocuments as $document) {
+            $this->assertEquals('text📝 updated all', $document->getAttribute('string'));
+        }
+    }
+
     public function testEvents(): void
     {
         self::$authorization->skip(function () {
@@ -15621,66 +15706,5 @@ abstract class Base extends TestCase
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
-    }
-
-    public function testUpdateDocuments(): void
-    {
-        $collection = 'testUpdateDocuments';
-
-        $this->getDatabase()->createCollection($collection, attributes: [
-            new Document([
-                '$id' => ID::custom('string'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('integer'),
-                'type' => Database::VAR_INTEGER,
-                'format' => '',
-                'size' => 10000,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ]);
-
-        for ($i = 0; $i < 10; $i++) {
-            $this->getDatabase()->createDocument($collection, new Document([
-                '$id' => 'doc' . $i,
-                'string' => 'text📝 ' . $i,
-                'integer' => $i,
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-            ]));
-        }
-
-        // Test Update half of the documents
-        $this->getDatabase()->updateDocuments($collection, new Document([
-            'string' => 'text📝 updated',
-        ]), [
-            Query::greaterThanEqual('integer', 5),
-        ]);
-
-        $updatedDocuments = $this->getDatabase()->find($collection, [
-            Query::greaterThanEqual('integer', 5),
-        ]);
-
-        $this->assertEquals(count($updatedDocuments), 5);
-
-        foreach ($updatedDocuments as $document) {
-            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
-        }
     }
 }

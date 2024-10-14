@@ -3886,16 +3886,16 @@ class Database
 
     /**
      * Batch update documents
-     * 
+     *
      * @param string $collection
      * @param Document $updates
      * @param array<Query> $queries
-     * 
+     *
      * @return bool
-     * 
+     *
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $update, array $queries, int $batchSize = self::INSERT_BATCH_SIZE): bool
+    public function updateDocuments(string $collection, Document $update, array $queries = [], int $batchSize = self::INSERT_BATCH_SIZE): bool
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');

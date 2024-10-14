@@ -1238,7 +1238,75 @@ class Postgres extends SQL
      */
     public function updateDocuments(string $collection, Document $update, array $queries): bool
     {
-        throw new Exception('Not implemented');
+        $attributes = $update->getAttributes();
+
+        if (empty($attributes)) {
+            return true;
+        }
+
+        $name = $this->filter($collection);
+        $columns = '';
+
+        $where = [];
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
+        $conditions = $this->getSQLConditions($queries);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
+        }
+
+        if ($this->sharedTables) {
+            $where[] = "_tenant = :_tenant";
+        }
+
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $bindIndex = 0;
+        foreach ($attributes as $attribute => $value) {
+            $column = $this->filter($attribute);
+            $bindKey = 'key_' . $bindIndex;
+            $columns .= "\"{$column}\"" . '=:' . $bindKey;
+
+            if ($bindIndex > 0) {
+                $columns .= ',';
+            }
+
+            $bindIndex++;
+        }
+
+        $sql = "
+            UPDATE {$this->getSQLTable($name)}
+            SET {$columns}
+            {$sqlWhere}
+        ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($queries as $query) {
+            $this->bindConditionValue($stmt, $query);
+        }
+
+        if ($this->sharedTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
+        }
+
+        $attributeIndex = 0;
+        foreach ($attributes as $attribute => $value) {
+            if (is_array($value)) {
+                $value = json_encode($value);
+            }
+
+            $bindKey = 'key_' . $attributeIndex;
+            $value = (is_bool($value)) ? (int)$value : $value;
+            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+            $attributeIndex++;
+        }
+
+        $stmt->execute();
+
+        return true;
     }
 
     /**

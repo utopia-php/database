@@ -832,7 +832,25 @@ class Mongo extends Adapter
      */
     public function updateDocuments(string $collection, Document $update, array $queries): bool
     {
-        throw new Exception('Not implemented');
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
+        $filters = $this->buildFilters($queries);
+        if ($this->sharedTables) {
+            $filters['_tenant'] = (string)$this->getTenant();
+        }
+
+        $updateQuery = [
+            '$set' => $update->getArrayCopy(),
+        ];
+
+        try {
+            $this->client->update($name, $filters, $updateQuery, multi: true);
+        } catch (MongoException $e) {
+            throw new Duplicate($e->getMessage());
+        }
+
+        return true;
     }
 
     /**

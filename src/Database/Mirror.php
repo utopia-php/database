@@ -901,7 +901,7 @@ class Mirror extends Database
 
         return Authorization::skip(function () use ($collection) {
             try {
-                return $this->getDocument('upgrades', $collection);
+                return $this->source->getDocument('upgrades', $collection);
             } catch (\Throwable) {
                 return;
             }

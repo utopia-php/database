@@ -3888,8 +3888,9 @@ class Database
      * Batch update documents
      *
      * @param string $collection
-     * @param Document $updates
+     * @param Document $update
      * @param array<Query> $queries
+     * @param int $batchSize
      *
      * @return bool
      *
@@ -3901,7 +3902,7 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        if (empty($update)) {
+        if (empty($update->getArrayCopy())) {
             return true;
         }
 

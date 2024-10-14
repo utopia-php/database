@@ -281,13 +281,24 @@ class QueryTest extends TestCase
                 'users',
                 'u',
                 [
-                    Query::relation('u.id', Query::TYPE_EQUAL, 'd.user_id'),
+                    Query::relation('u', 'id', Query::TYPE_EQUAL, 'u', 'user_id'),
                     Query::equal('u.id', ['usa']),
                 ]
             );
 
-        $this->assertEquals(Query::TYPE_EQUAL, $query->getMethod());
-        $this->assertEquals('title', $query->getAttribute());
-        $this->assertEquals('Iron Man', $query->getValues()[0]);
+        $this->assertEquals(Query::TYPE_INNER_JOIN, $query->getMethod());
+        $this->assertEquals('users', $query->getValues()['collection']);
+        $this->assertEquals('u', $query->getValues()['alias']);
+
+        /**
+         * @var $conditions array<Query>
+         */
+        $conditions = $query->getValues()['conditions'];
+        $this->assertEquals(Query::TYPE_RELATION, $conditions[0]->getMethod());
+        $this->assertEquals('id', $conditions[0]->getAttribute());
+        $this->assertEquals('u', $conditions[0]->getValues()['leftAlias']);
+        $this->assertEquals(Query::TYPE_EQUAL, $conditions[0]->getValues()['method']);
+        $this->assertEquals('u', $conditions[0]->getValues()['rightAlias']);
+        $this->assertEquals('user_id', $conditions[0]->getValues()['rightColumn']);
     }
 }

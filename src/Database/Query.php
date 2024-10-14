@@ -597,9 +597,9 @@ class Query
      * @param array<Query> $conditions
      * @return Query
      */
-    public static function relation(string $leftColumn, string $method, string $rightColumn): self
+    public static function relation($leftAlias, string $leftColumn, string $method, $rightAlias, string $rightColumn): self
     {
-        if (in_array($method, [
+        if (!in_array($method, [
             self::TYPE_EQUAL,
             self::TYPE_NOT_EQUAL,
             self::TYPE_GREATER,
@@ -611,7 +611,10 @@ class Query
         }
 
         $value = [
-            'operator' => $method,
+            'leftAlias' => $leftAlias,
+            //'leftColumn' => $leftColumn, // this is attribute
+            'method' => $method,
+            'rightAlias' => $rightAlias,
             'rightColumn' => $rightColumn,
         ];
 

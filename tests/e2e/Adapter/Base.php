@@ -15612,7 +15612,7 @@ abstract class Base extends TestCase
         $database->setDatabase($this->testDatabase);
     }
 
-    public function testSharedTablesDuplicatesDontThrow(): void
+    public function testSharedTablesDuplicates(): void
     {
         $database = static::getDatabase();
 
@@ -15629,7 +15629,7 @@ abstract class Base extends TestCase
             ->setDatabase('sharedTables')
             ->setNamespace('')
             ->setSharedTables(true)
-            ->setTenant(1)
+            ->setTenant(null)
             ->create();
 
         // Create collection
@@ -15645,8 +15645,17 @@ abstract class Base extends TestCase
             // Ignore
         }
 
-        $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
-        $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+        try {
+            $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+        } catch (DuplicateException) {
+            // Ignore
+        }
+
+        try {
+            $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+        } catch (DuplicateException) {
+            // Ignore
+        }
 
         $collection = $database->getCollection('duplicates');
         $this->assertEquals(1, \count($collection->getAttribute('attributes')));

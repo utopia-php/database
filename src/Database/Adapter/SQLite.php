@@ -263,7 +263,7 @@ class SQLite extends MariaDB
     {
         $id = $this->filter($id);
 
-        $sql = "DROP TABLE IF EXISTS `{$this->getSQLTable($id)}`";
+        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id)}";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         $this->getPDO()

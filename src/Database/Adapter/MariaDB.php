@@ -2306,6 +2306,11 @@ class MariaDB extends SQL
             return new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
+        // Duplicate row
+        if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
+            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        }
+
         // Data is too big for column resize
         if (($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) ||
             ($e->getCode() === '01000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1265)) {

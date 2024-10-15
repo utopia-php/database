@@ -1593,7 +1593,7 @@ class Mongo extends Adapter
      */
     public function getSupportForSchemas(): bool
     {
-        return true;
+        return false;
     }
 
     /**

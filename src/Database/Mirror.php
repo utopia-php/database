@@ -104,35 +104,35 @@ class Mirror extends Database
 
     public function setDatabase(string $name): static
     {
-        $this->delegate('setDatabase', [$name]);
+        $this->delegate(__FUNCTION__, \func_get_args());
 
         return $this;
     }
 
     public function setNamespace(string $namespace): static
     {
-        $this->delegate('setNamespace', [$namespace]);
+        $this->delegate(__FUNCTION__, \func_get_args());
 
         return $this;
     }
 
     public function setSharedTables(bool $sharedTables): static
     {
-        $this->delegate('setSharedTables', [$sharedTables]);
+        $this->delegate(__FUNCTION__, \func_get_args());
 
         return $this;
     }
 
     public function setTenant(?int $tenant): static
     {
-        $this->delegate('setTenant', [$tenant]);
+        $this->delegate(__FUNCTION__, \func_get_args());
 
         return $this;
     }
 
     public function setPreserveDates(bool $preserve): static
     {
-        $this->delegate('setPreserveDates', [$preserve]);
+        $this->delegate(__FUNCTION__, \func_get_args());
 
         $this->preserveDates = $preserve;
 
@@ -141,7 +141,7 @@ class Mirror extends Database
 
     public function enableValidation(): static
     {
-        $this->delegate('enableValidation');
+        $this->delegate(__FUNCTION__);
 
         $this->validate = true;
 
@@ -150,7 +150,7 @@ class Mirror extends Database
 
     public function disableValidation(): static
     {
-        $this->delegate('disableValidation');
+        $this->delegate(__FUNCTION__);
 
         $this->validate = false;
 
@@ -176,22 +176,22 @@ class Mirror extends Database
 
     public function withRequestTimestamp(?\DateTime $requestTimestamp, callable $callback): mixed
     {
-        return $this->delegate('withRequestTimestamp', [$requestTimestamp, $callback]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function exists(?string $database = null, ?string $collection = null): bool
     {
-        return $this->delegate('exists', [$database, $collection]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function create(?string $database = null): bool
     {
-        return $this->delegate('create', [$database]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function delete(?string $database = null): bool
     {
-        return $this->delegate('delete', [$database]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
@@ -760,32 +760,32 @@ class Mirror extends Database
 
     public function updateAttributeRequired(string $collection, string $id, bool $required): Document
     {
-        return $this->delegate('updateAttributeRequired', [$collection, $id, $required]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function updateAttributeFormat(string $collection, string $id, string $format): Document
     {
-        return $this->delegate('updateAttributeFormat', [$collection, $id, $format]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): Document
     {
-        return $this->delegate('updateAttributeFormatOptions', [$collection, $id, $formatOptions]);
+        return $this->delegate(__FUNCTION__, [$collection, $id, $formatOptions]);
     }
 
     public function updateAttributeFilters(string $collection, string $id, array $filters): Document
     {
-        return $this->delegate('updateAttributeFilters', [$collection, $id, $filters]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function updateAttributeDefault(string $collection, string $id, mixed $default = null): Document
     {
-        return $this->delegate('updateAttributeDefault', [$collection, $id, $default]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
-        return $this->delegate('renameAttribute', [$collection, $old, $new]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function createRelationship(
@@ -797,7 +797,7 @@ class Mirror extends Database
         ?string $twoWayKey = null,
         string $onDelete = Database::RELATION_MUTATE_RESTRICT
     ): bool {
-        return $this->delegate('createRelationship', [$collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $onDelete]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function updateRelationship(
@@ -808,28 +808,28 @@ class Mirror extends Database
         ?bool $twoWay = null,
         ?string $onDelete = null
     ): bool {
-        return $this->delegate('updateRelationship', [$collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function deleteRelationship(string $collection, string $id): bool
     {
-        return $this->delegate('deleteRelationship', [$collection, $id]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
 
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        return $this->delegate('renameIndex', [$collection, $old, $new]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
     {
-        return $this->delegate('increaseDocumentAttribute', [$collection, $id, $attribute, $value, $max]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
     {
-        return $this->delegate('decreaseDocumentAttribute', [$collection, $id, $attribute, $value, $min]);
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     /**
@@ -903,7 +903,7 @@ class Mirror extends Database
             try {
                 return $this->source->getDocument('upgrades', $collection);
             } catch (\Throwable) {
-                return;
+                return null;
             }
         });
     }

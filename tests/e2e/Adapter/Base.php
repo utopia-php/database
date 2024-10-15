@@ -6354,14 +6354,9 @@ abstract class Base extends TestCase
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 
-
             $collection = $database->deleteCollection($collectionName);
             $this->assertTrue($collection);
-
-            // TODO: updateAttribute name tests
         }
-
-        // TODO: Index name tests
     }
 
     public function testWritePermissions(): void
@@ -6504,7 +6499,9 @@ abstract class Base extends TestCase
                 ]
             ]
         ]));
+
         $updatedSpecies = static::getDatabase()->getDocument('species', $species->getId());
+
         $this->assertEquals($species, $updatedSpecies);
     }
 

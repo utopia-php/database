@@ -21,17 +21,28 @@ services:
     container_name: utopia-adminer
     restart: always
     ports:
-      - "8760:8080"
+      - "8700:8080"
     networks:
       - database
 
   postgres:
-    image: postgres:13
+    image: postgres:16.4
     container_name: utopia-postgres
     networks:
       - database
     ports:
-      - "8700:5432"
+      - "8701:5432"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: password
+
+  postgres-mirror:
+    image: postgres:16.4
+    container_name: utopia-postgres-mirror
+    networks:
+      - database
+    ports:
+      - "8702:5432"
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
@@ -43,7 +54,7 @@ services:
     networks:
       - database
     ports:
-      - "8701:3306"
+      - "8703:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
 
@@ -64,7 +75,7 @@ services:
     networks:
       - database
     ports:
-      - "8702:27017"
+      - "8705:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
@@ -75,7 +86,7 @@ services:
     networks:
       - database
     ports:
-      - "8703:3307"
+      - "8706:3307"
     environment:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: default
@@ -91,7 +102,7 @@ services:
     networks:
       - database
     ports:
-      - "8705:3307"
+      - "8707:3307"
     environment:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: default
@@ -105,15 +116,15 @@ services:
     image: redis:7.4.1-alpine3.20
     container_name: utopia-redis
     ports:
-      - "8706:6379"
+      - "8708:6379"
     networks:
       - database
 
   redis-mirror:
     image: redis:7.4.1-alpine3.20
-    container_name: utopia-redis
+    container_name: utopia-redis-mirror
     ports:
-      - "8707:6379"
+      - "8709:6379"
     networks:
       - database
 

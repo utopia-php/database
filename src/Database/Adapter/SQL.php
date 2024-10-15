@@ -68,6 +68,7 @@ abstract class SQL extends Adapter
         }
 
         if (!$this->getPDO()->inTransaction()) {
+            // Implicit commit occurred
             $this->inTransaction = 0;
             return false;
         }
@@ -75,18 +76,12 @@ abstract class SQL extends Adapter
         try {
             $result = $this->getPDO()->commit();
         } catch (PDOException $e) {
-            if ($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
             throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
         } finally {
             $this->inTransaction--;
         }
 
         if (!$result) {
-            if ($this->getPDO()->inTransaction()) {
-                $this->getPDO()->rollBack();
-            }
             throw new DatabaseException('Failed to commit transaction');
         }
 

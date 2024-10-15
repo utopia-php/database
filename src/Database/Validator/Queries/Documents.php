@@ -22,7 +22,7 @@ class Documents extends IndexedQueries
      * @param array<mixed> $indexes
      * @throws Exception
      */
-    public function __construct(array $attributes, array $indexes)
+    public function __construct(array $attributes, array $indexes, int $maxValuesCount = 100)
     {
         $attributes[] = new Document([
             '$id' => '$id',
@@ -53,7 +53,7 @@ class Documents extends IndexedQueries
             new Limit(),
             new Offset(),
             new Cursor(),
-            new Filter($attributes),
+            new Filter($attributes, $maxValuesCount),
             new Order($attributes),
             new Select($attributes),
         ];

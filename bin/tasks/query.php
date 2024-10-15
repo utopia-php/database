@@ -129,13 +129,6 @@ $cli
         \fclose($results);
     });
 
-$cli
-    ->error()
-    ->inject('error')
-    ->action(function (Exception $error) {
-        Console::error($error->getMessage());
-    });
-
 function setRoles($faker, $count): int
 {
     for ($i = 0; $i < $count; $i++) {

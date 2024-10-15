@@ -101,13 +101,13 @@ COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20230831/pcov.so
 COPY --from=xdebug /usr/local/lib/php/extensions/no-debug-non-zts-20230831/xdebug.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
 
 # Add Source Code
-COPY ./bin /usr/src/code/bin
+COPY ./bin /usr/local/bin
 COPY ./src /usr/src/code/src
 COPY ./dev /usr/src/code/dev
 
 # Add Debug Configs
-RUN if [ "$DEBUG" == "true" ]; then cp /usr/src/code/dev/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini; fi
-RUN if [ "$DEBUG" == "true" ]; then mkdir -p /tmp/xdebug; fi
+RUN if [ "$DEBUG" = "true" ]; then cp /usr/src/code/dev/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini; fi
+RUN if [ "$DEBUG" = "true" ]; then mkdir -p /tmp/xdebug; fi
 RUN if [ "$DEBUG" = "false" ]; then rm -rf /usr/src/code/dev; fi
 RUN if [ "$DEBUG" = "false" ]; then rm -f /usr/local/lib/php/extensions/no-debug-non-zts-20220829/xdebug.so; fi
 

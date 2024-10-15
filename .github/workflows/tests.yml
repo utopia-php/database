@@ -102,5 +102,11 @@ jobs:
           sleep 10
 
       - name: Run Tests
-        run: docker compose exec -T tests vendor/bin/phpunit /usr/src/code/tests/e2e/Adapter/${{matrix.adapter}}Test.php --debug
+        run: |
+          docker compose exec -T tests test ${{ matrix.adapter }}
+
+      - name: Check Coverage
+        run: |
+          docker compose exec -T tests merge-coverage
+          docker compose exec -T tests check-coverage
 

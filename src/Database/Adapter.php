@@ -599,13 +599,13 @@ abstract class Adapter
      *
      * @param string $collection
      * @param Document $update
-     * @param array<Query> $queries
+     * @param array<Documents> $documents
      *
      * @return bool
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, Document $update, array $queries): bool;
+    abstract public function updateDocuments(string $collection, Document $update, array $documents): bool;
 
     /**
      * Delete Document

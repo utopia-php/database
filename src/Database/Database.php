@@ -3909,15 +3909,21 @@ class Database
         $queries = Query::groupByType($queries)['filters'];
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        unset($update['$id']);
+        unset($update['$createdAt']);
+        unset($update['$updatedAt']);
+        unset($update['_tenant']);
+
         // Check new document structure
         $validator = new PartialStructure($collection);
         if (!$validator->isValid($update)) {
             throw new StructureException($validator->getDescription());
         }
 
+        $totalAffectedDocuments = [];
         $affectedDocumentIds = [];
 
-        $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds, $update) {
+        $this->withTransaction(function () use ($collection, $queries, $batchSize, $totalAffectedDocuments, $affectedDocumentIds, $update) {
             $lastDocument = null;
 
             // Check Collection Security
@@ -3926,7 +3932,7 @@ class Database
             // Resolve and update relationships
             while (true) {
                 $affectedDocuments = $this->authorization->skip(function () use ($collection, $queries, $batchSize, $lastDocument) {
-                    $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) {
+                    return $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) {
                         return $this->find($collection->getId(), array_merge(
                             empty($lastDocument) ? [
                                 Query::limit($batchSize),
@@ -3943,6 +3949,7 @@ class Database
                     break;
                 }
 
+                $totalAffectedDocuments = array_merge($totalAffectedDocuments, $affectedDocuments);
                 $affectedDocumentIds = array_merge($affectedDocumentIds, array_map(fn ($document) => $document->getId(), $affectedDocuments));
 
                 foreach ($affectedDocuments as $document) {
@@ -3964,10 +3971,10 @@ class Database
             $getResults = fn () => $this->adapter->updateDocuments(
                 $collection->getId(),
                 $update,
-                $queries
+                $totalAffectedDocuments
             );
 
-            $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
+            $skipAuth ? $this->authorization->skip($getResults) : $getResults();
         });
 
         $this->purgeCachedCollection($collection->getId());

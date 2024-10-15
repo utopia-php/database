@@ -1258,7 +1258,7 @@ class Postgres extends SQL
         }
 
         if ($this->authorization->getStatus()) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, 'update');
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, Database::PERMISSION_UPDATE);
         }
 
         if ($this->sharedTables) {

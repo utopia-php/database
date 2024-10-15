@@ -15,7 +15,7 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
     
-FROM php:8.3.10-cli-alpine3.20 as compile
+FROM php:8.3.10-cli-alpine3.20 AS compile
 
 ENV PHP_REDIS_VERSION="6.0.2" \
     PHP_SWOOLE_VERSION="v5.1.3" \

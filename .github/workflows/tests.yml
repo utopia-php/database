@@ -1,5 +1,10 @@
 name: "Tests"
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -61,7 +66,7 @@ jobs:
           sleep 10
 
       - name: Run Unit Tests
-        run: docker compose exec tests vendor/bin/phpunit /usr/src/code/tests/unit
+        run: docker compose exec tests vendor/bin/phpunit /usr/src/code/tests/unit --coverage-clover coverage/unit.xml
 
   adapter_test:
     name: Adapter Tests
@@ -105,8 +110,24 @@ jobs:
         run: |
           docker compose exec -T tests test ${{ matrix.adapter }}
 
-      - name: Check Coverage
+  coverage:
+    name: Check coverage
+    runs-on: ubuntu-latest
+    needs:
+      - unit_test
+      - adapter_test
+    steps:
+      - name: Merge coverage files
         run: |
           docker compose exec -T tests merge-coverage
-          docker compose exec -T tests check-coverage
+          docker compose exec -T tests vendor/bin/phpunit --coverage-html coverage/html --coverage-clover coverage/clover.xml
+
+      - name: Check coverage
+        run: docker compose exec -T tests check-coverage
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v2
+        with:
+          path: coverage
+          name: coverage
 

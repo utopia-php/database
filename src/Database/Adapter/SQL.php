@@ -67,6 +67,11 @@ abstract class SQL extends Adapter
             return true;
         }
 
+        if (!$this->getPDO()->inTransaction()) {
+            $this->inTransaction = 0;
+            return false;
+        }
+
         try {
             $result = $this->getPDO()->commit();
         } catch (PDOException $e) {

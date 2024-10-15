@@ -126,7 +126,7 @@ jobs:
         run: docker compose exec -T tests check-coverage
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           path: coverage
           name: coverage

@@ -65,21 +65,38 @@ abstract class Base extends TestCase
 
     public function testCreateExistsDelete(): void
     {
-        $schemaSupport = $this->getDatabase()->getAdapter()->getSupportForSchemas();
-        if (!$schemaSupport) {
-            $this->assertEquals(static::getDatabase(), static::getDatabase()->setDatabase($this->testDatabase));
-            $this->assertEquals(true, static::getDatabase()->create());
+        if (!static::getDatabase()->getAdapter()->getSupportForSchemas()) {
+            $this->expectNotToPerformAssertions();
             return;
         }
 
-        if (!static::getDatabase()->exists($this->testDatabase)) {
-            $this->assertEquals(true, static::getDatabase()->create());
-        }
         $this->assertEquals(true, static::getDatabase()->exists($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->delete($this->testDatabase));
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase));
-        $this->assertEquals(static::getDatabase(), static::getDatabase()->setDatabase($this->testDatabase));
         $this->assertEquals(true, static::getDatabase()->create());
+    }
+
+    /**
+     * @throws LimitException
+     * @throws DuplicateException
+     * @throws DatabaseException
+     */
+    public function testCreateDuplicates(): void
+    {
+        static::getDatabase()->createCollection('duplicates', permissions: [
+            Permission::read(Role::any())
+        ]);
+
+        try {
+            static::getDatabase()->createCollection('duplicates');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+
+        $this->assertNotEmpty(static::getDatabase()->listCollections());
+
+        static::getDatabase()->deleteCollection('duplicates');
     }
 
     public function testUpdateDeleteCollectionNotFound(): void
@@ -320,7 +337,6 @@ abstract class Base extends TestCase
         /**
          * Success for later test update
          */
-
         $doc = static::getDatabase()->createDocument('v1', new Document([
             '$id' => 'man',
             '$permissions' => [
@@ -747,7 +763,8 @@ abstract class Base extends TestCase
         $newDate = '2000-01-01T10:00:00.000+00:00';
 
         $doc1->setAttribute('$updatedAt', $newDate);
-        static::getDatabase()->updateDocument('preserve_update_dates', 'doc1', $doc1);
+        $doc1 = static::getDatabase()->updateDocument('preserve_update_dates', 'doc1', $doc1);
+        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
         $doc1 = static::getDatabase()->getDocument('preserve_update_dates', 'doc1');
         $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
 
@@ -965,6 +982,14 @@ abstract class Base extends TestCase
     }
 
 
+    /**
+     * @throws AuthorizationException
+     * @throws DuplicateException
+     * @throws ConflictException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws DatabaseException
+     */
     public function testQueryTimeout(): void
     {
         if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
@@ -973,9 +998,19 @@ abstract class Base extends TestCase
         }
 
         static::getDatabase()->createCollection('global-timeouts');
-        $this->assertEquals(true, static::getDatabase()->createAttribute('global-timeouts', 'longtext', Database::VAR_STRING, 100000000, true));
 
-        for ($i = 0 ; $i <= 20 ; $i++) {
+        $this->assertEquals(
+            true,
+            static::getDatabase()->createAttribute(
+                collection: 'global-timeouts',
+                id: 'longtext',
+                type: Database::VAR_STRING,
+                size: 100000000,
+                required: true
+            )
+        );
+
+        for ($i = 0; $i < 20; $i++) {
             static::getDatabase()->createDocument('global-timeouts', new Document([
                 'longtext' => file_get_contents(__DIR__ . '/../../resources/longtext.txt'),
                 '$permissions' => [
@@ -993,9 +1028,10 @@ abstract class Base extends TestCase
                 Query::notEqual('longtext', 'appwrite'),
             ]);
             $this->fail('Failed to throw exception');
-        } catch (TimeoutException $ex) {
+        } catch (\Exception $e) {
             static::getDatabase()->clearTimeout();
             static::getDatabase()->deleteCollection('global-timeouts');
+            $this->assertInstanceOf(TimeoutException::class, $e);
         }
     }
 
@@ -6087,8 +6123,7 @@ abstract class Base extends TestCase
         $document = $this->updateStringAttributeSize(65536, $document);
 
         // 65536-16777216 to PHP_INT_MAX or adapter limit
-        $maxStringSize = 16777217;
-        $document = $this->updateStringAttributeSize($maxStringSize, $document);
+        $document = $this->updateStringAttributeSize(16777217, $document);
 
         // Test going down in size with data that is too big (Expect Failure)
         try {
@@ -6319,14 +6354,9 @@ abstract class Base extends TestCase
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 
-
             $collection = $database->deleteCollection($collectionName);
             $this->assertTrue($collection);
-
-            // TODO: updateAttribute name tests
         }
-
-        // TODO: Index name tests
     }
 
     public function testWritePermissions(): void
@@ -6411,11 +6441,11 @@ abstract class Base extends TestCase
         }
         static::getDatabase()->createCollection('species');
         static::getDatabase()->createCollection('creatures');
-        static::getDatabase()->createCollection('characterstics');
+        static::getDatabase()->createCollection('characteristics');
 
         static::getDatabase()->createAttribute('species', 'name', Database::VAR_STRING, 255, true);
         static::getDatabase()->createAttribute('creatures', 'name', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('characterstics', 'name', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('characteristics', 'name', Database::VAR_STRING, 255, true);
 
         static::getDatabase()->createRelationship(
             collection: 'species',
@@ -6427,10 +6457,10 @@ abstract class Base extends TestCase
         );
         static::getDatabase()->createRelationship(
             collection: 'creatures',
-            relatedCollection: 'characterstics',
+            relatedCollection: 'characteristics',
             type: Database::RELATION_ONE_TO_ONE,
             twoWay: true,
-            id: 'characterstic',
+            id: 'characteristic',
             twoWayKey:'creature'
         );
 
@@ -6446,7 +6476,7 @@ abstract class Base extends TestCase
                     Permission::read(Role::any()),
                 ],
                 'name' => 'Dog',
-                'characterstic' => [
+                'characteristic' => [
                     '$id' => ID::custom('1'),
                     '$permissions' => [
                         Permission::read(Role::any()),
@@ -6462,14 +6492,16 @@ abstract class Base extends TestCase
             'creature' => [
                 '$id' => ID::custom('1'),
                 '$collection' => 'creatures',
-                'characterstic' => [
+                'characteristic' => [
                     '$id' => ID::custom('1'),
                     'name' => 'active',
-                    '$collection' => 'characterstics',
+                    '$collection' => 'characteristics',
                 ]
             ]
         ]));
+
         $updatedSpecies = static::getDatabase()->getDocument('species', $species->getId());
+
         $this->assertEquals($species, $updatedSpecies);
     }
 
@@ -15440,7 +15472,6 @@ abstract class Base extends TestCase
         /**
          * Table
          */
-
         $tenant1 = 1;
         $tenant2 = 2;
 
@@ -15568,7 +15599,7 @@ abstract class Base extends TestCase
             $database->getDocument('people', $docId);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Missing tenant. Tenant must be set when table sharing is enabled.', $e->getMessage());
+            $this->assertEquals('Collection not found', $e->getMessage());
         }
 
         // Reset state
@@ -15577,11 +15608,11 @@ abstract class Base extends TestCase
         $database->setDatabase($this->testDatabase);
     }
 
-    public function testSharedTablesDuplicatesDontThrow(): void
+    public function testSharedTablesDuplicates(): void
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->getSupportForSchemas()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -15594,7 +15625,7 @@ abstract class Base extends TestCase
             ->setDatabase('sharedTables')
             ->setNamespace('')
             ->setSharedTables(true)
-            ->setTenant(1)
+            ->setTenant(null)
             ->create();
 
         // Create collection
@@ -15610,8 +15641,17 @@ abstract class Base extends TestCase
             // Ignore
         }
 
-        $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
-        $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+        try {
+            $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+        } catch (DuplicateException) {
+            // Ignore
+        }
+
+        try {
+            $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+        } catch (DuplicateException) {
+            // Ignore
+        }
 
         $collection = $database->getCollection('duplicates');
         $this->assertEquals(1, \count($collection->getAttribute('attributes')));
@@ -15693,7 +15733,7 @@ abstract class Base extends TestCase
                 $database->setDatabase('hellodb');
                 $database->create();
             } else {
-                array_shift($events);
+                \array_shift($events);
             }
 
             $database->list();

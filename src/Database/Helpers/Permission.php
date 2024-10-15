@@ -77,7 +77,7 @@ class Permission
      * Parse a permission string into a Permission object
      *
      * @param string $permission
-     * @return Permission
+     * @return self
      * @throws Exception
      */
     public static function parse(string $permission): self

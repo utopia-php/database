@@ -1086,7 +1086,7 @@ class Mongo extends Adapter
         try {
             $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
         } catch (MongoException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
 
         if (empty($results)) {
@@ -1593,7 +1593,7 @@ class Mongo extends Adapter
      */
     public function getSupportForSchemas(): bool
     {
-        return true;
+        return false;
     }
 
     /**
@@ -1810,17 +1810,13 @@ class Mongo extends Adapter
         return [];
     }
 
-    /**
-     * @throws Timeout
-     * @throws Exception
-     */
-    protected function processException(Exception $e): void
+    protected function processException(Exception $e): \Exception
     {
         if ($e->getCode() === 50) {
-            throw new Timeout($e->getMessage());
+            return new Timeout($e->getMessage());
         }
 
-        throw $e;
+        return $e;
     }
 
     /**

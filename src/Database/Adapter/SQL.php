@@ -34,6 +34,10 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
+                if ($this->getPDO()->inTransaction()) {
+                    $this->getPDO()->rollBack();
+                }
+
                 $result = $this->getPDO()->beginTransaction();
             } else {
                 $result = true;
@@ -61,6 +65,12 @@ abstract class SQL extends Adapter
         } elseif ($this->inTransaction > 1) {
             $this->inTransaction--;
             return true;
+        }
+
+        if (!$this->getPDO()->inTransaction()) {
+            // Implicit commit occurred
+            $this->inTransaction = 0;
+            return false;
         }
 
         try {
@@ -194,7 +204,7 @@ abstract class SQL extends Adapter
 		";
 
         if ($this->sharedTables) {
-            $sql .= "AND _tenant = :_tenant";
+            $sql .= "AND (_tenant = :_tenant OR _tenant IS NULL)";
         }
 
         if ($this->getSupportForUpdateLock()) {
@@ -974,7 +984,7 @@ abstract class SQL extends Adapter
 
         $tenantQuery = '';
         if ($this->sharedTables) {
-            $tenantQuery = 'AND _tenant = :_tenant';
+            $tenantQuery = 'AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         return "table_main._uid IN (

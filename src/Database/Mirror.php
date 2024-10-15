@@ -903,7 +903,7 @@ class Mirror extends Database
             try {
                 return $this->source->getDocument('upgrades', $collection);
             } catch (\Throwable) {
-                return null;
+                return;
             }
         });
     }

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env sh
 
 echo ""
 echo "Navigate to http://localhost:8708 in your browser"

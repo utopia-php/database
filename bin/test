@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+
+if [ $# -eq 0 ]; then
+    vendor/bin/phpunit \
+      --coverage-clover="coverage/clover.xml" \
+      --coverage-html="coverage/html" \
+      --debug
+    exit $?
+fi
+
+for adapter in "${@}"; do
+  vendor/bin/phpunit "tests/e2e/Adapter/${adapter}Test.php" \
+    --coverage-clover="coverage/${adapter}.xml" \
+    --coverage-html="coverage/html" \
+    --debug
+done
+

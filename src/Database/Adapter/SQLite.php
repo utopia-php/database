@@ -281,6 +281,17 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
+    }
+
+    /**
      * Update Attribute
      *
      * @param string $collection
@@ -1392,16 +1403,5 @@ class SQLite extends MariaDB
         }
 
         return $e;
-    }
-
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return false;
     }
 }

@@ -837,7 +837,7 @@ class Mongo extends Adapter
         $queries = [
             Query::equal('$id', array_map(fn ($document) => $document->getId(), $documents))
         ];
-        
+
         $filters = $this->buildFilters($queries);
         if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();

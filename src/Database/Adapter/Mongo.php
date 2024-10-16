@@ -824,17 +824,20 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param Document $update
-     * @param array<Query> $queries
+     * @param array<Document> $documents
      *
      * @return bool
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $update, array $queries): bool
+    public function updateDocuments(string $collection, Document $update, array $documents): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-        $queries = array_map(fn ($query) => clone $query, $queries);
 
+        $queries = [
+            Query::equal('$id', array_map(fn ($document) => $document->getId(), $documents))
+        ];
+        
         $filters = $this->buildFilters($queries);
         if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();

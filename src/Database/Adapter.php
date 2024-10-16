@@ -599,7 +599,7 @@ abstract class Adapter
      *
      * @param string $collection
      * @param Document $update
-     * @param array<Documents> $documents
+     * @param array<Document> $documents
      *
      * @return bool
      *

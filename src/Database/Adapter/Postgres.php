@@ -1260,7 +1260,7 @@ class Postgres extends SQL
             $where[] = "table_main._tenant = :_tenant";
         }
 
-        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+        $sqlWhere = 'WHERE ' . implode(' AND ', $where);
 
         $bindIndex = 0;
         foreach ($attributes as $attribute => $value) {

@@ -114,6 +114,7 @@ class Database
     public const EVENT_DOCUMENT_FIND = 'document_find';
     public const EVENT_DOCUMENT_CREATE = 'document_create';
     public const EVENT_DOCUMENTS_CREATE = 'documents_create';
+    public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
     public const EVENT_DOCUMENT_READ = 'document_read';
     public const EVENT_DOCUMENT_UPDATE = 'document_update';
     public const EVENT_DOCUMENTS_UPDATE = 'documents_update';
@@ -4922,7 +4923,7 @@ class Database
 
                     $this->deleteDocument(
                         $relatedCollection->getId(),
-                        $value->getId()
+                        ($value instanceof Document) ? $value->getId() : $value
                     );
 
                     \array_pop($this->relationshipDeleteStack);
@@ -4995,6 +4996,88 @@ class Database
                 \array_pop($this->relationshipDeleteStack);
                 break;
         }
+    }
+
+    /**
+     * Delete Documents
+     *
+     * Deletes all documents which match the given query, will respect the relationship's onDelete optin.
+     *
+     * @param string $collection
+     * @param array<Query> $queries
+     * @param int $batchSize
+     *
+     * @return bool
+     *
+     * @throws AuthorizationException
+     * @throws DatabaseException
+     * @throws RestrictedException
+     */
+    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = 100): bool
+    {
+        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $queries = Query::groupByType($queries)['filters'];
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+        $affectedDocumentIds = [];
+
+        $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds) {
+            $lastDocument = null;
+
+            while (true) {
+                $affectedDocuments = $this->find($collection->getId(), array_merge(
+                    empty($lastDocument) ? [
+                        Query::limit($batchSize),
+                    ] : [
+                        Query::limit($batchSize),
+                        Query::cursorAfter($lastDocument),
+                    ],
+                    $queries,
+                ));
+
+                if (empty($affectedDocuments)) {
+                    break;
+                }
+
+                $affectedDocumentIds = array_merge($affectedDocumentIds, array_map(fn ($document) => $document->getId(), $affectedDocuments));
+
+                foreach ($affectedDocuments as $document) {
+                    if ($collection->getId() !== self::METADATA) {
+                        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                        $isValid = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
+                            ...$collection->getDelete(),
+                            ...($documentSecurity ? $document->getDelete() : [])
+                        ]));
+                        if (!$isValid) {
+                            throw new AuthorizationException($this->authorization->getDescription());
+                        }
+                    }
+
+                    // Delete Relationships
+                    if ($this->resolveRelationships) {
+                        $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
+                    }
+
+                    $this->purgeRelatedDocuments($collection, $document->getId());
+                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                }
+
+                if (count($affectedDocuments) < $batchSize) {
+                    break;
+                } else {
+                    $lastDocument = end($affectedDocuments);
+                }
+            }
+
+            $this->trigger(self::EVENT_DOCUMENTS_DELETE, $affectedDocumentIds);
+
+            // Mass delete using adapter with query
+            return $this->adapter->deleteDocuments($collection->getId(), $affectedDocumentIds);
+        });
+
+        return $deleted;
     }
 
     /**

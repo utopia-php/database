@@ -114,6 +114,7 @@ class Database
     public const EVENT_DOCUMENT_FIND = 'document_find';
     public const EVENT_DOCUMENT_CREATE = 'document_create';
     public const EVENT_DOCUMENTS_CREATE = 'documents_create';
+    public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
     public const EVENT_DOCUMENT_READ = 'document_read';
     public const EVENT_DOCUMENT_UPDATE = 'document_update';
     public const EVENT_DOCUMENTS_UPDATE = 'documents_update';
@@ -4997,6 +4998,7 @@ class Database
 
         $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds) {
             $lastDocument = null;
+
             while (true) {
                 $affectedDocuments = $this->find($collection->getId(), array_merge(
                     empty($lastDocument) ? [
@@ -5031,9 +5033,6 @@ class Database
                         $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
                     }
 
-                    // Fire events
-                    $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
-
                     $this->purgeRelatedDocuments($collection, $document->getId());
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
@@ -5044,6 +5043,8 @@ class Database
                     $lastDocument = end($affectedDocuments);
                 }
             }
+
+            $this->trigger(self::EVENT_DOCUMENTS_DELETE, $affectedDocumentIds);
 
             // Mass delete using adapter with query
             return $this->adapter->deleteDocuments($collection->getId(), $affectedDocumentIds);

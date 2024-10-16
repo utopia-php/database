@@ -2307,6 +2307,26 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
+    public function testMaxQuwriesValuse(): void
+    {
+        $max = static::getDatabase()->getMaxQueryValues();
+
+        static::getDatabase()->setMaxQueryValues(5);
+
+        try {
+            static::getDatabase()->find(
+                'documents',
+                [Query::equal('$id', [1, 2, 3, 4, 5, 6])]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Query on attribute has greater than 5 values: $id', $e->getMessage());
+        }
+
+        static::getDatabase()->setMaxQueryValues($max);
+    }
+
     public function testEmptyTenant(): void
     {
         if (static::getDatabase()->getAdapter()->getSharedTables()) {

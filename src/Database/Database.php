@@ -326,6 +326,8 @@ class Database
 
     protected bool $preserveDates = false;
 
+    protected int $maxQueryValues = 100;
+
     /**
      * Stack of collection IDs when creating or updating related documents
      * @var array<string>
@@ -830,6 +832,18 @@ class Database
         $this->preserveDates = $preserve;
 
         return $this;
+    }
+
+    public function setMaxQueryValues(int $max): self
+    {
+        $this->maxQueryValues = $max;
+
+        return $this;
+    }
+
+    public function getMaxQueryValues(): int
+    {
+        return$this->maxQueryValues;
     }
 
     /**
@@ -5055,7 +5069,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5230,7 +5244,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5276,7 +5290,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }

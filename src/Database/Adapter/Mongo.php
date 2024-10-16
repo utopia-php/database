@@ -840,14 +840,11 @@ class Mongo extends Adapter
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
-        // permissions
-        if ($this->authorization->getStatus()) { // skip if authorization is disabled
-            $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
-        }
+        $record = $update->getArrayCopy();
+        $record = $this->replaceChars('$', '_', $record);
 
         $updateQuery = [
-            '$set' => $update->getArrayCopy(),
+            '$set' => $record,
         ];
 
         try {
@@ -961,12 +958,13 @@ class Mongo extends Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      *
      * @return array<Document>
      * @throws Exception
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $queries = array_map(fn ($query) => clone $query, $queries);
@@ -980,7 +978,7 @@ class Mongo extends Adapter
         // permissions
         if ($this->authorization->getStatus()) { // skip if authorization is disabled
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         $options = [];

@@ -23,6 +23,21 @@ class PartialStructure extends Validator
     protected Document $collection;
 
     /**
+     * @var array<array<string, mixed>>
+     */
+    protected array $attributes = [
+        [
+            '$id' => '$permissions',
+            'type' => Database::VAR_STRING,
+            'size' => 67000, // medium text
+            'required' => false,
+            'signed' => true,
+            'array' => true,
+            'filters' => [],
+        ]
+    ];
+
+    /**
      * @var array<string, array{callback: callable, type: string}>
      */
     protected static array $formats = [];
@@ -151,6 +166,8 @@ class PartialStructure extends Validator
         $keys = [];
         $structure = $document->getArrayCopy();
         $attributes = $this->collection->getAttribute('attributes', []);
+
+        $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
 
         $keys = [];
         foreach ($attributes as $attribute) {

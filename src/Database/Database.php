@@ -3926,37 +3926,40 @@ class Database
         $this->withTransaction(function () use ($collection, $queries, $batchSize, $totalAffectedDocuments, $affectedDocumentIds, $update) {
             $lastDocument = null;
 
-            // Check Collection Security
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+
             $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $collection->getUpdate()));
+
+            if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+                throw new AuthorizationException($this->authorization->getDescription());
+            }
 
             // Resolve and update relationships
             while (true) {
-                $affectedDocuments = $this->authorization->skip(function () use ($collection, $queries, $batchSize, $lastDocument) {
-                    return $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) {
-                        return $this->find($collection->getId(), array_merge(
-                            empty($lastDocument) ? [
-                                Query::limit($batchSize),
-                            ] : [
-                                Query::limit($batchSize),
-                                Query::cursorAfter($lastDocument),
-                            ],
-                            $queries,
-                        ));
-                    });
+                $affectedDocuments = $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) {
+                    return $this->find($collection->getId(), array_merge(
+                        empty($lastDocument) ? [
+                            Query::limit($batchSize),
+                        ] : [
+                            Query::limit($batchSize),
+                            Query::cursorAfter($lastDocument),
+                        ],
+                        $queries,
+                    ), forPermission: Database::PERMISSION_UPDATE);
                 });
 
                 if (empty($affectedDocuments)) {
                     break;
                 }
 
-                $totalAffectedDocuments = array_merge($totalAffectedDocuments, $affectedDocuments);
-                $affectedDocumentIds = array_merge($affectedDocumentIds, array_map(fn ($document) => $document->getId(), $affectedDocuments));
-
                 foreach ($affectedDocuments as $document) {
                     // Update relationship, TODO: Figure out.
                     if ($this->resolveRelationships) {
 
                     }
+
+                    $affectedDocumentIds[] = $document->getId();
+                    $totalAffectedDocuments[] = $document;
                 }
 
                 if (count($affectedDocuments) < $batchSize) {
@@ -5059,13 +5062,14 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
+     * @param string $forPermission
      *
      * @return array<Document>
      * @throws DatabaseException
      * @throws QueryException
      * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = []): array
+    public function find(string $collection, array $queries = [], string $forPermission = Database::PERMISSION_READ): array
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -5089,7 +5093,7 @@ class Database
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
@@ -5176,7 +5180,8 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER
+            $cursorDirection ?? Database::CURSOR_AFTER,
+            $forPermission
         );
 
         $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();

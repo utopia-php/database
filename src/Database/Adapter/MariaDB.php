@@ -1316,23 +1316,22 @@ class MariaDB extends SQL
     public function updateDocuments(string $collection, Document $update, array $documents): bool
     {
         $attributes = $update->getAttributes();
+        if (!empty($update->getPermissions())) {
+            $attributes['_permissions'] = json_encode($update->getPermissions());
+        }
 
         if (empty($attributes)) {
             return true;
         }
 
         $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
+
         $columns = '';
 
         $where = [];
 
         $ids = \array_map(fn ($document) => $document->getId(), $documents);
         $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($id) => ":_id_{$id}", \array_keys($ids))) . ")";
-
-        if ($this->authorization->getStatus()) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, Database::PERMISSION_UPDATE);
-        }
 
         if ($this->sharedTables) {
             $where[] = "table_main._tenant = :_tenant";
@@ -1346,7 +1345,7 @@ class MariaDB extends SQL
             $bindKey = 'key_' . $bindIndex;
             $columns .= "`{$column}`" . '=:' . $bindKey;
 
-            if ($bindIndex > 0) {
+            if ($attribute !== \array_key_last($attributes)) {
                 $columns .= ',';
             }
 
@@ -1354,10 +1353,10 @@ class MariaDB extends SQL
         }
 
         $sql = "
-            UPDATE {$this->getSQLTable($name)} AS table_main
-            SET {$columns}
-            {$sqlWhere}
-        ";
+                UPDATE {$this->getSQLTable($name)} AS table_main
+                SET {$columns}
+                {$sqlWhere}
+            ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
         $stmt = $this->getPDO()->prepare($sql);
@@ -1384,8 +1383,9 @@ class MariaDB extends SQL
 
         $stmt->execute();
 
+
         // Permissions logic
-        if (key_exists('_permissions', $attributes)) {
+        if (!empty($update->getPermissions())) {
             $removeQuery = '';
             $removeBindValues = [];
 
@@ -1394,8 +1394,6 @@ class MariaDB extends SQL
 
             /* @var $document Document */
             foreach ($documents as $index => $document) {
-                $attributes['_permissions'] = json_encode($document->getPermissions());
-
                 // Permissions logic
                 $sql = "
                     SELECT _type, _permission
@@ -1432,7 +1430,7 @@ class MariaDB extends SQL
                 // Get removed Permissions
                 $removals = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    $diff = array_diff($permissions[$type], $document->getPermissionsByType($type));
+                    $diff = array_diff($permissions[$type], $update->getPermissionsByType($type));
                     if (!empty($diff)) {
                         $removals[$type] = $diff;
                     }
@@ -1477,7 +1475,7 @@ class MariaDB extends SQL
                 // Get added Permissions
                 $additions = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
+                    $diff = \array_diff($update->getPermissionsByType($type), $permissions[$type]);
                     if (!empty($diff)) {
                         $additions[$type] = $diff;
                     }
@@ -1686,11 +1684,12 @@ class MariaDB extends SQL
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
         $roles = $this->authorization->getRoles();
@@ -1780,7 +1779,7 @@ class MariaDB extends SQL
         }
 
         if ($this->authorization->getStatus()) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
         }
 
         if ($this->sharedTables) {

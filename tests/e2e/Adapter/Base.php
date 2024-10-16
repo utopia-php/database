@@ -15636,15 +15636,19 @@ abstract class Base extends TestCase
         // Check document level permissions
         $this->getDatabase()->updateCollection($collection, permissions: [], documentSecurity: true);
 
-        $this->getDatabase()->updateDocument($collection, 'doc0', new Document([
-            'string' => 'text📝 updated all',
-            '$permissions' => [
-                Permission::read(Role::user('asd')),
-                Permission::create(Role::user('asd')),
-                Permission::update(Role::user('asd')),
-                Permission::delete(Role::user('asd')),
-            ],
-        ]));
+        $this::$authorization->skip(function () use ($collection) {
+            $this->getDatabase()->updateDocument($collection, 'doc0', new Document([
+                'string' => 'text📝 updated all',
+                '$permissions' => [
+                    Permission::read(Role::user('asd')),
+                    Permission::create(Role::user('asd')),
+                    Permission::update(Role::user('asd')),
+                    Permission::delete(Role::user('asd')),
+                ],
+            ]));
+        });
+
+        $this::$authorization->addRole(Role::user('asd')->toString());
 
         $this->getDatabase()->updateDocuments($collection, new Document([
             'string' => 'permission text',
@@ -15655,8 +15659,127 @@ abstract class Base extends TestCase
                 Query::equal('string', ['permission text']),
             ]);
 
-            $this->assertCount(9, $documents);
+            $this->assertCount(1, $documents);
+
+            $unmodifiedDocuments = $this->getDatabase()->find($collection, [
+                Query::equal('string', ['text📝 updated all']),
+            ]);
+
+            $this->assertCount(9, $unmodifiedDocuments);
         });
+    }
+
+    public function testUpdateDocumentsPermissions(): void
+    {
+        $collection = 'testUpdateDocumentsPerms';
+        self::$authorization->cleanRoles();
+        self::$authorization->addRole(Role::any()->toString());
+
+        $this->getDatabase()->createCollection($collection, attributes: [
+            new Document([
+                '$id' => ID::custom('string'),
+                'type' => Database::VAR_STRING,
+                'size' => 767,
+                'required' => true,
+            ])
+        ], permissions: [], documentSecurity: true);
+
+        // Test we can bulk update permissions we have access to
+        $this::$authorization->skip(function () use ($collection) {
+            for ($i = 0; $i < 10; $i++) {
+                $this->getDatabase()->createDocument($collection, new Document([
+                    '$id' => 'doc' . $i,
+                    'string' => 'text📝 ' . $i,
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any())
+                    ],
+                ]));
+            }
+
+            $this->getDatabase()->createDocument($collection, new Document([
+                '$id' => 'doc' . $i,
+                'string' => 'text📝 ' . $i,
+                '$permissions' => [
+                    Permission::read(Role::user('user1')),
+                    Permission::create(Role::user('user1')),
+                    Permission::update(Role::user('user1')),
+                    Permission::delete(Role::user('user1'))
+                ],
+            ]));
+        });
+
+        $this->getDatabase()->updateDocuments($collection, new Document([
+            '$permissions' => [
+                Permission::read(Role::user('user2')),
+                Permission::create(Role::user('user2')),
+                Permission::update(Role::user('user2')),
+                Permission::delete(Role::user('user2'))
+            ],
+        ]));
+
+        $documents = $this::$authorization->skip(function () use ($collection) {
+            return $this->getDatabase()->find($collection);
+        });
+
+        $this->assertCount(11, $documents);
+
+        $modifiedDocuments = array_filter($documents, function (Document $document) {
+            return $document->getAttribute('$permissions') == [
+                Permission::read(Role::user('user2')),
+                Permission::create(Role::user('user2')),
+                Permission::update(Role::user('user2')),
+                Permission::delete(Role::user('user2'))
+            ];
+        });
+
+        $this->assertCount(10, $modifiedDocuments);
+
+        $unmodifiedDocuments = array_filter($documents, function (Document $document) {
+            return $document->getAttribute('$permissions') == [
+                Permission::read(Role::user('user1')),
+                Permission::create(Role::user('user1')),
+                Permission::update(Role::user('user1')),
+                Permission::delete(Role::user('user1'))
+            ];
+        });
+
+        $this->assertCount(1, $unmodifiedDocuments);
+
+        $this::$authorization->addRole(Role::user('user2')->toString());
+
+        // Test Bulk permission update with data
+        $this->getDatabase()->updateDocuments($collection, new Document([
+            '$permissions' => [
+                Permission::read(Role::user('user3')),
+                Permission::create(Role::user('user3')),
+                Permission::update(Role::user('user3')),
+                Permission::delete(Role::user('user3'))
+            ],
+            'string' => 'text📝 updated',
+        ]));
+
+        $documents = $this::$authorization
+            ->skip(function () use ($collection) {
+                return $this->getDatabase()->find($collection);
+            });
+
+        $this->assertCount(11, $documents);
+
+        $modifiedDocuments = array_filter($documents, function (Document $document) {
+            return $document->getAttribute('$permissions') == [
+                Permission::read(Role::user('user3')),
+                Permission::create(Role::user('user3')),
+                Permission::update(Role::user('user3')),
+                Permission::delete(Role::user('user3'))
+            ];
+        });
+
+        foreach ($modifiedDocuments as $document) {
+            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+        }
     }
 
     public function testEvents(): void

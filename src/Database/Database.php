@@ -318,6 +318,8 @@ class Database
 
     protected bool $resolveRelationships = true;
 
+    protected bool $checkRelationshipsExist = true;
+
     protected int $relationshipFetchDepth = 1;
 
     protected bool $filter = true;
@@ -504,6 +506,18 @@ class Database
             return $callback();
         } finally {
             $this->resolveRelationships = $previous;
+        }
+    }
+
+    public function skipRelationshipsExistCheck(callable $callback): mixed
+    {
+        $previous = $this->checkRelationshipsExist;
+        $this->checkRelationshipsExist = false;
+
+        try {
+            return $callback();
+        } finally {
+            $this->checkRelationshipsExist = $previous;
         }
     }
 
@@ -3642,7 +3656,7 @@ class Database
         // Get the related document, will be empty on permissions failure
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId));
 
-        if ($related->isEmpty()) {
+        if ($related->isEmpty() && $this->checkRelationshipsExist) {
             return;
         }
 
@@ -3671,7 +3685,7 @@ class Database
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $this->skipRelationships(fn () => $this->createDocument($junction, new Document([
-                    $key => $related->getId(),
+                    $key => $relationId,
                     $twoWayKey => $documentId,
                     '$permissions' => [
                         Permission::read(Role::any()),

@@ -3903,7 +3903,7 @@ class Database
         }
 
         if (empty($update->getArrayCopy())) {
-            return true;
+            return 0;
         }
 
         $queries = Query::groupByType($queries)['filters'];

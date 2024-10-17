@@ -20,6 +20,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
@@ -3885,83 +3886,110 @@ class Database
     }
 
     /**
-     * Update Documents in a batch
+     * Batch update documents
      *
      * @param string $collection
-     * @param array<Document> $documents
+     * @param Document $update
+     * @param array<Query> $queries
      * @param int $batchSize
      *
-     * @return array<Document>
+     * @return int
      *
-     * @throws AuthorizationException
-     * @throws Exception
-     * @throws StructureException
+     * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
+    public function updateDocuments(string $collection, Document $update, array $queries = [], int $batchSize = self::INSERT_BATCH_SIZE): int
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        if (empty($documents)) {
-            return [];
+        if (empty($update->getArrayCopy())) {
+            return 0;
         }
 
+        $queries = Query::groupByType($queries)['filters'];
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
-            $time = DateTime::now();
+        unset($update['$id']);
+        unset($update['$createdAt']);
+        unset($update['$updatedAt']);
+        unset($update['_tenant']);
 
-            foreach ($documents as $key => $document) {
-                if (!$document->getId()) {
-                    throw new DatabaseException('Must define $id attribute for each document');
-                }
-
-                $updatedAt = $document->getUpdatedAt();
-                $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
-                $document = $this->encode($collection, $document);
-
-                $old = $this->authorization->skip(fn () => $this->silent(
-                    fn () => $this->getDocument(
-                        $collection->getId(),
-                        $document->getId(),
-                        forUpdate: true
-                    )
-                ));
-
-                if (
-                    $collection->getId() !== self::METADATA
-                && !$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $old->getUpdate()))
-                ) {
-                    throw new AuthorizationException($this->authorization->getDescription());
-                }
-
-                $validator = new Structure($collection);
-                if (!$validator->isValid($document)) {
-                    throw new StructureException($validator->getDescription());
-                }
-
-                if ($this->resolveRelationships) {
-                    $documents[$key] = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
-                }
-            }
-
-            return $this->adapter->updateDocuments($collection->getId(), $documents, $batchSize);
-        });
-
-        foreach ($documents as $key => $document) {
-            if ($this->resolveRelationships) {
-                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
-            }
-
-            $documents[$key] = $this->decode($collection, $document);
-
-            $this->purgeCachedDocument($collection->getId(), $document->getId());
+        // Check new document structure
+        $validator = new PartialStructure($collection);
+        if (!$validator->isValid($update)) {
+            throw new StructureException($validator->getDescription());
         }
 
-        $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
+        $totalAffectedDocuments = [];
+        $affectedDocumentIds = [];
 
-        return $documents;
+        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $totalAffectedDocuments, $affectedDocumentIds, $update) {
+            $lastDocument = null;
+
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+
+            $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $collection->getUpdate()));
+
+            if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+                throw new AuthorizationException($this->authorization->getDescription());
+            }
+
+            // Resolve and update relationships
+            while (true) {
+                $affectedDocuments = $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) {
+                    return $this->find($collection->getId(), array_merge(
+                        empty($lastDocument) ? [
+                            Query::limit($batchSize),
+                        ] : [
+                            Query::limit($batchSize),
+                            Query::cursorAfter($lastDocument),
+                        ],
+                        $queries,
+                    ), forPermission: Database::PERMISSION_UPDATE);
+                });
+
+                if (empty($affectedDocuments)) {
+                    break;
+                }
+
+                foreach ($affectedDocuments as $document) {
+                    // Update relationship, TODO: Figure out.
+                    if ($this->resolveRelationships) {
+                        $newDocument = array_merge($document->getArrayCopy(), $update->getArrayCopy());
+
+                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, new Document($newDocument)));
+                    }
+
+                    $affectedDocumentIds[] = $document->getId();
+                    $totalAffectedDocuments[] = $document;
+                }
+
+                if (count($affectedDocuments) < $batchSize) {
+                    break;
+                } else {
+                    $lastDocument = end($affectedDocuments);
+                }
+            }
+
+            if (empty($totalAffectedDocuments)) {
+                return;
+            }
+
+            $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $affectedDocumentIds);
+
+            $getResults = fn () => $this->adapter->updateDocuments(
+                $collection->getId(),
+                $update,
+                $totalAffectedDocuments
+            );
+
+            return $skipAuth ? $this->authorization->skip($getResults) : $getResults();
+        });
+
+        $this->purgeCachedCollection($collection->getId());
+
+        return $affected;
     }
 
     /**
@@ -5041,13 +5069,14 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
+     * @param string $forPermission
      *
      * @return array<Document>
      * @throws DatabaseException
      * @throws QueryException
      * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = []): array
+    public function find(string $collection, array $queries = [], string $forPermission = Database::PERMISSION_READ): array
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -5071,7 +5100,7 @@ class Database
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
@@ -5158,7 +5187,8 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER
+            $cursorDirection ?? Database::CURSOR_AFTER,
+            $forPermission
         );
 
         $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();

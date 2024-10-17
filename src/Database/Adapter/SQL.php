@@ -968,7 +968,7 @@ abstract class SQL extends Adapter
      * @return string
      * @throws Exception
      */
-    protected function getSQLPermissionsCondition(string $collection, array $roles): string
+    protected function getSQLPermissionsCondition(string $collection, array $roles, string $type = 'read'): string
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
 
@@ -981,7 +981,7 @@ abstract class SQL extends Adapter
                     SELECT _document
                     FROM {$this->getSQLTable($collection . '_perms')}
                     WHERE _permission IN (" . implode(', ', $roles) . ")
-                      AND _type = 'read'
+                      AND _type = '{$type}'
                       {$tenantQuery}
                 )";
     }

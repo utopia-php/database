@@ -9,6 +9,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -1155,14 +1156,14 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         if (
             $this->adapter->getSharedTables()
             && $collection->getAttribute('$tenant') != $this->adapter->getTenant()
         ) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $collection
@@ -1252,11 +1253,11 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         return $this->adapter->getSizeOfCollection($collection->getId());
@@ -1278,11 +1279,11 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         return $this->adapter->getSizeOfCollectionOnDisk($collection->getId());
@@ -1305,11 +1306,11 @@ class Database
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $relationships = \array_filter(
@@ -1369,11 +1370,11 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         // Attribute IDs are case insensitive
@@ -1569,7 +1570,7 @@ class Database
         $index = \array_search($id, \array_map(fn ($index) => $index['$id'], $indexes));
 
         if ($index === false) {
-            throw new DatabaseException('Index not found');
+            throw new NotFoundException('Index not found');
         }
 
         // Execute update from callback
@@ -1612,7 +1613,7 @@ class Database
         $index = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($index === false) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         // Execute update from callback
@@ -1930,7 +1931,7 @@ class Database
         }
 
         if (\is_null($attribute)) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         if ($attribute['type'] === self::VAR_RELATIONSHIP) {
@@ -1996,7 +1997,7 @@ class Database
         $attribute = \in_array($old, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($attribute === false) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         $attributeNew = \in_array($new, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
@@ -2070,13 +2071,13 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection));
 
         if ($relatedCollection->isEmpty()) {
-            throw new DatabaseException('Related collection not found');
+            throw new NotFoundException('Related collection not found');
         }
 
         $id ??= $relatedCollection->getId();
@@ -2281,7 +2282,7 @@ class Database
         $attributeIndex = array_search($id, array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($attributeIndex === false) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         $attribute = $attributes[$attributeIndex];
@@ -2472,7 +2473,7 @@ class Database
         }
 
         if (\is_null($relationship)) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         $collection->setAttribute('attributes', \array_values($attributes));
@@ -2594,7 +2595,7 @@ class Database
         $index = \in_array($old, \array_map(fn ($index) => $index['$id'], $indexes));
 
         if ($index === false) {
-            throw new DatabaseException('Index not found');
+            throw new NotFoundException('Index not found');
         }
 
         $indexNew = \in_array($new, \array_map(fn ($index) => $index['$id'], $indexes));
@@ -2819,7 +2820,7 @@ class Database
         }
 
         if (empty($collection)) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         if (empty($id)) {
@@ -2829,7 +2830,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -4425,7 +4426,7 @@ class Database
         });
 
         if (empty($attr)) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
@@ -4520,7 +4521,7 @@ class Database
         });
 
         if (empty($attr)) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
@@ -5076,7 +5077,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -5548,7 +5549,7 @@ class Database
     protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new DatabaseException("Filter: {$name} not found");
+            throw new NotFoundException("Filter: {$name} not found");
         }
 
         try {
@@ -5584,7 +5585,7 @@ class Database
         }
 
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new DatabaseException('Filter not found');
+            throw new NotFoundException('Filter not found');
         }
 
         if (array_key_exists($name, $this->instanceFilters)) {

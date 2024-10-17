@@ -10,6 +10,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 
@@ -307,7 +308,7 @@ class SQLite extends MariaDB
         $collection = $this->getDocument(Database::METADATA, $name);
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $indexes = \json_decode($collection->getAttribute('indexes', []), true);
@@ -349,7 +350,7 @@ class SQLite extends MariaDB
         $collection = $this->getDocument(Database::METADATA, $collection);
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $old = $this->filter($old);

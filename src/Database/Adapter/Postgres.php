@@ -9,8 +9,8 @@ use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\Timeout;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -869,7 +869,7 @@ class Postgres extends SQL
         } catch (Throwable $e) {
             switch ($e->getCode()) {
                 case 23505:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
                 default:
                     throw $e;
             }
@@ -887,7 +887,7 @@ class Postgres extends SQL
      *
      * @return array<Document>
      *
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -972,7 +972,7 @@ class Postgres extends SQL
 
         } catch (PDOException $e) {
             throw match ($e->getCode()) {
-                1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
@@ -1196,7 +1196,7 @@ class Postgres extends SQL
             switch ($e->getCode()) {
                 case 1062:
                 case 23505:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
+                    throw new DuplicateException('Duplicated document: ' . $e->getMessage());
                 default:
                     throw $e;
             }
@@ -1214,7 +1214,7 @@ class Postgres extends SQL
      *
      * @return array<Document>
      *
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
     {
@@ -1448,7 +1448,7 @@ class Postgres extends SQL
         } catch (PDOException $e) {
 
             throw match ($e->getCode()) {
-                1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                1062, 23000 => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
@@ -1587,7 +1587,7 @@ class Postgres extends SQL
      * @return array<Document>
      * @throws Exception
      * @throws PDOException
-     * @throws Timeout
+     * @throws TimeoutException
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
     {
@@ -2212,8 +2212,8 @@ class Postgres extends SQL
 
     /**
      * @param PDOException $e
-     * @throws Timeout
-     * @throws Duplicate
+     * @throws TimeoutException
+     * @throws DuplicateException
      */
     protected function processException(PDOException $e): void
     {
@@ -2222,11 +2222,11 @@ class Postgres extends SQL
          */
 
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            throw new Timeout($e->getMessage(), $e->getCode(), $e);
+            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
         if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
+            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
         }
 
         // Data is too big for column resize

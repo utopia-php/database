@@ -9,6 +9,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
@@ -709,7 +710,7 @@ class MariaDB extends SQL
         $collection = $this->getDocument(Database::METADATA, $collection);
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);

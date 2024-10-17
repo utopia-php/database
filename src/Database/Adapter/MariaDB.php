@@ -1309,11 +1309,11 @@ class MariaDB extends SQL
      * @param Document $update
      * @param array<Document> $documents
      *
-     * @return bool
+     * @return int
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $update, array $documents): bool
+    public function updateDocuments(string $collection, Document $update, array $documents): int
     {
         $attributes = $update->getAttributes();
         if (!empty($update->getPermissions())) {
@@ -1382,7 +1382,7 @@ class MariaDB extends SQL
         }
 
         $stmt->execute();
-
+        $affected = $stmt->rowCount();
 
         // Permissions logic
         if (!empty($update->getPermissions())) {
@@ -1553,7 +1553,7 @@ class MariaDB extends SQL
             }
         }
 
-        return true;
+        return $affected;
     }
 
     /**
@@ -2236,6 +2236,16 @@ class MariaDB extends SQL
      * @return bool
      */
     public function getSupportForTimeouts(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Are batch operations supported?
+     * 
+     * @return bool
+     */
+    public function getSupportForBatchOperations(): bool
     {
         return true;
     }

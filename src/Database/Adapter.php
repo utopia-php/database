@@ -601,11 +601,11 @@ abstract class Adapter
      * @param Document $update
      * @param array<Document> $documents
      *
-     * @return bool
+     * @return int
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, Document $update, array $documents): bool;
+    abstract public function updateDocuments(string $collection, Document $update, array $documents): int;
 
     /**
      * Delete Document
@@ -777,6 +777,13 @@ abstract class Adapter
     abstract public function getSupportForRelationships(): bool;
 
     abstract public function getSupportForUpdateLock(): bool;
+
+    /**
+     * Are batch operations supported?
+     * 
+     * @return bool
+     */
+    abstract public function getSupportForBatchOperations(): bool;
 
     /**
      * Is attribute resizing supported?

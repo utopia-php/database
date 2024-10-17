@@ -826,11 +826,11 @@ class Mongo extends Adapter
      * @param Document $update
      * @param array<Document> $documents
      *
-     * @return bool
+     * @return int
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $update, array $documents): bool
+    public function updateDocuments(string $collection, Document $update, array $documents): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -856,7 +856,7 @@ class Mongo extends Adapter
             throw new Duplicate($e->getMessage());
         }
 
-        return true;
+        return 1;
     }
 
     /**
@@ -1685,6 +1685,16 @@ class Mongo extends Adapter
     }
 
     public function getSupportForAttributeResizing(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Are batch operations supported?
+     * 
+     * @return bool
+     */
+    public function getSupportForBatchOperations(): bool
     {
         return false;
     }

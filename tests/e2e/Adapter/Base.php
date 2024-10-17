@@ -15534,6 +15534,11 @@ abstract class Base extends TestCase
 
     public function testUpdateDocuments(): void
     {
+        if (!$this->getDatabase()->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collection = 'testUpdateDocuments';
         self::$authorization->cleanRoles();
         self::$authorization->addRole(Role::any()->toString());
@@ -15577,11 +15582,13 @@ abstract class Base extends TestCase
         }
 
         // Test Update half of the documents
-        $this->getDatabase()->updateDocuments($collection, new Document([
+        $affected = $this->getDatabase()->updateDocuments($collection, new Document([
             'string' => 'text📝 updated',
         ]), [
             Query::greaterThanEqual('integer', 5),
         ]);
+
+        $this->assertEquals($affected, 5);
 
         $updatedDocuments = $this->getDatabase()->find($collection, [
             Query::greaterThanEqual('integer', 5),
@@ -15604,9 +15611,11 @@ abstract class Base extends TestCase
         }
 
         // Test Update all documents
-        $this->getDatabase()->updateDocuments($collection, new Document([
+        $affected = $this->getDatabase()->updateDocuments($collection, new Document([
             'string' => 'text📝 updated all',
         ]));
+
+        $this->assertEquals(5, $affected);
 
         $updatedDocuments = $this->getDatabase()->find($collection);
 
@@ -15671,6 +15680,11 @@ abstract class Base extends TestCase
 
     public function testUpdateDocumentsPermissions(): void
     {
+        if (!$this->getDatabase()->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collection = 'testUpdateDocumentsPerms';
         self::$authorization->cleanRoles();
         self::$authorization->addRole(Role::any()->toString());
@@ -15780,6 +15794,83 @@ abstract class Base extends TestCase
         foreach ($modifiedDocuments as $document) {
             $this->assertEquals('text📝 updated', $document->getAttribute('string'));
         }
+    }
+
+    public function testUpdateDocumentsRelationships(): void
+    {
+        if (!$this->getDatabase()->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        self::$authorization->cleanRoles();
+        self::$authorization->addRole(Role::any()->toString());
+
+        $this->getDatabase()->createCollection('testUpdateDocumentsRelationships1', attributes: [
+            new Document([
+                '$id' => ID::custom('string'),
+                'type' => Database::VAR_STRING,
+                'size' => 767,
+                'required' => true,
+            ])
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        $this->getDatabase()->createCollection('testUpdateDocumentsRelationships2', attributes: [
+            new Document([
+                '$id' => ID::custom('string'),
+                'type' => Database::VAR_STRING,
+                'size' => 767,
+                'required' => true,
+            ])
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        $this->getDatabase()->createRelationship(
+            collection: 'testUpdateDocumentsRelationships1',
+            relatedCollection: 'testUpdateDocumentsRelationships2',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+        );
+
+        $this::$authorization->skip(function () {
+            $this->getDatabase()->createDocument('testUpdateDocumentsRelationships1', new Document([
+                '$id' => 'doc1',
+                'string' => 'text📝',
+            ]));
+
+            $this->getDatabase()->createDocument('testUpdateDocumentsRelationships2', new Document([
+                '$id' => 'doc2',
+                'string' => 'text📝',
+                'testUpdateDocumentsRelationships1' => 'doc1'
+            ]));
+        });
+
+        $sisterDocument = $this->getDatabase()->getDocument('testUpdateDocumentsRelationships2', 'doc2');
+        $this->assertNotNull($sisterDocument);
+
+        $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships1', new Document([
+            'string' => 'text📝 updated',
+        ]));
+
+        $document = $this->getDatabase()->findOne('testUpdateDocumentsRelationships1');
+
+        $this->assertNotFalse($document);
+        $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+
+        $sisterDocument = $this->getDatabase()->getDocument('testUpdateDocumentsRelationships2', 'doc2');
+        $this->assertNotNull($sisterDocument);
+        
+        $relationalDocument = $sisterDocument->getAttribute('testUpdateDocumentsRelationships1');
+        $this->assertEquals('text📝 updated', $relationalDocument->getAttribute('string'));
     }
 
     public function testEvents(): void

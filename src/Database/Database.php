@@ -3955,7 +3955,9 @@ class Database
                 foreach ($affectedDocuments as $document) {
                     // Update relationship, TODO: Figure out.
                     if ($this->resolveRelationships) {
+                        $newDocument = array_merge($document->getArrayCopy(), $update->getArrayCopy());
 
+                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, new Document($newDocument)));
                     }
 
                     $affectedDocumentIds[] = $document->getId();
@@ -3967,6 +3969,10 @@ class Database
                 } else {
                     $lastDocument = end($affectedDocuments);
                 }
+            }
+
+            if (empty($totalAffectedDocuments)) {
+                return;
             }
 
             $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $affectedDocumentIds);

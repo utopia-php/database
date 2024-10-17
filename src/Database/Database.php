@@ -3892,11 +3892,11 @@ class Database
      * @param array<Query> $queries
      * @param int $batchSize
      *
-     * @return bool
+     * @return int
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $update, array $queries = [], int $batchSize = self::INSERT_BATCH_SIZE): bool
+    public function updateDocuments(string $collection, Document $update, array $queries = [], int $batchSize = self::INSERT_BATCH_SIZE): int
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -3923,7 +3923,7 @@ class Database
         $totalAffectedDocuments = [];
         $affectedDocumentIds = [];
 
-        $this->withTransaction(function () use ($collection, $queries, $batchSize, $totalAffectedDocuments, $affectedDocumentIds, $update) {
+        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $totalAffectedDocuments, $affectedDocumentIds, $update) {
             $lastDocument = null;
 
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3983,12 +3983,12 @@ class Database
                 $totalAffectedDocuments
             );
 
-            $skipAuth ? $this->authorization->skip($getResults) : $getResults();
+            return $skipAuth ? $this->authorization->skip($getResults) : $getResults();
         });
 
         $this->purgeCachedCollection($collection->getId());
 
-        return true;
+        return $affected;
     }
 
     /**

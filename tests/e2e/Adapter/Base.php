@@ -15615,7 +15615,7 @@ abstract class Base extends TestCase
             'string' => 'text📝 updated all',
         ]));
 
-        $this->assertEquals(5, $affected);
+        $this->assertEquals(10, $affected);
 
         $updatedDocuments = $this->getDatabase()->find($collection);
 
@@ -15725,7 +15725,7 @@ abstract class Base extends TestCase
             ]));
         });
 
-        $this->getDatabase()->updateDocuments($collection, new Document([
+        $affected = $this->getDatabase()->updateDocuments($collection, new Document([
             '$permissions' => [
                 Permission::read(Role::user('user2')),
                 Permission::create(Role::user('user2')),
@@ -15738,6 +15738,7 @@ abstract class Base extends TestCase
             return $this->getDatabase()->find($collection);
         });
 
+        $this->assertEquals(10, $affected);
         $this->assertCount(11, $documents);
 
         $modifiedDocuments = array_filter($documents, function (Document $document) {

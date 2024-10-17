@@ -15868,7 +15868,7 @@ abstract class Base extends TestCase
 
         $sisterDocument = $this->getDatabase()->getDocument('testUpdateDocumentsRelationships2', 'doc2');
         $this->assertNotNull($sisterDocument);
-        
+
         $relationalDocument = $sisterDocument->getAttribute('testUpdateDocumentsRelationships1');
         $this->assertEquals('text📝 updated', $relationalDocument->getAttribute('string'));
     }

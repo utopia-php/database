@@ -1321,7 +1321,7 @@ class MariaDB extends SQL
         }
 
         if (empty($attributes)) {
-            return true;
+            return 0;
         }
 
         $name = $this->filter($collection);
@@ -2242,7 +2242,7 @@ class MariaDB extends SQL
 
     /**
      * Are batch operations supported?
-     * 
+     *
      * @return bool
      */
     public function getSupportForBatchOperations(): bool

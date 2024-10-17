@@ -1691,7 +1691,7 @@ class Mongo extends Adapter
 
     /**
      * Are batch operations supported?
-     * 
+     *
      * @return bool
      */
     public function getSupportForBatchOperations(): bool

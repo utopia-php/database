@@ -780,7 +780,7 @@ abstract class Adapter
 
     /**
      * Are batch operations supported?
-     * 
+     *
      * @return bool
      */
     abstract public function getSupportForBatchOperations(): bool;

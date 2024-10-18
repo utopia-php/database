@@ -1303,7 +1303,9 @@ class MariaDB extends SQL
     }
 
     /**
-     * Batch update documents
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
      * @param Document $updates
@@ -1522,9 +1524,19 @@ class MariaDB extends SQL
                     WHERE ({$removeQuery})
                 ");
 
+                $asd = "
+                    DELETE
+                    FROM {$this->getSQLTable($name . '_perms')}
+                    WHERE ({$removeQuery})
+                ";
+
                 foreach ($removeBindValues as $key => $value) {
+                    $asd = str_replace(":{$key}", "'{$value}'", $asd);
                     $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
                 }
+
+                var_dump($asd);
+
                 if ($this->sharedTables) {
                     $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
                 }

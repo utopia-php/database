@@ -820,7 +820,9 @@ class Mongo extends Adapter
     }
 
     /**
-     * Batch update documents
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
      * @param Document $updates

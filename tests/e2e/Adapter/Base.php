@@ -15685,12 +15685,25 @@ abstract class Base extends TestCase
             $this->assertCount(9, $unmodifiedDocuments);
         });
 
+        static::$authorization->skip(function () use ($collection) {
+            static::getDatabase()->updateDocuments($collection, new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]));
+        });
+
         // Test we can update more documents than batchSize
-        static::getDatabase()->updateDocuments($collection, new Document([
+        $affected = static::getDatabase()->updateDocuments($collection, new Document([
             'string' => 'batchSize Test'
         ]), batchSize: 2);
 
         $documents = static::getDatabase()->find($collection);
+
+        $this->assertEquals(10, $affected);
 
         foreach ($documents as $document) {
             $this->assertEquals('batchSize Test', $document->getAttribute('string'));
@@ -15786,7 +15799,7 @@ abstract class Base extends TestCase
         static::$authorization->addRole(Role::user('user2')->toString());
 
         // Test Bulk permission update with data
-        static::getDatabase()->updateDocuments($collection, new Document([
+        $affected = static::getDatabase()->updateDocuments($collection, new Document([
             '$permissions' => [
                 Permission::read(Role::user('user3')),
                 Permission::create(Role::user('user3')),
@@ -15795,6 +15808,8 @@ abstract class Base extends TestCase
             ],
             'string' => 'text📝 updated',
         ]));
+
+        $this->assertEquals(10, $affected);
 
         $documents = static::$authorization
             ->skip(function () use ($collection) {

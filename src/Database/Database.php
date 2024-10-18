@@ -3890,46 +3890,45 @@ class Database
      * Updates all documents which match the given query.
      *
      * @param string $collection
-     * @param Document $update
+     * @param Document $updates
      * @param array<Query> $queries
      * @param int $batchSize
      *
      * @return int
      *
-     * @throws AuthorizationException
+     * @throws AuthorizationExceptions
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $update, array $queries = [], int $batchSize = self::INSERT_BATCH_SIZE): int
+    public function updateDocuments(string $collection, Document $updates, array $queries = [], int $batchSize = self::INSERT_BATCH_SIZE): int
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        if ($update->isEmpty()) {
+        if ($updates->isEmpty()) {
             return 0;
         }
 
         $queries = Query::groupByType($queries)['filters'];
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        unset($update['$id']);
-        unset($update['$createdAt']);
-        unset($update['$tenant']);
+        unset($updates['$id']);
+        unset($updates['$createdAt']);
+        unset($updates['$tenant']);
 
         if (!$this->preserveDates) {
-            unset($update['$updatedAt']);
-            $update['$updatedAt'] = DateTime::now();
+            $updates['$updatedAt'] = DateTime::now();
         }
 
-        $update = $this->encode($collection, $update);
+        $updates = $this->encode($collection, $updates);
 
         // Check new document structure
         $validator = new PartialStructure($collection);
-        if (!$validator->isValid($update)) {
+        if (!$validator->isValid($updates)) {
             throw new StructureException($validator->getDescription());
         }
 
-        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $update) {
+        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates) {
             $lastDocument = null;
             $totalModified = 0;
             $affectedDocumentIds = [];
@@ -3960,7 +3959,7 @@ class Database
 
                 foreach ($affectedDocuments as $document) {
                     if ($this->resolveRelationships) {
-                        $newDocument = array_merge($document->getArrayCopy(), $update->getArrayCopy());
+                        $newDocument = array_merge($document->getArrayCopy(), $updates->getArrayCopy());
 
                         $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, new Document($newDocument)));
                     }
@@ -3970,7 +3969,7 @@ class Database
 
                 $getResults = fn () => $this->adapter->updateDocuments(
                     $collection->getId(),
-                    $update,
+                    $updates,
                     $affectedDocuments
                 );
 
@@ -3992,7 +3991,7 @@ class Database
                 $this->purgeCachedDocument($collection->getId(), $id);
             }
 
-            return $result ?? 0;
+            return $totalModified ?? 0;
         });
 
         return $affected;

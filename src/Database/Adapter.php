@@ -593,9 +593,11 @@ abstract class Adapter
      * @return Document
      */
     abstract public function updateDocument(string $collection, Document $document): Document;
-
+    
     /**
-     * Batch update documents
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
      * @param Document $updates

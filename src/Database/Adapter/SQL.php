@@ -362,6 +362,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Are batch operations supported?
+     *
+     * @return bool
+     */
+    public function getSupportForBatchOperations(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -968,8 +978,12 @@ abstract class SQL extends Adapter
      * @return string
      * @throws Exception
      */
-    protected function getSQLPermissionsCondition(string $collection, array $roles): string
+    protected function getSQLPermissionsCondition(string $collection, array $roles, string $type = Database::PERMISSION_READ): string
     {
+        if (!in_array($type, Database::PERMISSIONS)) {
+            throw new DatabaseException('Unknown permission type: ' . $type);
+        }
+
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
 
         $tenantQuery = '';
@@ -981,7 +995,7 @@ abstract class SQL extends Adapter
                     SELECT _document
                     FROM {$this->getSQLTable($collection . '_perms')}
                     WHERE _permission IN (" . implode(', ', $roles) . ")
-                      AND _type = 'read'
+                      AND _type = '{$type}'
                       {$tenantQuery}
                 )";
     }

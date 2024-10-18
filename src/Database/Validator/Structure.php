@@ -227,6 +227,32 @@ class Structure extends Validator
         $structure = $document->getArrayCopy();
         $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
 
+        if (!$this->checkForAllRequiredValues($structure, $attributes, $keys)) {
+            return false;
+        }
+
+        if (!$this->checkForUnknownAttributes($structure, $keys)) {
+            return false;
+        }
+
+        if (!$this->checkForInvalidAttributeValues($structure, $keys)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Check for all required values
+     *
+     * @param array<string, mixed> $structure
+     * @param array<string, mixed> $attributes
+     * @param array<string, mixed> $keys
+     *
+     * @return bool
+     */
+    protected function checkForAllRequiredValues(array $structure, array $attributes, array &$keys): bool
+    {
         foreach ($attributes as $key => $attribute) { // Check all required attributes are set
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
@@ -239,12 +265,40 @@ class Structure extends Validator
             }
         }
 
+        return true;
+    }
+
+    /**
+     * Check for Unknown Attributes
+     *
+     * @param array<string, mixed> $structure
+     * @param array<string, mixed> $keys
+     *
+     * @return bool
+     */
+    protected function checkForUnknownAttributes(array $structure, array $keys): bool
+    {
         foreach ($structure as $key => $value) {
             if (!array_key_exists($key, $keys)) { // Check no unknown attributes are set
                 $this->message = 'Unknown attribute: "'.$key.'"';
                 return false;
             }
+        }
 
+        return true;
+    }
+
+    /**
+     * Check for invalid attribute values
+     *
+     * @param array<string, mixed> $structure
+     * @param array<string, mixed> $keys
+     *
+     * @return bool
+     */
+    protected function checkForInvalidAttributeValues(array $structure, array $keys): bool
+    {
+        foreach ($structure as $key => $value) {
             $attribute = $keys[$key] ?? [];
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;

@@ -4999,7 +4999,7 @@ class Database
 
         $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds) {
             $lastDocument = null;
-            
+
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
             $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, $collection->getDelete()));
 

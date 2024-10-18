@@ -966,7 +966,7 @@ class Mongo extends Adapter
         return true;
     }
 
-        /**
+    /**
      * Find Documents
      *
      * Find data sets using chosen queries

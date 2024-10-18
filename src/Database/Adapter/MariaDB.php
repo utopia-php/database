@@ -1654,11 +1654,11 @@ class MariaDB extends SQL
                 $where[] = "_tenant = :_tenant";
             }
 
-            $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($id) => ":_id_{$id}", \array_keys($ids))) . ")";
+            $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($ids))) . ")";
 
             $sql = "DELETE FROM {$this->getSQLTable($name)} WHERE " . \implode(' AND ', $where);
 
-            $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
+            $sql = $this->trigger(Database::EVENT_DOCUMENTS_DELETE, $sql);
 
             $stmt = $this->getPDO()->prepare($sql);
 
@@ -1672,7 +1672,7 @@ class MariaDB extends SQL
 
             $sql = "
                 DELETE FROM {$this->getSQLTable($name . '_perms')} 
-                WHERE _document IN (" . \implode(', ', \array_map(fn ($id) => ":_id_{$id}", \array_keys($ids))) . ")
+                WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($ids))) . ")
             ";
 
             if ($this->sharedTables) {
@@ -1705,7 +1705,7 @@ class MariaDB extends SQL
         return true;
     }
 
-    /**
+        /**
      * Find Documents
      *
      * @param string $collection
@@ -1716,11 +1716,12 @@ class MariaDB extends SQL
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
         $roles = $this->authorization->getRoles();
@@ -1810,7 +1811,7 @@ class MariaDB extends SQL
         }
 
         if ($this->authorization->getStatus()) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
         }
 
         if ($this->sharedTables) {

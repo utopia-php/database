@@ -137,6 +137,7 @@ class Database
     public const EVENT_INDEX_DELETE = 'index_delete';
 
     public const INSERT_BATCH_SIZE = 100;
+    public const DELETE_BATCH_SIZE = 100;
 
     protected Adapter $adapter;
 
@@ -4986,7 +4987,7 @@ class Database
      * @throws DatabaseException
      * @throws RestrictedException
      */
-    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = 100): bool
+    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): bool
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -4998,6 +4999,13 @@ class Database
 
         $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds) {
             $lastDocument = null;
+            
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, $collection->getDelete()));
+
+            if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+                throw new AuthorizationException($this->authorization->getDescription());
+            }
 
             while (true) {
                 $affectedDocuments = $this->find($collection->getId(), array_merge(
@@ -5008,7 +5016,7 @@ class Database
                         Query::cursorAfter($lastDocument),
                     ],
                     $queries,
-                ));
+                ), forPermission: Database::PERMISSION_DELETE);
 
                 if (empty($affectedDocuments)) {
                     break;
@@ -5017,17 +5025,6 @@ class Database
                 $affectedDocumentIds = array_merge($affectedDocumentIds, array_map(fn ($document) => $document->getId(), $affectedDocuments));
 
                 foreach ($affectedDocuments as $document) {
-                    if ($collection->getId() !== self::METADATA) {
-                        $documentSecurity = $collection->getAttribute('documentSecurity', false);
-                        $isValid = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
-                            ...$collection->getDelete(),
-                            ...($documentSecurity ? $document->getDelete() : [])
-                        ]));
-                        if (!$isValid) {
-                            throw new AuthorizationException($this->authorization->getDescription());
-                        }
-                    }
-
                     // Delete Relationships
                     if ($this->resolveRelationships) {
                         $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
@@ -5097,13 +5094,14 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
+     * @param string $forPermission
      *
      * @return array<Document>
      * @throws DatabaseException
      * @throws QueryException
      * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = []): array
+    public function find(string $collection, array $queries = [], string $forPermission = Database::PERMISSION_READ): array
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -5127,7 +5125,7 @@ class Database
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
@@ -5214,7 +5212,8 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER
+            $cursorDirection ?? Database::CURSOR_AFTER,
+            $forPermission
         );
 
         $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();

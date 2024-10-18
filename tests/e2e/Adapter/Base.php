@@ -15617,18 +15617,19 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteDocuments('bulk_delete');
         $this->assertEquals(0, count($this->getDatabase()->find('bulk_delete')));
 
-        // TEST (FAIL): Bulk delete all documents with invalid document permissions
-        // Authorization::setRole(Role::any()->toString());
+        // TEST: Make sure we can't delete documents we don't have permissions for
         static::getDatabase()->updateCollection('bulk_delete', [
             Permission::create(Role::any()),
         ], true);
         $this->propegateBulkDocuments(true);
 
-        try {
-            static::getDatabase()->deleteDocuments('bulk_delete');
-            $this->fail('Bulk deleted documents with invalid document permission');
-        } catch (\Utopia\Database\Exception\Authorization) {
-        }
+        static::getDatabase()->deleteDocuments('bulk_delete');
+
+        $documents = static::$authorization->skip(function () {
+            return static::getDatabase()->find('bulk_delete');
+        });
+
+        $this->assertCount(10, $documents);
 
         static::getDatabase()->updateCollection('bulk_delete', [
             Permission::create(Role::any()),

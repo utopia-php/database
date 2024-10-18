@@ -30,8 +30,6 @@ class PartialStructure extends Structure
 
         $keys = [];
         $structure = $document->getArrayCopy();
-        $attributes = $this->collection->getAttribute('attributes', []);
-
         $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
 
         foreach ($attributes as $attribute) {

@@ -1679,6 +1679,79 @@ class MariaDB extends SQL
     }
 
     /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<string> $ids
+     *
+     * @return bool
+     */
+    public function deleteDocuments(string $collection, array $ids): bool
+    {
+        if (empty($ids)) {
+            return true;
+        }
+
+        try {
+            $name = $this->filter($collection);
+            $where = [];
+
+            if ($this->sharedTables) {
+                $where[] = "_tenant = :_tenant";
+            }
+
+            $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($ids))) . ")";
+
+            $sql = "DELETE FROM {$this->getSQLTable($name)} WHERE " . \implode(' AND ', $where);
+
+            $sql = $this->trigger(Database::EVENT_DOCUMENTS_DELETE, $sql);
+
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($ids as $id => $value) {
+                $stmt->bindValue(":_id_{$id}", $value);
+            }
+
+            if ($this->sharedTables) {
+                $stmt->bindValue(':_tenant', $this->tenant);
+            }
+
+            $sql = "
+                DELETE FROM {$this->getSQLTable($name . '_perms')} 
+                WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($ids))) . ")
+            ";
+
+            if ($this->sharedTables) {
+                $sql .= ' AND _tenant = :_tenant';
+            }
+
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
+
+            $stmtPermissions = $this->getPDO()->prepare($sql);
+
+            foreach ($ids as $id => $value) {
+                $stmtPermissions->bindValue(":_id_{$id}", $value);
+            }
+
+            if ($this->sharedTables) {
+                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+            }
+
+            if (!$stmt->execute()) {
+                throw new DatabaseException('Failed to delete documents');
+            }
+
+            if (!$stmtPermissions->execute()) {
+                throw new DatabaseException('Failed to delete permissions');
+            }
+        } catch (\Throwable $e) {
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        return true;
+    }
+
+    /**
      * Find Documents
      *
      * @param string $collection
@@ -1689,11 +1762,12 @@ class MariaDB extends SQL
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
         $roles = $this->authorization->getRoles();
@@ -1783,7 +1857,7 @@ class MariaDB extends SQL
         }
 
         if ($this->authorization->getStatus()) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
         }
 
         if ($this->sharedTables) {

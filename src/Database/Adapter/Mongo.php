@@ -921,6 +921,43 @@ class Mongo extends Adapter
     }
 
     /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<string> $ids
+     *
+     * @return bool
+     */
+    public function deleteDocuments(string $collection, array $ids): bool
+    {
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_uid', $ids)]);
+
+        if ($this->sharedTables) {
+            $filters['_tenant'] = (string)$this->getTenant();
+        }
+
+        $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
+        $filters = $this->timeFilter($filters);
+
+        $options = [];
+
+        try {
+            $res = $this->client->delete(
+                collection: $name,
+                filters: $filters,
+                options: $options,
+                limit: 0
+            );
+        } catch (MongoException $e) {
+            $this->processException($e);
+        }
+
+        return true;
+    }
+
+    /**
      * Update Attribute.
      * @param string $collection
      * @param string $id
@@ -954,12 +991,13 @@ class Mongo extends Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      *
      * @return array<Document>
      * @throws Exception
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $queries = array_map(fn ($query) => clone $query, $queries);
@@ -973,7 +1011,7 @@ class Mongo extends Adapter
         // permissions
         if ($this->authorization->getStatus()) { // skip if authorization is disabled
             $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         $options = [];

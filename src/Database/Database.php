@@ -3944,17 +3944,15 @@ class Database
 
             // Resolve and update relationships
             while (true) {
-                $affectedDocuments = $this->skipRelationships(function () use ($collection, $queries, $batchSize, $lastDocument) {
-                    return $this->find($collection->getId(), array_merge(
-                        empty($lastDocument) ? [
-                            Query::limit($batchSize),
-                        ] : [
-                            Query::limit($batchSize),
-                            Query::cursorAfter($lastDocument),
-                        ],
-                        $queries,
-                    ), forPermission: Database::PERMISSION_UPDATE);
-                });
+                $affectedDocuments = $this->find($collection->getId(), array_merge(
+                    empty($lastDocument) ? [
+                        Query::limit($batchSize),
+                    ] : [
+                        Query::limit($batchSize),
+                        Query::cursorAfter($lastDocument),
+                    ],
+                    $queries,
+                ), forPermission: Database::PERMISSION_UPDATE);
 
                 if (empty($affectedDocuments)) {
                     break;
@@ -3968,7 +3966,6 @@ class Database
                     }
 
                     $affectedDocumentIds[] = $document->getId();
-                    $totalAffectedDocuments[] = $document;
                 }
 
                 $getResults = fn () => $this->adapter->updateDocuments(

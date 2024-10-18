@@ -15892,6 +15892,15 @@ abstract class Base extends TestCase
         $this->assertEquals('text📝 updated', $relationalDocument->getAttribute('string'));
 
         // Check relationship value updating between each other.
+        $this->getDatabase()->deleteRelationship('testUpdateDocumentsRelationships1', 'testUpdateDocumentsRelationships2');
+
+        $this->getDatabase()->createRelationship(
+            collection: 'testUpdateDocumentsRelationships1',
+            relatedCollection: 'testUpdateDocumentsRelationships2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+        );
+
         for ($i = 2; $i < 11; $i++) {
             $this->getDatabase()->createDocument('testUpdateDocumentsRelationships1', new Document([
                 '$id' => 'doc' . $i,
@@ -15906,14 +15915,17 @@ abstract class Base extends TestCase
         }
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships2', new Document([
+            'testUpdateDocumentsRelationships1' => null
+        ]));
+
+        $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships2', new Document([
             'testUpdateDocumentsRelationships1' => 'doc1'
         ]));
 
         $documents = $this->getDatabase()->find('testUpdateDocumentsRelationships2');
 
         foreach ($documents as $document) {
-            var_dump($document->getAttribute('testUpdateDocumentsRelationships1'));
-           //  $this->assertEquals('doc1', $document->getAttribute('testUpdateDocumentsRelationships1')->getId());
+            $this->assertEquals('doc1', $document->getAttribute('testUpdateDocumentsRelationships1')->getId());
         }
     }
 

@@ -1076,6 +1076,7 @@ abstract class Base extends TestCase
         static::getDatabase()->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
         static::getDatabase()->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
 
+
         $loopCount = 100;
 
         for ($i = 0; $i < $loopCount; $i++) {
@@ -1092,6 +1093,20 @@ abstract class Base extends TestCase
         $size2 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
 
         $this->assertGreaterThan($size1, $size2);
+
+        self::$authorization->skip(function () use ($loopCount) {
+            for ($i = 0; $i < $loopCount; $i++) {
+                $this->getDatabase()->deleteDocument('sizeTest2', 'doc' . $i);
+            }
+        });
+
+        sleep(5);
+
+        static::getDatabase()->analyzeCollection('sizeTest2');
+
+        $size3 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
+
+        $this->assertLessThan($size2, $size3);
     }
 
     public function testSizeCollectionOnDisk(): void
@@ -2422,6 +2437,18 @@ abstract class Base extends TestCase
         $this->assertNotContains('guests', $new->getCreate());
         $this->assertNotContains('guests', $new->getUpdate());
         $this->assertNotContains('guests', $new->getDelete());
+
+        // Test change document ID
+        $id = $new->getId();
+        $newId = 'new-id';
+        $new->setAttribute('$id', $newId);
+        $new = $this->getDatabase()->updateDocument($new->getCollection(), $id, $new);
+        $this->assertEquals($newId, $new->getId());
+
+        // Reset ID
+        $new->setAttribute('$id', $id);
+        $new = $this->getDatabase()->updateDocument($new->getCollection(), $newId, $new);
+        $this->assertEquals($id, $new->getId());
 
         return $document;
     }

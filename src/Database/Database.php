@@ -3897,7 +3897,7 @@ class Database
      *
      * @return int
      *
-     * @throws AuthorizationExceptions
+     * @throws AuthorizationException
      * @throws DatabaseException
      */
     public function updateDocuments(string $collection, Document $updates, array $queries = [], int $batchSize = self::INSERT_BATCH_SIZE): int
@@ -3992,7 +3992,7 @@ class Database
                 $this->purgeCachedDocument($collection->getId(), $id);
             }
 
-            return $totalModified ?? 0;
+            return $totalModified;
         });
 
         return $affected;

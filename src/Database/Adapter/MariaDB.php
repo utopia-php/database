@@ -1475,6 +1475,10 @@ class MariaDB extends SQL
                             $removeQuery .= ' OR ';
                         }
                     }
+
+                    if ($index !== \array_key_last($documents)) {
+                        $removeQuery .= ' OR ';
+                    }
                 }
 
                 // Get added Permissions

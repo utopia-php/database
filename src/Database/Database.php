@@ -3885,7 +3885,9 @@ class Database
     }
 
     /**
-     * Batch update documents
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
      * @param Document $update
@@ -3894,6 +3896,7 @@ class Database
      *
      * @return int
      *
+     * @throws AuthorizationException
      * @throws DatabaseException
      */
     public function updateDocuments(string $collection, Document $update, array $queries = [], int $batchSize = self::INSERT_BATCH_SIZE): int
@@ -3902,7 +3905,7 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        if (empty($update->getArrayCopy())) {
+        if ($update->isEmpty()) {
             return 0;
         }
 
@@ -3911,8 +3914,14 @@ class Database
 
         unset($update['$id']);
         unset($update['$createdAt']);
-        unset($update['$updatedAt']);
-        unset($update['_tenant']);
+        unset($update['$tenant']);
+
+        if (!$this->preserveDates) {
+            unset($update['$updatedAt']);
+            $update['$updatedAt'] = DateTime::now();
+        }
+
+        $update = $this->encode($collection, $update);
 
         // Check new document structure
         $validator = new PartialStructure($collection);
@@ -3920,11 +3929,10 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
-        $totalAffectedDocuments = [];
-        $affectedDocumentIds = [];
-
-        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $totalAffectedDocuments, $affectedDocumentIds, $update) {
+        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $update) {
             $lastDocument = null;
+            $totalModified = 0;
+            $affectedDocumentIds = [];
 
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
@@ -3953,7 +3961,6 @@ class Database
                 }
 
                 foreach ($affectedDocuments as $document) {
-                    // Update relationship, TODO: Figure out.
                     if ($this->resolveRelationships) {
                         $newDocument = array_merge($document->getArrayCopy(), $update->getArrayCopy());
 
@@ -3964,6 +3971,16 @@ class Database
                     $totalAffectedDocuments[] = $document;
                 }
 
+                $getResults = fn () => $this->adapter->updateDocuments(
+                    $collection->getId(),
+                    $update,
+                    $affectedDocuments
+                );
+
+                $result = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
+
+                $totalModified += $result;
+
                 if (count($affectedDocuments) < $batchSize) {
                     break;
                 } else {
@@ -3971,22 +3988,15 @@ class Database
                 }
             }
 
-            if (empty($totalAffectedDocuments)) {
-                return;
-            }
-
             $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $affectedDocumentIds);
 
-            $getResults = fn () => $this->adapter->updateDocuments(
-                $collection->getId(),
-                $update,
-                $totalAffectedDocuments
-            );
+            foreach ($affectedDocumentIds as $id) {
+                $this->purgeRelatedDocuments($collection, $id);
+                $this->purgeCachedDocument($collection->getId(), $id);
+            }
 
-            return $skipAuth ? $this->authorization->skip($getResults) : $getResults();
+            return $result ?? 0;
         });
-
-        $this->purgeCachedCollection($collection->getId());
 
         return $affected;
     }

@@ -823,14 +823,14 @@ class Mongo extends Adapter
      * Batch update documents
      *
      * @param string $collection
-     * @param Document $update
+     * @param Document $updates
      * @param array<Document> $documents
      *
      * @return int
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $update, array $documents): int
+    public function updateDocuments(string $collection, Document $updates, array $documents): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -843,8 +843,9 @@ class Mongo extends Adapter
             $filters['_tenant'] = (string)$this->getTenant();
         }
 
-        $record = $update->getArrayCopy();
+        $record = $updates->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
+        $record = $this->timeToMongo($record);
 
         $updateQuery = [
             '$set' => $record,
@@ -1172,8 +1173,13 @@ class Mongo extends Adapter
      */
     private function timeToMongo(array $record): array
     {
-        $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
-        $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
+        if (isset($record['_createdAt'])) {
+            $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
+        }
+
+        if (isset($record['_updatedAt'])) {
+            $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
+        }
 
         return $record;
     }

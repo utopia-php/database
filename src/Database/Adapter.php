@@ -598,14 +598,14 @@ abstract class Adapter
      * Batch update documents
      *
      * @param string $collection
-     * @param Document $update
+     * @param Document $updates
      * @param array<Document> $documents
      *
      * @return int
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, Document $update, array $documents): int;
+    abstract public function updateDocuments(string $collection, Document $updates, array $documents): int;
 
     /**
      * Delete Document
@@ -634,7 +634,7 @@ abstract class Adapter
      *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::RELATION_SIDE_PARENT): array;
+    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
 
     /**
      * Sum an attribute

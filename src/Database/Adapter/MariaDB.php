@@ -1306,18 +1306,23 @@ class MariaDB extends SQL
      * Batch update documents
      *
      * @param string $collection
-     * @param Document $update
+     * @param Document $updates
      * @param array<Document> $documents
      *
      * @return int
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $update, array $documents): int
+    public function updateDocuments(string $collection, Document $updates, array $documents): int
     {
-        $attributes = $update->getAttributes();
-        if (!empty($update->getPermissions())) {
-            $attributes['_permissions'] = json_encode($update->getPermissions());
+        $attributes = $updates->getAttributes();
+
+        if (!empty($updates->getUpdatedAt())) {
+            $attributes['_updatedAt'] = $updates->getUpdatedAt();
+        }
+
+        if (!empty($updates->getPermissions())) {
+            $attributes['_permissions'] = json_encode($updates->getPermissions());
         }
 
         if (empty($attributes)) {
@@ -1331,10 +1336,10 @@ class MariaDB extends SQL
         $where = [];
 
         $ids = \array_map(fn ($document) => $document->getId(), $documents);
-        $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($id) => ":_id_{$id}", \array_keys($ids))) . ")";
+        $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($ids))) . ")";
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "_tenant = :_tenant";
         }
 
         $sqlWhere = 'WHERE ' . implode(' AND ', $where);
@@ -1353,12 +1358,12 @@ class MariaDB extends SQL
         }
 
         $sql = "
-                UPDATE {$this->getSQLTable($name)} AS table_main
+                UPDATE {$this->getSQLTable($name)}
                 SET {$columns}
                 {$sqlWhere}
             ";
 
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
+        $sql = $this->trigger(Database::EVENT_DOCUMENTS_UPDATE, $sql);
         $stmt = $this->getPDO()->prepare($sql);
 
         if ($this->sharedTables) {
@@ -1385,7 +1390,7 @@ class MariaDB extends SQL
         $affected = $stmt->rowCount();
 
         // Permissions logic
-        if (!empty($update->getPermissions())) {
+        if (!empty($updates->getPermissions())) {
             $removeQuery = '';
             $removeBindValues = [];
 
@@ -1430,7 +1435,7 @@ class MariaDB extends SQL
                 // Get removed Permissions
                 $removals = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    $diff = array_diff($permissions[$type], $update->getPermissionsByType($type));
+                    $diff = array_diff($permissions[$type], $updates->getPermissionsByType($type));
                     if (!empty($diff)) {
                         $removals[$type] = $diff;
                     }
@@ -1475,7 +1480,7 @@ class MariaDB extends SQL
                 // Get added Permissions
                 $additions = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    $diff = \array_diff($update->getPermissionsByType($type), $permissions[$type]);
+                    $diff = \array_diff($updates->getPermissionsByType($type), $permissions[$type]);
                     if (!empty($diff)) {
                         $additions[$type] = $diff;
                     }
@@ -2236,16 +2241,6 @@ class MariaDB extends SQL
      * @return bool
      */
     public function getSupportForTimeouts(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Are batch operations supported?
-     *
-     * @return bool
-     */
-    public function getSupportForBatchOperations(): bool
     {
         return true;
     }

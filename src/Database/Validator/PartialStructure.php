@@ -2,146 +2,11 @@
 
 namespace Utopia\Database\Validator;
 
-use Closure;
-use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Validator\Datetime as DatetimeValidator;
-use Utopia\Http\Validator;
-use Utopia\Http\Validator\Boolean;
-use Utopia\Http\Validator\FloatValidator;
-use Utopia\Http\Validator\Integer;
-use Utopia\Http\Validator\Range;
-use Utopia\Http\Validator\Text;
 
-class PartialStructure extends Validator
+class PartialStructure extends Structure
 {
-    /**
-     * @var Document
-     */
-    protected Document $collection;
-
-    /**
-     * @var array<array<string, mixed>>
-     */
-    protected array $attributes = [
-        [
-            '$id' => '$permissions',
-            'type' => Database::VAR_STRING,
-            'size' => 67000, // medium text
-            'required' => false,
-            'signed' => true,
-            'array' => true,
-            'filters' => [],
-        ]
-    ];
-
-    /**
-     * @var array<string, array{callback: callable, type: string}>
-     */
-    protected static array $formats = [];
-
-    /**
-     * @var string
-     */
-    protected string $message = 'General Error';
-
-    /**
-     * Structure constructor.
-     *
-     */
-    public function __construct(Document $collection)
-    {
-        $this->collection = $collection;
-    }
-
-    /**
-     * Remove a Validator
-     *
-     * @return array<string, array{callback: callable, type: string}>
-     */
-    public static function getFormats(): array
-    {
-        return self::$formats;
-    }
-
-    /**
-     * Add a new Validator
-     * Stores a callback and required params to create Validator
-     *
-     * @param string $name
-     * @param Closure $callback Callback that accepts $params in order and returns \Utopia\Http\Validator
-     * @param string $type Primitive data type for validation
-     */
-    public static function addFormat(string $name, Closure $callback, string $type): void
-    {
-        self::$formats[$name] = [
-            'callback' => $callback,
-            'type' => $type,
-        ];
-    }
-
-    /**
-     * Check if validator has been added
-     *
-     * @param string $name
-     *
-     * @return bool
-     */
-    public static function hasFormat(string $name, string $type): bool
-    {
-        if (isset(self::$formats[$name]) && self::$formats[$name]['type'] === $type) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Get a Format array to create Validator
-     *
-     * @param string $name
-     * @param string $type
-     *
-     * @return array{callback: callable, type: string}
-     * @throws Exception
-     */
-    public static function getFormat(string $name, string $type): array
-    {
-        if (isset(self::$formats[$name])) {
-            if (self::$formats[$name]['type'] !== $type) {
-                throw new DatabaseException('Format "'.$name.'" not available for attribute type "'.$type.'"');
-            }
-
-            return self::$formats[$name];
-        }
-
-        throw new DatabaseException('Unknown format validator "'.$name.'"');
-    }
-
-    /**
-     * Remove a Validator
-     *
-     * @param string $name
-     */
-    public static function removeFormat(string $name): void
-    {
-        unset(self::$formats[$name]);
-    }
-
-    /**
-     * Get Description.
-     *
-     * Returns validator description
-     *
-     * @return string
-     */
-    public function getDescription(): string
-    {
-        return 'Invalid document structure: '.$this->message;
-    }
-
     /**
      * Is valid.
      *
@@ -169,133 +34,19 @@ class PartialStructure extends Validator
 
         $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
 
-        $keys = [];
         foreach ($attributes as $attribute) {
-            $keys[$attribute['$id']] = $attribute;
+            $name = $attribute['$id'] ?? '';
+            $keys[$name] = $attribute;
         }
 
-        foreach ($structure as $key => $value) {
-            if (!array_key_exists($key, $keys)) { // Check no unknown attributes are set
-                $this->message = 'Unknown attribute: "'.$key.'"';
-                return false;
-            }
+        if (!$this->checkForUnknownAttributes($structure, $keys)) {
+            return false;
+        }
 
-            $attribute = $keys[$key] ?? [];
-            $type = $attribute['type'] ?? '';
-            $array = $attribute['array'] ?? false;
-            $format = $attribute['format'] ?? '';
-            $required = $attribute['required'] ?? false;
-            $size = $attribute['size'] ?? 0;
-            $signed = $attribute['signed'] ?? true;
-
-            if ($required === false && is_null($value)) { // Allow null value to optional params
-                continue;
-            }
-
-            if ($type === Database::VAR_RELATIONSHIP) {
-                continue;
-            }
-
-            $validators = [];
-
-            switch ($type) {
-                case Database::VAR_STRING:
-                    $validators[] = new Text($size, min: 0);
-                    break;
-
-                case Database::VAR_INTEGER:
-                    // We need both Integer and Range because Range implicitly casts non-numeric values
-                    $validators[] = new Integer();
-                    $max = $size >= 8 ? Database::BIG_INT_MAX : Database::INT_MAX;
-                    $min = $signed ? -$max : 0;
-                    $validators[] = new Range($min, $max, Database::VAR_INTEGER);
-                    break;
-
-                case Database::VAR_FLOAT:
-                    // We need both Float and Range because Range implicitly casts non-numeric values
-                    $validators[] = new FloatValidator();
-                    $min = $signed ? -Database::DOUBLE_MAX : 0;
-                    $validators[] =  new Range($min, Database::DOUBLE_MAX, Database::VAR_FLOAT);
-                    break;
-
-                case Database::VAR_BOOLEAN:
-                    $validators[] = new Boolean();
-                    break;
-
-                case Database::VAR_DATETIME:
-                    $validators[] = new DatetimeValidator();
-                    break;
-
-                default:
-                    $this->message = 'Unknown attribute type "'.$type.'"';
-                    return false;
-            }
-
-            /** Error message label, either 'format' or 'type' */
-            $label = ($format) ? 'format' : 'type';
-
-            if ($format) {
-                // Format encoded as json string containing format name and relevant format options
-                $format = self::getFormat($format, $type);
-                $validators[] = $format['callback']($attribute);
-            }
-
-            if ($array) { // Validate attribute type for arrays - format for arrays handled separately
-                if (!$required && ((is_array($value) && empty($value)) || is_null($value))) { // Allow both null and [] for optional arrays
-                    continue;
-                }
-
-                if (!\is_array($value) || !\array_is_list($value)) {
-                    $this->message = 'Attribute "'.$key.'" must be an array';
-                    return false;
-                }
-
-                foreach ($value as $x => $child) {
-                    if (!$required && is_null($child)) { // Allow null value to optional params
-                        continue;
-                    }
-
-                    foreach ($validators as $validator) {
-                        if (!$validator->isValid($child)) {
-                            $this->message = 'Attribute "'.$key.'[\''.$x.'\']" has invalid '.$label.'. '.$validator->getDescription();
-                            return false;
-                        }
-                    }
-                }
-            } else {
-                foreach ($validators as $validator) {
-                    if (!$validator->isValid($value)) {
-                        $this->message = 'Attribute "'.$key.'" has invalid '.$label.'. '.$validator->getDescription();
-                        return false;
-                    }
-                }
-            }
+        if (!$this->checkForInvalidAttributeValues($structure, $keys)) {
+            return false;
         }
 
         return true;
-    }
-
-    /**
-     * Is array
-     *
-     * Function will return true if object is array.
-     *
-     * @return bool
-     */
-    public function isArray(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     *
-     * @return string
-     */
-    public function getType(): string
-    {
-        return self::TYPE_ARRAY;
     }
 }

@@ -318,6 +318,8 @@ class Database
 
     protected bool $resolveRelationships = true;
 
+    protected bool $checkRelationshipsExist = true;
+
     protected int $relationshipFetchDepth = 1;
 
     protected bool $filter = true;
@@ -325,6 +327,8 @@ class Database
     protected bool $validate = true;
 
     protected bool $preserveDates = false;
+
+    protected int $maxQueryValues = 100;
 
     /**
      * Stack of collection IDs when creating or updating related documents
@@ -505,6 +509,18 @@ class Database
             return $callback();
         } finally {
             $this->resolveRelationships = $previous;
+        }
+    }
+
+    public function skipRelationshipsExistCheck(callable $callback): mixed
+    {
+        $previous = $this->checkRelationshipsExist;
+        $this->checkRelationshipsExist = false;
+
+        try {
+            return $callback();
+        } finally {
+            $this->checkRelationshipsExist = $previous;
         }
     }
 
@@ -913,6 +929,18 @@ class Database
         } finally {
             $this->preserveDates = $previous;
         }
+    }
+
+    public function setMaxQueryValues(int $max): self
+    {
+        $this->maxQueryValues = $max;
+
+        return $this;
+    }
+
+    public function getMaxQueryValues(): int
+    {
+        return$this->maxQueryValues;
     }
 
     /**
@@ -3613,7 +3641,7 @@ class Database
         // Get the related document, will be empty on permissions failure
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId));
 
-        if ($related->isEmpty()) {
+        if ($related->isEmpty() && $this->checkRelationshipsExist) {
             return;
         }
 
@@ -3642,7 +3670,7 @@ class Database
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $this->skipRelationships(fn () => $this->createDocument($junction, new Document([
-                    $key => $related->getId(),
+                    $key => $relationId,
                     $twoWayKey => $documentId,
                     '$permissions' => [
                         Permission::read(Role::any()),
@@ -5015,7 +5043,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5186,7 +5214,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5228,7 +5256,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }

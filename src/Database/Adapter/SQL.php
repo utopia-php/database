@@ -35,10 +35,12 @@ abstract class SQL extends Adapter
         try {
             if ($this->inTransaction === 0) {
                 if ($this->getPDO()->inTransaction()) {
+                    \var_dump('Rolling back active transaction');
                     $this->getPDO()->rollBack();
                 }
 
                 $result = $this->getPDO()->beginTransaction();
+                \var_dump('Started transaction');
             } else {
                 $result = true;
             }
@@ -48,9 +50,10 @@ abstract class SQL extends Adapter
 
         if (!$result) {
             throw new DatabaseException('Failed to start transaction');
+        } else {
+            \var_dump('Incrementing transaction count');
+            $this->inTransaction++;
         }
-
-        $this->inTransaction++;
 
         return $result;
     }
@@ -61,23 +64,28 @@ abstract class SQL extends Adapter
     public function commitTransaction(): bool
     {
         if ($this->inTransaction === 0) {
+            \var_dump('No transaction to commit');
             return false;
         } elseif ($this->inTransaction > 1) {
+            \var_dump('Decrementing transaction count');
             $this->inTransaction--;
             return true;
         }
 
         if (!$this->getPDO()->inTransaction()) {
             // Implicit commit occurred
+            \var_dump('Implicit commit occurred, resetting transaction count');
             $this->inTransaction = 0;
             return false;
         }
 
         try {
             $result = $this->getPDO()->commit();
+            \var_dump('Committed transaction');
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
         } finally {
+            \var_dump('Decrementing transaction count');
             $this->inTransaction--;
         }
 
@@ -94,14 +102,17 @@ abstract class SQL extends Adapter
     public function rollbackTransaction(): bool
     {
         if ($this->inTransaction === 0) {
+            \var_dump('No transaction to rollback');
             return false;
         }
 
         try {
             $result = $this->getPDO()->rollBack();
+            \var_dump('Rolled back transaction');
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         } finally {
+            \var_dump('Resetting transaction count');
             $this->inTransaction = 0;
         }
 

@@ -3276,6 +3276,7 @@ class Database
             throw new StructureException($structure->getDescription());
         }
 
+        \var_dump('before transaction createDocument', $collection, $document);
         $document = $this->withTransaction(function () use ($collection, $document) {
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
@@ -3342,6 +3343,7 @@ class Database
             $documents[$key] = $document;
         }
 
+        \var_dump('before transaction createDocuments', $collection);
         $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
             return $this->adapter->createDocuments($collection->getId(), $documents, $batchSize);
         });
@@ -3703,6 +3705,7 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        \var_dump('before transaction updateDocument', $collection, $document);
         $document = $this->withTransaction(function () use ($collection, $id, $document) {
             $time = DateTime::now();
             $old = Authorization::skip(fn () => $this->silent(
@@ -3901,6 +3904,7 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        \var_dump('before transaction updateDocuments', $collection);
         $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
             $time = DateTime::now();
 
@@ -4551,6 +4555,7 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        \var_dump('before transaction deleteDocument', $collection, $id);
         $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
             $document = Authorization::skip(fn () => $this->silent(
                 fn () =>

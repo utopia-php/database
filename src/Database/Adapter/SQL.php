@@ -34,7 +34,12 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
-                if ($this->getPDO()->inTransaction()) {
+                $pdo = $this->getPDO();
+                if ($pdo::class === 'Swoole\Database\PDOProxy' && $pdo->inTransaction()) {
+                    \var_dump('Getting raw PDO from proxy');
+                    $pdo = $pdo->__getObject();
+                }
+                if ($pdo->inTransaction()) {
                     \var_dump('Rolling back active transaction');
                     $this->getPDO()->rollBack();
                 }

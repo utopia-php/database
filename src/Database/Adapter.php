@@ -286,13 +286,16 @@ abstract class Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        $this->startTransaction();
-
         try {
+            \var_dump('Start');
+            $this->startTransaction();
             $result = $callback();
+            \var_dump('Commit');
             $this->commitTransaction();
+            \var_dump('Return');
             return $result;
         } catch (\Throwable $e) {
+            \var_dump('Rollback');
             $this->rollbackTransaction();
             throw $e;
         }

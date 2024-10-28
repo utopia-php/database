@@ -75,7 +75,14 @@ class Query
     ];
 
     protected string $method = '';
+    protected string $as = '';
+    protected string $collection = '';
+    protected string $function = '';
+    protected string $alias = '';
     protected string $attribute = '';
+    protected string $aliasRight = '';
+    protected string $attributeRight = '';
+
     protected bool $onArray = false;
     protected bool $isRelation = false;
 
@@ -91,11 +98,27 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      */
-    public function __construct(string $method, string $attribute = '', array $values = [])
+    protected function __construct(
+        string $method,
+        string $attribute = '',
+        array $values = [],
+        string $alias = '',
+        string $attributeRight = '',
+        string $aliasRight = '',
+        string $as = '',
+        string $collection = '',
+        string $function = ''
+    )
     {
         $this->method = $method;
+        $this->alias = $alias;
         $this->attribute = $attribute;
         $this->values = $values;
+        $this->function = $function;
+        $this->aliasRight = $aliasRight;
+        $this->attributeRight = $attributeRight;
+        $this->as = $as;
+        $this->collection = $collection;
     }
 
     public function __clone(): void
@@ -138,6 +161,26 @@ class Query
     public function getValue(mixed $default = null): mixed
     {
         return $this->values[0] ?? $default;
+    }
+
+    public function getAlias(): string
+    {
+        return $this->alias;
+    }
+
+    public function getRightAlias(): string
+    {
+        return $this->aliasRight;
+    }
+
+    public function getAttributeRight(): string
+    {
+        return $this->attributeRight;
+    }
+
+    public function getCollection(): string
+    {
+        return $this->collection;
     }
 
     /**
@@ -345,9 +388,9 @@ class Query
      * @param array<string|int|float|bool> $values
      * @return Query
      */
-    public static function equal(string $attribute, array $values): self
+    public static function equal(string $attribute, array $values, string $alias = ''): self
     {
-        return new self(self::TYPE_EQUAL, $attribute, $values);
+        return new self(self::TYPE_EQUAL, $attribute, $values, alias: $alias);
     }
 
     /**
@@ -464,9 +507,9 @@ class Query
      * @param string $attribute
      * @return Query
      */
-    public static function orderDesc(string $attribute = ''): self
+    public static function orderDesc(string $attribute = '', string $alias = ''): self
     {
-        return new self(self::TYPE_ORDER_DESC, $attribute);
+        return new self(self::TYPE_ORDER_DESC, $attribute, alias: $alias);
     }
 
     /**
@@ -580,15 +623,12 @@ class Query
      * @param array<Query> $conditions
      * @return Query
      */
-    public static function join(string $collection, string $alias, array $conditions = []): self
+    public static function join(string $collection, string $alias, array $queries = []): self
     {
-        $value = [
-            'collection' => $collection,
-            'alias' => $alias,
-            'conditions' => $conditions,
-        ];
+        //$conditions = Query::groupByType($queries)['filters'];
+        //$conditions = Query::groupByType($queries)['relations'];
 
-        return new self(self::TYPE_INNER_JOIN, '', $value);
+        return new self(self::TYPE_INNER_JOIN, '', $queries, alias: $alias, collection: $collection);
     }
 
     /**
@@ -597,28 +637,13 @@ class Query
      * @param array<Query> $conditions
      * @return Query
      */
-    public static function relation($leftAlias, string $leftColumn, string $method, $rightAlias, string $rightColumn): self
+    public static function relation($leftAlias, string $leftColumn, string $method, string $rightAlias, string $rightColumn): self
     {
-        if (!in_array($method, [
-            self::TYPE_EQUAL,
-            self::TYPE_NOT_EQUAL,
-            self::TYPE_GREATER,
-            self::TYPE_GREATER_EQUAL,
-            self::TYPE_LESSER,
-            self::TYPE_LESSER_EQUAL,
-        ])) {
-            throw new QueryException('Invalid query method: ' . $method);
-        }
-
         $value = [
-            'leftAlias' => $leftAlias,
-            //'leftColumn' => $leftColumn, // this is attribute
             'method' => $method,
-            'rightAlias' => $rightAlias,
-            'rightColumn' => $rightColumn,
         ];
 
-        return new self(self::TYPE_RELATION, $leftColumn, $value);
+        return new self(self::TYPE_RELATION, $leftColumn, $value, alias: $leftAlias, attributeRight: $rightColumn, aliasRight: $rightAlias);
     }
 
     /**

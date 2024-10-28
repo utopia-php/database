@@ -5041,6 +5041,10 @@ class Database
                 }
             }
 
+            if (empty($affectedDocumentIds)) {
+                return false;
+            }
+
             $this->trigger(self::EVENT_DOCUMENTS_DELETE, $affectedDocumentIds);
 
             // Mass delete using adapter with query

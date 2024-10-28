@@ -920,10 +920,6 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        if (empty($ids)) {
-            return true;
-        }
-
         $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_uid', $ids)]);
 
         if ($this->sharedTables) {

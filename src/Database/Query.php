@@ -40,7 +40,8 @@ class Query
     public const TYPE_OR = 'or';
 
     // Join methods
-    public const TYPE_INNER_JOIN = 'join';
+    public const TYPE_JOIN = 'join';
+    public const TYPE_INNER_JOIN = 'innerJoin';
     public const TYPE_LEFT_JOIN = 'leftJoin';
     public const TYPE_RIGHT_JOIN = 'rightJoin';
 
@@ -77,6 +78,7 @@ class Query
     protected string $method = '';
     protected string $as = '';
     protected string $collection = '';
+    protected string $type = '';
     protected string $function = '';
     protected string $alias = '';
     protected string $attribute = '';
@@ -107,7 +109,8 @@ class Query
         string $aliasRight = '',
         string $as = '',
         string $collection = '',
-        string $function = ''
+        string $function = '',
+        string $type = ''
     )
     {
         $this->method = $method;
@@ -119,6 +122,7 @@ class Query
         $this->attributeRight = $attributeRight;
         $this->as = $as;
         $this->collection = $collection;
+        $this->type = $type;
     }
 
     public function __clone(): void
@@ -181,6 +185,11 @@ class Query
     public function getCollection(): string
     {
         return $this->collection;
+    }
+
+    public function getType(): string
+    {
+        return $this->type;
     }
 
     /**
@@ -628,7 +637,7 @@ class Query
         //$conditions = Query::groupByType($queries)['filters'];
         //$conditions = Query::groupByType($queries)['relations'];
 
-        return new self(self::TYPE_INNER_JOIN, '', $queries, alias: $alias, collection: $collection);
+        return new self(self::TYPE_JOIN, '', $queries, alias: $alias, collection: $collection, type: self::TYPE_INNER_JOIN);
     }
 
     /**

@@ -288,7 +288,8 @@ class QueryTest extends TestCase
                 ]
             );
 
-        $this->assertEquals(Query::TYPE_INNER_JOIN, $query->getMethod());
+        $this->assertEquals(Query::TYPE_JOIN, $query->getMethod());
+        $this->assertEquals(Query::TYPE_INNER_JOIN, $query->getType());
         $this->assertEquals('users', $query->getCollection());
         $this->assertEquals('u', $query->getAlias());
         $this->assertCount(2, $query->getValues());

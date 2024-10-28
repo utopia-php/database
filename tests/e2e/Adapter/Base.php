@@ -2251,6 +2251,28 @@ abstract class Base extends TestCase
         $this->assertEquals(1, count($documents));
     }
 
+    public function testJoin()
+    {
+        $documents = static::getDatabase()->find(
+            'documents',
+            [
+                Query::join(
+                    'users',
+                    'u',
+                    [
+                        Query::relation('main', 'id', Query::TYPE_EQUAL, 'u', 'user_id'),
+                        Query::equal('id', ['usa'], 'u'),
+                    ]
+                )
+            ]
+        );
+
+        var_dump($documents);
+
+        $this->assertEquals('shmuel', 'fogel');
+
+    }
+
     public function testEmptyTenant(): void
     {
         if(static::getDatabase()->getAdapter()->getSharedTables()) {

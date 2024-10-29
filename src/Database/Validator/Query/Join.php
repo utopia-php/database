@@ -10,22 +10,24 @@ class Join extends Base
 
     /**
      * Is valid.
-     * @param Query $value
-     * @return bool
+     *
+     * @param  Query  $value
      */
     public function isValid($value): bool
     {
         var_dump('Validating join');
+        var_dump($value);
 
-        if (!$value instanceof Query) {
+        if (! $value instanceof Query) {
             return false;
         }
 
         $method = $value->getMethod();
 
         if ($method === Query::TYPE_JOIN) {
-            if(!in_array($value->getType(), $this->types)) {
+            if (! in_array($value->getType(), $this->types)) {
                 $this->message = 'Invalid join type';
+
                 return false;
             }
 

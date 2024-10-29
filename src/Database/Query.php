@@ -693,6 +693,7 @@ class Query
     public static function groupByType(array $queries): array
     {
         $filters = [];
+        $joins = [];
         $selections = [];
         $limit = null;
         $offset = null;
@@ -753,6 +754,10 @@ class Query
                     $selections[] = clone $query;
                     break;
 
+                case Query::TYPE_JOIN:
+                    $joins[] = clone $query;
+                    break;
+
                 default:
                     $filters[] = clone $query;
                     break;
@@ -768,6 +773,7 @@ class Query
             'orderTypes' => $orderTypes,
             'cursor' => $cursor,
             'cursorDirection' => $cursorDirection,
+            'join' => $joins,
         ];
     }
 

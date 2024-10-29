@@ -23,43 +23,43 @@ class Documents extends IndexedQueries
      * @param array<mixed> $indexes
      * @throws Exception
      */
-    public function __construct(array $attributes, array $indexes)
+    public function __construct(array $collections)
     {
-        $attributes[] = new Document([
-            '$id' => '$id',
-            'key' => '$id',
-            'type' => Database::VAR_STRING,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            '$id' => '$internalId',
-            'key' => '$internalId',
-            'type' => Database::VAR_STRING,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            '$id' => '$createdAt',
-            'key' => '$createdAt',
-            'type' => Database::VAR_DATETIME,
-            'array' => false,
-        ]);
-        $attributes[] = new Document([
-            '$id' => '$updatedAt',
-            'key' => '$updatedAt',
-            'type' => Database::VAR_DATETIME,
-            'array' => false,
-        ]);
+//        $attributes[] = new Document([
+//            '$id' => '$id',
+//            'key' => '$id',
+//            'type' => Database::VAR_STRING,
+//            'array' => false,
+//        ]);
+//        $attributes[] = new Document([
+//            '$id' => '$internalId',
+//            'key' => '$internalId',
+//            'type' => Database::VAR_STRING,
+//            'array' => false,
+//        ]);
+//        $attributes[] = new Document([
+//            '$id' => '$createdAt',
+//            'key' => '$createdAt',
+//            'type' => Database::VAR_DATETIME,
+//            'array' => false,
+//        ]);
+//        $attributes[] = new Document([
+//            '$id' => '$updatedAt',
+//            'key' => '$updatedAt',
+//            'type' => Database::VAR_DATETIME,
+//            'array' => false,
+//        ]);
 
         $validators = [
             new Limit(),
             new Offset(),
             new Cursor(),
-            new Filter($attributes),
-            new Order($attributes),
-            new Select($attributes),
-            new Join($attributes),
+            new Filter($collections),
+            new Order($collections),
+            new Select($collections),
+            new Join($collections),
         ];
 
-        parent::__construct($attributes, $indexes, $validators);
+        parent::__construct($collections, $validators);
     }
 }

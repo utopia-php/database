@@ -5007,11 +5007,9 @@ class Database
         }
 
         if ($this->validate) {
-            $collections[] = $collection;
-
-            $joins = Query::getByType($queries, [Query::TYPE_JOIN]);
-            var_dump($joins);
             $collections = [];
+            $collections[] = $collection;
+            $joins = Query::getByType($queries, [Query::TYPE_JOIN]);
             foreach ($joins as $join) {
                 $collections[] = $this->silent(fn () => $this->getCollection($join->getCollection()));
             }

@@ -307,9 +307,7 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertTrue($e instanceof RelationshipException);
         }
-        static::getDatabase()->find('v2', [
-            Query::equal('v1', ['virtual_attribute']),
-        ]);
+
         try {
             static::getDatabase()->find('v2', [
                 Query::equal('v1', ['virtual_attribute']),

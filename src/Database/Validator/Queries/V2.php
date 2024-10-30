@@ -7,8 +7,6 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
-use Utopia\Database\Validator\Queries;
-use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Join;
@@ -26,7 +24,9 @@ class V2 extends Validator
 {
     protected string $message = 'Invalid queries';
 
-    protected array $collections = [];
+    //protected string $collectionId = '';
+
+    //protected array $collections = [];
 
     protected array $schema = [];
 
@@ -34,20 +34,27 @@ class V2 extends Validator
 
     private int $maxValuesCount;
 
+    private array $aliases = [];
+
     /**
      * Expression constructor
      *
-     * @param array<Document> $collections
+     * @param  array<Document>  $collections
+     *
      * @throws Exception
      */
     public function __construct(array $collections, int $length = 0, int $maxValuesCount = 100)
     {
-        foreach ($collections as $collection) {
-            $this->collections[$collection->getId()] = $collection->getArrayCopy();
+        foreach ($collections as $i => $collection) {
+            if($i === 0){
+                $this->aliases[''] = $collection->getId();
+            }
+
+            //$this->collections[$collection->getId()] = $collection->getArrayCopy();
 
             $attributes = $collection->getAttribute('attributes', []);
             foreach ($attributes as $attribute) {
-                // todo: Add internal id's?
+                // todo: internal id's?
                 $this->schema[$collection->getId()][$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
             }
         }
@@ -55,51 +62,52 @@ class V2 extends Validator
         $this->length = $length;
         $this->maxValuesCount = $maxValuesCount;
 
-//        $attributes[] = new Document([
-//            '$id' => '$id',
-//            'key' => '$id',
-//            'type' => Database::VAR_STRING,
-//            'array' => false,
-//        ]);
-//        $attributes[] = new Document([
-//            '$id' => '$internalId',
-//            'key' => '$internalId',
-//            'type' => Database::VAR_STRING,
-//            'array' => false,
-//        ]);
-//        $attributes[] = new Document([
-//            '$id' => '$createdAt',
-//            'key' => '$createdAt',
-//            'type' => Database::VAR_DATETIME,
-//            'array' => false,
-//        ]);
-//        $attributes[] = new Document([
-//            '$id' => '$updatedAt',
-//            'key' => '$updatedAt',
-//            'type' => Database::VAR_DATETIME,
-//            'array' => false,
-//        ]);
+        //        $attributes[] = new Document([
+        //            '$id' => '$id',
+        //            'key' => '$id',
+        //            'type' => Database::VAR_STRING,
+        //            'array' => false,
+        //        ]);
+        //        $attributes[] = new Document([
+        //            '$id' => '$internalId',
+        //            'key' => '$internalId',
+        //            'type' => Database::VAR_STRING,
+        //            'array' => false,
+        //        ]);
+        //        $attributes[] = new Document([
+        //            '$id' => '$createdAt',
+        //            'key' => '$createdAt',
+        //            'type' => Database::VAR_DATETIME,
+        //            'array' => false,
+        //        ]);
+        //        $attributes[] = new Document([
+        //            '$id' => '$updatedAt',
+        //            'key' => '$updatedAt',
+        //            'type' => Database::VAR_DATETIME,
+        //            'array' => false,
+        //        ]);
 
-//        $validators = [
-//            new Limit(),
-//            new Offset(),
-//            new Cursor(),
-//            new Filter($collections),
-//            new Order($collections),
-//            new Select($collections),
-//            new Join($collections),
-//        ];
+        //        $validators = [
+        //            new Limit(),
+        //            new Offset(),
+        //            new Cursor(),
+        //            new Filter($collections),
+        //            new Order($collections),
+        //            new Select($collections),
+        //            new Join($collections),
+        //        ];
     }
 
     /**
-     * @param array<Query|string> $value
-     * @return bool
+     * @param  array<Query|string>  $value
+     *
      * @throws \Utopia\Database\Exception\Query
      */
     public function isValid($value): bool
     {
-        if (!is_array($value)) {
+        if (! is_array($value)) {
             $this->message = 'Queries must be an array';
+
             return false;
         }
 
@@ -107,7 +115,9 @@ class V2 extends Validator
             return false;
         }
 
-        var_dump("ininininininininininininininin");
+        var_dump('in isValid ');
+        var_dump($this->aliases);
+        $queries = [];
 
         foreach ($value as $query) {
             if (!$query instanceof Query) {
@@ -115,28 +125,45 @@ class V2 extends Validator
                     $query = Query::parse($query);
                 } catch (\Throwable $e) {
                     $this->message = 'Invalid query: ' . $e->getMessage();
+
                     return false;
                 }
             }
 
-            if($query->isNested()) {
-                if(!self::isValid($query->getValues())) {
+            if($query->getMethod() === Query::TYPE_JOIN) {
+                $this->aliases[$query->getAlias()] = $query->getCollection();
+            }
+
+            var_dump($query);
+            $queries[] = $query;
+        }
+
+        foreach ($queries as $query) {
+            if ($query->isNested()) {
+                if (! self::isValid($query->getValues())) {
                     return false;
                 }
             }
 
             $method = $query->getMethod();
-            $attribute = $query->getAttribute();
 
             switch ($method) {
                 case Query::TYPE_EQUAL:
                 case Query::TYPE_CONTAINS:
                     if ($this->isEmpty($query->getValues())) {
-                        $this->message = \ucfirst($method) . ' queries require at least one value.';
+                        $this->message = \ucfirst($method).' queries require at least one value.';
                         return false;
                     }
 
-                    return $this->isValidAttributeAndValues($attribute, $query->getValues(), $method);
+                    if(!$this->isAttributeExist($query->getAttribute(), $query->getAlias())){
+                        return false;
+                    }
+
+                    if(!$this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)){
+                        return false;
+                    }
+
+                    return true;
 
                 case Query::TYPE_NOT_EQUAL:
                 case Query::TYPE_LESSER:
@@ -147,42 +174,71 @@ class V2 extends Validator
                 case Query::TYPE_STARTS_WITH:
                 case Query::TYPE_ENDS_WITH:
                     if (count($query->getValues()) != 1) {
-                        $this->message = \ucfirst($method) . ' queries require exactly one value.';
+                        $this->message = \ucfirst($method).' queries require exactly one value.';
+
                         return false;
                     }
 
-                    return $this->isValidAttributeAndValues($attribute, $query->getValues(), $method);
+                    if(!$this->isAttributeExist($query->getAttribute(), $query->getAlias())){
+                        return false;
+                    }
+
+                    if(!$this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)){
+                        return false;
+                    }
+
+                    return true;
 
                 case Query::TYPE_BETWEEN:
                     if (count($query->getValues()) != 2) {
-                        $this->message = \ucfirst($method) . ' queries require exactly two values.';
+                        $this->message = \ucfirst($method).' queries require exactly two values.';
+
                         return false;
                     }
 
-                    return $this->isValidAttributeAndValues($attribute, $query->getValues(), $method);
+                    if(!$this->isAttributeExist($query->getAttribute(), $query->getAlias())){
+                        return false;
+                    }
+
+                    if(!$this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)){
+                        return false;
+                    }
+
+                    return true;
 
                 case Query::TYPE_IS_NULL:
                 case Query::TYPE_IS_NOT_NULL:
-                    return $this->isValidAttributeAndValues($attribute, $query->getValues(), $method);
+                    if(!$this->isAttributeExist($query->getAttribute(), $query->getAlias())){
+                        return false;
+                    }
+
+                    if(!$this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)){
+                        return false;
+                    }
+
+                    return true;
 
                 case Query::TYPE_OR:
                 case Query::TYPE_AND:
                     $filters = Query::groupByType($query->getValues())['filters'];
 
-                    if(count($query->getValues()) !== count($filters)) {
-                        $this->message = \ucfirst($method) . ' queries can only contain filter queries';
+                    if (count($query->getValues()) !== count($filters)) {
+                        $this->message = \ucfirst($method).' queries can only contain filter queries';
+
                         return false;
                     }
 
-                    if(count($filters) < 2) {
-                        $this->message = \ucfirst($method) . ' queries require at least two queries';
+                    if (count($filters) < 2) {
+                        $this->message = \ucfirst($method).' queries require at least two queries';
+
                         return false;
                     }
 
                     return true;
 
                 case Query::TYPE_RELATION:
-                    echo "Hello TYPE_RELATION";
+                    // Check attributes right & left
+                    echo 'Hello TYPE_RELATION';
                     break;
 
                 default:
@@ -197,8 +253,6 @@ class V2 extends Validator
      * Get Description.
      *
      * Returns validator description
-     *
-     * @return string
      */
     public function getDescription(): string
     {
@@ -209,8 +263,6 @@ class V2 extends Validator
      * Is array
      *
      * Function will return true if object is array.
-     *
-     * @return bool
      */
     public function isArray(): bool
     {
@@ -221,8 +273,6 @@ class V2 extends Validator
      * Get Type
      *
      * Returns validator type.
-     *
-     * @return string
      */
     public function getType(): string
     {
@@ -230,8 +280,7 @@ class V2 extends Validator
     }
 
     /**
-     * @param array<mixed> $values
-     * @return bool
+     * @param  array<mixed>  $values
      */
     protected function isEmpty(array $values): bool
     {
@@ -246,88 +295,80 @@ class V2 extends Validator
         return false;
     }
 
-    /**
-     * @param string $attribute
-     * @return bool
-     */
-    protected function isValidAttribute(string $attribute): bool
+    protected function isAttributeExist(string $attributeId, string $alias): bool
     {
-        if (\str_contains($attribute, '.')) {
-            // Check for special symbol `.`
-            if (isset($this->schema[$attribute])) {
-                return true;
-            }
+        var_dump("=== isAttributeExist");
 
-            // For relationships, just validate the top level.
-            // will validate each nested level during the recursive calls.
-            $attribute = \explode('.', $attribute)[0];
+//        if (\str_contains($attributeId, '.')) {
+//            // Check for special symbol `.`
+//            if (isset($this->schema[$attributeId])) {
+//                return true;
+//            }
+//
+//            // For relationships, just validate the top level.
+//            // will validate each nested level during the recursive calls.
+//            $attributeId = \explode('.', $attributeId)[0];
+//
+//            if (isset($this->schema[$attributeId])) {
+//                $this->message = 'Cannot query nested attribute on: '.$attributeId;
+//
+//                return false;
+//            }
+//        }
 
-            if (isset($this->schema[$attribute])) {
-                $this->message = 'Cannot query nested attribute on: ' . $attribute;
-                return false;
-            }
-        }
+        $collectionId = $this->aliases[$alias];
+        var_dump("=== attribute === " . $attributeId);
+        var_dump("=== alias === " . $alias);
+        var_dump("=== collectionId === " . $collectionId);
 
-        // Search for attribute in schema
-        if (!isset($this->schema[$attribute])) {
-            $this->message = 'Attribute not found in schema: ' . $attribute;
+        var_dump($this->schema[$collectionId][$attributeId]);
+
+        if (! isset($this->schema[$collectionId][$attributeId])) {
+            $this->message = 'Attribute not found in schema: '.$attributeId;
+
             return false;
         }
 
         return true;
     }
 
-    /**
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return bool
-     */
-    protected function isValidAttributeAndValues(string $attribute, array $values, string $method): bool
+    protected function isValidValues(string $attributeId, string $alias, array $values, string $method): bool
     {
-        if (!$this->isValidAttribute($attribute)) {
-            return false;
-        }
-
-        // isset check if for special symbols "." in the attribute name
-        if (\str_contains($attribute, '.') && !isset($this->schema[$attribute])) {
-            // For relationships, just validate the top level.
-            // Utopia will validate each nested level during the recursive calls.
-            $attribute = \explode('.', $attribute)[0];
-        }
-
-        $attributeSchema = $this->schema[$attribute];
+        var_dump("=== isValidValues");
 
         if (count($values) > $this->maxValuesCount) {
-            $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
+            $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attributeId;
+
             return false;
         }
 
-        // Extract the type of desired attribute from collection $schema
-        $attributeType = $attributeSchema['type'];
+        $collectionId = $this->aliases[$alias];
+
+        $attribute = $this->schema[$collectionId][$attributeId];
 
         foreach ($values as $value) {
 
             $validator = null;
 
-            switch ($attributeType) {
+            switch ($attribute['type']) {
                 case Database::VAR_STRING:
                     $validator = new Text(0, 0);
                     break;
 
                 case Database::VAR_INTEGER:
-                    $validator = new Integer();
+                    $validator = new Integer;
                     break;
 
                 case Database::VAR_FLOAT:
-                    $validator = new FloatValidator();
+                    $validator = new FloatValidator;
                     break;
 
                 case Database::VAR_BOOLEAN:
-                    $validator = new Boolean();
+                    $validator = new Boolean;
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator();
+                    $validator = new DatetimeValidator;
                     break;
 
                 case Database::VAR_RELATIONSHIP:
@@ -335,59 +376,67 @@ class V2 extends Validator
                     break;
                 default:
                     $this->message = 'Unknown Data type';
+
                     return false;
             }
 
-            if (!$validator->isValid($value)) {
-                $this->message = 'Query value is invalid for attribute "' . $attribute . '"';
+            if (! $validator->isValid($value)) {
+                $this->message = 'Query value is invalid for attribute "'.$attributeId.'"';
+
                 return false;
             }
         }
 
-        if($attributeSchema['type'] === 'relationship') {
+        if ($attribute['type'] === 'relationship') {
             /**
              * We can not disable relationship query since we have logic that use it,
              * so instead we validate against the relation type
              */
-            $options = $attributeSchema['options'];
+            $options = $attribute['options'];
 
-            if($options['relationType'] === Database::RELATION_ONE_TO_ONE && $options['twoWay'] === false && $options['side'] === Database::RELATION_SIDE_CHILD) {
+            if ($options['relationType'] === Database::RELATION_ONE_TO_ONE && $options['twoWay'] === false && $options['side'] === Database::RELATION_SIDE_CHILD) {
                 $this->message = 'Cannot query on virtual relationship attribute';
+
                 return false;
             }
 
-            if($options['relationType'] === Database::RELATION_ONE_TO_MANY && $options['side'] === Database::RELATION_SIDE_PARENT) {
+            if ($options['relationType'] === Database::RELATION_ONE_TO_MANY && $options['side'] === Database::RELATION_SIDE_PARENT) {
                 $this->message = 'Cannot query on virtual relationship attribute';
+
                 return false;
             }
 
-            if($options['relationType'] === Database::RELATION_MANY_TO_ONE && $options['side'] === Database::RELATION_SIDE_CHILD) {
+            if ($options['relationType'] === Database::RELATION_MANY_TO_ONE && $options['side'] === Database::RELATION_SIDE_CHILD) {
                 $this->message = 'Cannot query on virtual relationship attribute';
+
                 return false;
             }
 
-            if($options['relationType'] === Database::RELATION_MANY_TO_MANY) {
+            if ($options['relationType'] === Database::RELATION_MANY_TO_MANY) {
                 $this->message = 'Cannot query on virtual relationship attribute';
+
                 return false;
             }
         }
 
-        $array = $attributeSchema['array'] ?? false;
+        $array = $attribute['array'] ?? false;
 
-        if(
-            !$array &&
+        if (
+            ! $array &&
             $method === Query::TYPE_CONTAINS &&
-            $attributeSchema['type'] !==  Database::VAR_STRING
+            $attribute['type'] !== Database::VAR_STRING
         ) {
-            $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array or string.';
+            $this->message = 'Cannot query contains on attribute "'.$attributeId.'" because it is not an array or string.';
+
             return false;
         }
 
-        if(
+        if (
             $array &&
-            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
+            ! in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
         ) {
-            $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
+            $this->message = 'Cannot query '.$method.' on attribute "'.$attributeId.'" because it is an array.';
+
             return false;
         }
 

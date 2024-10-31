@@ -91,6 +91,7 @@ abstract class SQL extends Adapter
             throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
         } finally {
             \var_dump('Decrementing transaction count');
+            // Should we set this to 0 if we commit?
             $this->inTransaction--;
         }
 

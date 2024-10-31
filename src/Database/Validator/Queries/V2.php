@@ -18,6 +18,8 @@ use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
+use Utopia\Validator\Numeric;
+use Utopia\Validator\Range;
 use Utopia\Validator\Text;
 
 class V2 extends Validator
@@ -34,6 +36,10 @@ class V2 extends Validator
 
     private int $maxValuesCount;
 
+    protected int $maxLimit;
+
+    protected int $maxOffset;
+
     private array $aliases = [];
 
     /**
@@ -43,7 +49,7 @@ class V2 extends Validator
      *
      * @throws Exception
      */
-    public function __construct(array $collections, int $length = 0, int $maxValuesCount = 100)
+    public function __construct(array $collections, int $length = 0, int $maxValuesCount = 100, int $maxLimit = PHP_INT_MAX, int $maxOffset = PHP_INT_MAX)
     {
         foreach ($collections as $i => $collection) {
             if($i === 0){
@@ -59,6 +65,8 @@ class V2 extends Validator
             }
         }
 
+        $this->maxLimit = $maxLimit;
+        $this->maxOffset = $maxOffset;
         $this->length = $length;
         $this->maxValuesCount = $maxValuesCount;
 
@@ -237,9 +245,17 @@ class V2 extends Validator
                     return true;
 
                 case Query::TYPE_RELATION:
-                    // Check attributes right & left
                     echo 'Hello TYPE_RELATION';
                     break;
+
+                case Query::TYPE_LIMIT:
+                    return $this->isValidLimit($query);
+
+                case Query::TYPE_OFFSET:
+                    return $this->isValidOffset($query);
+
+                case Query::TYPE_SELECT:
+                    return $this->isValidSelect($query);
 
                 default:
                     return false;
@@ -442,4 +458,86 @@ class V2 extends Validator
 
         return true;
     }
+
+    public function isValidLimit(Query $query): bool
+    {
+        $limit = $query->getValue();
+
+        $validator = new Numeric();
+        if (!$validator->isValid($limit)) {
+            $this->message = 'Invalid limit: ' . $validator->getDescription();
+            return false;
+        }
+
+        $validator = new Range(1, $this->maxLimit);
+        if (!$validator->isValid($limit)) {
+            $this->message = 'Invalid limit: ' . $validator->getDescription();
+            return false;
+        }
+
+        return true;
+    }
+
+    public function isValidOffset(Query $query): bool
+    {
+        $offset = $query->getValue();
+
+        $validator = new Numeric();
+        if (!$validator->isValid($offset)) {
+            $this->message = 'Invalid limit: ' . $validator->getDescription();
+            return false;
+        }
+
+        $validator = new Range(0, $this->maxOffset);
+        if (!$validator->isValid($offset)) {
+            $this->message = 'Invalid offset: ' . $validator->getDescription();
+            return false;
+        }
+
+        return true;
+    }
+
+    public function isValidSelect(Query $query): bool
+    {
+        $internalKeys = \array_map(
+            fn ($attr) => $attr['$id'],
+            Database::INTERNAL_ATTRIBUTES
+        );
+
+        foreach ($query->getValues() as $attribute) {
+
+            if(is_string()){
+
+            }
+            else if($this->isArray()){
+
+            }
+
+            if($this->isAttributeExist()){
+
+            }
+
+//            if (\str_contains($attribute, '.')) {
+//                //special symbols with `dots`
+//                if (isset($this->schema[$attribute])) {
+//                    continue;
+//                }
+//
+//                // For relationships, just validate the top level.
+//                // Will validate each nested level during the recursive calls.
+//                $attribute = \explode('.', $attribute)[0];
+//            }
+
+            if (\in_array($attribute, $internalKeys)) {
+                continue;
+            }
+
+            if (!isset($this->schema[$attribute]) && $attribute !== '*') {
+                $this->message = 'Attribute not found in schema: ' . $attribute;
+                return false;
+            }
+        }
+        return true;
+    }
+
 }

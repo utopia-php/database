@@ -318,6 +318,8 @@ class Database
 
     protected bool $resolveRelationships = true;
 
+    protected bool $checkRelationshipsExist = true;
+
     protected int $relationshipFetchDepth = 1;
 
     protected bool $filter = true;
@@ -325,6 +327,8 @@ class Database
     protected bool $validate = true;
 
     protected bool $preserveDates = false;
+
+    protected int $maxQueryValues = 100;
 
     /**
      * Stack of collection IDs when creating or updating related documents
@@ -502,6 +506,18 @@ class Database
             return $callback();
         } finally {
             $this->resolveRelationships = $previous;
+        }
+    }
+
+    public function skipRelationshipsExistCheck(callable $callback): mixed
+    {
+        $previous = $this->checkRelationshipsExist;
+        $this->checkRelationshipsExist = false;
+
+        try {
+            return $callback();
+        } finally {
+            $this->checkRelationshipsExist = $previous;
         }
     }
 
@@ -830,6 +846,18 @@ class Database
         $this->preserveDates = $preserve;
 
         return $this;
+    }
+
+    public function setMaxQueryValues(int $max): self
+    {
+        $this->maxQueryValues = $max;
+
+        return $this;
+    }
+
+    public function getMaxQueryValues(): int
+    {
+        return$this->maxQueryValues;
     }
 
     /**
@@ -2250,7 +2278,20 @@ class Database
             throw new DuplicateException('Attribute already exists');
         }
 
-        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
+        $attributeIndex = array_search($id, array_map(fn ($attribute) => $attribute['$id'], $attributes));
+
+        if ($attributeIndex === false) {
+            throw new DatabaseException('Attribute not found');
+        }
+
+        $attribute = $attributes[$attributeIndex];
+        $type = $attribute['options']['relationType'];
+        $side = $attribute['options']['side'];
+
+        $relatedCollectionId = $attribute['options']['relatedCollection'];
+        $relatedCollection = $this->getCollection($relatedCollectionId);
+
+        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete, $type, $side) {
             $altering = (!\is_null($newKey) && $newKey !== $id)
                 || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
 
@@ -2264,9 +2305,6 @@ class Database
             ) {
                 throw new DuplicateException('Related attribute already exists');
             }
-
-            $type = $attribute['options']['relationType'];
-            $side = $attribute['options']['side'];
 
             $newKey ??= $attribute['key'];
             $twoWayKey = $attribute['options']['twoWayKey'];
@@ -2329,68 +2367,76 @@ class Database
                     throw new DatabaseException('Failed to update relationship');
                 }
             }
+        });
 
-            $this->purgeCachedCollection($collection->getId());
-            $this->purgeCachedCollection($relatedCollection->getId());
+        // Update Indexes
+        $renameIndex = function (string $collection, string $key, string $newKey) {
+            $this->updateIndexMeta(
+                $collection,
+                '_index_' . $key,
+                function ($index) use ($newKey) {
+                    $index->setAttribute('attributes', [$newKey]);
+                }
+            );
+            $this->silent(
+                fn () =>
+                $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
+            );
+        };
 
-            $renameIndex = function (string $collection, string $key, string $newKey) {
-                $this->updateIndexMeta(
-                    $collection,
-                    '_index_' . $key,
-                    fn ($index) =>
-                    $index->setAttribute('attributes', [$newKey])
-                );
-                $this->silent(
-                    fn () =>
-                    $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
-                );
-            };
+        $newKey ??= $attribute['key'];
+        $twoWayKey = $attribute['options']['twoWayKey'];
+        $newTwoWayKey ??= $attribute['options']['twoWayKey'];
+        $twoWay ??= $attribute['options']['twoWay'];
+        $onDelete ??= $attribute['options']['onDelete'];
 
-            switch ($type) {
-                case self::RELATION_ONE_TO_ONE:
+        switch ($type) {
+            case self::RELATION_ONE_TO_ONE:
+                if ($id !== $newKey) {
+                    $renameIndex($collection->getId(), $id, $newKey);
+                }
+                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                    $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            case self::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                    }
+                } else {
                     if ($id !== $newKey) {
                         $renameIndex($collection->getId(), $id, $newKey);
                     }
-                    if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                }
+                break;
+            case self::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($id !== $newKey) {
+                        $renameIndex($collection->getId(), $id, $newKey);
+                    }
+                } else {
+                    if ($twoWayKey !== $newTwoWayKey) {
                         $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
                     }
-                    break;
-                case self::RELATION_ONE_TO_MANY:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if ($twoWayKey !== $newTwoWayKey) {
-                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                        }
-                    } else {
-                        if ($id !== $newKey) {
-                            $renameIndex($collection->getId(), $id, $newKey);
-                        }
-                    }
-                    break;
-                case self::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if ($id !== $newKey) {
-                            $renameIndex($collection->getId(), $id, $newKey);
-                        }
-                    } else {
-                        if ($twoWayKey !== $newTwoWayKey) {
-                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                        }
-                    }
-                    break;
-                case self::RELATION_MANY_TO_MANY:
-                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+                }
+                break;
+            case self::RELATION_MANY_TO_MANY:
+                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                    if ($id !== $newKey) {
-                        $renameIndex($junction, $id, $newKey);
-                    }
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($junction, $twoWayKey, $newTwoWayKey);
-                    }
-                    break;
-                default:
-                    throw new RelationshipException('Invalid relationship type.');
-            }
-        });
+                if ($id !== $newKey) {
+                    $renameIndex($junction, $id, $newKey);
+                }
+                if ($twoWayKey !== $newTwoWayKey) {
+                    $renameIndex($junction, $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            default:
+                throw new RelationshipException('Invalid relationship type.');
+        }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedCollection($relatedCollection->getId());
 
         return true;
     }
@@ -3610,7 +3656,7 @@ class Database
         // Get the related document, will be empty on permissions failure
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId));
 
-        if ($related->isEmpty()) {
+        if ($related->isEmpty() && $this->checkRelationshipsExist) {
             return;
         }
 
@@ -3639,7 +3685,7 @@ class Database
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $this->skipRelationships(fn () => $this->createDocument($junction, new Document([
-                    $key => $related->getId(),
+                    $key => $relationId,
                     $twoWayKey => $documentId,
                     '$permissions' => [
                         Permission::read(Role::any()),
@@ -3685,10 +3731,12 @@ class Database
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
-            if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
-            }
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
+
+            if ($this->adapter->getSharedTables()) {
+                $document['$tenant'] = $old->getAttribute('$tenant');       // Make sure user doesn't switch tenant
+            }
+
             $document = new Document($document);
 
             $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
@@ -3825,7 +3873,6 @@ class Database
             $document = $this->encode($collection, $document);
 
             $structureValidator = new Structure($collection);
-
             if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                 throw new StructureException($structureValidator->getDescription());
             }
@@ -3834,7 +3881,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document);
 
             return $document;
         });
@@ -5036,7 +5083,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5215,7 +5262,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5261,7 +5308,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }

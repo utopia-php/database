@@ -103,4 +103,15 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::equal('string', [])));
         $this->assertEquals('Equal queries require at least one value.', $this->validator->getDescription());
     }
+
+    public function testMaxValuesCount(): void
+    {
+        $values = [];
+        for ($i = 1; $i <= 200; $i++) {
+            $values[] = $i;
+        }
+
+        $this->assertFalse($this->validator->isValid(Query::equal('integer', $values)));
+        $this->assertEquals('Query on attribute has greater than 100 values: integer', $this->validator->getDescription());
+    }
 }

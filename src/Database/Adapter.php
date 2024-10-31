@@ -562,7 +562,7 @@ abstract class Adapter
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, Document $document): Document;
+    abstract public function updateDocument(string $collection, string $id, Document $document): Document;
 
     /**
      * Update Documents in batches

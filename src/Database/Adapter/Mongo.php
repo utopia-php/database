@@ -267,7 +267,18 @@ class Mongo extends Adapter
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
+     * Get Collection Size of raw data
      * @param string $collection
      * @return int
      * @throws DatabaseException
@@ -780,12 +791,13 @@ class Mongo extends Adapter
      * Update Document
      *
      * @param string $collection
+     * @param string $id
      * @param Document $document
      *
      * @return Document
      * @throws Exception
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -794,7 +806,7 @@ class Mongo extends Adapter
         $record = $this->timeToMongo($record);
 
         $filters = [];
-        $filters['_uid'] = $document->getId();
+        $filters['_uid'] = $id;
         if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
@@ -809,35 +821,46 @@ class Mongo extends Adapter
     }
 
     /**
-     * Update Documents in batches
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
+     * @param Document $updates
      * @param array<Document> $documents
-     * @param int $batchSize
      *
-     * @return array<Document>
+     * @return int
      *
-     * @throws Duplicate
+     * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, array $documents, int $batchSize): array
+    public function updateDocuments(string $collection, Document $updates, array $documents): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        foreach ($documents as $index => $document) {
-            $document = $document->getArrayCopy();
-            $document = $this->replaceChars('$', '_', $document);
-            $document = $this->timeToMongo($document);
+        $queries = [
+            Query::equal('$id', array_map(fn ($document) => $document->getId(), $documents))
+        ];
 
-            $filters = [];
-            $filters['_uid'] = $document['_uid'];
-            if ($this->sharedTables) {
-                $filters['_tenant'] = (string)$this->getTenant();
-            }
-
-            $this->client->update($name, $filters, $document);
+        $filters = $this->buildFilters($queries);
+        if ($this->sharedTables) {
+            $filters['_tenant'] = (string)$this->getTenant();
         }
 
-        return $documents;
+        $record = $updates->getArrayCopy();
+        $record = $this->replaceChars('$', '_', $record);
+        $record = $this->timeToMongo($record);
+
+        $updateQuery = [
+            '$set' => $record,
+        ];
+
+        try {
+            $this->client->update($name, $filters, $updateQuery, multi: true);
+        } catch (MongoException $e) {
+            throw new Duplicate($e->getMessage());
+        }
+
+        return 1;
     }
 
     /**
@@ -1190,8 +1213,13 @@ class Mongo extends Adapter
      */
     private function timeToMongo(array $record): array
     {
-        $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
-        $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
+        if (isset($record['_createdAt'])) {
+            $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
+        }
+
+        if (isset($record['_updatedAt'])) {
+            $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
+        }
 
         return $record;
     }
@@ -1708,6 +1736,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Are batch operations supported?
+     *
+     * @return bool
+     */
+    public function getSupportForBatchOperations(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1872,4 +1910,16 @@ class Mongo extends Adapter
 
         $this->timeout = null;
     }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
+    }
+
 }

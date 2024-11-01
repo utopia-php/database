@@ -592,20 +592,22 @@ abstract class Adapter
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, Document $document): Document;
+    abstract public function updateDocument(string $collection, string $id, Document $document): Document;
 
     /**
-     * Update Documents in batches
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
+     * @param Document $updates
      * @param array<Document> $documents
-     * @param int $batchSize
      *
-     * @return array<Document>
+     * @return int
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, array $documents, int $batchSize): array;
+    abstract public function updateDocuments(string $collection, Document $updates, array $documents): int;
 
     /**
      * Delete Document
@@ -670,13 +672,22 @@ abstract class Adapter
     abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
 
     /**
-     * Get Collection Size
+     * Get Collection Size of the raw data
      *
      * @param string $collection
      * @return int
      * @throws DatabaseException
      */
     abstract public function getSizeOfCollection(string $collection): int;
+
+    /**
+     * Get Collection Size on the disk
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
 
     /**
      * Get max STRING limit
@@ -778,6 +789,13 @@ abstract class Adapter
     abstract public function getSupportForRelationships(): bool;
 
     abstract public function getSupportForUpdateLock(): bool;
+
+    /**
+     * Are batch operations supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForBatchOperations(): bool;
 
     /**
      * Is attribute resizing supported?
@@ -968,4 +986,12 @@ abstract class Adapter
         // Clear existing callback
         $this->before($event, 'timeout', null);
     }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    abstract public function analyzeCollection(string $collection): bool;
 }

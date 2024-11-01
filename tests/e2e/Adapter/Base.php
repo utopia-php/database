@@ -15729,7 +15729,7 @@ abstract class Base extends TestCase
         $deleted = static::getDatabase()->deleteDocuments('bulk_delete');
         $this->assertEquals(0, $deleted);
 
-        $documents = static::$authorization->skip(function () {
+        $documents = Authorization::skip(function () {
             return static::getDatabase()->find('bulk_delete');
         });
 

@@ -5082,10 +5082,11 @@ class Database
             $lastDocument = null;
 
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, $collection->getDelete()));
+            $authorization = new Authorization(self::PERMISSION_DELETE);
+            $skipAuth = $authorization->isValid($collection->getDelete());
 
             if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-                throw new AuthorizationException($this->authorization->getDescription());
+                throw new AuthorizationException($authorization->getDescription());
             }
 
             while (true) {

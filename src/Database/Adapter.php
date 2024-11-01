@@ -623,9 +623,9 @@ abstract class Adapter
      * @param string $collection
      * @param array<string> $ids
      *
-     * @return bool
+     * @return int
      */
-    abstract public function deleteDocuments(string $collection, array $ids): bool;
+    abstract public function deleteDocuments(string $collection, array $ids): int;
 
     /**
      * Find Documents

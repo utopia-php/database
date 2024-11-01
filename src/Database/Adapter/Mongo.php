@@ -914,9 +914,9 @@ class Mongo extends Adapter
      * @param string $collection
      * @param array<string> $ids
      *
-     * @return bool
+     * @return int
      */
-    public function deleteDocuments(string $collection, array $ids): bool
+    public function deleteDocuments(string $collection, array $ids): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -932,7 +932,7 @@ class Mongo extends Adapter
         $options = [];
 
         try {
-            $res = $this->client->delete(
+            $count = $this->client->delete(
                 collection: $name,
                 filters: $filters,
                 options: $options,
@@ -942,7 +942,7 @@ class Mongo extends Adapter
             $this->processException($e);
         }
 
-        return true;
+        return $count ?? 0;
     }
 
     /**

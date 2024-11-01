@@ -15586,7 +15586,8 @@ abstract class Base extends TestCase
         $this->assertCount(10, $docs);
 
         // TEST: Bulk Delete All Documents
-        static::getDatabase()->deleteDocuments('bulk_delete');
+        $deleted = static::getDatabase()->deleteDocuments('bulk_delete');
+        $this->assertEquals(10, $deleted);
 
         $docs = static::getDatabase()->find('bulk_delete');
         $this->assertCount(0, $docs);
@@ -15594,9 +15595,10 @@ abstract class Base extends TestCase
         // TEST: Bulk delete documents with queries.
         $this->propegateBulkDocuments();
 
-        static::getDatabase()->deleteDocuments('bulk_delete', [
+        $deleted = static::getDatabase()->deleteDocuments('bulk_delete', [
             Query::greaterThanEqual('integer', 5)
         ]);
+        $this->assertEquals(5, $deleted);
 
         $docs = static::getDatabase()->find('bulk_delete');
         $this->assertCount(5, $docs);
@@ -15614,7 +15616,9 @@ abstract class Base extends TestCase
             Permission::read(Role::any()),
             Permission::delete(Role::any())
         ], false);
-        static::getDatabase()->deleteDocuments('bulk_delete');
+        $deleted = static::getDatabase()->deleteDocuments('bulk_delete');
+
+        $this->assertEquals(5, $deleted);
         $this->assertEquals(0, count($this->getDatabase()->find('bulk_delete')));
 
         // TEST: Make sure we can't delete documents we don't have permissions for
@@ -15623,7 +15627,8 @@ abstract class Base extends TestCase
         ], true);
         $this->propegateBulkDocuments(true);
 
-        static::getDatabase()->deleteDocuments('bulk_delete');
+        $deleted = static::getDatabase()->deleteDocuments('bulk_delete');
+        $this->assertEquals(0, $deleted);
 
         $documents = static::$authorization->skip(function () {
             return static::getDatabase()->find('bulk_delete');

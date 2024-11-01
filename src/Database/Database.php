@@ -4981,13 +4981,13 @@ class Database
      * @param array<Query> $queries
      * @param int $batchSize
      *
-     * @return bool
+     * @return int
      *
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws RestrictedException
      */
-    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): bool
+    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): int
     {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -5042,7 +5042,7 @@ class Database
             }
 
             if (empty($affectedDocumentIds)) {
-                return false;
+                return 0;
             }
 
             $this->trigger(self::EVENT_DOCUMENTS_DELETE, $affectedDocumentIds);

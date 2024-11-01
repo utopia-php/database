@@ -1638,9 +1638,9 @@ class MariaDB extends SQL
      * @param string $collection
      * @param array<string> $ids
      *
-     * @return bool
+     * @return int
      */
-    public function deleteDocuments(string $collection, array $ids): bool
+    public function deleteDocuments(string $collection, array $ids): int
     {
         try {
             $name = $this->filter($collection);
@@ -1698,7 +1698,7 @@ class MariaDB extends SQL
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
 
-        return true;
+        return $stmt->rowCount();
     }
 
     /**

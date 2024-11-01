@@ -23,7 +23,7 @@ use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
-use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
+use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 use Utopia\Database\Validator\Structure;
 
 class Database
@@ -5178,11 +5178,15 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        $attributes = $collection->getAttribute('attributes', []);
-        $indexes = $collection->getAttribute('indexes', []);
-
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $collections = [];
+            $collections[] = $collection;
+            $joins = Query::getByType($queries, [Query::TYPE_JOIN]);
+            foreach ($joins as $join) {
+                $collections[] = $this->silent(fn () => $this->getCollection($join->getCollection()));
+            }
+
+            $validator = new DocumentsValidator($collections);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }

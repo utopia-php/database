@@ -1318,7 +1318,7 @@ class Postgres extends SQL
 
         // Permissions logic
         if (!empty($updates->getPermissions())) {
-            $removeQuery = '';
+            $removeQueries = [];
             $removeBindValues = [];
 
             $addQuery = '';
@@ -1380,7 +1380,7 @@ class Postgres extends SQL
                             $tenantQuery = ' AND _tenant = :_tenant';
                         }
 
-                        $removeQuery .= "(
+                        $removeQueries[] = "(
                                             _document = :uid_{$index}
                                             {$tenantQuery}
                                             AND _type = '{$type}'
@@ -1393,14 +1393,6 @@ class Postgres extends SQL
                         }, \array_keys($permissionsToRemove))) .
                             ")
                                         )";
-
-                        if ($type !== \array_key_last($removals)) {
-                            $removeQuery .= ' OR ';
-                        }
-                    }
-
-                    if ($index !== \array_key_last($documents)) {
-                        $removeQuery .= ' OR ';
                     }
                 }
 
@@ -1442,7 +1434,9 @@ class Postgres extends SQL
                 }
             }
 
-            if (!empty($removeQuery)) {
+            if (!empty($removeQueries)) {
+                $removeQuery = \implode(' OR ', $removeQueries);
+
                 $stmtRemovePermissions = $this->getPDO()->prepare("
                     DELETE
                     FROM {$this->getSQLTable($name . '_perms')}

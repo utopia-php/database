@@ -1395,7 +1395,7 @@ class MariaDB extends SQL
 
         // Permissions logic
         if (!empty($updates->getPermissions())) {
-            $removeQuery = '';
+            $removeQueries = [];
             $removeBindValues = [];
 
             $addQuery = '';
@@ -1457,11 +1457,11 @@ class MariaDB extends SQL
                             $tenantQuery = ' AND _tenant = :_tenant';
                         }
 
-                        $removeQuery .= "(
-                                            _document = :uid_{$index}
-                                            {$tenantQuery}
-                                            AND _type = '{$type}'
-                                            AND _permission IN (" . \implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
+                        $removeQueries[] = "(
+                            _document = :uid_{$index}
+                            {$tenantQuery}
+                            AND _type = '{$type}'
+                            AND _permission IN (" . \implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
                             $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
                             $removeBindKeys[] = ':' . $bindKey;
                             $removeBindValues[$bindKey] = $permissionsToRemove[$i];
@@ -1469,15 +1469,7 @@ class MariaDB extends SQL
                             return ':' . $bindKey;
                         }, \array_keys($permissionsToRemove))) .
                             ")
-                                        )";
-
-                        if ($type !== \array_key_last($removals)) {
-                            $removeQuery .= ' OR ';
-                        }
-                    }
-
-                    if ($index !== \array_key_last($documents)) {
-                        $removeQuery .= ' OR ';
+                        )";
                     }
                 }
 
@@ -1519,7 +1511,9 @@ class MariaDB extends SQL
                 }
             }
 
-            if (!empty($removeQuery)) {
+            if (!empty($removeQueries)) {
+                $removeQuery = \implode(' OR ', $removeQueries);
+
                 $stmtRemovePermissions = $this->getPDO()->prepare("
                     DELETE
                     FROM {$this->getSQLTable($name . '_perms')}

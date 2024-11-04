@@ -18,11 +18,6 @@ use Utopia\Validator\Text;
 class Structure extends Validator
 {
     /**
-     * @var Document
-     */
-    protected Document $collection;
-
-    /**
      * @var array<array<string, mixed>>
      */
     protected array $attributes = [
@@ -106,9 +101,11 @@ class Structure extends Validator
      * Structure constructor.
      *
      */
-    public function __construct(Document $collection)
-    {
-        $this->collection = $collection;
+    public function __construct(
+        protected readonly Document $collection,
+        private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
+        private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+    ) {
     }
 
     /**
@@ -342,7 +339,10 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validators[] = new DatetimeValidator();
+                    $validators[] = new DatetimeValidator(
+                        min: $this->minAllowedDate,
+                        max: $this->maxAllowedDate
+                    );
                     break;
 
                 default:

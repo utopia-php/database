@@ -6138,7 +6138,10 @@ abstract class Base extends TestCase
         $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getUpdatedAt());
 
         $document = static::getDatabase()->getDocument('datetime', 'id1234');
-        $dateValidator = new DatetimeValidator();
+
+        $min = static::getDatabase()->getAdapter()->getMinDateTime();
+        $max = static::getDatabase()->getAdapter()->getMaxDateTime();
+        $dateValidator = new DatetimeValidator($min, $max);
         $this->assertEquals(null, $document->getAttribute('date2'));
         $this->assertEquals(true, $dateValidator->isValid($document->getAttribute('date')));
         $this->assertEquals(false, $dateValidator->isValid($document->getAttribute('date2')));

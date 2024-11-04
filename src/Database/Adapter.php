@@ -235,6 +235,35 @@ abstract class Adapter
     }
 
     /**
+     * Set a global timeout for database queries in milliseconds.
+     *
+     * This function allows you to set a maximum execution time for all database
+     * queries executed using the library, or a specific event specified by the
+     * event parameter. Once this timeout is set, any database query that takes
+     * longer than the specified time will be automatically terminated by the library,
+     * and an appropriate error or exception will be raised to handle the timeout condition.
+     *
+     * @param int $milliseconds The timeout value in milliseconds for database queries.
+     * @param string $event     The event the timeout should fire fore
+     * @return void
+     *
+     * @throws Exception The provided timeout value must be greater than or equal to 0.
+     */
+    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+
+    /**
+     * Clears a global timeout for database queries.
+     *
+     * @param string $event
+     * @return void
+     */
+    public function clearTimeout(string $event): void
+    {
+        // Clear existing callback
+        $this->before($event, 'timeout', null);
+    }
+
+    /**
      * Start a new transaction.
      *
      * If a transaction is already active, this will only increment the transaction count and return true.
@@ -394,6 +423,14 @@ abstract class Adapter
      * @return bool
      */
     abstract public function deleteCollection(string $id): bool;
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    abstract public function analyzeCollection(string $collection): bool;
 
     /**
      * Create Attribute
@@ -688,6 +725,28 @@ abstract class Adapter
     abstract public function getLimitForIndexes(): int;
 
     /**
+     * @return int
+     */
+    abstract public function getMaxIndexLength(): int;
+
+    /**
+     * Get the minimum supported DateTime value
+     *
+     * @return \DateTime
+     */
+    abstract public function getMinDateTime(): \DateTime;
+
+    /**
+     * Get the maximum supported DateTime value
+     *
+     * @return \DateTime
+     */
+    public function getMaxDateTime(): \DateTime
+    {
+        return new \DateTime('9999-12-31 23:59:59');
+    }
+
+    /**
      * Is schemas supported?
      *
      * @return bool
@@ -921,47 +980,4 @@ abstract class Adapter
      * @throws Exception
      */
     abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool;
-
-    /**
-     * @return int
-     */
-    abstract public function getMaxIndexLength(): int;
-
-
-    /**
-     * Set a global timeout for database queries in milliseconds.
-     *
-     * This function allows you to set a maximum execution time for all database
-     * queries executed using the library, or a specific event specified by the
-     * event parameter. Once this timeout is set, any database query that takes
-     * longer than the specified time will be automatically terminated by the library,
-     * and an appropriate error or exception will be raised to handle the timeout condition.
-     *
-     * @param int $milliseconds The timeout value in milliseconds for database queries.
-     * @param string $event     The event the timeout should fire fore
-     * @return void
-     *
-     * @throws Exception The provided timeout value must be greater than or equal to 0.
-     */
-    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
-
-    /**
-     * Clears a global timeout for database queries.
-     *
-     * @param string $event
-     * @return void
-     */
-    public function clearTimeout(string $event): void
-    {
-        // Clear existing callback
-        $this->before($event, 'timeout', null);
-    }
-
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
-     */
-    abstract public function analyzeCollection(string $collection): bool;
 }

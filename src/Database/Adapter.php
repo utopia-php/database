@@ -565,17 +565,19 @@ abstract class Adapter
     abstract public function updateDocument(string $collection, string $id, Document $document): Document;
 
     /**
-     * Update Documents in batches
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
+     * @param Document $updates
      * @param array<Document> $documents
-     * @param int $batchSize
      *
-     * @return array<Document>
+     * @return int
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, array $documents, int $batchSize): array;
+    abstract public function updateDocuments(string $collection, Document $updates, array $documents): int;
 
     /**
      * Delete Document
@@ -586,6 +588,16 @@ abstract class Adapter
      * @return bool
      */
     abstract public function deleteDocument(string $collection, string $id): bool;
+
+    /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<string> $ids
+     *
+     * @return int
+     */
+    abstract public function deleteDocuments(string $collection, array $ids): int;
 
     /**
      * Find Documents
@@ -600,10 +612,11 @@ abstract class Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
+    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
 
     /**
      * Sum an attribute
@@ -746,6 +759,13 @@ abstract class Adapter
     abstract public function getSupportForRelationships(): bool;
 
     abstract public function getSupportForUpdateLock(): bool;
+
+    /**
+     * Are batch operations supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForBatchOperations(): bool;
 
     /**
      * Is attribute resizing supported?

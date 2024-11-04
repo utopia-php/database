@@ -821,35 +821,46 @@ class Mongo extends Adapter
     }
 
     /**
-     * Update Documents in batches
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
+     * @param Document $updates
      * @param array<Document> $documents
-     * @param int $batchSize
      *
-     * @return array<Document>
+     * @return int
      *
-     * @throws Duplicate
+     * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, array $documents, int $batchSize): array
+    public function updateDocuments(string $collection, Document $updates, array $documents): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        foreach ($documents as $index => $document) {
-            $document = $document->getArrayCopy();
-            $document = $this->replaceChars('$', '_', $document);
-            $document = $this->timeToMongo($document);
+        $queries = [
+            Query::equal('$id', array_map(fn ($document) => $document->getId(), $documents))
+        ];
 
-            $filters = [];
-            $filters['_uid'] = $document['_uid'];
-            if ($this->sharedTables) {
-                $filters['_tenant'] = (string)$this->getTenant();
-            }
-
-            $this->client->update($name, $filters, $document);
+        $filters = $this->buildFilters($queries);
+        if ($this->sharedTables) {
+            $filters['_tenant'] = (string)$this->getTenant();
         }
 
-        return $documents;
+        $record = $updates->getArrayCopy();
+        $record = $this->replaceChars('$', '_', $record);
+        $record = $this->timeToMongo($record);
+
+        $updateQuery = [
+            '$set' => $record,
+        ];
+
+        try {
+            $this->client->update($name, $filters, $updateQuery, multi: true);
+        } catch (MongoException $e) {
+            throw new Duplicate($e->getMessage());
+        }
+
+        return 1;
     }
 
     /**
@@ -921,6 +932,43 @@ class Mongo extends Adapter
     }
 
     /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<string> $ids
+     *
+     * @return int
+     */
+    public function deleteDocuments(string $collection, array $ids): int
+    {
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_uid', $ids)]);
+
+        if ($this->sharedTables) {
+            $filters['_tenant'] = (string)$this->getTenant();
+        }
+
+        $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
+        $filters = $this->timeFilter($filters);
+
+        $options = [];
+
+        try {
+            $count = $this->client->delete(
+                collection: $name,
+                filters: $filters,
+                options: $options,
+                limit: 0
+            );
+        } catch (MongoException $e) {
+            $this->processException($e);
+        }
+
+        return $count ?? 0;
+    }
+
+    /**
      * Update Attribute.
      * @param string $collection
      * @param string $id
@@ -954,12 +1002,13 @@ class Mongo extends Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      *
      * @return array<Document>
      * @throws Exception
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $queries = array_map(fn ($query) => clone $query, $queries);
@@ -971,9 +1020,9 @@ class Mongo extends Adapter
         }
 
         // permissions
-        if (Authorization::$status) { // skip if authorization is disabled
+        if (Authorization::$status) {
             $roles = \implode('|', Authorization::getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         $options = [];
@@ -1164,8 +1213,13 @@ class Mongo extends Adapter
      */
     private function timeToMongo(array $record): array
     {
-        $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
-        $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
+        if (isset($record['_createdAt'])) {
+            $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
+        }
+
+        if (isset($record['_updatedAt'])) {
+            $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
+        }
 
         return $record;
     }
@@ -1677,6 +1731,16 @@ class Mongo extends Adapter
     }
 
     public function getSupportForAttributeResizing(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Are batch operations supported?
+     *
+     * @return bool
+     */
+    public function getSupportForBatchOperations(): bool
     {
         return false;
     }

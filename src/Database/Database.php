@@ -411,7 +411,7 @@ class Database
              */
             function (mixed $value) {
                 if (is_null($value)) {
-                    return null;
+                    return;
                 }
                 try {
                     $value = new \DateTime($value);

@@ -34,6 +34,10 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
+                if ($this->getPDO()->inTransaction()) {
+                    $this->getPDO()->rollBack();
+                }
+
                 $result = $this->getPDO()->beginTransaction();
             } else {
                 $result = true;

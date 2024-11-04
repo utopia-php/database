@@ -27,6 +27,30 @@ class Postgres extends SQL
      */
 
     /**
+     * Returns Max Execution Time
+     * @param int $milliseconds
+     * @param string $event
+     * @return void
+     * @throws DatabaseException
+     */
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        if (!$this->getSupportForTimeouts()) {
+            return;
+        }
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
+        }
+        $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
+            return "
+				SET statement_timeout = {$milliseconds};
+				{$sql};
+				SET statement_timeout = 0;
+			";
+        });
+    }
+
+    /**
      * Create Database
      *
      * @param string $name
@@ -254,6 +278,17 @@ class Postgres extends SQL
         return $this->getPDO()
             ->prepare($sql)
             ->execute();
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
     }
 
     /**
@@ -2233,12 +2268,16 @@ class Postgres extends SQL
         return '{' . implode(",", $value) . '}';
     }
 
+    public function getMinDateTime(): \DateTime
+    {
+        return new \DateTime('-4713-01-01 00:00:00');
+    }
+
     /**
      * Is fulltext Wildcard index supported?
      *
      * @return bool
      */
-    // TODO: Fix full-text search logic for postgres and MariaDB
     public function getSupportForFulltextWildcardIndex(): bool
     {
         return false;
@@ -2265,27 +2304,11 @@ class Postgres extends SQL
     }
 
     /**
-     * Returns Max Execution Time
-     * @param int $milliseconds
-     * @param string $event
-     * @return void
-     * @throws DatabaseException
+     * @return string
      */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    public function getLikeOperator(): string
     {
-        if (!$this->getSupportForTimeouts()) {
-            return;
-        }
-        if ($milliseconds <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
-        }
-        $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
-            return "
-				SET statement_timeout = {$milliseconds};
-				{$sql};
-				SET statement_timeout = 0;
-			";
-        });
+        return 'ILIKE';
     }
 
     /**
@@ -2313,24 +2336,5 @@ class Postgres extends SQL
         }
 
         throw $e;
-    }
-
-    /**
-     * @return string
-     */
-    public function getLikeOperator(): string
-    {
-        return 'ILIKE';
-    }
-
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return false;
     }
 }

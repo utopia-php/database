@@ -57,6 +57,22 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        if (!$this->getSupportForTimeouts()) {
+            return;
+        }
+
+        $this->timeout = $milliseconds;
+    }
+
+    public function clearTimeout(string $event): void
+    {
+        parent::clearTimeout($event);
+
+        $this->timeout = null;
+    }
+
     public function startTransaction(): bool
     {
         return true;
@@ -318,6 +334,17 @@ class Mongo extends Adapter
         $id = $this->getNamespace() . '_' . $this->filter($id);
 
         return (!!$this->getClient()->dropCollection($id));
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
     }
 
     /**
@@ -1640,6 +1667,11 @@ class Mongo extends Adapter
         return 64;
     }
 
+    public function getMinDateTime(): \DateTime
+    {
+        return new \DateTime('-9999-01-01 00:00:00');
+    }
+
     /**
      * Is schemas supported?
      *
@@ -1893,32 +1925,5 @@ class Mongo extends Adapter
     public function getMaxIndexLength(): int
     {
         return 0;
-    }
-
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
-    {
-        if (!$this->getSupportForTimeouts()) {
-            return;
-        }
-
-        $this->timeout = $milliseconds;
-    }
-
-    public function clearTimeout(string $event): void
-    {
-        parent::clearTimeout($event);
-
-        $this->timeout = null;
-    }
-
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return false;
     }
 }

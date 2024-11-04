@@ -3287,7 +3287,11 @@ class Database
             }
         }
 
-        $structure = new Structure($collection);
+        $structure = new Structure(
+            $collection,
+            $this->adapter->getMinDateTime(),
+            $this->adapter->getMaxDateTime(),
+        );
         if (!$structure->isValid($document)) {
             throw new StructureException($structure->getDescription());
         }
@@ -3349,7 +3353,11 @@ class Database
 
             $document = $this->encode($collection, $document);
 
-            $validator = new Structure($collection);
+            $validator = new Structure(
+                $collection,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
             if (!$validator->isValid($document)) {
                 throw new StructureException($validator->getDescription());
             }
@@ -3876,7 +3884,11 @@ class Database
 
             $document = $this->encode($collection, $document);
 
-            $structureValidator = new Structure($collection);
+            $structureValidator = new Structure(
+                $collection,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
             if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                 throw new StructureException($structureValidator->getDescription());
             }
@@ -3942,7 +3954,11 @@ class Database
         $updates = $this->encode($collection, $updates);
 
         // Check new document structure
-        $validator = new PartialStructure($collection);
+        $validator = new PartialStructure(
+            $collection,
+            $this->adapter->getMinDateTime(),
+            $this->adapter->getMaxDateTime(),
+        );
         if (!$validator->isValid($updates)) {
             throw new StructureException($validator->getDescription());
         }
@@ -5204,7 +5220,13 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
+            $validator = new DocumentsValidator(
+                $attributes,
+                $indexes,
+                $this->maxQueryValues,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5384,7 +5406,13 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
+            $validator = new DocumentsValidator(
+                $attributes,
+                $indexes,
+                $this->maxQueryValues,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5430,7 +5458,13 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes, maxValuesCount: $this->maxQueryValues);
+            $validator = new DocumentsValidator(
+                $attributes,
+                $indexes,
+                $this->maxQueryValues,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }

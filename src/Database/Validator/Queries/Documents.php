@@ -22,8 +22,13 @@ class Documents extends IndexedQueries
      * @param array<mixed> $indexes
      * @throws Exception
      */
-    public function __construct(array $attributes, array $indexes, int $maxValuesCount = 100)
-    {
+    public function __construct(
+        array $attributes,
+        array $indexes,
+        int $maxValuesCount = 100,
+        \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
+        \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+    ) {
         $attributes[] = new Document([
             '$id' => '$id',
             'key' => '$id',
@@ -53,7 +58,12 @@ class Documents extends IndexedQueries
             new Limit(),
             new Offset(),
             new Cursor(),
-            new Filter($attributes, $maxValuesCount),
+            new Filter(
+                $attributes,
+                $maxValuesCount,
+                $minAllowedDate,
+                $maxAllowedDate,
+            ),
             new Order($attributes),
             new Select($attributes),
         ];

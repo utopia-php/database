@@ -314,6 +314,22 @@ class MariaDB extends SQL
     }
 
     /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+
+        $sql = "ANALYZE TABLE {$this->getSQLTable($name)}";
+
+        $stmt = $this->getPDO()->prepare($sql);
+        return $stmt->execute();
+    }
+
+    /**
      * Create Attribute
      *
      * @param string $collection
@@ -2285,6 +2301,16 @@ class MariaDB extends SQL
         };
     }
 
+    public function getMinDateTime(): \DateTime
+    {
+        return new \DateTime('1000-01-01 00:00:00');
+    }
+
+    public function getMaxDateTime(): \DateTime
+    {
+        return new \DateTime('9999-12-31 23:59:59');
+    }
+
     /**
      * Is fulltext Wildcard index supported?
      *
@@ -2371,21 +2397,5 @@ class MariaDB extends SQL
         }
 
         throw $e;
-    }
-
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        $name = $this->filter($collection);
-
-        $sql = "ANALYZE TABLE {$this->getSQLTable($name)}";
-
-        $stmt = $this->getPDO()->prepare($sql);
-        return $stmt->execute();
     }
 }

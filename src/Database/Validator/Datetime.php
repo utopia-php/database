@@ -60,7 +60,7 @@ class Datetime extends Validator
      */
     public function isValid($value): bool
     {
-        if (empty($value)) {
+        if (empty($value) || ! is_string($value)) {
             return false;
         }
 

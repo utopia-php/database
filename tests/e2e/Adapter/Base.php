@@ -6119,6 +6119,15 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true, null, true, false, null, [], ['datetime']));
         $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
 
+        try {
+            static::getDatabase()->createDocument('datetime', new Document([
+                'date' => ['2020-01-01'], // array
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
         $doc = static::getDatabase()->createDocument('datetime', new Document([
             '$id' => ID::custom('id1234'),
             '$permissions' => [

@@ -407,12 +407,11 @@ class Database
             'datetime',
             /**
              * @param mixed $value
-             * @return string|null
-             * @throws Exception
+             * @return mixed
              */
             function (mixed $value) {
                 if (is_null($value)) {
-                    return;
+                    return null;
                 }
                 try {
                     $value = new \DateTime($value);

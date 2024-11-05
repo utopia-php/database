@@ -327,6 +327,7 @@ abstract class Adapter
                     $this->rollbackTransaction();
                 } catch (\Throwable $rollback) {
                     if ($attempts < 2) {
+                        \usleep(5000); // 5ms
                         continue;
                     }
 
@@ -334,6 +335,7 @@ abstract class Adapter
                 }
 
                 if ($attempts < 2) {
+                    \usleep(5000); // 5ms
                     continue;
                 }
 

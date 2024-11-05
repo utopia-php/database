@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 
 abstract class Adapter
 {
@@ -315,16 +316,35 @@ abstract class Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        $this->startTransaction();
+        for ($attempts = 0; $attempts < 3; $attempts++) {
+            try {
+                $this->startTransaction();
+                $result = $callback();
+                $this->commitTransaction();
+                return $result;
+            } catch (\Throwable $action) {
 
-        try {
-            $result = $callback();
-            $this->commitTransaction();
-            return $result;
-        } catch (\Throwable $e) {
-            $this->rollbackTransaction();
-            throw $e;
+                try {
+                    $this->rollbackTransaction();
+                } catch (\Throwable $rollback) {
+                    if ($attempts < 2) {
+                        \usleep(5000); // 5ms
+                        continue;
+                    }
+
+                    throw $rollback;
+                }
+
+                if ($attempts < 2) {
+                    \usleep(5000); // 5ms
+                    continue;
+                }
+
+                throw $action;
+            }
         }
+
+        throw new TransactionException('Failed to execute transaction');
     }
 
     /**

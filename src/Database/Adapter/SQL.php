@@ -9,6 +9,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -43,11 +44,11 @@ abstract class SQL extends Adapter
                 $result = true;
             }
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
         if (!$result) {
-            throw new DatabaseException('Failed to start transaction');
+            throw new TransactionException('Failed to start transaction');
         }
 
         $this->inTransaction++;
@@ -70,13 +71,13 @@ abstract class SQL extends Adapter
         try {
             $result = $this->getPDO()->commit();
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new TransactionException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
         } finally {
             $this->inTransaction--;
         }
 
         if (!$result) {
-            throw new DatabaseException('Failed to commit transaction');
+            throw new TransactionException('Failed to commit transaction');
         }
 
         return $result;
@@ -94,13 +95,13 @@ abstract class SQL extends Adapter
         try {
             $result = $this->getPDO()->rollBack();
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new TransactionException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         } finally {
             $this->inTransaction = 0;
         }
 
         if (!$result) {
-            throw new DatabaseException('Failed to rollback transaction');
+            throw new TransactionException('Failed to rollback transaction');
         }
 
         return $result;

@@ -867,6 +867,16 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    public function getSupportForGetConnectionId(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get SQL Index Type
      *
      * @param string $type

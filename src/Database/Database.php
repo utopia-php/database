@@ -494,6 +494,17 @@ class Database
     }
 
     /**
+     * Get getConnection Id
+     *
+     * @return string
+     * @throws Exception
+     */
+    public function getConnectionId(): string
+    {
+        return $this->adapter->getConnectionId();
+    }
+
+    /**
      * Skip relationships for all the calls inside the callback
      *
      * @template T

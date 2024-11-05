@@ -834,6 +834,13 @@ abstract class Adapter
     abstract public function getSupportForAttributeResizing(): bool;
 
     /**
+     * Are attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForGetConnectionId(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -980,4 +987,11 @@ abstract class Adapter
      * @throws Exception
      */
     abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool;
+
+    /**
+     * Returns the connection ID identifier
+     *
+     * @return string
+     */
+    abstract public function getConnectionId(): string;
 }

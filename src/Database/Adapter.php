@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 
 abstract class Adapter
 {

@@ -419,9 +419,17 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
-        return $this->getPDO()
+        try {
+            return $this->getPDO()
             ->prepare($sql)
             ->execute();
+        } catch (PDOException $e) {
+            if ($e->getCode() === "42000" && $e->errorInfo[1] === 1091) {
+                return true;
+            }
+
+            throw $e;
+        }
     }
 
     /**

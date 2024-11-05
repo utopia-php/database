@@ -41,6 +41,7 @@ abstract class SQL extends Adapter
 
                 $result = $this->getPDO()->beginTransaction();
             } else {
+                $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
                 $result = true;
             }
         } catch (PDOException $e) {
@@ -97,11 +98,16 @@ abstract class SQL extends Adapter
         }
 
         try {
-            $result = $this->getPDO()->rollBack();
+            if ($this->inTransaction > 1) {
+                $this->getPDO()->exec('ROLLBACK TO transaction' . $this->inTransaction);
+                $this->inTransaction--;
+                $result = true;
+            } else {
+                $result = $this->getPDO()->rollBack();
+                $this->inTransaction = 0;
+            }
         } catch (PDOException $e) {
-            throw new TransactionException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
-        } finally {
-            $this->inTransaction = 0;
+            throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
         if (!$result) {

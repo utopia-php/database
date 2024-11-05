@@ -406,13 +406,12 @@ class Database
         self::addFilter(
             'datetime',
             /**
-             * @param string|null $value
-             * @return string|null
-             * @throws Exception
+             * @param mixed $value
+             * @return mixed
              */
-            function (?string $value) {
+            function (mixed $value) {
                 if (is_null($value)) {
-                    return null;
+                    return;
                 }
                 try {
                     $value = new \DateTime($value);

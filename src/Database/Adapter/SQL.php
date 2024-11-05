@@ -37,6 +37,9 @@ abstract class SQL extends Adapter
             if ($this->inTransaction === 0) {
                 if ($this->getPDO()->inTransaction()) {
                     $this->getPDO()->rollBack();
+                } else {
+                    // If no active transaction, this has no effect.
+                    $this->getPDO()->exec('ROLLBACK');
                 }
 
                 $result = $this->getPDO()->beginTransaction();

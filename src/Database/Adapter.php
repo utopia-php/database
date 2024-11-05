@@ -322,7 +322,6 @@ abstract class Adapter
                 $this->commitTransaction();
                 return $result;
             } catch (\Throwable $e) {
-
                 try {
                     $this->rollbackTransaction();
                 } catch (\Throwable) {

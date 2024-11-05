@@ -107,8 +107,6 @@ abstract class Base extends TestCase
         }
 
         $this->assertIsString(static::getDatabase()->getConnectionId());
-
-        $this->assertEquals(999, 11111);
     }
 
     public function testDeleteRelatedCollection(): void

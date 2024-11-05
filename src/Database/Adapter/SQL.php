@@ -75,10 +75,9 @@ abstract class SQL extends Adapter
 
         try {
             $result = $this->getPDO()->commit();
+            $this->inTransaction = 0;
         } catch (PDOException $e) {
             throw new TransactionException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
-        } finally {
-            $this->inTransaction--;
         }
 
         if (!$result) {

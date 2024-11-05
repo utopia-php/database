@@ -321,20 +321,23 @@ abstract class Adapter
                 $result = $callback();
                 $this->commitTransaction();
                 return $result;
-            } catch (\Throwable $e) {
+            } catch (\Throwable $action) {
+
                 try {
                     $this->rollbackTransaction();
-                } catch (\Throwable) {
+                } catch (\Throwable $rollback) {
                     if ($attempts < 2) {
                         continue;
                     }
+
+                    throw $rollback;
                 }
 
                 if ($attempts < 2) {
                     continue;
                 }
 
-                throw $e;
+                throw $action;
             }
         }
 

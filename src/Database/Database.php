@@ -4016,7 +4016,7 @@ class Database
                     $limit -= $batchSize;
                 }
 
-                $queries = array_merge(
+                $affectedDocuments = $this->find($collection->getId(), array_merge(
                     $queries,
                     empty($lastDocument) ? [
                         Query::limit($batchSize),
@@ -4024,9 +4024,7 @@ class Database
                         Query::limit($batchSize),
                         Query::cursorAfter($lastDocument),
                     ]
-                );
-
-                $affectedDocuments = $this->find($collection->getId(), $queries, forPermission: Database::PERMISSION_UPDATE);
+                ), forPermission: Database::PERMISSION_UPDATE);
 
                 if (empty($affectedDocuments)) {
                     break;
@@ -5184,7 +5182,7 @@ class Database
                     $limit -= $batchSize;
                 }
 
-                $queries = array_merge(
+                $affectedDocuments = $this->find($collection->getId(), array_merge(
                     $queries,
                     empty($lastDocument) ? [
                         Query::limit($batchSize),
@@ -5192,9 +5190,7 @@ class Database
                         Query::limit($batchSize),
                         Query::cursorAfter($lastDocument),
                     ]
-                );
-
-                $affectedDocuments = $this->find($collection->getId(), $queries, forPermission: Database::PERMISSION_DELETE);
+                ), forPermission: Database::PERMISSION_DELETE);
 
                 if (empty($affectedDocuments)) {
                     break;

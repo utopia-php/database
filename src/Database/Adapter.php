@@ -323,7 +323,6 @@ abstract class Adapter
                 $this->commitTransaction();
                 return $result;
             } catch (\Throwable $action) {
-
                 try {
                     $this->rollbackTransaction();
                 } catch (\Throwable $rollback) {
@@ -332,6 +331,7 @@ abstract class Adapter
                         continue;
                     }
 
+                    $this->inTransaction = 0;
                     throw $rollback;
                 }
 
@@ -340,6 +340,7 @@ abstract class Adapter
                     continue;
                 }
 
+                $this->inTransaction = 0;
                 throw $action;
             }
         }

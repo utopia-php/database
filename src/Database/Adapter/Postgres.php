@@ -36,6 +36,9 @@ class Postgres extends SQL
             if ($this->inTransaction === 0) {
                 if ($this->getPDO()->inTransaction()) {
                     $this->getPDO()->rollBack();
+                } else {
+                    // If no active transaction, this has no effect.
+                    $this->getPDO()->prepare('ROLLBACK')->execute();
                 }
 
                 $result = $this->getPDO()->beginTransaction();

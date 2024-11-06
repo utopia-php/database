@@ -5,7 +5,7 @@ services:
     build:
       context: .
       args:
-        DEBUG: false
+        DEBUG: true
     networks:
       - database
     volumes:

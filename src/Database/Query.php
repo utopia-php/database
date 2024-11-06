@@ -254,6 +254,10 @@ class Query
         $attribute = $query['attribute'] ?? '';
         $values = $query['values'] ?? [];
 
+        if (!\is_string($method)) {
+            throw new QueryException('Invalid query method. Must be a string, got ' . \gettype($method));
+        }
+
         if (!self::isMethod($method)) {
             throw new QueryException('Invalid query method: ' . $method);
         }

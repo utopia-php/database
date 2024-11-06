@@ -834,7 +834,7 @@ abstract class Adapter
     abstract public function getSupportForAttributeResizing(): bool;
 
     /**
-     * Are attributes supported?
+     * Is get connection id supported?
      *
      * @return bool
      */

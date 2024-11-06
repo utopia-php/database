@@ -4,6 +4,7 @@ namespace Utopia\Database\Mirroring;
 
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Query;
 
 abstract class Filter
 {
@@ -261,6 +262,41 @@ abstract class Filter
     }
 
     /**
+     * @param Database $source
+     * @param Database $destination
+     * @param string $collectionId
+     * @param Document $updates
+     * @param array<Query> $queries
+     * @return Document
+     */
+    public function beforeUpdateDocuments(
+        Database $source,
+        Database $destination,
+        string $collectionId,
+        Document $updates,
+        array $queries
+    ): Document {
+        return $updates;
+    }
+
+    /**
+     * @param Database $source
+     * @param Database $destination
+     * @param string $collectionId
+     * @param Document $updates
+     * @param array<Query> $queries
+     * @return void
+     */
+    public function afterUpdateDocuments(
+        Database $source,
+        Database $destination,
+        string $collectionId,
+        Document $updates,
+        array $queries
+    ): void {
+    }
+
+    /**
      * Called before document is deleted in the destination database
      *
      * @param Database $source
@@ -291,6 +327,36 @@ abstract class Filter
         Database $destination,
         string $collectionId,
         string $documentId,
+    ): void {
+    }
+
+    /**
+     * @param Database $source
+     * @param Database $destination
+     * @param string $collectionId
+     * @param array<Query> $queries
+     * @return void
+     */
+    public function beforeDeleteDocuments(
+        Database $source,
+        Database $destination,
+        string $collectionId,
+        array $queries
+    ): void {
+    }
+
+    /**
+     * @param Database $source
+     * @param Database $destination
+     * @param string $collectionId
+     * @param array<Query> $queries
+     * @return void
+     */
+    public function afterDeleteDocuments(
+        Database $source,
+        Database $destination,
+        string $collectionId,
+        array $queries
     ): void {
     }
 }

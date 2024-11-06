@@ -659,60 +659,55 @@ class Mirror extends Database
 
     public function updateDocuments(
         string $collection,
-        array $documents,
+        Document $updates,
+        array $queries = [],
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): array {
-        $documents = $this->source->updateDocuments($collection, $documents, $batchSize);
+    ): int {
+        $count = $this->source->updateDocuments($collection, $updates, $queries, $batchSize);
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
-            return $documents;
+            return $count;
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-            return $documents;
+            return $count;
         }
 
         try {
-            $clones = [];
+            $clone = clone $updates;
 
-            foreach ($documents as $document) {
-                $clone = clone $document;
-
-                foreach ($this->writeFilters as $filter) {
-                    $clone = $filter->beforeUpdateDocument(
-                        source: $this->source,
-                        destination: $this->destination,
-                        collectionId: $collection,
-                        document: $clone,
-                    );
-                }
-
-                $clones[] = $clone;
+            foreach ($this->writeFilters as $filter) {
+                $clone = $filter->beforeUpdateDocuments(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    updates: $clone,
+                    queries: $queries,
+                );
             }
 
             $this->destination->setPreserveDates(true);
-            $this->destination->updateDocuments($collection, $clones, $batchSize);
+            $this->destination->updateDocuments($collection, $clone, $queries, $batchSize);
             $this->destination->setPreserveDates(false);
 
-            foreach ($clones as $clone) {
-                foreach ($this->writeFilters as $filter) {
-                    $filter->afterUpdateDocument(
-                        source: $this->source,
-                        destination: $this->destination,
-                        collectionId: $collection,
-                        document: $clone,
-                    );
-                }
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterUpdateDocuments(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    updates: $clone,
+                    queries: $queries,
+                );
             }
         } catch (\Throwable $err) {
             $this->logError('updateDocuments', $err);
         }
 
-        return $documents;
+        return $count;
     }
 
     public function deleteDocument(string $collection, string $id): bool
@@ -756,6 +751,49 @@ class Mirror extends Database
         }
 
         return $result;
+    }
+
+    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): int
+    {
+        $count = $this->source->deleteDocuments($collection, $queries, $batchSize);
+
+        if (
+            \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+            || $this->destination === null
+        ) {
+            return $count;
+        }
+
+        $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
+        if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
+            return $count;
+        }
+
+        try {
+            foreach ($this->writeFilters as $filter) {
+                $filter->beforeDeleteDocuments(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    queries: $queries,
+                );
+            }
+
+            $this->destination->deleteDocuments($collection, $queries, $batchSize);
+
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterDeleteDocuments(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    queries: $queries,
+                );
+            }
+        } catch (\Throwable $err) {
+            $this->logError('deleteDocuments', $err);
+        }
+
+        return $count;
     }
 
     public function updateAttributeRequired(string $collection, string $id, bool $required): Document

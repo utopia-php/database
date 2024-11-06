@@ -27,27 +27,27 @@
             "Composer\\Config::disableProcessTimeout",
             "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml"
         ],
-        "lint": "./vendor/bin/pint --test",
-        "format": "./vendor/bin/pint",
+        "lint": "php -d memory_limit=2G ./vendor/bin/pint --test",
+        "format": "php -d memory_limit=2G ./vendor/bin/pint",
         "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 2G",
         "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
     },
     "require": {
         "ext-pdo": "*",
         "ext-mbstring": "*",
-        "php": ">=8.0",
+        "php": ">=8.3",
         "utopia-php/framework": "0.33.*",
-        "utopia-php/cache": "0.10.*",
+        "utopia-php/cache": "0.11.*",
         "utopia-php/mongo": "0.3.*"
     },
     "require-dev": {
         "fakerphp/faker": "1.23.*",
-        "phpunit/phpunit": "9.6.*",
-        "pcov/clobber": "2.0.*",
+        "phpunit/phpunit": "9.*",
+        "pcov/clobber": "2.*",
         "swoole/ide-helper": "5.1.3",
         "utopia-php/cli": "0.14.*",
-        "laravel/pint": "1.17.*",
-        "phpstan/phpstan": "1.11.*",
+        "laravel/pint": "1.*",
+        "phpstan/phpstan": "1.*",
         "rregeer/phpunit-coverage-check": "0.3.*"
     },
     "suggests": {

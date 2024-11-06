@@ -262,6 +262,10 @@ class Query
             throw new QueryException('Invalid query attribute. Must be a string, got ' . \gettype($attribute));
         }
 
+        if (!\is_array($values)) {
+            throw new QueryException('Invalid query values. Must be an array, got ' . \gettype($values));
+        }
+
         if (\in_array($method, self::LOGICAL_TYPES)) {
             foreach ($values as $index => $value) {
                 $values[$index] = self::parseQuery($value);

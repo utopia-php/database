@@ -5113,14 +5113,20 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator(
+                $attributes, 
+                $indexes, 
+                $this->maxQueryValues, 
+                $this->adapter->getMinDateTime(), 
+                $this->adapter->getMaxDateTime()
+            );
+
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
         }
 
         $grouped = Query::groupByType($queries);
-        $filters = $grouped['filters'];
         $limit = $grouped['limit'];
         $cursor = $grouped['cursor'];
 

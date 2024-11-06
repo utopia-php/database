@@ -163,10 +163,10 @@ class MariaDB extends SQL
         if ($this->sharedTables) {
             $collection .= "
             	_tenant INT(11) UNSIGNED DEFAULT NULL,
-				UNIQUE KEY _uid (_tenant, _uid),
-				KEY _created_at (_tenant, _createdAt),
-				KEY _updated_at (_tenant, _updatedAt),
-				KEY _tenant_id (_tenant, _id)
+				UNIQUE KEY _uid (_uid, _tenant),
+				KEY _created_at (_createdAt, _tenant),
+				KEY _updated_at (_updatedAt, _tenant),
+				KEY _tenant_id (_id, _tenant)
 			";
         } else {
             $collection .= "

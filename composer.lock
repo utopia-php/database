@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d8b51c1a58da391a80c01cd5b691b739",
+    "content-hash": "f7eec4bad737b741ae97c81db0532d29",
     "packages": [
         {
             "name": "jean85/pretty-package-versions",
@@ -216,16 +216,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "0.10.2",
+            "version": "0.11.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "b22c6eb6d308de246b023efd0fc9758aee8b8247"
+                "reference": "8ebcab5aac7606331cef69b0081f6c9eff2e58bc"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/b22c6eb6d308de246b023efd0fc9758aee8b8247",
-                "reference": "b22c6eb6d308de246b023efd0fc9758aee8b8247",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/8ebcab5aac7606331cef69b0081f6c9eff2e58bc",
+                "reference": "8ebcab5aac7606331cef69b0081f6c9eff2e58bc",
                 "shasum": ""
             },
             "require": {
@@ -236,7 +236,7 @@
             },
             "require-dev": {
                 "laravel/pint": "1.2.*",
-                "phpstan/phpstan": "1.9.x-dev",
+                "phpstan/phpstan": "^1.12",
                 "phpunit/phpunit": "^9.3",
                 "vimeo/psalm": "4.13.1"
             },
@@ -260,9 +260,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/0.10.2"
+                "source": "https://github.com/utopia-php/cache/tree/0.11.0"
             },
-            "time": "2024-06-25T20:36:35+00:00"
+            "time": "2024-11-05T16:53:58+00:00"
         },
         {
             "name": "utopia-php/framework",
@@ -2591,7 +2591,7 @@
     "platform": {
         "ext-pdo": "*",
         "ext-mbstring": "*",
-        "php": ">=8.0"
+        "php": ">=8.3"
     },
     "platform-dev": [],
     "plugin-api-version": "2.6.0"

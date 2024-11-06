@@ -348,7 +348,7 @@ abstract class Base extends TestCase
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertTrue($e instanceof RelationshipException);
+            $this->assertInstanceOf(RelationshipException::class, $e);
         }
 
         static::getDatabase()->deleteRelationship('v1', 'v2');

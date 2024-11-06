@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -25,6 +26,60 @@ class Postgres extends SQL
      * 3. DATETIME is TIMESTAMP
      * 4. Full-text search is different - to_tsvector() and to_tsquery()
      */
+
+    /**
+     * @inheritDoc
+     */
+    public function startTransaction(): bool
+    {
+        try {
+            if ($this->inTransaction === 0) {
+                if ($this->getPDO()->inTransaction()) {
+                    $this->getPDO()->rollBack();
+                } else {
+                    // If no active transaction, this has no effect.
+                    $this->getPDO()->prepare('ROLLBACK')->execute();
+                }
+
+                $result = $this->getPDO()->beginTransaction();
+            } else {
+                $result = true;
+            }
+        } catch (PDOException $e) {
+            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+        if (!$result) {
+            throw new TransactionException('Failed to start transaction');
+        }
+
+        $this->inTransaction++;
+
+        return $result;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function rollbackTransaction(): bool
+    {
+        if ($this->inTransaction === 0) {
+            return false;
+        }
+
+        try {
+            $result = $this->getPDO()->rollBack();
+            $this->inTransaction = 0;
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+        if (!$result) {
+            throw new TransactionException('Failed to rollback transaction');
+        }
+
+        return $result;
+    }
 
     /**
      * Returns Max Execution Time

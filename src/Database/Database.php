@@ -5114,10 +5114,10 @@ class Database
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
-                $attributes, 
-                $indexes, 
-                $this->maxQueryValues, 
-                $this->adapter->getMinDateTime(), 
+                $attributes,
+                $indexes,
+                $this->maxQueryValues,
+                $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime()
             );
 

@@ -15819,7 +15819,10 @@ abstract class Base extends TestCase
 
         $docs = static::getDatabase()->find('bulk_delete', [Query::limit(100)]);
         $this->assertCount(50, $docs);
-        $this->assertEquals('doc49', end($docs)->getId());
+
+        $lastDoc = end($docs);
+        $this->assertNotEmpty($lastDoc);
+        $this->assertEquals('doc49', $lastDoc->getId());
         $this->assertEquals(50, static::getDatabase()->deleteDocuments('bulk_delete'));
 
         static::getDatabase()->deleteCollection('bulk_delete');

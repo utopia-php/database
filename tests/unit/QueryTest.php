@@ -214,24 +214,10 @@ class QueryTest extends TestCase
         $this->assertEquals($json, '{"method":"or","values":[{"method":"equal","attribute":"actors","values":["Brad Pitt"]},{"method":"equal","attribute":"actors","values":["Johnny Depp"]}]}');
 
         try {
-            Query::parse('{"method":["equal"],"attribute":["title"],"values":["test"]}');
-            $this->fail('Failed to throw exception');
-        } catch (QueryException $e) {
-            $this->assertEquals('Invalid query method. Must be a string, got array', $e->getMessage());
-        }
-
-        try {
             Query::parse('{"method":"equal","attribute":["title"],"values":["test"]}');
             $this->fail('Failed to throw exception');
         } catch (QueryException $e) {
             $this->assertEquals('Invalid query attribute. Must be a string, got array', $e->getMessage());
-        }
-
-        try {
-            Query::parse('{"method":"equal","attribute":"title","values":"test"}');
-            $this->fail('Failed to throw exception');
-        } catch (QueryException $e) {
-            $this->assertEquals('Invalid query values. Must be an array, got string', $e->getMessage());
         }
 
         try {

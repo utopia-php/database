@@ -3950,8 +3950,36 @@ class Database
             return 0;
         }
 
-        $queries = Query::groupByType($queries)['filters'];
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        if ($this->validate) {
+            $validator = new DocumentsValidator(
+                $attributes,
+                $indexes,
+                $this->maxQueryValues,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
+
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
+        }
+
+        $grouped = Query::groupByType($queries);
+        $limit = $grouped['limit'];
+        $cursor = $grouped['cursor'];
+
+        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new DatabaseException("cursor Document must be from the same Collection.");
+        }
 
         unset($updates['$id']);
         unset($updates['$createdAt']);
@@ -3969,11 +3997,12 @@ class Database
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
         );
+
         if (!$validator->isValid($updates)) {
             throw new StructureException($validator->getDescription());
         }
 
-        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates) {
+        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates, $limit, $cursor) {
             $lastDocument = null;
             $totalModified = 0;
             $affectedDocumentIds = [];
@@ -3987,16 +4016,25 @@ class Database
                 throw new AuthorizationException($authorization->getDescription());
             }
 
+            $originalLimit = $limit;
+            $lastDocument = $cursor;
+
             // Resolve and update relationships
             while (true) {
+                if ($limit && $limit < $batchSize) {
+                    $batchSize = $limit;
+                } elseif (!empty($limit)) {
+                    $limit -= $batchSize;
+                }
+
                 $affectedDocuments = $this->find($collection->getId(), array_merge(
+                    $queries,
                     empty($lastDocument) ? [
                         Query::limit($batchSize),
                     ] : [
                         Query::limit($batchSize),
                         Query::cursorAfter($lastDocument),
-                    ],
-                    $queries,
+                    ]
                 ), forPermission: Database::PERMISSION_UPDATE);
 
                 if (empty($affectedDocuments)) {
@@ -4025,9 +4063,11 @@ class Database
 
                 if (count($affectedDocuments) < $batchSize) {
                     break;
-                } else {
-                    $lastDocument = end($affectedDocuments);
+                } elseif ($originalLimit && count($affectedDocumentIds) == $originalLimit) {
+                    break;
                 }
+
+                $lastDocument = end($affectedDocuments);
             }
 
             $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $affectedDocumentIds);
@@ -5101,13 +5141,40 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        $queries = Query::groupByType($queries)['filters'];
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        if ($this->validate) {
+            $validator = new DocumentsValidator(
+                $attributes,
+                $indexes,
+                $this->maxQueryValues,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime()
+            );
+
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
+        }
+
+        $grouped = Query::groupByType($queries);
+        $limit = $grouped['limit'];
+        $cursor = $grouped['cursor'];
+
+        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new DatabaseException("cursor Document must be from the same Collection.");
+        }
+
         $affectedDocumentIds = [];
 
-        $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds) {
-            $lastDocument = null;
-
+        $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds, $limit, $cursor) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
             $authorization = new Authorization(self::PERMISSION_DELETE);
             $skipAuth = $authorization->isValid($collection->getDelete());
@@ -5116,15 +5183,24 @@ class Database
                 throw new AuthorizationException($authorization->getDescription());
             }
 
+            $originalLimit = $limit;
+            $lastDocument = $cursor;
+
             while (true) {
+                if ($limit && $limit < $batchSize) {
+                    $batchSize = $limit;
+                } elseif (!empty($limit)) {
+                    $limit -= $batchSize;
+                }
+
                 $affectedDocuments = $this->find($collection->getId(), array_merge(
+                    $queries,
                     empty($lastDocument) ? [
                         Query::limit($batchSize),
                     ] : [
                         Query::limit($batchSize),
                         Query::cursorAfter($lastDocument),
-                    ],
-                    $queries,
+                    ]
                 ), forPermission: Database::PERMISSION_DELETE);
 
                 if (empty($affectedDocuments)) {
@@ -5145,9 +5221,11 @@ class Database
 
                 if (count($affectedDocuments) < $batchSize) {
                     break;
-                } else {
-                    $lastDocument = end($affectedDocuments);
+                } elseif ($originalLimit && count($affectedDocumentIds) == $originalLimit) {
+                    break;
                 }
+
+                $lastDocument = end($affectedDocuments);
             }
 
             if (empty($affectedDocumentIds)) {

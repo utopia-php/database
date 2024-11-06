@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 
 /**
@@ -30,6 +31,36 @@ use Utopia\Database\Helpers\ID;
  */
 class SQLite extends MariaDB
 {
+    /**
+     * @inheritDoc
+     */
+    public function startTransaction(): bool
+    {
+        try {
+            if ($this->inTransaction === 0) {
+                if ($this->getPDO()->inTransaction()) {
+                    $this->getPDO()->rollBack();
+                }
+
+                $result = $this->getPDO()->beginTransaction();
+            } else {
+                $result = $this->getPDO()
+                    ->prepare('SAVEPOINT transaction' . $this->inTransaction)
+                    ->execute();
+            }
+        } catch (PDOException $e) {
+            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+        if (!$result) {
+            throw new TransactionException('Failed to start transaction');
+        }
+
+        $this->inTransaction++;
+
+        return $result;
+    }
+
     /**
      * Check if Database exists
      * Optionally check if collection exists in Database

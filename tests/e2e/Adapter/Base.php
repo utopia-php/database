@@ -15687,9 +15687,9 @@ abstract class Base extends TestCase
         $this->assertTrue($result->isEmpty());
     }
 
-    public function propegateBulkDocuments(bool $documentSecurity = false): void
+    public function propegateBulkDocuments(bool $documentSecurity = false, int $amount = 10): void
     {
-        for ($i = 0; $i < 10; $i++) {
+        for ($i = 0; $i < $amount; $i++) {
             static::getDatabase()->createDocument('bulk_delete', new Document(
                 array_merge([
                     '$id' => 'doc' . $i,
@@ -15707,6 +15707,11 @@ abstract class Base extends TestCase
 
     public function testDeleteBulkDocuments(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(
             'bulk_delete',
             attributes: [
@@ -15799,9 +15804,73 @@ abstract class Base extends TestCase
         static::getDatabase()->deleteCollection('bulk_delete');
     }
 
+    public function testDeleteBulkDocumentsQueries(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(
+            'bulk_delete',
+            attributes: [
+                new Document([
+                    '$id' => 'text',
+                    'type' => Database::VAR_STRING,
+                    'size' => 100,
+                    'required' => true,
+                ]),
+                new Document([
+                    '$id' => 'integer',
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 10,
+                    'required' => true,
+                ])
+            ],
+            documentSecurity: false,
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::delete(Role::any())
+            ]
+        );
+
+        // Test limit
+        $this->propegateBulkDocuments();
+
+        $this->assertEquals(5, static::getDatabase()->deleteDocuments('bulk_delete', [Query::limit(5)]));
+        $this->assertCount(5, static::getDatabase()->find('bulk_delete'));
+
+        $this->assertEquals(5, static::getDatabase()->deleteDocuments('bulk_delete', [Query::limit(5)]));
+        $this->assertCount(0, static::getDatabase()->find('bulk_delete'));
+
+        // Test Limit more than batchSize
+        $this->propegateBulkDocuments(false, Database::DELETE_BATCH_SIZE * 2);
+        $this->assertCount(Database::DELETE_BATCH_SIZE * 2, static::getDatabase()->find('bulk_delete', [Query::limit(200)]));
+
+        $this->assertEquals(Database::DELETE_BATCH_SIZE + 2, static::getDatabase()->deleteDocuments('bulk_delete', [Query::limit(Database::DELETE_BATCH_SIZE + 2)]));
+
+        $this->assertCount(Database::DELETE_BATCH_SIZE - 2, static::getDatabase()->find('bulk_delete', [Query::limit(200)]));
+        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, $this->getDatabase()->deleteDocuments('bulk_delete'));
+
+        // Test Offset
+        $this->propegateBulkDocuments(false, 100);
+        $this->assertEquals(50, static::getDatabase()->deleteDocuments('bulk_delete', [Query::offset(50)]));
+
+        $docs = static::getDatabase()->find('bulk_delete', [Query::limit(100)]);
+        $this->assertCount(50, $docs);
+
+        $lastDoc = end($docs);
+        $this->assertNotEmpty($lastDoc);
+        $this->assertEquals('doc49', $lastDoc->getId());
+        $this->assertEquals(50, static::getDatabase()->deleteDocuments('bulk_delete'));
+
+        static::getDatabase()->deleteCollection('bulk_delete');
+    }
+
     public function testDeleteBulkDocumentsOneToOneRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships() || !static::getDatabase()->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -15997,7 +16066,7 @@ abstract class Base extends TestCase
 
     public function testDeleteBulkDocumentsOneToManyRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships() || !static::getDatabase()->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -16176,7 +16245,7 @@ abstract class Base extends TestCase
 
     public function testDeleteBulkDocumentsManyToManyRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships() || !static::getDatabase()->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -16251,7 +16320,7 @@ abstract class Base extends TestCase
 
     public function testDeleteBulkDocumentsManyToOneRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships() || !static::getDatabase()->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
             return;
         }

@@ -56,10 +56,34 @@ class MirrorTest extends Base
         $mirrorPass = 'password';
 
         $mirrorPdo = new PDO("mysql:host={$mirrorHost};port={$mirrorPort};charset=utf8mb4", $mirrorUser, $mirrorPass, MariaDB::getPDOAttributes());
+        $mirrorRedis = new Redis();
+        $mirrorRedis->connect('redis-mirror');
+        $mirrorRedis->flushAll();
+        $mirrorCache = new Cache(new RedisAdapter($mirrorRedis));
 
-        self::$destination = new Database(new MariaDB($mirrorPdo), $cache);
+        self::$destination = new Database(new MariaDB($mirrorPdo), $mirrorCache);
 
         $database = new Mirror(self::$source, self::$destination);
+
+        // Handle cases where the source and destination databases are not in sync because of previous tests
+        if ($database->getSource()->exists('schema1')) {
+            $database->getSource()->setDatabase('schema1')->delete();
+        }
+        if ($database->getDestination()->exists('schema1')) {
+            $database->getDestination()->setDatabase('schema1')->delete();
+        }
+        if ($database->getSource()->exists('schema2')) {
+            $database->getSource()->setDatabase('schema2')->delete();
+        }
+        if ($database->getDestination()->exists('schema2')) {
+            $database->getDestination()->setDatabase('schema2')->delete();
+        }
+        if ($database->getSource()->exists('sharedTables')) {
+            $database->getSource()->setDatabase('sharedTables')->delete();
+        }
+        if ($database->getDestination()->exists('sharedTables')) {
+            $database->getDestination()->setDatabase('sharedTables')->delete();
+        }
 
         $database
             ->setDatabase('utopiaTests')

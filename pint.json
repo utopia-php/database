@@ -1,5 +1,8 @@
 {
     "preset": "psr12",
+    "exclude": [
+        "vendor"
+    ],
     "rules": {
         "array_indentation": true,
         "single_import_per_statement": true,

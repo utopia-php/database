@@ -91,6 +91,15 @@ class Query
         $this->values = $values;
     }
 
+    public function __clone(): void
+    {
+        foreach ($this->values as $index => $value) {
+            if ($value instanceof self) {
+                $this->values[$index] = clone $value;
+            }
+        }
+    }
+
     /**
      * @return string
      */
@@ -245,12 +254,20 @@ class Query
         $attribute = $query['attribute'] ?? '';
         $values = $query['values'] ?? [];
 
+        if (!\is_string($method)) {
+            throw new QueryException('Invalid query method. Must be a string, got ' . \gettype($method));
+        }
+
         if (!self::isMethod($method)) {
             throw new QueryException('Invalid query method: ' . $method);
         }
 
         if (!\is_string($attribute)) {
             throw new QueryException('Invalid query attribute. Must be a string, got ' . \gettype($attribute));
+        }
+
+        if (!\is_array($values)) {
+            throw new QueryException('Invalid query values. Must be an array, got ' . \gettype($values));
         }
 
         if (\in_array($method, self::LOGICAL_TYPES)) {

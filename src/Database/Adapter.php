@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 
 abstract class Adapter
 {
@@ -235,6 +236,35 @@ abstract class Adapter
     }
 
     /**
+     * Set a global timeout for database queries in milliseconds.
+     *
+     * This function allows you to set a maximum execution time for all database
+     * queries executed using the library, or a specific event specified by the
+     * event parameter. Once this timeout is set, any database query that takes
+     * longer than the specified time will be automatically terminated by the library,
+     * and an appropriate error or exception will be raised to handle the timeout condition.
+     *
+     * @param int $milliseconds The timeout value in milliseconds for database queries.
+     * @param string $event     The event the timeout should fire fore
+     * @return void
+     *
+     * @throws Exception The provided timeout value must be greater than or equal to 0.
+     */
+    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+
+    /**
+     * Clears a global timeout for database queries.
+     *
+     * @param string $event
+     * @return void
+     */
+    public function clearTimeout(string $event): void
+    {
+        // Clear existing callback
+        $this->before($event, 'timeout', null);
+    }
+
+    /**
      * Start a new transaction.
      *
      * If a transaction is already active, this will only increment the transaction count and return true.
@@ -286,16 +316,36 @@ abstract class Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        $this->startTransaction();
+        for ($attempts = 0; $attempts < 3; $attempts++) {
+            try {
+                $this->startTransaction();
+                $result = $callback();
+                $this->commitTransaction();
+                return $result;
+            } catch (\Throwable $action) {
+                try {
+                    $this->rollbackTransaction();
+                } catch (\Throwable $rollback) {
+                    if ($attempts < 2) {
+                        \usleep(5000); // 5ms
+                        continue;
+                    }
 
-        try {
-            $result = $callback();
-            $this->commitTransaction();
-            return $result;
-        } catch (\Throwable $e) {
-            $this->rollbackTransaction();
-            throw $e;
+                    $this->inTransaction = 0;
+                    throw $rollback;
+                }
+
+                if ($attempts < 2) {
+                    \usleep(5000); // 5ms
+                    continue;
+                }
+
+                $this->inTransaction = 0;
+                throw $action;
+            }
         }
+
+        throw new TransactionException('Failed to execute transaction');
     }
 
     /**
@@ -394,6 +444,14 @@ abstract class Adapter
      * @return bool
      */
     abstract public function deleteCollection(string $id): bool;
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    abstract public function analyzeCollection(string $collection): bool;
 
     /**
      * Create Attribute
@@ -562,20 +620,22 @@ abstract class Adapter
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, Document $document): Document;
+    abstract public function updateDocument(string $collection, string $id, Document $document): Document;
 
     /**
-     * Update Documents in batches
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
+     * @param Document $updates
      * @param array<Document> $documents
-     * @param int $batchSize
      *
-     * @return array<Document>
+     * @return int
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, array $documents, int $batchSize): array;
+    abstract public function updateDocuments(string $collection, Document $updates, array $documents): int;
 
     /**
      * Delete Document
@@ -586,6 +646,16 @@ abstract class Adapter
      * @return bool
      */
     abstract public function deleteDocument(string $collection, string $id): bool;
+
+    /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<string> $ids
+     *
+     * @return int
+     */
+    abstract public function deleteDocuments(string $collection, array $ids): int;
 
     /**
      * Find Documents
@@ -600,10 +670,11 @@ abstract class Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
+    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
 
     /**
      * Sum an attribute
@@ -638,6 +709,15 @@ abstract class Adapter
     abstract public function getSizeOfCollection(string $collection): int;
 
     /**
+     * Get Collection Size on the disk
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
+
+    /**
      * Get max STRING limit
      *
      * @return int
@@ -664,6 +744,28 @@ abstract class Adapter
      * @return int
      */
     abstract public function getLimitForIndexes(): int;
+
+    /**
+     * @return int
+     */
+    abstract public function getMaxIndexLength(): int;
+
+    /**
+     * Get the minimum supported DateTime value
+     *
+     * @return \DateTime
+     */
+    abstract public function getMinDateTime(): \DateTime;
+
+    /**
+     * Get the maximum supported DateTime value
+     *
+     * @return \DateTime
+     */
+    public function getMaxDateTime(): \DateTime
+    {
+        return new \DateTime('9999-12-31 23:59:59');
+    }
 
     /**
      * Is schemas supported?
@@ -737,6 +839,13 @@ abstract class Adapter
     abstract public function getSupportForRelationships(): bool;
 
     abstract public function getSupportForUpdateLock(): bool;
+
+    /**
+     * Are batch operations supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForBatchOperations(): bool;
 
     /**
      * Is attribute resizing supported?
@@ -892,39 +1001,4 @@ abstract class Adapter
      * @throws Exception
      */
     abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool;
-
-    /**
-     * @return int
-     */
-    abstract public function getMaxIndexLength(): int;
-
-
-    /**
-     * Set a global timeout for database queries in milliseconds.
-     *
-     * This function allows you to set a maximum execution time for all database
-     * queries executed using the library, or a specific event specified by the
-     * event parameter. Once this timeout is set, any database query that takes
-     * longer than the specified time will be automatically terminated by the library,
-     * and an appropriate error or exception will be raised to handle the timeout condition.
-     *
-     * @param int $milliseconds The timeout value in milliseconds for database queries.
-     * @param string $event     The event the timeout should fire fore
-     * @return void
-     *
-     * @throws Exception The provided timeout value must be greater than or equal to 0.
-     */
-    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
-
-    /**
-     * Clears a global timeout for database queries.
-     *
-     * @param string $event
-     * @return void
-     */
-    public function clearTimeout(string $event): void
-    {
-        // Clear existing callback
-        $this->before($event, 'timeout', null);
-    }
 }

@@ -9,6 +9,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -19,6 +20,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
@@ -113,6 +115,7 @@ class Database
     public const EVENT_DOCUMENT_FIND = 'document_find';
     public const EVENT_DOCUMENT_CREATE = 'document_create';
     public const EVENT_DOCUMENTS_CREATE = 'documents_create';
+    public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
     public const EVENT_DOCUMENT_READ = 'document_read';
     public const EVENT_DOCUMENT_UPDATE = 'document_update';
     public const EVENT_DOCUMENTS_UPDATE = 'documents_update';
@@ -135,6 +138,7 @@ class Database
     public const EVENT_INDEX_DELETE = 'index_delete';
 
     public const INSERT_BATCH_SIZE = 100;
+    public const DELETE_BATCH_SIZE = 100;
 
     /**
      * List of Internal attributes
@@ -318,6 +322,8 @@ class Database
 
     protected bool $resolveRelationships = true;
 
+    protected bool $checkRelationshipsExist = true;
+
     protected int $relationshipFetchDepth = 1;
 
     protected bool $filter = true;
@@ -325,6 +331,8 @@ class Database
     protected bool $validate = true;
 
     protected bool $preserveDates = false;
+
+    protected int $maxQueryValues = 100;
 
     /**
      * Stack of collection IDs when creating or updating related documents
@@ -401,13 +409,12 @@ class Database
         self::addFilter(
             'datetime',
             /**
-             * @param string|null $value
-             * @return string|null
-             * @throws Exception
+             * @param mixed $value
+             * @return mixed
              */
-            function (?string $value) {
+            function (mixed $value) {
                 if (is_null($value)) {
-                    return null;
+                    return;
                 }
                 try {
                     $value = new \DateTime($value);
@@ -505,6 +512,18 @@ class Database
             return $callback();
         } finally {
             $this->resolveRelationships = $previous;
+        }
+    }
+
+    public function skipRelationshipsExistCheck(callable $callback): mixed
+    {
+        $previous = $this->checkRelationshipsExist;
+        $this->checkRelationshipsExist = false;
+
+        try {
+            return $callback();
+        } finally {
+            $this->checkRelationshipsExist = $previous;
         }
     }
 
@@ -915,6 +934,18 @@ class Database
         }
     }
 
+    public function setMaxQueryValues(int $max): self
+    {
+        $this->maxQueryValues = $max;
+
+        return $this;
+    }
+
+    public function getMaxQueryValues(): int
+    {
+        return$this->maxQueryValues;
+    }
+
     /**
      * Get list of keywords that cannot be used
      *
@@ -1076,6 +1107,8 @@ class Database
             'deleted' => $deleted
         ]);
 
+        $this->cache->flush();
+
         return $deleted;
     }
 
@@ -1190,14 +1223,14 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         if (
             $this->adapter->getSharedTables()
             && $collection->getAttribute('$tenant') != $this->adapter->getTenant()
         ) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $collection
@@ -1273,14 +1306,40 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         return $this->adapter->getSizeOfCollection($collection->getId());
+    }
+
+    /**
+     * Get Collection Size on disk
+     *
+     * @param string $collection
+     *
+     * @return int
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        return $this->adapter->getSizeOfCollectionOnDisk($collection->getId());
     }
 
     /**
@@ -1296,11 +1355,11 @@ class Database
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $relationships = \array_filter(
@@ -1357,7 +1416,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         // Attribute IDs are case-insensitive
@@ -1542,7 +1601,7 @@ class Database
         $index = \array_search($id, \array_map(fn ($index) => $index['$id'], $indexes));
 
         if ($index === false) {
-            throw new DatabaseException('Index not found');
+            throw new NotFoundException('Index not found');
         }
 
         // Execute update from callback
@@ -1581,7 +1640,7 @@ class Database
         $index = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($index === false) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         // Execute update from callback
@@ -1694,7 +1753,7 @@ class Database
 
     /**
      * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
-     * To update attribute key (ID), use renameAttribute instead.
+     *
      * @param string $collection
      * @param string $id
      * @param string|null $type
@@ -1891,7 +1950,7 @@ class Database
         }
 
         if (\is_null($attribute)) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         if ($attribute['type'] === self::VAR_RELATIONSHIP) {
@@ -1953,7 +2012,7 @@ class Database
         $attribute = \in_array($old, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($attribute === false) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         $attributeNew = \in_array($new, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
@@ -2023,13 +2082,13 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection));
 
         if ($relatedCollection->isEmpty()) {
-            throw new DatabaseException('Related collection not found');
+            throw new NotFoundException('Related collection not found');
         }
 
         $id ??= $relatedCollection->getId();
@@ -2227,7 +2286,20 @@ class Database
             throw new DuplicateException('Attribute already exists');
         }
 
-        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete) {
+        $attributeIndex = array_search($id, array_map(fn ($attribute) => $attribute['$id'], $attributes));
+
+        if ($attributeIndex === false) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        $attribute = $attributes[$attributeIndex];
+        $type = $attribute['options']['relationType'];
+        $side = $attribute['options']['side'];
+
+        $relatedCollectionId = $attribute['options']['relatedCollection'];
+        $relatedCollection = $this->getCollection($relatedCollectionId);
+
+        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete, $type, $side) {
             $altering = (!\is_null($newKey) && $newKey !== $id)
                 || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
 
@@ -2241,9 +2313,6 @@ class Database
             ) {
                 throw new DuplicateException('Related attribute already exists');
             }
-
-            $type = $attribute['options']['relationType'];
-            $side = $attribute['options']['side'];
 
             $newKey ??= $attribute['key'];
             $twoWayKey = $attribute['options']['twoWayKey'];
@@ -2306,68 +2375,76 @@ class Database
                     throw new DatabaseException('Failed to update relationship');
                 }
             }
+        });
 
-            $this->purgeCachedCollection($collection->getId());
-            $this->purgeCachedCollection($relatedCollection->getId());
+        // Update Indexes
+        $renameIndex = function (string $collection, string $key, string $newKey) {
+            $this->updateIndexMeta(
+                $collection,
+                '_index_' . $key,
+                function ($index) use ($newKey) {
+                    $index->setAttribute('attributes', [$newKey]);
+                }
+            );
+            $this->silent(
+                fn () =>
+                $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
+            );
+        };
 
-            $renameIndex = function (string $collection, string $key, string $newKey) {
-                $this->updateIndexMeta(
-                    $collection,
-                    '_index_' . $key,
-                    fn ($index) =>
-                    $index->setAttribute('attributes', [$newKey])
-                );
-                $this->silent(
-                    fn () =>
-                    $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
-                );
-            };
+        $newKey ??= $attribute['key'];
+        $twoWayKey = $attribute['options']['twoWayKey'];
+        $newTwoWayKey ??= $attribute['options']['twoWayKey'];
+        $twoWay ??= $attribute['options']['twoWay'];
+        $onDelete ??= $attribute['options']['onDelete'];
 
-            switch ($type) {
-                case self::RELATION_ONE_TO_ONE:
+        switch ($type) {
+            case self::RELATION_ONE_TO_ONE:
+                if ($id !== $newKey) {
+                    $renameIndex($collection->getId(), $id, $newKey);
+                }
+                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                    $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            case self::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                    }
+                } else {
                     if ($id !== $newKey) {
                         $renameIndex($collection->getId(), $id, $newKey);
                     }
-                    if ($twoWay && $twoWayKey !== $newTwoWayKey) {
+                }
+                break;
+            case self::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    if ($id !== $newKey) {
+                        $renameIndex($collection->getId(), $id, $newKey);
+                    }
+                } else {
+                    if ($twoWayKey !== $newTwoWayKey) {
                         $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
                     }
-                    break;
-                case self::RELATION_ONE_TO_MANY:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if ($twoWayKey !== $newTwoWayKey) {
-                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                        }
-                    } else {
-                        if ($id !== $newKey) {
-                            $renameIndex($collection->getId(), $id, $newKey);
-                        }
-                    }
-                    break;
-                case self::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if ($id !== $newKey) {
-                            $renameIndex($collection->getId(), $id, $newKey);
-                        }
-                    } else {
-                        if ($twoWayKey !== $newTwoWayKey) {
-                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                        }
-                    }
-                    break;
-                case self::RELATION_MANY_TO_MANY:
-                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+                }
+                break;
+            case self::RELATION_MANY_TO_MANY:
+                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                    if ($id !== $newKey) {
-                        $renameIndex($junction, $id, $newKey);
-                    }
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($junction, $twoWayKey, $newTwoWayKey);
-                    }
-                    break;
-                default:
-                    throw new RelationshipException('Invalid relationship type.');
-            }
-        });
+                if ($id !== $newKey) {
+                    $renameIndex($junction, $id, $newKey);
+                }
+                if ($twoWayKey !== $newTwoWayKey) {
+                    $renameIndex($junction, $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            default:
+                throw new RelationshipException('Invalid relationship type.');
+        }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedCollection($relatedCollection->getId());
 
         return true;
     }
@@ -2399,7 +2476,7 @@ class Database
         }
 
         if (\is_null($relationship)) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         $collection->setAttribute('attributes', \array_values($attributes));
@@ -2517,7 +2594,7 @@ class Database
         $index = \in_array($old, \array_map(fn ($index) => $index['$id'], $indexes));
 
         if ($index === false) {
-            throw new DatabaseException('Index not found');
+            throw new NotFoundException('Index not found');
         }
 
         $indexNew = \in_array($new, \array_map(fn ($index) => $index['$id'], $indexes));
@@ -2651,7 +2728,18 @@ class Database
             }
         }
 
-        $index = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+        try {
+            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+
+            if (!$created) {
+                throw new DatabaseException('Failed to create index');
+            }
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables()) {
+                throw $e;
+            }
+        }
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
@@ -2659,7 +2747,7 @@ class Database
 
         $this->trigger(self::EVENT_INDEX_CREATE, $index);
 
-        return $index;
+        return true;
     }
 
     /**
@@ -2719,7 +2807,7 @@ class Database
         }
 
         if (empty($collection)) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         if (empty($id)) {
@@ -2729,7 +2817,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -3186,7 +3274,11 @@ class Database
             }
         }
 
-        $structure = new Structure($collection);
+        $structure = new Structure(
+            $collection,
+            $this->adapter->getMinDateTime(),
+            $this->adapter->getMaxDateTime(),
+        );
         if (!$structure->isValid($document)) {
             throw new StructureException($structure->getDescription());
         }
@@ -3245,7 +3337,11 @@ class Database
 
             $document = $this->encode($collection, $document);
 
-            $validator = new Structure($collection);
+            $validator = new Structure(
+                $collection,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
             if (!$validator->isValid($document)) {
                 throw new StructureException($validator->getDescription());
             }
@@ -3556,7 +3652,7 @@ class Database
         // Get the related document, will be empty on permissions failure
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId));
 
-        if ($related->isEmpty()) {
+        if ($related->isEmpty() && $this->checkRelationshipsExist) {
             return;
         }
 
@@ -3585,7 +3681,7 @@ class Database
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $this->skipRelationships(fn () => $this->createDocument($junction, new Document([
-                    $key => $related->getId(),
+                    $key => $relationId,
                     $twoWayKey => $documentId,
                     '$permissions' => [
                         Permission::read(Role::any()),
@@ -3630,7 +3726,7 @@ class Database
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getAttribute('$tenant');           // Make sure user doesn't switch tenant
+                $document['$tenant'] = $old->getAttribute('$tenant');       // Make sure user doesn't switch tenant
             }
 
             $document = new Document($document);
@@ -3768,8 +3864,11 @@ class Database
 
             $document = $this->encode($collection, $document);
 
-            $structureValidator = new Structure($collection);
-
+            $structureValidator = new Structure(
+                $collection,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
             if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                 throw new StructureException($structureValidator->getDescription());
             }
@@ -3778,7 +3877,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document);
 
             return $document;
         });
@@ -3797,80 +3896,130 @@ class Database
     }
 
     /**
-     * Update Documents in a batch
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
-     * @param array<Document> $documents
+     * @param Document $updates
+     * @param array<Query> $queries
      * @param int $batchSize
      *
-     * @return array<Document>
+     * @return int
      *
      * @throws AuthorizationException
-     * @throws Exception
-     * @throws StructureException
+     * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
+    public function updateDocuments(string $collection, Document $updates, array $queries = [], int $batchSize = self::INSERT_BATCH_SIZE): int
     {
-        if (empty($documents)) {
-            return [];
+        if ($updates->isEmpty()) {
+            return 0;
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
-            $time = DateTime::now();
-
-            foreach ($documents as $key => $document) {
-                if (!$document->getId()) {
-                    throw new DatabaseException('Must define $id attribute for each document');
-                }
-
-                $updatedAt = $document->getUpdatedAt();
-                $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
-                $document = $this->encode($collection, $document);
-
-                $old = Authorization::skip(fn () => $this->silent(
-                    fn () => $this->getDocument(
-                        $collection->getId(),
-                        $document->getId(),
-                        forUpdate: true
-                    )
-                ));
-
-                $validator = new Authorization(self::PERMISSION_UPDATE);
-                if (
-                    $collection->getId() !== self::METADATA
-                    && !$validator->isValid($old->getUpdate())
-                ) {
-                    throw new AuthorizationException($validator->getDescription());
-                }
-
-                $validator = new Structure($collection);
-                if (!$validator->isValid($document)) {
-                    throw new StructureException($validator->getDescription());
-                }
-
-                if ($this->resolveRelationships) {
-                    $documents[$key] = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
-                }
-            }
-
-            return $this->adapter->updateDocuments($collection->getId(), $documents, $batchSize);
-        });
-
-        foreach ($documents as $key => $document) {
-            if ($this->resolveRelationships) {
-                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
-            }
-
-            $documents[$key] = $this->decode($collection, $document);
-
-            $this->purgeCachedDocument($collection->getId(), $document->getId());
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
         }
 
-        $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $documents);
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
 
-        return $documents;
+        if ($this->validate) {
+            $validator = new DocumentsValidator($attributes, $indexes);
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
+        }
+
+        unset($updates['$id']);
+        unset($updates['$createdAt']);
+        unset($updates['$tenant']);
+
+        if (!$this->preserveDates) {
+            $updates['$updatedAt'] = DateTime::now();
+        }
+
+        $updates = $this->encode($collection, $updates);
+
+        // Check new document structure
+        $validator = new PartialStructure(
+            $collection,
+            $this->adapter->getMinDateTime(),
+            $this->adapter->getMaxDateTime(),
+        );
+        if (!$validator->isValid($updates)) {
+            throw new StructureException($validator->getDescription());
+        }
+
+        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates) {
+            $lastDocument = null;
+            $totalModified = 0;
+            $affectedDocumentIds = [];
+
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+
+            $authorization = new Authorization(self::PERMISSION_UPDATE);
+            $skipAuth = $authorization->isValid($collection->getUpdate());
+
+            if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+
+            // Resolve and update relationships
+            while (true) {
+                $affectedDocuments = $this->find($collection->getId(), array_merge(
+                    empty($lastDocument) ? [
+                        Query::limit($batchSize),
+                    ] : [
+                        Query::limit($batchSize),
+                        Query::cursorAfter($lastDocument),
+                    ],
+                    $queries,
+                ), forPermission: Database::PERMISSION_UPDATE);
+
+                if (empty($affectedDocuments)) {
+                    break;
+                }
+
+                foreach ($affectedDocuments as $document) {
+                    if ($this->resolveRelationships) {
+                        $newDocument = array_merge($document->getArrayCopy(), $updates->getArrayCopy());
+
+                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, new Document($newDocument)));
+                    }
+
+                    $affectedDocumentIds[] = $document->getId();
+                }
+
+                $getResults = fn () => $this->adapter->updateDocuments(
+                    $collection->getId(),
+                    $updates,
+                    $affectedDocuments
+                );
+
+                $result = $skipAuth ? $authorization->skip($getResults) : $getResults();
+
+                $totalModified += $result;
+
+                if (count($affectedDocuments) < $batchSize) {
+                    break;
+                } else {
+                    $lastDocument = end($affectedDocuments);
+                }
+            }
+
+            $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $affectedDocumentIds);
+
+            foreach ($affectedDocumentIds as $id) {
+                $this->purgeRelatedDocuments($collection, $id);
+                $this->purgeCachedDocument($collection->getId(), $id);
+            }
+
+            return $totalModified;
+        });
+
+        return $affected;
     }
 
     /**
@@ -3975,10 +4124,10 @@ class Database
                                 }
                                 if (
                                     $oldValue?->getId() !== $value
-                                    && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
+                                    && !($this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
                                         Query::select(['$id']),
                                         Query::equal($twoWayKey, [$value]),
-                                    ]))
+                                    ]))->isEmpty())
                                 ) {
                                     // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                     throw new DuplicateException('Document already has a related document');
@@ -3996,10 +4145,10 @@ class Database
 
                                     if (
                                         $oldValue?->getId() !== $value->getId()
-                                        && $this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
+                                        && !($this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
                                             Query::select(['$id']),
                                             Query::equal($twoWayKey, [$value->getId()]),
-                                        ]))
+                                        ]))->isEmpty())
                                     ) {
                                         // Have to do this here because otherwise relations would be updated before the database can throw the unique violation
                                         throw new DuplicateException('Document already has a related document');
@@ -4290,7 +4439,12 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
+        /* @var $document Document */
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        if ($document->isEmpty()) {
+            return false;
+        }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4309,7 +4463,7 @@ class Database
         });
 
         if (empty($attr)) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
@@ -4376,7 +4530,12 @@ class Database
 
         $validator = new Authorization(self::PERMISSION_UPDATE);
 
+        /* @var $document Document */
         $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        if ($document->isEmpty()) {
+            return false;
+        }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4395,7 +4554,7 @@ class Database
         });
 
         if (empty($attr)) {
-            throw new DatabaseException('Attribute not found');
+            throw new NotFoundException('Attribute not found');
         }
 
         $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
@@ -4452,12 +4611,9 @@ class Database
      * @throws ConflictException
      * @throws DatabaseException
      * @throws RestrictedException
-     * @throws StructureException
      */
     public function deleteDocument(string $collection, string $id): bool
     {
-        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id)));
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
@@ -4465,6 +4621,10 @@ class Database
                 fn () =>
                 $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
+
+            if ($document->isEmpty()) {
+                return false;
+            }
 
             $validator = new Authorization(self::PERMISSION_DELETE);
 
@@ -4485,7 +4645,7 @@ class Database
                 throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
             }
 
-            if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+            if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
@@ -4641,7 +4801,7 @@ class Database
                     Query::equal($twoWayKey, [$document->getId()])
                 ]);
 
-                if (!$related instanceof Document) {
+                if ($related->isEmpty()) {
                     return;
                 }
 
@@ -4664,7 +4824,7 @@ class Database
                 Query::equal($twoWayKey, [$document->getId()])
             ]));
 
-            if ($related) {
+            if (!$related->isEmpty()) {
                 throw new RestrictedException('Cannot delete document because it has at least one related document.');
             }
         }
@@ -4708,7 +4868,7 @@ class Database
                         $related = $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])]);
                     }
 
-                    if (!$related instanceof Document) {
+                    if ($related->isEmpty()) {
                         return;
                     }
 
@@ -4810,7 +4970,7 @@ class Database
 
                     $this->deleteDocument(
                         $relatedCollection->getId(),
-                        $value->getId()
+                        ($value instanceof Document) ? $value->getId() : $value
                     );
 
                     \array_pop($this->relationshipDeleteStack);
@@ -4886,6 +5046,129 @@ class Database
     }
 
     /**
+     * Delete Documents
+     *
+     * Deletes all documents which match the given query, will respect the relationship's onDelete optin.
+     *
+     * @param string $collection
+     * @param array<Query> $queries
+     * @param int $batchSize
+     *
+     * @return int
+     *
+     * @throws AuthorizationException
+     * @throws DatabaseException
+     * @throws RestrictedException
+     */
+    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): int
+    {
+        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
+            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new DatabaseException('Collection not found');
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+        $indexes = $collection->getAttribute('indexes', []);
+
+        if ($this->validate) {
+            $validator = new DocumentsValidator(
+                $attributes,
+                $indexes,
+                $this->maxQueryValues,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime()
+            );
+
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
+        }
+
+        $grouped = Query::groupByType($queries);
+        $limit = $grouped['limit'];
+        $cursor = $grouped['cursor'];
+
+        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new DatabaseException("cursor Document must be from the same Collection.");
+        }
+
+        $affectedDocumentIds = [];
+
+        $deleted = $this->withTransaction(function () use ($collection, $queries, $batchSize, $affectedDocumentIds, $limit, $cursor) {
+            $documentSecurity = $collection->getAttribute('documentSecurity', false);
+            $authorization = new Authorization(self::PERMISSION_DELETE);
+            $skipAuth = $authorization->isValid($collection->getDelete());
+
+            if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+
+            $originalLimit = $limit;
+            $lastDocument = $cursor;
+
+            while (true) {
+                if ($limit && $limit < $batchSize) {
+                    $batchSize = $limit;
+                } elseif (!empty($limit)) {
+                    $limit -= $batchSize;
+                }
+
+                $queries = array_merge(
+                    $queries,
+                    empty($lastDocument) ? [
+                        Query::limit($batchSize),
+                    ] : [
+                        Query::limit($batchSize),
+                        Query::cursorAfter($lastDocument),
+                    ]
+                );
+
+                $affectedDocuments = $this->find($collection->getId(), $queries, forPermission: Database::PERMISSION_DELETE);
+
+                if (empty($affectedDocuments)) {
+                    break;
+                }
+
+                $affectedDocumentIds = array_merge($affectedDocumentIds, array_map(fn ($document) => $document->getId(), $affectedDocuments));
+
+                foreach ($affectedDocuments as $document) {
+                    // Delete Relationships
+                    if ($this->resolveRelationships) {
+                        $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
+                    }
+
+                    $this->purgeRelatedDocuments($collection, $document->getId());
+                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                }
+
+                if (count($affectedDocuments) < $batchSize) {
+                    break;
+                } elseif ($originalLimit && count($affectedDocumentIds) == $originalLimit) {
+                    break;
+                }
+
+                $lastDocument = end($affectedDocuments);
+            }
+
+            if (empty($affectedDocumentIds)) {
+                return 0;
+            }
+
+            $this->trigger(self::EVENT_DOCUMENTS_DELETE, $affectedDocumentIds);
+
+            // Mass delete using adapter with query
+            return $this->adapter->deleteDocuments($collection->getId(), $affectedDocumentIds);
+        });
+
+        return $deleted;
+    }
+
+    /**
      * Cleans the all the collection's documents from the cache
      * And the all related cached documents.
      *
@@ -4929,6 +5212,7 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
+     * @param string $forPermission
      *
      * @return array<Document>
      * @throws DatabaseException
@@ -4936,19 +5220,25 @@ class Database
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(string $collection, array $queries = []): array
+    public function find(string $collection, array $queries = [], string $forPermission = Database::PERMISSION_READ): array
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator(
+                $attributes,
+                $indexes,
+                $this->maxQueryValues,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -4956,7 +5246,7 @@ class Database
 
         $authorization = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $authorization->isValid($collection->getRead());
+        $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($authorization->getDescription());
@@ -5043,7 +5333,8 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER
+            $cursorDirection ?? Database::CURSOR_AFTER,
+            $forPermission
         );
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
@@ -5084,10 +5375,10 @@ class Database
     /**
      * @param string $collection
      * @param array<Query> $queries
-     * @return false|Document
+     * @return Document
      * @throws DatabaseException
      */
-    public function findOne(string $collection, array $queries = []): false|Document
+    public function findOne(string $collection, array $queries = []): Document
     {
         $results = $this->silent(fn () => $this->find($collection, \array_merge([
             Query::limit(1)
@@ -5096,6 +5387,10 @@ class Database
         $found = \reset($results);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $found);
+
+        if (!$found) {
+            return new Document();
+        }
 
         return $found;
     }
@@ -5119,7 +5414,13 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator(
+                $attributes,
+                $indexes,
+                $this->maxQueryValues,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5161,7 +5462,13 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($attributes, $indexes);
+            $validator = new DocumentsValidator(
+                $attributes,
+                $indexes,
+                $this->maxQueryValues,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5405,7 +5712,7 @@ class Database
     protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new DatabaseException("Filter: {$name} not found");
+            throw new NotFoundException("Filter: {$name} not found");
         }
 
         try {
@@ -5441,7 +5748,7 @@ class Database
         }
 
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new DatabaseException('Filter not found');
+            throw new NotFoundException('Filter not found');
         }
 
         if (array_key_exists($name, $this->instanceFilters)) {
@@ -5620,5 +5927,16 @@ class Database
         }
 
         return $attributes;
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return $this->adapter->analyzeCollection($collection);
     }
 }

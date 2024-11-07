@@ -1778,6 +1778,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    public function getSupportForGetConnectionId(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1925,5 +1935,10 @@ class Mongo extends Adapter
     public function getMaxIndexLength(): int
     {
         return 0;
+    }
+
+    public function getConnectionId(): string
+    {
+        return '0';
     }
 }

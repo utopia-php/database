@@ -99,6 +99,16 @@ abstract class Base extends TestCase
         }
     }
 
+    public function testGetCollectionId(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForGetConnectionId()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->assertIsString(static::getDatabase()->getConnectionId());
+    }
+
     public function testDeleteRelatedCollection(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {

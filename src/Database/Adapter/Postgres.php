@@ -2392,4 +2392,13 @@ class Postgres extends SQL
 
         throw $e;
     }
+
+    /**
+     * @return string
+     */
+    public function getConnectionId(): string
+    {
+        $stmt = $this->getPDO()->query("SELECT pg_backend_pid();");
+        return $stmt->fetchColumn();
+    }
 }

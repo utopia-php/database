@@ -348,10 +348,10 @@ class Postgres extends SQL
 
         try {
             return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+                ->prepare($sql)
+                ->execute();
         } catch (PDOException $e) {
-            if ($e->getCode() === "4242703000" && $e->errorInfo[1] === 7) {
+            if ($e->getCode() === "42703" && $e->errorInfo[1] === 7) {
                 return true;
             }
 

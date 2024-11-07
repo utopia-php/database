@@ -42,6 +42,14 @@ abstract class Base extends TestCase
     abstract protected static function getDatabase(): Database;
 
     /**
+     * @param string $collection
+     * @param string $column
+     * 
+     * @return bool
+     */
+    abstract protected static function deleteColumn(string $collection, string $column): bool;
+
+    /**
      * @return string
      */
     abstract protected static function getAdapterName(): string;
@@ -1295,6 +1303,11 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
+
+        // Test delete attribute when column does not exist
+        $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::deleteColumn('attributes', 'string1'));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string1'));
     }
 
     /**

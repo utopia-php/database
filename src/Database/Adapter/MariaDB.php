@@ -421,8 +421,8 @@ class MariaDB extends SQL
 
         try {
             return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+                ->prepare($sql)
+                ->execute();
         } catch (PDOException $e) {
             if ($e->getCode() === "42000" && $e->errorInfo[1] === 1091) {
                 return true;
@@ -435,7 +435,7 @@ class MariaDB extends SQL
     /**
      * Rename Attribute
      *
-     * @param string $collection
+     * @param string $collectionp
      * @param string $old
      * @param string $new
      * @return bool

@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 class MySQLTest extends Base
 {
     public static ?Database $database = null;
+    protected static ?PDO $pdo = null;
     protected static string $namespace;
 
     // Remove once all methods are implemented
@@ -58,6 +59,17 @@ class MySQLTest extends Base
 
         $database->create();
 
+        self::$pdo = $pdo;
         return self::$database = $database;
+    }
+
+    protected static function deleteColumn(string $collection, string $column): bool
+    {
+        $SQLTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sql = "ALTER TABLE {$SQLTable} DROP COLUMN `{$column}`";
+
+        self::$pdo->exec($sql);
+
+        return true;
     }
 }

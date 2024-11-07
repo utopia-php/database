@@ -44,7 +44,7 @@ abstract class Base extends TestCase
     /**
      * @param string $collection
      * @param string $column
-     * 
+     *
      * @return bool
      */
     abstract protected static function deleteColumn(string $collection, string $column): bool;

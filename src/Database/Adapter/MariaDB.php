@@ -435,7 +435,7 @@ class MariaDB extends SQL
     /**
      * Rename Attribute
      *
-     * @param string $collectionp
+     * @param string $collection
      * @param string $old
      * @param string $new
      * @return bool

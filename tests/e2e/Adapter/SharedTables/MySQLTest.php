@@ -68,8 +68,8 @@ class MySQLTest extends Base
 
     protected static function deleteColumn(string $collection, string $column): bool
     {
-        $SQLTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
-        $sql = "ALTER TABLE {$SQLTable} DROP COLUMN `{$column}`";
+        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pdo->exec($sql);
 

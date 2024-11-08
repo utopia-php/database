@@ -1306,8 +1306,23 @@ abstract class Base extends TestCase
 
         // Test delete attribute when column does not exist
         $this->assertEquals(true, static::getDatabase()->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
+        sleep(1);
+
         $this->assertEquals(true, static::deleteColumn('attributes', 'string1'));
+
+        $collection = static::getDatabase()->getCollection('attributes');
+        $attributes = $collection->getAttribute('attributes');
+        $attribute = end($attributes);
+        $this->assertEquals('string1', $attribute->getId());
+
         $this->assertEquals(true, static::getDatabase()->deleteAttribute('attributes', 'string1'));
+
+        $collection = static::getDatabase()->getCollection('attributes');
+        $attributes = $collection->getAttribute('attributes');
+        $attribute = end($attributes);
+        $this->assertNotEquals('string1', $attribute->getId());
+
+        $collection = static::getDatabase()->getCollection('attributes');
     }
 
     /**

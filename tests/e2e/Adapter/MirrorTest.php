@@ -22,6 +22,7 @@ use Utopia\Database\Mirror;
 class MirrorTest extends Base
 {
     protected static ?Mirror $database = null;
+    protected static ?PDO $pdo = null;
     protected static Database $source;
     protected static Database $destination;
 
@@ -95,6 +96,7 @@ class MirrorTest extends Base
 
         $database->create();
 
+        self::$pdo = $pdo;
         return self::$database = $database;
     }
 
@@ -311,5 +313,15 @@ class MirrorTest extends Base
         // Assert document is deleted in both databases
         $this->assertTrue($database->getSource()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
         $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
+    }
+
+    protected static function deleteColumn(string $collection, string $column): bool
+    {
+        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
+
+        self::$pdo->exec($sql);
+
+        return true;
     }
 }

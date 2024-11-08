@@ -22,7 +22,8 @@ use Utopia\Database\Mirror;
 class MirrorTest extends Base
 {
     protected static ?Mirror $database = null;
-    protected static ?PDO $pdo = null;
+    protected static ?PDO $destinationPdo = null;
+    protected static ?PDO $sourcePdo = null;
     protected static Database $source;
     protected static Database $destination;
 
@@ -49,6 +50,7 @@ class MirrorTest extends Base
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 
+        self::$sourcePdo = $pdo;
         self::$source = new Database(new MariaDB($pdo), $cache);
 
         $mirrorHost = 'mariadb-mirror';
@@ -62,6 +64,7 @@ class MirrorTest extends Base
         $mirrorRedis->flushAll();
         $mirrorCache = new Cache(new RedisAdapter($mirrorRedis));
 
+        self::$destinationPdo = $mirrorPdo;
         self::$destination = new Database(new MariaDB($mirrorPdo), $mirrorCache);
 
         $database = new Mirror(self::$source, self::$destination);
@@ -96,7 +99,6 @@ class MirrorTest extends Base
 
         $database->create();
 
-        self::$pdo = $pdo;
         return self::$database = $database;
     }
 
@@ -317,10 +319,15 @@ class MirrorTest extends Base
 
     protected static function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
-        self::$pdo->exec($sql);
+        self::$sourcePdo->exec($sql);
+
+        $sqlTable = "`" . self::$destination->getDatabase() . "`.`" . self::$destination->getNamespace() . "_" . $collection . "`";
+        $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
+
+        self::$destinationPdo->exec($sql);
 
         return true;
     }

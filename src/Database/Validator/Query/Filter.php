@@ -69,6 +69,7 @@ class Filter extends Base
     /**
      * @param string $attribute
      * @param array<mixed> $values
+     * @param string $method
      * @return bool
      */
     protected function isValidAttributeAndValues(string $attribute, array $values, string $method): bool

@@ -55,7 +55,6 @@ abstract class SQL extends Adapter
         }
 
         $this->inTransaction++;
-
         return $result;
     }
 
@@ -210,7 +209,7 @@ abstract class SQL extends Adapter
 		";
 
         if ($this->sharedTables) {
-            $sql .= "AND _tenant = :_tenant";
+            $sql .= "AND (_tenant = :_tenant OR _tenant IS NULL)";
         }
 
         if ($this->getSupportForUpdateLock()) {
@@ -1014,7 +1013,7 @@ abstract class SQL extends Adapter
 
         $tenantQuery = '';
         if ($this->sharedTables) {
-            $tenantQuery = 'AND _tenant = :_tenant';
+            $tenantQuery = 'AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         return "table_main._uid IN (

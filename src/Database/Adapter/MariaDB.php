@@ -2408,4 +2408,13 @@ class MariaDB extends SQL
 
         return $e;
     }
+
+    /**
+     * @return string
+     */
+    public function getConnectionId(): string
+    {
+        $stmt = $this->getPDO()->query("SELECT CONNECTION_ID();");
+        return $stmt->fetchColumn();
+    }
 }

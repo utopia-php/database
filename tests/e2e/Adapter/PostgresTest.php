@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 class PostgresTest extends Base
 {
     public static ?Database $database = null;
+    protected static ?PDO $pdo = null;
     protected static string $namespace;
 
     /**
@@ -55,6 +56,17 @@ class PostgresTest extends Base
 
         $database->create();
 
+        self::$pdo = $pdo;
         return self::$database = $database;
+    }
+
+    protected static function deleteColumn(string $collection, string $column): bool
+    {
+        $sqlTable = '"' . self::getDatabase()->getDatabase() . '"."' . self::getDatabase()->getNamespace() . '_' . $collection . '"';
+        $sql = "ALTER TABLE {$sqlTable} DROP COLUMN \"{$column}\"";
+
+        self::$pdo->exec($sql);
+
+        return true;
     }
 }

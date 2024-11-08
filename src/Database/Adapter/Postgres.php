@@ -428,9 +428,17 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            if ($e->getCode() === "42703" && $e->errorInfo[1] === 7) {
+                return true;
+            }
+
+            throw $e;
+        }
     }
 
     /**

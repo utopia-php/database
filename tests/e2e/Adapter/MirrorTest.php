@@ -22,6 +22,8 @@ use Utopia\Database\Mirror;
 class MirrorTest extends Base
 {
     protected static ?Mirror $database = null;
+    protected static ?PDO $destinationPdo = null;
+    protected static ?PDO $sourcePdo = null;
     protected static Database $source;
     protected static Database $destination;
 
@@ -48,6 +50,7 @@ class MirrorTest extends Base
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 
+        self::$sourcePdo = $pdo;
         self::$source = new Database(new MariaDB($pdo), $cache);
 
         $mirrorHost = 'mariadb-mirror';
@@ -61,6 +64,7 @@ class MirrorTest extends Base
         $mirrorRedis->flushAll();
         $mirrorCache = new Cache(new RedisAdapter($mirrorRedis));
 
+        self::$destinationPdo = $mirrorPdo;
         self::$destination = new Database(new MariaDB($mirrorPdo), $mirrorCache);
 
         $database = new Mirror(self::$source, self::$destination);
@@ -311,5 +315,20 @@ class MirrorTest extends Base
         // Assert document is deleted in both databases
         $this->assertTrue($database->getSource()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
         $this->assertTrue($database->getDestination()->getDocument('testDeleteMirroredDocument', $document->getId())->isEmpty());
+    }
+
+    protected static function deleteColumn(string $collection, string $column): bool
+    {
+        $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
+        $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
+
+        self::$sourcePdo->exec($sql);
+
+        $sqlTable = "`" . self::$destination->getDatabase() . "`.`" . self::$destination->getNamespace() . "_" . $collection . "`";
+        $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
+
+        self::$destinationPdo->exec($sql);
+
+        return true;
     }
 }

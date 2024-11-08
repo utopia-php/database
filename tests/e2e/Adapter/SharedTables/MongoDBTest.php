@@ -98,4 +98,9 @@ class MongoDBTest extends Base
     {
         $this->assertTrue(true);
     }
+
+    protected static function deleteColumn(string $collection, string $column): bool
+    {
+        return true;
+    }
 }

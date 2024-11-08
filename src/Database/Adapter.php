@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 
 abstract class Adapter
 {
@@ -42,7 +43,7 @@ abstract class Adapter
      *
      * @return $this
      */
-    public function setDebug(string $key, mixed $value): self
+    public function setDebug(string $key, mixed $value): static
     {
         $this->debug[$key] = $value;
 
@@ -58,9 +59,9 @@ abstract class Adapter
     }
 
     /**
-     * @return self
+     * @return static
      */
-    public function resetDebug(): self
+    public function resetDebug(): static
     {
         $this->debug = [];
 
@@ -196,7 +197,7 @@ abstract class Adapter
      * @param mixed $value
      * @return $this
      */
-    public function setMetadata(string $key, mixed $value): self
+    public function setMetadata(string $key, mixed $value): static
     {
         $this->metadata[$key] = $value;
 
@@ -227,7 +228,7 @@ abstract class Adapter
      *
      * @return $this
      */
-    public function resetMetadata(): self
+    public function resetMetadata(): static
     {
         $this->metadata = [];
 
@@ -315,16 +316,36 @@ abstract class Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        $this->startTransaction();
+        for ($attempts = 0; $attempts < 3; $attempts++) {
+            try {
+                $this->startTransaction();
+                $result = $callback();
+                $this->commitTransaction();
+                return $result;
+            } catch (\Throwable $action) {
+                try {
+                    $this->rollbackTransaction();
+                } catch (\Throwable $rollback) {
+                    if ($attempts < 2) {
+                        \usleep(5000); // 5ms
+                        continue;
+                    }
 
-        try {
-            $result = $callback();
-            $this->commitTransaction();
-            return $result;
-        } catch (\Throwable $e) {
-            $this->rollbackTransaction();
-            throw $e;
+                    $this->inTransaction = 0;
+                    throw $rollback;
+                }
+
+                if ($attempts < 2) {
+                    \usleep(5000); // 5ms
+                    continue;
+                }
+
+                $this->inTransaction = 0;
+                throw $action;
+            }
         }
+
+        throw new TransactionException('Failed to execute transaction');
     }
 
     /**
@@ -333,9 +354,9 @@ abstract class Adapter
      * @param string $event
      * @param string $name
      * @param ?callable $callback
-     * @return self
+     * @return static
      */
-    public function before(string $event, string $name = '', ?callable $callback = null): self
+    public function before(string $event, string $name = '', ?callable $callback = null): static
     {
         if (!isset($this->transformations[$event])) {
             $this->transformations[$event] = [];
@@ -834,6 +855,13 @@ abstract class Adapter
     abstract public function getSupportForAttributeResizing(): bool;
 
     /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForGetConnectionId(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -980,4 +1008,11 @@ abstract class Adapter
      * @throws Exception
      */
     abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool;
+
+    /**
+     * Returns the connection ID identifier
+     *
+     * @return string
+     */
+    abstract public function getConnectionId(): string;
 }

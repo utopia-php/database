@@ -1162,7 +1162,7 @@ class Mongo extends Adapter
         try {
             $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
         } catch (MongoException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
 
         if (empty($results)) {
@@ -1679,7 +1679,7 @@ class Mongo extends Adapter
      */
     public function getSupportForSchemas(): bool
     {
-        return true;
+        return false;
     }
 
     /**
@@ -1773,6 +1773,16 @@ class Mongo extends Adapter
      * @return bool
      */
     public function getSupportForBatchOperations(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    public function getSupportForGetConnectionId(): bool
     {
         return false;
     }
@@ -1906,17 +1916,13 @@ class Mongo extends Adapter
         return [];
     }
 
-    /**
-     * @throws Timeout
-     * @throws Exception
-     */
-    protected function processException(Exception $e): void
+    protected function processException(Exception $e): \Exception
     {
         if ($e->getCode() === 50) {
-            throw new Timeout($e->getMessage());
+            return new Timeout($e->getMessage());
         }
 
-        throw $e;
+        return $e;
     }
 
     /**
@@ -1925,5 +1931,10 @@ class Mongo extends Adapter
     public function getMaxIndexLength(): int
     {
         return 0;
+    }
+
+    public function getConnectionId(): string
+    {
+        return '0';
     }
 }

@@ -210,9 +210,9 @@ class Document extends ArrayObject
      * @param mixed $value
      * @param string $type
      *
-     * @return self
+     * @return static
      */
-    public function setAttribute(string $key, mixed $value, string $type = self::SET_TYPE_ASSIGN): self
+    public function setAttribute(string $key, mixed $value, string $type = self::SET_TYPE_ASSIGN): static
     {
         switch ($type) {
             case self::SET_TYPE_ASSIGN:
@@ -235,9 +235,9 @@ class Document extends ArrayObject
      * Set Attributes.
      *
      * @param array<string, mixed> $attributes
-     * @return self
+     * @return static
      */
-    public function setAttributes(array $attributes): self
+    public function setAttributes(array $attributes): static
     {
         foreach ($attributes as $key => $value) {
             $this->setAttribute($key, $value);
@@ -253,14 +253,15 @@ class Document extends ArrayObject
      *
      * @param string $key
      *
-     * @return self
+     * @return static
      */
-    public function removeAttribute(string $key): self
+    public function removeAttribute(string $key): static
     {
         if (\array_key_exists($key, (array)$this)) {
             unset($this[$key]);
         }
 
+        /* @phpstan-ignore-next-line */
         return $this;
     }
 

@@ -5,9 +5,7 @@ namespace Utopia\Database\Adapter;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Exception\Truncate as TruncateException;
 
 class MySQL extends MariaDB
 {
@@ -37,7 +35,7 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Get Collection Size on disk
+     * Get size of collection on disk
      * @param string $collection
      * @return int
      * @throws DatabaseException
@@ -84,38 +82,13 @@ class MySQL extends MariaDB
         return true;
     }
 
-    /**
-     * @param PDOException $e
-     * @throws TimeoutException
-     * @throws DuplicateException
-     */
-    protected function processException(PDOException $e): void
+    protected function processException(PDOException $e): \Exception
     {
-        /**
-         * PDO and Swoole PDOProxy swap error codes and errorInfo
-         */
-
         // Timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
         }
 
-        // Duplicate column
-        if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        // Duplicate index
-        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        // Data is too big for column resize
-        if (($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) ||
-            ($e->getCode() === '01000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1265)) {
-            throw new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
-        }
-
-        throw $e;
+        return parent::processException($e);
     }
 }

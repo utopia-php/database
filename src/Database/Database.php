@@ -1871,7 +1871,7 @@ class Database
                 $this->adapter->getDocumentSizeLimit() > 0 &&
                 $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
             ) {
-                throw new LimitException('Row width limit reached. Cannot create new attribute.');
+                throw new LimitException('Row width limit reached. Cannot update attribute.');
             }
 
             if ($altering) {

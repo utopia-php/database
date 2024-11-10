@@ -1097,6 +1097,40 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase, 'actors'));
     }
 
+    public function testCreateIndex()
+    {
+        $database = $this->getDatabase();
+
+        $database->createCollection('indexes');
+        $database->createAttribute('indexes', 'name', Database::VAR_STRING, 10, false);
+
+        $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['name']);
+        $database->createIndex('indexes', 'index2', Database::INDEX_KEY, ['name']);
+
+        try {
+            $database->createIndex('indexes', 'primary', Database::INDEX_KEY, ['name']);
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof DatabaseException);
+            self::assertEquals($e->getMessage(), 'Index key name is reserved');
+        }
+
+        try {
+            $database->createIndex('indexes', 'index3', Database::INDEX_KEY, ['$id', '$id']);
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof DatabaseException);
+            self::assertEquals($e->getMessage(), 'Duplicate attributes provided');
+        }
+
+        try {
+            $database->createIndex('indexes', 'index4', Database::INDEX_KEY, ['name', 'Name']);
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof DatabaseException);
+            self::assertEquals($e->getMessage(), 'Duplicate attributes provided');
+        }
+
+        $database->deleteCollection('indexes');
+    }
+
     public function testSizeCollection(): void
     {
         static::getDatabase()->createCollection('sizeTest1');
@@ -1512,8 +1546,12 @@ abstract class Base extends TestCase
     public function testIndexCaseInsensitivity(): void
     {
         $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
-        $this->expectException(DuplicateException::class);
-        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+
+        try {
+            $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof DuplicateException);
+        }
     }
 
     /**

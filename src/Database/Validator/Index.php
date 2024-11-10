@@ -84,7 +84,9 @@ class Index extends Validator
         $stack = [];
         foreach ($attributes as $key => $attribute) {
             $direction = $orders[$key] ?? 'ASC';
-            $value = \strtolower($attribute . '|' . $direction);
+            // Why did we add direction to duplicates id we check only the current Document?
+            //$value = \strtolower($attribute . '|' . $direction);
+            $value = \strtolower($attribute);
             if (\in_array($value, $stack)) {
                 $this->message = 'Duplicate attributes provided';
                 return false;
@@ -210,6 +212,21 @@ class Index extends Validator
     }
 
     /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkIndexKeyName(Document $index): bool
+    {
+        $key = \strtolower($index->getAttribute('key', $index->getAttribute('$id')));
+        if ($key === 'primary') {
+            $this->message = 'Index key name is reserved';
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Is valid.
      *
      * Returns true index if valid.
@@ -240,6 +257,10 @@ class Index extends Validator
         }
 
         if (!$this->checkIndexLength($value)) {
+            return false;
+        }
+
+        if (!$this->checkIndexKeyName($value)) {
             return false;
         }
 

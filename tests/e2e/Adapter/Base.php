@@ -1097,7 +1097,7 @@ abstract class Base extends TestCase
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase, 'actors'));
     }
 
-    public function testCreateIndex():void
+    public function testCreateIndex(): void
     {
         $database = $this->getDatabase();
 

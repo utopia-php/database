@@ -310,6 +310,6 @@ class IndexTest extends TestCase
 
         $validator = new Index($collection->getAttribute('attributes'), 768);
         $index = $collection->getAttribute('indexes')[0];
-        $this->assertTrue($validator->isValid($index));
+        $this->assertFalse($validator->isValid($index));
     }
 }

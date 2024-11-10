@@ -2747,6 +2747,7 @@ class Database
             }
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            // Double check this please
             if (!$this->adapter->getSharedTables()) {
                 throw $e;
             }

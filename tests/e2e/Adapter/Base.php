@@ -1104,8 +1104,7 @@ abstract class Base extends TestCase
         $database->createCollection('indexes');
         $database->createAttribute('indexes', 'name', Database::VAR_STRING, 10, false);
 
-        $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['name']);
-        $database->createIndex('indexes', 'index2', Database::INDEX_KEY, ['name']);
+        $database->createIndex('indexes', 'index_1', Database::INDEX_KEY, ['name']);
 
         try {
             $database->createIndex('indexes', 'primary', Database::INDEX_KEY, ['name']);

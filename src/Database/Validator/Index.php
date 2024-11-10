@@ -215,7 +215,7 @@ class Index extends Validator
      * @param Document $index
      * @return bool
      */
-    public function checkIndexKeyName(Document $index): bool
+    public function checkReservedNames(Document $index): bool
     {
         $key = \strtolower($index->getAttribute('key', $index->getAttribute('$id')));
         if ($key === 'primary') {
@@ -260,7 +260,7 @@ class Index extends Validator
             return false;
         }
 
-        if (!$this->checkIndexKeyName($value)) {
+        if (!$this->checkReservedNames($value)) {
             return false;
         }
 

@@ -334,6 +334,8 @@ class Database
 
     protected int $maxQueryValues = 100;
 
+    protected bool $migrating = false;
+
     /**
      * Stack of collection IDs when creating or updating related documents
      * @var array<string>
@@ -931,6 +933,18 @@ class Database
         $this->preserveDates = $preserve;
 
         return $this;
+    }
+
+    public function setMigrating(bool $migrating): self
+    {
+        $this->migrating = $migrating;
+
+        return $this;
+    }
+
+    public function isMigrating(): bool
+    {
+        return $this->migrating;
     }
 
     public function withPreserveDates(callable $callback): mixed
@@ -2749,10 +2763,11 @@ class Database
             }
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            // Double check this please
-            if (!$this->adapter->getSharedTables()) {
+
+            if(!$this->adapter->getSharedTables() || !$this->isMigrating()){
                 throw $e;
             }
+
         }
 
         if ($collection->getId() !== self::METADATA) {

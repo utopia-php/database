@@ -1167,7 +1167,8 @@ class Database
         if ($this->validate) {
             $validator = new IndexValidator(
                 $attributes,
-                $this->adapter->getMaxIndexLength()
+                $this->adapter->getMaxIndexLength(),
+                $this->adapter->getInternalIndexesKeys()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2732,7 +2733,8 @@ class Database
         if ($this->validate) {
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
-                $this->adapter->getMaxIndexLength()
+                $this->adapter->getMaxIndexLength(),
+                $this->adapter->getInternalIndexesKeys()
             );
             if (!$validator->isValid($index)) {
                 throw new DatabaseException($validator->getDescription());

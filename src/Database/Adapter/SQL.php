@@ -1129,4 +1129,9 @@ abstract class SQL extends Adapter
         return 'LIKE';
     }
 
+    public function getInternalIndexesKeys(): array
+    {
+        return [];
+    }
+
 }

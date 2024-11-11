@@ -1937,4 +1937,9 @@ class Mongo extends Adapter
     {
         return '0';
     }
+
+    public function getInternalIndexesKeys(): array
+    {
+        return [];
+    }
 }

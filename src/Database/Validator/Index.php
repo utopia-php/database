@@ -18,13 +18,20 @@ class Index extends Validator
     protected array $attributes;
 
     /**
+     * @var array<string> $reservedKeys
+     */
+    protected array $reservedKeys;
+
+    /**
      * @param array<Document> $attributes
      * @param int $maxLength
+     * @param array<string> $reservedKeys
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength)
+    public function __construct(array $attributes, int $maxLength, array $reservedKeys)
     {
         $this->maxLength = $maxLength;
+        $this->reservedKeys = $reservedKeys;
 
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -217,10 +224,13 @@ class Index extends Validator
      */
     public function checkReservedNames(Document $index): bool
     {
-        $key = \strtolower($index->getAttribute('key', $index->getAttribute('$id')));
-        if ($key === 'primary') {
-            $this->message = 'Index key name is reserved';
-            return false;
+        $key = $index->getAttribute('key', $index->getAttribute('$id'));
+
+        foreach ($this->reservedKeys as $reserved) {
+            if (\strtolower($key) === \strtolower($reserved)) {
+                $this->message = 'Index key name is reserved';
+                return false;
+            }
         }
 
         return true;

@@ -2425,4 +2425,9 @@ class MariaDB extends SQL
         $stmt = $this->getPDO()->query("SELECT CONNECTION_ID();");
         return $stmt->fetchColumn();
     }
+
+    public function getInternalIndexesKeys(): array
+    {
+        return ['primary'];
+    }
 }

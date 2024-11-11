@@ -906,7 +906,11 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
-        $validator = new Index($attributes, static::getDatabase()->getAdapter()->getMaxIndexLength());
+        $validator = new Index(
+            $attributes,
+            static::getDatabase()->getAdapter()->getMaxIndexLength(),
+            static::getDatabase()->getAdapter()->getInternalIndexesKeys()
+        );
 
         $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
         $this->assertFalse($validator->isValid($indexes[0]));
@@ -976,7 +980,11 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
-        $validator = new Index($attributes, static::getDatabase()->getAdapter()->getMaxIndexLength());
+        $validator = new Index(
+            $attributes,
+            static::getDatabase()->getAdapter()->getMaxIndexLength(),
+            static::getDatabase()->getAdapter()->getInternalIndexesKeys()
+        );
         $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
         $this->assertFalse($validator->isValid($indexes[0]));
         $this->assertEquals($errorMessage, $validator->getDescription());
@@ -1105,13 +1113,6 @@ abstract class Base extends TestCase
         $database->createAttribute('indexes', 'name', Database::VAR_STRING, 10, false);
 
         $database->createIndex('indexes', 'index_1', Database::INDEX_KEY, ['name']);
-
-        try {
-            $database->createIndex('indexes', 'primary', Database::INDEX_KEY, ['name']);
-        } catch (Throwable $e) {
-            self::assertTrue($e instanceof DatabaseException);
-            self::assertEquals($e->getMessage(), 'Index key name is reserved');
-        }
 
         try {
             $database->createIndex('indexes', 'index3', Database::INDEX_KEY, ['$id', '$id']);

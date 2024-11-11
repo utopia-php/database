@@ -2767,7 +2767,6 @@ class Database
             if(!$this->adapter->getSharedTables() || !$this->isMigrating()){
                 throw $e;
             }
-
         }
 
         if ($collection->getId() !== self::METADATA) {

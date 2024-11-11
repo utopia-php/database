@@ -87,17 +87,15 @@ class Index extends Validator
     public function checkDuplicatedAttributes(Document $index): bool
     {
         $attributes = $index->getAttribute('attributes', []);
-        $orders = $index->getAttribute('orders', []);
         $stack = [];
-        foreach ($attributes as $key => $attribute) {
-            $direction = $orders[$key] ?? 'ASC';
-            // Why did we add direction to duplicates id we check only the current Document?
-            //$value = \strtolower($attribute . '|' . $direction);
+        foreach ($attributes as $attribute) {
             $value = \strtolower($attribute);
+
             if (\in_array($value, $stack)) {
                 $this->message = 'Duplicate attributes provided';
                 return false;
             }
+
             $stack[] = $value;
         }
         return true;

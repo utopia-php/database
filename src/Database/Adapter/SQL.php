@@ -1133,5 +1133,4 @@ abstract class SQL extends Adapter
     {
         return [];
     }
-
 }

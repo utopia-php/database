@@ -2428,6 +2428,6 @@ class MariaDB extends SQL
 
     public function getInternalIndexesKeys(): array
     {
-        return ['primary'];
+        return ['primary', '_created_at', '_updated_at', '_tenant_id'];
     }
 }

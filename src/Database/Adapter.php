@@ -1019,7 +1019,7 @@ abstract class Adapter
     /**
      * Get List of internal index keys names
      *
-     * @return array
+     * @return array<string>
      */
     abstract public function getInternalIndexesKeys(): array;
 }

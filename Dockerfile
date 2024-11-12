@@ -1,8 +1,5 @@
 FROM composer:2.0 AS composer
 
-ARG DEBUG=false
-ENV DEBUG=$DEBUG
-
 WORKDIR /usr/local/src/
 
 COPY composer.lock /usr/local/src/

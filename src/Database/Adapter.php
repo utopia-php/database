@@ -1015,4 +1015,11 @@ abstract class Adapter
      * @return string
      */
     abstract public function getConnectionId(): string;
+
+    /**
+     * Get List of internal index keys names
+     *
+     * @return array<string>
+     */
+    abstract public function getInternalIndexesKeys(): array;
 }

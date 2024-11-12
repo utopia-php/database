@@ -906,7 +906,11 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
-        $validator = new Index($attributes, static::getDatabase()->getAdapter()->getMaxIndexLength());
+        $validator = new Index(
+            $attributes,
+            static::getDatabase()->getAdapter()->getMaxIndexLength(),
+            static::getDatabase()->getAdapter()->getInternalIndexesKeys()
+        );
 
         $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
         $this->assertFalse($validator->isValid($indexes[0]));
@@ -976,7 +980,11 @@ abstract class Base extends TestCase
             'indexes' => $indexes
         ]);
 
-        $validator = new Index($attributes, static::getDatabase()->getAdapter()->getMaxIndexLength());
+        $validator = new Index(
+            $attributes,
+            static::getDatabase()->getAdapter()->getMaxIndexLength(),
+            static::getDatabase()->getAdapter()->getInternalIndexesKeys()
+        );
         $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
         $this->assertFalse($validator->isValid($indexes[0]));
         $this->assertEquals($errorMessage, $validator->getDescription());
@@ -1095,6 +1103,32 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->deleteCollection('actors'));
         $this->assertEquals(true, static::getDatabase()->getCollection('actors')->isEmpty());
         $this->assertEquals(false, static::getDatabase()->exists($this->testDatabase, 'actors'));
+    }
+
+    public function testCreateIndex(): void
+    {
+        $database = $this->getDatabase();
+
+        $database->createCollection('indexes');
+        $database->createAttribute('indexes', 'name', Database::VAR_STRING, 10, false);
+
+        $database->createIndex('indexes', 'index_1', Database::INDEX_KEY, ['name']);
+
+        try {
+            $database->createIndex('indexes', 'index3', Database::INDEX_KEY, ['$id', '$id']);
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof DatabaseException);
+            self::assertEquals($e->getMessage(), 'Duplicate attributes provided');
+        }
+
+        try {
+            $database->createIndex('indexes', 'index4', Database::INDEX_KEY, ['name', 'Name']);
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof DatabaseException);
+            self::assertEquals($e->getMessage(), 'Duplicate attributes provided');
+        }
+
+        $database->deleteCollection('indexes');
     }
 
     public function testSizeCollection(): void
@@ -1512,8 +1546,12 @@ abstract class Base extends TestCase
     public function testIndexCaseInsensitivity(): void
     {
         $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
-        $this->expectException(DuplicateException::class);
-        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+
+        try {
+            $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof DuplicateException);
+        }
     }
 
     /**

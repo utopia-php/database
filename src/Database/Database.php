@@ -334,6 +334,8 @@ class Database
 
     protected int $maxQueryValues = 100;
 
+    protected bool $migrating = false;
+
     /**
      * Stack of collection IDs when creating or updating related documents
      * @var array<string>
@@ -933,6 +935,18 @@ class Database
         return $this;
     }
 
+    public function setMigrating(bool $migrating): self
+    {
+        $this->migrating = $migrating;
+
+        return $this;
+    }
+
+    public function isMigrating(): bool
+    {
+        return $this->migrating;
+    }
+
     public function withPreserveDates(callable $callback): mixed
     {
         $previous = $this->preserveDates;
@@ -1167,7 +1181,8 @@ class Database
         if ($this->validate) {
             $validator = new IndexValidator(
                 $attributes,
-                $this->adapter->getMaxIndexLength()
+                $this->adapter->getMaxIndexLength(),
+                $this->adapter->getInternalIndexesKeys()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -1512,10 +1527,17 @@ class Database
             $this->validateDefaultTypes($type, $default);
         }
 
-        $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+        try {
+            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
-        if (!$created) {
-            throw new DatabaseException('Failed to create attribute');
+            if (!$created) {
+                throw new DatabaseException('Failed to create attribute');
+            }
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
+            }
         }
 
         if ($collection->getId() !== self::METADATA) {
@@ -2732,7 +2754,8 @@ class Database
         if ($this->validate) {
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
-                $this->adapter->getMaxIndexLength()
+                $this->adapter->getMaxIndexLength(),
+                $this->adapter->getInternalIndexesKeys()
             );
             if (!$validator->isValid($index)) {
                 throw new DatabaseException($validator->getDescription());
@@ -2747,7 +2770,8 @@ class Database
             }
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if (!$this->adapter->getSharedTables()) {
+
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
         }

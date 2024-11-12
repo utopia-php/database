@@ -1527,10 +1527,17 @@ class Database
             $this->validateDefaultTypes($type, $default);
         }
 
-        $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+        try {
+            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
-        if (!$created) {
-            throw new DatabaseException('Failed to create attribute');
+            if (!$created) {
+                throw new DatabaseException('Failed to create attribute');
+            }
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
+            }
         }
 
         if ($collection->getId() !== self::METADATA) {

@@ -3979,10 +3979,11 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
-        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates, $limit, $cursor) {
+        $affectedDocumentIds = [];
+
+        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates, $limit, $cursor, $affectedDocumentIds) {
             $lastDocument = null;
             $totalModified = 0;
-            $affectedDocumentIds = [];
 
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
@@ -4004,7 +4005,7 @@ class Database
                     $limit -= $batchSize;
                 }
 
-                $affectedDocuments = $this->find($collection->getId(), array_merge(
+                $affectedDocuments = $this->silent(fn () => $this->find($collection->getId(), array_merge(
                     $queries,
                     empty($lastDocument) ? [
                         Query::limit($batchSize),
@@ -4012,7 +4013,7 @@ class Database
                         Query::limit($batchSize),
                         Query::cursorAfter($lastDocument),
                     ]
-                ), forPermission: Database::PERMISSION_UPDATE);
+                ), forPermission: Database::PERMISSION_UPDATE));
 
                 if (empty($affectedDocuments)) {
                     break;
@@ -4049,7 +4050,7 @@ class Database
 
             $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
                 '$collection' => $collection->getId(),
-                '$ids' => $affectedDocumentIds,
+                'modified' => $affectedDocumentIds,
             ]));
 
             foreach ($affectedDocumentIds as $id) {
@@ -5159,7 +5160,7 @@ class Database
                     $limit -= $batchSize;
                 }
 
-                $affectedDocuments = $this->find($collection->getId(), array_merge(
+                $affectedDocuments = $this->silent(fn () => $this->find($collection->getId(), array_merge(
                     $queries,
                     empty($lastDocument) ? [
                         Query::limit($batchSize),
@@ -5167,7 +5168,7 @@ class Database
                         Query::limit($batchSize),
                         Query::cursorAfter($lastDocument),
                     ]
-                ), forPermission: Database::PERMISSION_DELETE);
+                ), forPermission: Database::PERMISSION_DELETE));
 
                 if (empty($affectedDocuments)) {
                     break;
@@ -5200,7 +5201,7 @@ class Database
 
             $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
                 '$collection' => $collection->getId(),
-                '$ids' => $affectedDocumentIds
+                'modified' => $affectedDocumentIds
             ]));
 
             // Mass delete using adapter with query

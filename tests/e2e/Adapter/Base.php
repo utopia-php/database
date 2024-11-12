@@ -16922,11 +16922,13 @@ abstract class Base extends TestCase
                 Database::EVENT_DOCUMENT_SUM,
                 Database::EVENT_DOCUMENT_INCREASE,
                 Database::EVENT_DOCUMENT_DECREASE,
+                Database::EVENT_DOCUMENTS_CREATE,
+                Database::EVENT_DOCUMENTS_UPDATE,
                 Database::EVENT_INDEX_DELETE,
                 Database::EVENT_DOCUMENT_DELETE,
                 Database::EVENT_ATTRIBUTE_DELETE,
                 Database::EVENT_COLLECTION_DELETE,
-                Database::EVENT_DATABASE_DELETE,
+                Database::EVENT_DATABASE_DELETE
             ];
 
             $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
@@ -16983,8 +16985,22 @@ abstract class Base extends TestCase
 
             $this->assertFalse($executed);
 
+            $database->createDocuments($collectionId, [
+                new Document([
+                    'attr1' => 10,
+                ]),
+                new Document([
+                    'attr1' => 20,
+                ]),
+            ]);
+
+            $database->updateDocuments($collectionId, new Document([
+                'attr1' => 15,
+            ]));
+
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');
+            $database->deleteDocuments($collectionId);
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');

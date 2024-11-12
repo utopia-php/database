@@ -6203,6 +6203,16 @@ abstract class Base extends TestCase
             $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
         } catch (TruncateException $e) {
         }
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('resize_test', 'attr1', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('resize_test', 'attr2', Database::VAR_STRING, 128, true));
+
+        static::getDatabase()->createIndex('resize_test', 'index', Database::INDEX_KEY, ['attr1', 'attr2'], [128, 128]);
+        $this->assertEquals('shmuel', 'fogel');
+
+        static::getDatabase()->updateAttribute('resize_test', 'attr1', Database::VAR_STRING, 5000);
+
+        $this->assertEquals('shmuel', 'fogel');
     }
 
     /**

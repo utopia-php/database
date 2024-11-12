@@ -4047,7 +4047,10 @@ class Database
                 $lastDocument = end($affectedDocuments);
             }
 
-            $this->trigger(self::EVENT_DOCUMENTS_UPDATE, $affectedDocumentIds);
+            $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
+                '$collection' => $collection->getId(),
+                '$ids' => $affectedDocumentIds,
+            ]));
 
             foreach ($affectedDocumentIds as $id) {
                 $this->purgeRelatedDocuments($collection, $id);
@@ -5195,7 +5198,10 @@ class Database
                 return 0;
             }
 
-            $this->trigger(self::EVENT_DOCUMENTS_DELETE, $affectedDocumentIds);
+            $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
+                '$collection' => $collection->getId(),
+                '$ids' => $affectedDocumentIds
+            ]));
 
             // Mass delete using adapter with query
             return $this->adapter->deleteDocuments($collection->getId(), $affectedDocumentIds);

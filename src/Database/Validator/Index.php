@@ -28,7 +28,7 @@ class Index extends Validator
      * @param array<string> $reservedKeys
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength, array $reservedKeys)
+    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [])
     {
         $this->maxLength = $maxLength;
         $this->reservedKeys = $reservedKeys;

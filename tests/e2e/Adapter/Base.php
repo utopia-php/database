@@ -6019,7 +6019,6 @@ abstract class Base extends TestCase
             type: Database::VAR_STRING,
         );
 
-        //shmuel
         $collection = static::getDatabase()->getCollection('rename_test');
 
         $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['key']);

@@ -2767,7 +2767,6 @@ class Database
             }
         }
 
-        \var_dump($orders);
         $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,

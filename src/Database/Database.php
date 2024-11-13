@@ -2750,7 +2750,7 @@ class Database
                      * mysql does not save length in collection when length = attributes size
                      */
                     if ($collectionAttribute->getAttribute('type') === Database::VAR_STRING) {
-                        if(!empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0){
+                        if (!empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = null;
                         }
                     }

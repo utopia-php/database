@@ -1088,7 +1088,7 @@ abstract class SQL extends Adapter
         /**
          * $tenant int = 1
          */
-        return $this->sharedTables ? 767:768;
+        return $this->sharedTables ? 767 : 768;
     }
 
     /**

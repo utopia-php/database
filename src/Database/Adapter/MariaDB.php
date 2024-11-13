@@ -406,7 +406,7 @@ class MariaDB extends SQL
         } else {
             $sql = "ALTER TABLE {$this->getSQLTable($name)} MODIFY `{$id}` {$type};";
         }
-var_dump($sql);
+
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
         try {

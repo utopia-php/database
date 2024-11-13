@@ -1897,11 +1897,9 @@ class Database
             }
 
             if ($altering) {
-                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
+                $indexes = $collectionDoc->getAttribute('indexes');
 
-                if ($id !== $newKey) {
-                    $indexes = $collectionDoc->getAttribute('indexes');
-
+                if (!\is_null($newKey) && $id !== $newKey) {
                     foreach ($indexes as $index) {
                         if (in_array($id, $index['attributes'])) {
                             $index['attributes'] = array_map(function ($attribute) use ($id, $newKey) {
@@ -1910,6 +1908,25 @@ class Database
                         }
                     }
                 }
+
+                /**
+                 * Since we allow changing type & size we need to validate index length
+                 */
+                if ($this->validate) {
+                    $validator = new IndexValidator(
+                        $attributes,
+                        $this->adapter->getMaxIndexLength(),
+                        $this->adapter->getInternalIndexesKeys()
+                    );
+
+                    foreach ($indexes as $index) {
+                        if (!$validator->isValid($index)) {
+                            throw new DatabaseException($validator->getDescription());
+                        }
+                    }
+                }
+
+                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
 
                 if (!$updated) {
                     throw new DatabaseException('Failed to update attribute');
@@ -2728,6 +2745,16 @@ class Database
         foreach ($attributes as $i => $attr) {
             foreach ($collectionAttributes as $collectionAttribute) {
                 if ($collectionAttribute->getAttribute('key') === $attr) {
+
+                    /**
+                     * mysql does not save length in collection when length = attributes size
+                     */
+                    if ($collectionAttribute->getAttribute('type') === Database::VAR_STRING) {
+                        if(!empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0){
+                            $lengths[$i] = null;
+                        }
+                    }
+
                     $isArray = $collectionAttribute->getAttribute('array', false);
                     if ($isArray) {
                         if ($this->adapter->getMaxIndexLength() > 0) {
@@ -2740,6 +2767,7 @@ class Database
             }
         }
 
+        \var_dump($orders);
         $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,

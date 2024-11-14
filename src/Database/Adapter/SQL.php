@@ -498,6 +498,7 @@ abstract class SQL extends Adapter
                     }
                     break;
                 case Database::VAR_FLOAT:
+                case Database::VAR_ID:
                     // DOUBLE takes 8 bytes
                     $total += 8;
                     break;

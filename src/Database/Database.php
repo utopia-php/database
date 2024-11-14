@@ -28,8 +28,9 @@ use Utopia\Database\Validator\Structure;
 
 class Database
 {
-    public const VAR_STRING = 'string';
     // Simple Types
+    public const VAR_ID = 'id';
+    public const VAR_STRING = 'string';
     public const VAR_INTEGER = 'integer';
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';

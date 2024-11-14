@@ -148,49 +148,49 @@ class MariaDB extends SQL
             $indexStrings[$key] = "{$indexType} `{$indexId}` ({$indexAttributes}),";
         }
 
-        $collection = "
-			CREATE TABLE {$this->getSQLTable($id)} (
-				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-				_uid VARCHAR(255) NOT NULL,
-				_createdAt DATETIME(3) DEFAULT NULL,
-				_updatedAt DATETIME(3) DEFAULT NULL,
-				_permissions MEDIUMTEXT DEFAULT NULL,
-				PRIMARY KEY (_id),
-				" . \implode(' ', $attributeStrings) . "
-				" . \implode(' ', $indexStrings) . "
-		";
-
         if ($this->sharedTables) {
-            $collection .= "
-            	_tenant INT(11) UNSIGNED DEFAULT NULL,
-				UNIQUE KEY _uid (_uid, _tenant),
+            $indexSql = '
+            	_tenant BIGINT UNSIGNED DEFAULT NULL,
+				UNIQUE KEY  (_uid, _tenant),
 				KEY _created_at (_tenant, _createdAt),
 				KEY _updated_at (_tenant, _updatedAt),
-				KEY _tenant_id (_tenant, _id)
-			";
+				KEY _tenant_id (_tenant, _id),
+			';
         } else {
-            $collection .= "
+            $indexSql = '
 				UNIQUE KEY _uid (_uid),
 				KEY _created_at (_createdAt),
-				KEY _updated_at (_updatedAt)
-			";
+				KEY _updated_at (_updatedAt),
+			';
         }
 
-        $collection .= ")";
+        $collection = "
+			CREATE TABLE {$this->getSQLTable($id)} (
+				`_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+				`_uid` VARCHAR(255) NOT NULL,
+				`_createdAt` DATETIME(3) DEFAULT NULL,
+				`_updatedAt` DATETIME(3) DEFAULT NULL,
+				`_permissions` MEDIUMTEXT DEFAULT NULL,
+				".$indexSql."
+                ". \implode(' ', $attributeStrings) . "
+				". \implode(' ', $indexStrings) . "
+				PRIMARY KEY (`_id`)
+			)";
+
         $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
         $permissions = "
             CREATE TABLE {$this->getSQLTable($id . '_perms')} (
-                _id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-                _type VARCHAR(12) NOT NULL,
-                _permission VARCHAR(255) NOT NULL,
-                _document VARCHAR(255) NOT NULL,
+                `_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `_type` VARCHAR(12) NOT NULL,
+                `_permission` VARCHAR(255) NOT NULL,
+                `_document` VARCHAR(255) NOT NULL,
                 PRIMARY KEY (_id),
         ";
 
         if ($this->sharedTables) {
             $permissions .= "
-                _tenant INT(11) UNSIGNED DEFAULT NULL,
+                _tenant BIGINT UNSIGNED DEFAULT NULL,
                 UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
                 INDEX _permission (_tenant, _permission, _type)
             ";

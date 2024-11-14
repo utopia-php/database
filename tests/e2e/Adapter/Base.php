@@ -2844,7 +2844,7 @@ abstract class Base extends TestCase
                 $database->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
-                $this->assertEquals('Index length is longer than the maximum: 768', $e->getMessage());
+                $this->assertEquals('Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength(), $e->getMessage());
             }
         }
 
@@ -6010,13 +6010,20 @@ abstract class Base extends TestCase
         $collection = static::getDatabase()->getCollection('rename_test');
         $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['key']);
         $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['$id']);
+        $this->assertEquals('renamed', $collection->getAttribute('indexes')[0]['attributes'][0]);
 
-        // Check empty key doesn't cause issues
+        // Check empty newKey doesn't cause issues
         static::getDatabase()->updateAttribute(
             collection: 'rename_test',
             id: 'renamed',
             type: Database::VAR_STRING,
         );
+
+        $collection = static::getDatabase()->getCollection('rename_test');
+
+        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['key']);
+        $this->assertEquals('renamed', $collection->getAttribute('attributes')[0]['$id']);
+        $this->assertEquals('renamed', $collection->getAttribute('indexes')[0]['attributes'][0]);
 
         $doc = static::getDatabase()->getDocument('rename_test', $doc->getId());
 
@@ -6202,6 +6209,60 @@ abstract class Base extends TestCase
             static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
             $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
         } catch (TruncateException $e) {
+        }
+
+        if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
+            $length = intval(static::getDatabase()->getAdapter()->getMaxIndexLength() / 2);
+
+            $this->assertEquals(true, static::getDatabase()->createAttribute('resize_test', 'attr1', Database::VAR_STRING, $length, true));
+            $this->assertEquals(true, static::getDatabase()->createAttribute('resize_test', 'attr2', Database::VAR_STRING, $length, true));
+
+            /**
+             * No index length provided, we are able to validate
+             */
+            static::getDatabase()->createIndex('resize_test', 'index1', Database::INDEX_KEY, ['attr1', 'attr2']);
+
+            try {
+                static::getDatabase()->updateAttribute('resize_test', 'attr1', Database::VAR_STRING, 5000);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertEquals('Index length is longer than the maximum: '.static::getDatabase()->getAdapter()->getMaxIndexLength(), $e->getMessage());
+            }
+
+            static::getDatabase()->deleteIndex('resize_test', 'index1');
+
+            /**
+             * Index lengths are provided, We are able to validate
+             * Index $length === attr1, $length === attr2, so $length is removed, so we are able to validate
+             */
+            static::getDatabase()->createIndex('resize_test', 'index1', Database::INDEX_KEY, ['attr1', 'attr2'], [$length, $length]);
+
+            $collection = static::getDatabase()->getCollection('resize_test');
+            $indexes = $collection->getAttribute('indexes', []);
+            $this->assertEquals(null, $indexes[0]['lengths'][0]);
+            $this->assertEquals(null, $indexes[0]['lengths'][1]);
+
+            try {
+                static::getDatabase()->updateAttribute('resize_test', 'attr1', Database::VAR_STRING, 5000);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertEquals('Index length is longer than the maximum: '.static::getDatabase()->getAdapter()->getMaxIndexLength(), $e->getMessage());
+            }
+
+            static::getDatabase()->deleteIndex('resize_test', 'index1');
+
+            /**
+             * Index lengths are provided
+             * We are able to increase size because index length remains 50
+             */
+            static::getDatabase()->createIndex('resize_test', 'index1', Database::INDEX_KEY, ['attr1', 'attr2'], [50, 50]);
+
+            $collection = static::getDatabase()->getCollection('resize_test');
+            $indexes = $collection->getAttribute('indexes', []);
+            $this->assertEquals(50, $indexes[0]['lengths'][0]);
+            $this->assertEquals(50, $indexes[0]['lengths'][1]);
+
+            static::getDatabase()->updateAttribute('resize_test', 'attr1', Database::VAR_STRING, 5000);
         }
     }
 

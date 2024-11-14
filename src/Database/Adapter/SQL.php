@@ -1085,7 +1085,10 @@ abstract class SQL extends Adapter
      */
     public function getMaxIndexLength(): int
     {
-        return 768;
+        /**
+         * $tenant int = 1
+         */
+        return $this->sharedTables ? 767 : 768;
     }
 
     /**

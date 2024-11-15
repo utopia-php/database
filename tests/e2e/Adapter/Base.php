@@ -52,7 +52,7 @@ abstract class Base extends TestCase
     /**
      * @param string $collection
      * @param string $index
-     * 
+     *
      * @return bool
      */
     abstract protected static function deleteIndex(string $collection, string $index): bool;

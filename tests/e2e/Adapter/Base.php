@@ -50,6 +50,14 @@ abstract class Base extends TestCase
     abstract protected static function deleteColumn(string $collection, string $column): bool;
 
     /**
+     * @param string $collection
+     * @param string $index
+     * 
+     * @return bool
+     */
+    abstract protected static function deleteIndex(string $collection, string $index): bool;
+
+    /**
      * @return string
      */
     abstract protected static function getAdapterName(): string;
@@ -1615,6 +1623,16 @@ abstract class Base extends TestCase
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
+
+        // Test delete index when index does not exist
+        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, static::deleteIndex('indexes', 'index1'));
+        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
+
+        // Test delete index when attribute does not exist
+        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, static::getDatabase()->deleteAttribute('indexes', 'string'));
+        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
 
         static::getDatabase()->deleteCollection('indexes');
     }

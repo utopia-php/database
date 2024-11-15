@@ -100,4 +100,9 @@ class MongoDBTest extends Base
     {
         return true;
     }
+
+    protected static function deleteIndex(string $collection, string $index): bool
+    {
+        return true;
+    }
 }

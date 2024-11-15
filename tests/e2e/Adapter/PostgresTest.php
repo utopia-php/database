@@ -69,4 +69,15 @@ class PostgresTest extends Base
 
         return true;
     }
+
+    protected static function deleteIndex(string $collection, string $index): bool
+    {
+        $key = "\"".self::getDatabase()->getNamespace()."_".self::getDatabase()->getTenant()."_{$collection}_{$index}\"";
+
+        $sql = "DROP INDEX \"".self::getDatabase()->getDatabase()."\".{$key}";
+
+        self::$pdo->exec($sql);
+
+        return true;
+    }
 }

@@ -70,4 +70,14 @@ class MariaDBTest extends Base
 
         return true;
     }
+
+    protected static function deleteIndex(string $collection, string $index): bool
+    {
+        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
+
+        self::$pdo->exec($sql);
+
+        return true;
+    }
 }

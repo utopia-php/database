@@ -331,4 +331,19 @@ class MirrorTest extends Base
 
         return true;
     }
+
+    protected static function deleteIndex(string $collection, string $index): bool
+    {
+        $sqlTable = "`" . self::$source->getDatabase() . "`.`" . self::$source->getNamespace() . "_" . $collection . "`";
+        $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
+
+        self::$sourcePdo->exec($sql);
+
+        $sqlTable = "`" . self::$destination->getDatabase() . "`.`" . self::$destination->getNamespace() . "_" . $collection . "`";
+        $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
+
+        self::$destinationPdo->exec($sql);
+
+        return true;
+    }
 }

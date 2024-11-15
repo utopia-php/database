@@ -3376,7 +3376,10 @@ class Database
             $documents[$key] = $this->decode($collection, $document);
         }
 
-        $this->trigger(self::EVENT_DOCUMENTS_CREATE, $documents);
+        $this->trigger(self::EVENT_DOCUMENTS_CREATE,  new Document([
+            '$collection' => $collection->getId(),
+            'modified' => array_map(fn ($document) => $document->getId(), $documents)
+        ]));
 
         return $documents;
     }

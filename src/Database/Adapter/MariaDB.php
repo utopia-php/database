@@ -215,7 +215,6 @@ class MariaDB extends SQL
         } catch (PDOException $e) {
             $e = $this->processException($e);
 
-            // Can we remove drop perms table?
             if (!($e instanceof DuplicateException)) {
                 $this->getPDO()
                     ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")

@@ -499,9 +499,17 @@ class SQLite extends MariaDB
         $sql = "DROP INDEX `{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}`";
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            if (str_contains($e->getMessage(), 'no such index')) {
+                return true;
+            }
+
+            throw $e;
+        }
     }
 
     /**

@@ -15905,9 +15905,14 @@ abstract class Base extends TestCase
         // TEST: Bulk delete documents with queries.
         $this->propegateBulkDocuments('bulk_delete');
 
-        $this->assertCount(5,static::getDatabase()->deleteDocuments('bulk_delete', [
+        $modified = static::getDatabase()->deleteDocuments('bulk_delete', [
             Query::greaterThanEqual('integer', 5)
-        ]));
+        ]);
+        $this->assertCount(5,$modified);
+
+        foreach ($modified as $document) {
+            $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
+        }
 
         $docs = static::getDatabase()->find('bulk_delete');
         $this->assertCount(5, $docs);
@@ -16600,11 +16605,16 @@ abstract class Base extends TestCase
         }
 
         // Test Update half of the documents
-        $this->assertCount(5, static::getDatabase()->updateDocuments($collection, new Document([
+        $modified = static::getDatabase()->updateDocuments($collection, new Document([
             'string' => 'text📝 updated',
         ]), [
             Query::greaterThanEqual('integer', 5),
-        ]));
+        ]);
+        $this->assertCount(5, $modified);
+
+        foreach ($modified as $document) {
+            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+        }
 
         $updatedDocuments = static::getDatabase()->find($collection, [
             Query::greaterThanEqual('integer', 5),
@@ -16614,6 +16624,7 @@ abstract class Base extends TestCase
 
         foreach ($updatedDocuments as $document) {
             $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
         }
 
         $controlDocuments = static::getDatabase()->find($collection, [

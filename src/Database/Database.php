@@ -4033,7 +4033,7 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
-        $affected = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates, $limit, $cursor) {
+        $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates, $limit, $cursor) {
             $lastDocument = null;
             $documents = [];
 
@@ -4105,7 +4105,7 @@ class Database
             return $documents;
         });
 
-        return $affected;
+        return $documents;
     }
 
     /**
@@ -5183,7 +5183,7 @@ class Database
             throw new DatabaseException("cursor Document must be from the same Collection.");
         }
 
-        $modified = $this->withTransaction(function () use ($collection, $queries, $batchSize, $limit, $cursor) {
+        $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $limit, $cursor) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
             $authorization = new Authorization(self::PERMISSION_DELETE);
             $skipAuth = $authorization->isValid($collection->getDelete());
@@ -5251,7 +5251,7 @@ class Database
             return $documents;
         });
 
-        return $modified;
+        return $documents;
     }
 
     /**

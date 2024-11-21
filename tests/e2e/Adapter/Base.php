@@ -17118,7 +17118,6 @@ abstract class Base extends TestCase
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');
 
-            var_dump('asd');
             $database->deleteDocuments($collectionId);
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);

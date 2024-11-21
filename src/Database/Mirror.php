@@ -662,19 +662,19 @@ class Mirror extends Database
         Document $updates,
         array $queries = [],
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): int {
-        $count = $this->source->updateDocuments($collection, $updates, $queries, $batchSize);
+    ): array {
+        $documents = $this->source->updateDocuments($collection, $updates, $queries, $batchSize);
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
-            return $count;
+            return $documents;
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-            return $count;
+            return $documents;
         }
 
         try {
@@ -707,7 +707,7 @@ class Mirror extends Database
             $this->logError('updateDocuments', $err);
         }
 
-        return $count;
+        return $documents;
     }
 
     public function deleteDocument(string $collection, string $id): bool
@@ -753,20 +753,20 @@ class Mirror extends Database
         return $result;
     }
 
-    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): int
+    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): array
     {
-        $count = $this->source->deleteDocuments($collection, $queries, $batchSize);
+        $documents = $this->source->deleteDocuments($collection, $queries, $batchSize);
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
-            return $count;
+            return $documents;
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-            return $count;
+            return $documents;
         }
 
         try {
@@ -793,7 +793,7 @@ class Mirror extends Database
             $this->logError('deleteDocuments', $err);
         }
 
-        return $count;
+        return $documents;
     }
 
     public function updateAttributeRequired(string $collection, string $id, bool $required): Document

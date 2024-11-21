@@ -15908,7 +15908,7 @@ abstract class Base extends TestCase
         $modified = static::getDatabase()->deleteDocuments('bulk_delete', [
             Query::greaterThanEqual('integer', 5)
         ]);
-        $this->assertCount(5,$modified);
+        $this->assertCount(5, $modified);
 
         foreach ($modified as $document) {
             $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));

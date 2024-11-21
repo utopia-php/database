@@ -17037,10 +17037,13 @@ abstract class Base extends TestCase
                 Database::EVENT_DOCUMENT_INCREASE,
                 Database::EVENT_DOCUMENT_DECREASE,
                 Database::EVENT_DOCUMENTS_CREATE,
-                Database::EVENT_DOCUMENTS_UPDATE,
+                Database::EVENT_DOCUMENT_UPDATE,
+                Database::EVENT_DOCUMENT_UPDATE,
+                Database::EVENT_DOCUMENT_UPDATE,
                 Database::EVENT_INDEX_DELETE,
                 Database::EVENT_DOCUMENT_DELETE,
-                Database::EVENT_DOCUMENTS_DELETE,
+                Database::EVENT_DOCUMENT_DELETE,
+                Database::EVENT_DOCUMENT_DELETE,
                 Database::EVENT_ATTRIBUTE_DELETE,
                 Database::EVENT_COLLECTION_DELETE,
                 Database::EVENT_DATABASE_DELETE
@@ -17048,7 +17051,6 @@ abstract class Base extends TestCase
 
             $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
                 $shifted = array_shift($events);
-
                 $this->assertEquals($shifted, $event);
             });
 
@@ -17115,6 +17117,8 @@ abstract class Base extends TestCase
 
             $database->deleteIndex($collectionId, $indexId1);
             $database->deleteDocument($collectionId, 'doc1');
+
+            var_dump('asd');
             $database->deleteDocuments($collectionId);
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);

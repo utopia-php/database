@@ -1219,7 +1219,12 @@ class Database
             return new Document(self::COLLECTION);
         }
 
-        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        try {
+            $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        } catch (Exception $e) {
+            $this->adapter->deleteCollection($id);
+            throw $e;
+        }
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 

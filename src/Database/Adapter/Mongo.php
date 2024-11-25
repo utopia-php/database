@@ -122,7 +122,7 @@ class Mongo extends Adapter
      * @return bool
      * @throws Exception
      */
-    public function exists(string $database, string $collection = null): bool
+    public function exists(string $database, ?string $collection = null): bool
     {
         if (!\is_null($collection)) {
             $collection = $this->getNamespace() . "_" . $collection;
@@ -1007,7 +1007,7 @@ class Mongo extends Adapter
      *
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
     {
         if (!empty($newKey) && $newKey !== $id) {
             return $this->renameAttribute($collection, $id, $newKey);

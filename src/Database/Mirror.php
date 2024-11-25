@@ -169,7 +169,7 @@ class Mirror extends Database
         $this->source->trigger($event, $args);
     }
 
-    public function silent(callable $callback, array $listeners = null): mixed
+    public function silent(callable $callback, ?array $listeners = null): mixed
     {
         return $this->source->silent($callback, $listeners);
     }
@@ -194,7 +194,7 @@ class Mirror extends Database
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
+    public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
         $result = $this->source->createCollection(
             $id,
@@ -292,7 +292,7 @@ class Mirror extends Database
         return $result;
     }
 
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $result = $this->source->createAttribute(
             $collection,
@@ -356,7 +356,7 @@ class Mirror extends Database
         return $result;
     }
 
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
+    public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         $document = $this->source->updateAttribute(
             $collection,

@@ -477,7 +477,7 @@ class Database
      * @param array<string>|null $listeners List of listeners to silence; if null, all listeners will be silenced
      * @return T
      */
-    public function silent(callable $callback, array $listeners = null): mixed
+    public function silent(callable $callback, ?array $listeners = null): mixed
     {
         $previous = $this->silentListeners;
 
@@ -1143,14 +1143,14 @@ class Database
      * @param string $id
      * @param array<Document> $attributes
      * @param array<Document> $indexes
-     * @param array<string> $permissions
+     * @param array<string>|null $permissions
      * @param bool $documentSecurity
      * @return Document
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = [], array $permissions = null, bool $documentSecurity = true): Document
+    public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
         $permissions ??= [
             Permission::create(Role::any()),
@@ -1437,7 +1437,7 @@ class Database
      * @throws StructureException
      * @throws Exception
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -1802,7 +1802,7 @@ class Database
      * @return Document
      * @throws Exception
      */
-    public function updateAttribute(string $collection, string $id, string $type = null, int $size = null, bool $required = null, mixed $default = null, bool $signed = null, bool $array = null, string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
+    public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, $newKey) {
             $altering = !\is_null($type)
@@ -3425,12 +3425,8 @@ class Database
             }
 
             $documents[$key] = $this->decode($collection, $document);
+            $this->trigger(self::EVENT_DOCUMENT_CREATE, $documents[$key]);
         }
-
-        $this->trigger(self::EVENT_DOCUMENTS_CREATE, new Document([
-            '$collection' => $collection->getId(),
-            'modified' => array_map(fn ($document) => $document->getId(), $documents)
-        ]));
 
         return $documents;
     }

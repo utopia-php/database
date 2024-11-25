@@ -1191,10 +1191,6 @@ class Database
             }
         }
 
-        if ($id === self::METADATA) {
-            return new Document(self::COLLECTION);
-        }
-
         // Check index limits, if given
         if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
@@ -1218,6 +1214,10 @@ class Database
         }
 
         $this->adapter->createCollection($id, $attributes, $indexes);
+
+        if ($id === self::METADATA) {
+            return new Document(self::COLLECTION);
+        }
 
         $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
 

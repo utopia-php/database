@@ -1222,6 +1222,7 @@ class Database
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
         } catch (Exception $e) {
+            \var_dump('Error creating collection ' . $id . ' metadata document. Deleting collection.' . "\n" . $e->getMessage() . "\n" . $e->getTraceAsString());
             $this->adapter->deleteCollection($id);
             throw $e;
         }

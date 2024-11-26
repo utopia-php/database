@@ -2420,7 +2420,10 @@ class MariaDB extends SQL
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
-
+        // Unknown database
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {
+            return new NotFoundException($e->getMessage(), $e->getCode(), $e);
+        }
 
         return $e;
     }

@@ -9,6 +9,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
 
@@ -163,10 +164,19 @@ abstract class SQL extends Adapter
             $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
         }
 
-        $stmt->execute();
+        try {
+            $stmt->execute();
+            $document = $stmt->fetchAll();
+            $stmt->closeCursor();
+        } catch (PDOException $e) {
+            $e = $this->processException($e);
 
-        $document = $stmt->fetchAll();
-        $stmt->closeCursor();
+            if ($e instanceof NotFoundException) {
+                return false;
+            }
+
+            throw $e;
+        }
 
         if (empty($document)) {
             return false;

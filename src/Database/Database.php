@@ -3305,8 +3305,6 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        \var_dump($collection);
-
         if ($collection->getId() !== self::METADATA) {
             $authorization = new Authorization(self::PERMISSION_CREATE);
             if (!$authorization->isValid($collection->getCreate())) {

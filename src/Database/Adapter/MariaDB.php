@@ -2379,6 +2379,20 @@ class MariaDB extends SQL
         });
     }
 
+    /**
+     * @return string
+     */
+    public function getConnectionId(): string
+    {
+        $stmt = $this->getPDO()->query("SELECT CONNECTION_ID();");
+        return $stmt->fetchColumn();
+    }
+
+    public function getInternalIndexesKeys(): array
+    {
+        return ['primary', '_created_at', '_updated_at', '_tenant_id'];
+    }
+
     protected function processException(PDOException $e): \Exception
     {
         // Timeout
@@ -2418,19 +2432,5 @@ class MariaDB extends SQL
         }
 
         return $e;
-    }
-
-    /**
-     * @return string
-     */
-    public function getConnectionId(): string
-    {
-        $stmt = $this->getPDO()->query("SELECT CONNECTION_ID();");
-        return $stmt->fetchColumn();
-    }
-
-    public function getInternalIndexesKeys(): array
-    {
-        return ['primary', '_created_at', '_updated_at', '_tenant_id'];
     }
 }

@@ -1146,4 +1146,9 @@ abstract class SQL extends Adapter
     {
         return [];
     }
+
+    protected function processException(PDOException $e): \Exception
+    {
+        return $e;
+    }
 }

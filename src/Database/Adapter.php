@@ -1022,6 +1022,4 @@ abstract class Adapter
      * @return array<string>
      */
     abstract public function getInternalIndexesKeys(): array;
-
-    abstract protected function processException(\PDOException $e): \Exception;
 }

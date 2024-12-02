@@ -3432,8 +3432,12 @@ class Database
             }
 
             $documents[$key] = $this->decode($collection, $document);
-            $this->trigger(self::EVENT_DOCUMENT_CREATE, $documents[$key]);
         }
+
+        $this->trigger(self::EVENT_DOCUMENTS_CREATE, new Document([
+            '$collection' => $collection->getId(),
+            'modified' => array_map(fn ($document) => $document->getId(), $documents)
+        ]));
 
         return $documents;
     }
@@ -4102,8 +4106,12 @@ class Database
             foreach ($documents as $document) {
                 $this->purgeRelatedDocuments($collection, $document->getId());
                 $this->purgeCachedDocument($collection->getId(), $document->getId());
-                $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
             }
+
+            $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
+                '$collection' => $collection->getId(),
+                'modified' => array_map(fn ($document) => $document->getId(), $documents)
+            ]));
 
             return $documents;
         });
@@ -5245,9 +5253,10 @@ class Database
                 return [];
             }
 
-            foreach ($documents as $document) {
-                $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
-            }
+            $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
+                '$collection' => $collection->getId(),
+                'modified' => array_map(fn ($document) => $document->getId(), $documents)
+            ]));
 
             $this->adapter->deleteDocuments($collection->getId(), array_map(fn ($document) => $document->getId(), $documents));
 

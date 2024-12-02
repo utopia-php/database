@@ -1191,12 +1191,6 @@ class Database
             }
         }
 
-        $this->adapter->createCollection($id, $attributes, $indexes);
-
-        if ($id === self::METADATA) {
-            return new Document(self::COLLECTION);
-        }
-
         // Check index limits, if given
         if ($indexes && $this->adapter->getCountOfIndexes($collection) > $this->adapter->getLimitForIndexes()) {
             throw new LimitException('Index limit of ' . $this->adapter->getLimitForIndexes() . ' exceeded. Cannot create collection.');
@@ -1208,18 +1202,29 @@ class Database
                 $this->adapter->getLimitForAttributes() > 0 &&
                 $this->adapter->getCountOfAttributes($collection) > $this->adapter->getLimitForAttributes()
             ) {
-                throw new LimitException('Column limit of ' . $this->adapter->getLimitForAttributes() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Attribute limit of ' . $this->adapter->getLimitForAttributes() . ' exceeded. Cannot create collection.');
             }
 
             if (
                 $this->adapter->getDocumentSizeLimit() > 0 &&
                 $this->adapter->getAttributeWidth($collection) > $this->adapter->getDocumentSizeLimit()
             ) {
-                throw new LimitException('Row width limit of ' . $this->adapter->getDocumentSizeLimit() . ' exceeded. Cannot create collection.');
+                throw new LimitException('Document size limit of ' . $this->adapter->getDocumentSizeLimit() . ' exceeded. Cannot create collection.');
             }
         }
 
-        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        $this->adapter->createCollection($id, $attributes, $indexes);
+
+        if ($id === self::METADATA) {
+            return new Document(self::COLLECTION);
+        }
+
+        try {
+            $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        } catch (Exception $e) {
+            $this->adapter->deleteCollection($id);
+            throw $e;
+        }
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 
@@ -1410,6 +1415,8 @@ class Database
             $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
         }
 
+        $this->purgeCachedCollection($id);
+
         return $deleted;
     }
 
@@ -1521,7 +1528,7 @@ class Database
         // Only execute when $default is given
         if (!\is_null($default)) {
             if ($required === true) {
-                throw new DatabaseException('Cannot set a default value on a required attribute');
+                throw new DatabaseException('Cannot set a default value for a required attribute');
             }
 
             $this->validateDefaultTypes($type, $default);

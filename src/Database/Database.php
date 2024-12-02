@@ -3436,7 +3436,7 @@ class Database
 
         $this->trigger(self::EVENT_DOCUMENTS_CREATE, new Document([
             '$collection' => $collection->getId(),
-            'modified' => array_map(fn ($document) => $document->getId(), $documents)
+            'modified' => count($documents)
         ]));
 
         return $documents;
@@ -4110,7 +4110,7 @@ class Database
 
             $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
                 '$collection' => $collection->getId(),
-                'modified' => array_map(fn ($document) => $document->getId(), $documents)
+                'modified' => count($documents)
             ]));
 
             return $documents;
@@ -5255,7 +5255,7 @@ class Database
 
             $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
                 '$collection' => $collection->getId(),
-                'modified' => array_map(fn ($document) => $document->getId(), $documents)
+                'modified' => count($documents)
             ]));
 
             $this->adapter->deleteDocuments($collection->getId(), array_map(fn ($document) => $document->getId(), $documents));

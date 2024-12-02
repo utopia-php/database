@@ -213,15 +213,7 @@ class MariaDB extends SQL
                 ->prepare($permissions)
                 ->execute();
         } catch (PDOException $e) {
-            $e = $this->processException($e);
-
-            if (!($e instanceof DuplicateException)) {
-                $this->getPDO()
-                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
-                    ->execute();
-            }
-
-            throw $e;
+            throw $this->processException($e);
         }
 
         return true;

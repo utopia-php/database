@@ -1457,6 +1457,7 @@ class MariaDB extends SQL
 
                 $permissionsStmt->execute();
                 $permissions = $permissionsStmt->fetchAll();
+                $permissionsStmt->closeCursor();
 
                 $initial = [];
                 foreach (Database::PERMISSIONS as $type) {
@@ -2446,27 +2447,34 @@ class MariaDB extends SQL
         $schema = $this->getDatabase();
         $collection = $this->getNamespace().'_'.$this->filter($collection);
 
-        $stmt = $this->getPDO()->prepare("
-            SELECT 
-            COLUMN_NAME,
-            COLUMN_DEFAULT,
-            IS_NULLABLE,
-            DATA_TYPE,
-            CHARACTER_MAXIMUM_LENGTH,
-            NUMERIC_PRECISION,
-            NUMERIC_SCALE,
-            DATETIME_PRECISION,
-            COLUMN_TYPE,
-            COLUMN_KEY,
-            EXTRA
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
-        ");
-        $stmt->bindParam(':schema', $schema);
-        $stmt->bindParam(':table', $collection);
-        $stmt->execute();
+        try {
+            $stmt = $this->getPDO()->prepare("
+                SELECT 
+                COLUMN_NAME,
+                COLUMN_DEFAULT,
+                IS_NULLABLE,
+                DATA_TYPE,
+                CHARACTER_MAXIMUM_LENGTH,
+                NUMERIC_PRECISION,
+                NUMERIC_SCALE,
+                DATETIME_PRECISION,
+                COLUMN_TYPE,
+                COLUMN_KEY,
+                EXTRA
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
+            ");
+            $stmt->bindParam(':schema', $schema);
+            $stmt->bindParam(':table', $collection);
+            $stmt->execute();
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
 
-        return $stmt->fetchAll();
+            return $results;
+
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get schema attributes', $e->getCode(), $e);
+        }
     }
 
     public function getSupportForSchemaAttributes(): bool

@@ -1029,4 +1029,13 @@ abstract class Adapter
      * @return array<string>
      */
     abstract public function getInternalIndexesKeys(): array;
+
+    /**
+     * Get Schema Attributes
+     *
+     * @param string $collection
+     * @return array
+     * @throws DatabaseException
+     */
+    abstract public function getSchemaAttributes(string $collection): array;
 }

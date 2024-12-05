@@ -1307,8 +1307,10 @@ abstract class Base extends TestCase
             return;
         }
 
-        $collection = 'schema';
+        $collection = 'schema_attributes';
         $db = static::getDatabase();
+
+        $this->assertEmpty($db->getSchemaAttributes('no_such_collection'));
 
         $db->createCollection($collection);
 

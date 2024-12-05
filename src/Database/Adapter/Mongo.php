@@ -1952,4 +1952,9 @@ class Mongo extends Adapter
     {
         return [];
     }
+
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
 }

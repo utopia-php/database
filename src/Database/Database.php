@@ -6046,7 +6046,6 @@ class Database
      */
     public function getSchemaAttributes(string $collection): array
     {
-        var_dump('getSchemaAttributes' . $collection);
         return $this->adapter->getSchemaAttributes($collection);
     }
 }

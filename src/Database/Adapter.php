@@ -782,7 +782,7 @@ abstract class Adapter
     abstract public function getSupportForAttributes(): bool;
 
     /**
-     * Are schema attributes?
+     * Are schema attributes supported?
      *
      * @return bool
      */

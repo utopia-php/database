@@ -6039,10 +6039,11 @@ class Database
     }
 
     /**
-     * Get Schema attributes
+     * Get Schema Attributes
      *
      * @param string $collection
-     * @return array
+     * @return array<mixed>
+     * @throws DatabaseException
      */
     public function getSchemaAttributes(string $collection): array
     {

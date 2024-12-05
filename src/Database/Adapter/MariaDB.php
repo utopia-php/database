@@ -2433,4 +2433,44 @@ class MariaDB extends SQL
 
         return $e;
     }
+
+    /**
+     * Get Schema Attributes
+     *
+     * @param string $collection
+     * @return array
+     * @throws DatabaseException
+     */
+    public function getSchemaAttributes(string $collection): array
+    {
+        $schema = $this->getDatabase();
+        $collection = $this->getNamespace().'_'.$this->filter($collection);
+
+        $stmt = $this->getPDO()->prepare("
+            SELECT 
+            COLUMN_NAME,
+            COLUMN_DEFAULT,
+            IS_NULLABLE,
+            DATA_TYPE,
+            CHARACTER_MAXIMUM_LENGTH,
+            NUMERIC_PRECISION,
+            NUMERIC_SCALE,
+            DATETIME_PRECISION,
+            COLUMN_TYPE,
+            COLUMN_KEY,
+            EXTRA
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
+        ");
+        $stmt->bindParam(':schema', $schema);
+        $stmt->bindParam(':table', $collection);
+        $stmt->execute();
+
+        return $stmt->fetchAll();
+    }
+
+    public function getSupportForSchemaAttributes(): bool
+    {
+        return true;
+    }
 }

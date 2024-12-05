@@ -782,6 +782,13 @@ abstract class Adapter
     abstract public function getSupportForAttributes(): bool;
 
     /**
+     * Are schema attributes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSchemaAttributes(): bool;
+
+    /**
      * Is index supported?
      *
      * @return bool

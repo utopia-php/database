@@ -1300,6 +1300,64 @@ abstract class Base extends TestCase
         $this->assertArrayHasKey('age', $document);
     }
 
+    public function testSchemaAttribute(): void
+    {
+        if (!$this->getDatabase()->getAdapter()->getSupportForSchemaAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'schema';
+        $db = static::getDatabase();
+
+        $db->createCollection($collection);
+
+        $db->createAttribute($collection, 'username', Database::VAR_STRING, 128, true);
+        $db->createAttribute($collection, 'story', Database::VAR_STRING, 20000, true);
+        $db->createAttribute($collection, 'string_list', Database::VAR_STRING, 128, true, null, true, true);
+        $db->createAttribute($collection, 'dob', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']);
+
+        $attributes = [];
+        foreach ($db->getSchemaAttributes($collection) as $attribute) {
+            $attributes[$attribute['COLUMN_NAME']] = $attribute;
+        }
+
+        $attribute = $attributes['username'];
+        $this->assertEquals('username', $attribute['COLUMN_NAME']);
+        $this->assertEquals('varchar', $attribute['DATA_TYPE']);
+        $this->assertEquals('varchar(128)', $attribute['COLUMN_TYPE']);
+        $this->assertEquals('128', $attribute['CHARACTER_MAXIMUM_LENGTH']);
+        $this->assertEquals('YES', $attribute['IS_NULLABLE']);
+
+        $attribute = $attributes['story'];
+        $this->assertEquals('story', $attribute['COLUMN_NAME']);
+        $this->assertEquals('text', $attribute['DATA_TYPE']);
+        $this->assertEquals('text', $attribute['COLUMN_TYPE']);
+        $this->assertEquals('65535', $attribute['CHARACTER_MAXIMUM_LENGTH']);
+
+        $attribute = $attributes['string_list'];
+        $this->assertEquals('string_list', $attribute['COLUMN_NAME']);
+        $this->assertTrue(in_array($attribute['DATA_TYPE'], ['json', 'longtext'])); // mysql vs maria
+        $this->assertTrue(in_array($attribute['COLUMN_TYPE'], ['json', 'longtext']));
+        $this->assertTrue(in_array($attribute['CHARACTER_MAXIMUM_LENGTH'], [null, '4294967295']));
+        $this->assertEquals('YES', $attribute['IS_NULLABLE']);
+
+        $attribute = $attributes['dob'];
+        $this->assertEquals('dob', $attribute['COLUMN_NAME']);
+        $this->assertEquals('datetime', $attribute['DATA_TYPE']);
+        $this->assertEquals('datetime(3)', $attribute['COLUMN_TYPE']);
+        $this->assertEquals(null, $attribute['CHARACTER_MAXIMUM_LENGTH']);
+        $this->assertEquals('3', $attribute['DATETIME_PRECISION']);
+
+        if($db->getSharedTables()){
+            $attribute = $attributes['_tenant'];
+            $this->assertEquals('_tenant', $attribute['COLUMN_NAME']);
+            $this->assertEquals('int', $attribute['DATA_TYPE']);
+            $this->assertEquals('10', $attribute['NUMERIC_PRECISION']);
+            $this->assertTrue(in_array($attribute['COLUMN_TYPE'], ['int unsigned', 'int(11) unsigned']));
+        }
+    }
+
     public function testCreateDeleteAttribute(): void
     {
         static::getDatabase()->createCollection('attributes');

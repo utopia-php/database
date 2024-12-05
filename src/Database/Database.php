@@ -6037,4 +6037,16 @@ class Database
     {
         return $this->adapter->analyzeCollection($collection);
     }
+
+    /**
+     * Get Schema attributes
+     *
+     * @param string $collection
+     * @return array
+     */
+    public function getSchemaAttributes(string $collection): array
+    {
+        var_dump('getSchemaAttributes' . $collection);
+        return $this->adapter->getSchemaAttributes($collection);
+    }
 }

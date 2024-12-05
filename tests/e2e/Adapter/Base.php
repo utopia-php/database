@@ -1349,7 +1349,7 @@ abstract class Base extends TestCase
         $this->assertEquals(null, $attribute['CHARACTER_MAXIMUM_LENGTH']);
         $this->assertEquals('3', $attribute['DATETIME_PRECISION']);
 
-        if($db->getSharedTables()){
+        if ($db->getSharedTables()) {
             $attribute = $attributes['_tenant'];
             $this->assertEquals('_tenant', $attribute['COLUMN_NAME']);
             $this->assertEquals('int', $attribute['DATA_TYPE']);

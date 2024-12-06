@@ -2110,6 +2110,8 @@ abstract class Base extends TestCase
             $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
         }
 
+        // Test (FAIL) create documents with invalid timestamps
+
         return $documents;
     }
 
@@ -15917,6 +15919,18 @@ abstract class Base extends TestCase
         $docs = static::getDatabase()->find('bulk_delete');
         $this->assertCount(5, $docs);
 
+        // TEST (FAIL): Can't delete documents in the past
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+
+        try {
+            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
+                return $this->getDatabase()->deleteDocuments($document->getCollection());
+            });
+            $this->fail('Failed to throw exception');
+        } catch (ConflictException $e) {
+            $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
+        }
+
         // TEST (FAIL): Bulk delete all documents with invalid collection permission
         static::getDatabase()->updateCollection('bulk_delete', [], false);
         try {
@@ -16648,6 +16662,20 @@ abstract class Base extends TestCase
 
         foreach ($updatedDocuments as $document) {
             $this->assertEquals('text📝 updated all', $document->getAttribute('string'));
+        }
+
+        // TEST: Can't delete documents in the past
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+
+        try {
+            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($collection) {
+                return static::getDatabase()->updateDocuments($collection, new Document([
+                    'string' => 'text📝 updated all',
+                ]));
+            });
+            $this->fail('Failed to throw exception');
+        } catch (ConflictException $e) {
+            $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
         }
 
         // Check collection level permissions

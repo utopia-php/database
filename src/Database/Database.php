@@ -4084,6 +4084,12 @@ class Database
                         $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
                         $documents[] = $newDocument;
                     }
+
+                    // Check if document was updated after the request timestamp
+                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                        throw new ConflictException('Document was updated after the request timestamp');
+                    }
                 }
 
                 $getResults = fn () => $this->adapter->updateDocuments(
@@ -5234,6 +5240,17 @@ class Database
                     // Delete Relationships
                     if ($this->resolveRelationships) {
                         $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
+                    }
+
+                    // Check if document was updated after the request timestamp
+                    try {
+                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    } catch (Exception $e) {
+                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                    }
+
+                    if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                        throw new ConflictException('Document was updated after the request timestamp');
                     }
 
                     $this->purgeRelatedDocuments($collection, $document->getId());

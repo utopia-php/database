@@ -15923,8 +15923,8 @@ abstract class Base extends TestCase
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
 
         try {
-            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
-                return $this->getDatabase()->deleteDocuments($document->getCollection());
+            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () {
+                return $this->getDatabase()->deleteDocuments('bulk_delete');
             });
             $this->fail('Failed to throw exception');
         } catch (ConflictException $e) {

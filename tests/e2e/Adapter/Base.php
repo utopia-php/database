@@ -1322,7 +1322,7 @@ abstract class Base extends TestCase
         $attributes = [];
         foreach ($db->getSchemaAttributes($collection) as $attribute) {
             /**
-             * @var $attribute Document
+             * @var Document $attribute
              */
             $attributes[$attribute->getAttribute('columnName')] = $attribute;
         }

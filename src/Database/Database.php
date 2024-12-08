@@ -6042,7 +6042,7 @@ class Database
      * Get Schema Attributes
      *
      * @param string $collection
-     * @return array<mixed>
+     * @return array<Document>
      * @throws DatabaseException
      */
     public function getSchemaAttributes(string $collection): array

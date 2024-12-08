@@ -1788,6 +1788,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Is get schema attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSchemaAttributes(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1939,6 +1949,11 @@ class Mongo extends Adapter
     }
 
     public function getInternalIndexesKeys(): array
+    {
+        return [];
+    }
+
+    public function getSchemaAttributes(string $collection): array
     {
         return [];
     }

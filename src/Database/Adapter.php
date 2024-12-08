@@ -782,6 +782,13 @@ abstract class Adapter
     abstract public function getSupportForAttributes(): bool;
 
     /**
+     * Are schema attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSchemaAttributes(): bool;
+
+    /**
      * Is index supported?
      *
      * @return bool
@@ -1022,4 +1029,13 @@ abstract class Adapter
      * @return array<string>
      */
     abstract public function getInternalIndexesKeys(): array;
+
+    /**
+     * Get Schema Attributes
+     *
+     * @param string $collection
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    abstract public function getSchemaAttributes(string $collection): array;
 }

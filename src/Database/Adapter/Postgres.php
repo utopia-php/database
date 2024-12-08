@@ -2398,6 +2398,16 @@ class Postgres extends SQL
     }
 
     /**
+     * Is get schema attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSchemaAttributes(): bool
+    {
+        return false;
+    }
+
+    /**
      * @return string
      */
     public function getLikeOperator(): string

@@ -935,6 +935,16 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Is get schema attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSchemaAttributes(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get SQL Index Type
      *
      * @param string $type

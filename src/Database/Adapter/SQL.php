@@ -1151,4 +1151,9 @@ abstract class SQL extends Adapter
     {
         return $e;
     }
+
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
 }

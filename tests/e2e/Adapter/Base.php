@@ -1321,42 +1321,45 @@ abstract class Base extends TestCase
 
         $attributes = [];
         foreach ($db->getSchemaAttributes($collection) as $attribute) {
-            $attributes[$attribute['COLUMN_NAME']] = $attribute;
-        }
+            /**
+             * @var $attribute Document
+             */
+            $attributes[$attribute->getAttribute('columnName')] = $attribute;
+        } 
 
         $attribute = $attributes['username'];
-        $this->assertEquals('username', $attribute['COLUMN_NAME']);
-        $this->assertEquals('varchar', $attribute['DATA_TYPE']);
-        $this->assertEquals('varchar(128)', $attribute['COLUMN_TYPE']);
-        $this->assertEquals('128', $attribute['CHARACTER_MAXIMUM_LENGTH']);
-        $this->assertEquals('YES', $attribute['IS_NULLABLE']);
+        $this->assertEquals('username', $attribute['columnName']);
+        $this->assertEquals('varchar', $attribute['dataType']);
+        $this->assertEquals('varchar(128)', $attribute['columnType']);
+        $this->assertEquals('128', $attribute['characterMaximumLength']);
+        $this->assertEquals('YES', $attribute['isNullable']);
 
         $attribute = $attributes['story'];
-        $this->assertEquals('story', $attribute['COLUMN_NAME']);
-        $this->assertEquals('text', $attribute['DATA_TYPE']);
-        $this->assertEquals('text', $attribute['COLUMN_TYPE']);
-        $this->assertEquals('65535', $attribute['CHARACTER_MAXIMUM_LENGTH']);
+        $this->assertEquals('story', $attribute['columnName']);
+        $this->assertEquals('text', $attribute['dataType']);
+        $this->assertEquals('text', $attribute['columnType']);
+        $this->assertEquals('65535', $attribute['characterMaximumLength']);
 
         $attribute = $attributes['string_list'];
-        $this->assertEquals('string_list', $attribute['COLUMN_NAME']);
-        $this->assertTrue(in_array($attribute['DATA_TYPE'], ['json', 'longtext'])); // mysql vs maria
-        $this->assertTrue(in_array($attribute['COLUMN_TYPE'], ['json', 'longtext']));
-        $this->assertTrue(in_array($attribute['CHARACTER_MAXIMUM_LENGTH'], [null, '4294967295']));
-        $this->assertEquals('YES', $attribute['IS_NULLABLE']);
+        $this->assertEquals('string_list', $attribute['columnName']);
+        $this->assertTrue(in_array($attribute['dataType'], ['json', 'longtext'])); // mysql vs maria
+        $this->assertTrue(in_array($attribute['columnType'], ['json', 'longtext']));
+        $this->assertTrue(in_array($attribute['characterMaximumLength'], [null, '4294967295']));
+        $this->assertEquals('YES', $attribute['isNullable']);
 
         $attribute = $attributes['dob'];
-        $this->assertEquals('dob', $attribute['COLUMN_NAME']);
-        $this->assertEquals('datetime', $attribute['DATA_TYPE']);
-        $this->assertEquals('datetime(3)', $attribute['COLUMN_TYPE']);
-        $this->assertEquals(null, $attribute['CHARACTER_MAXIMUM_LENGTH']);
-        $this->assertEquals('3', $attribute['DATETIME_PRECISION']);
+        $this->assertEquals('dob', $attribute['columnName']);
+        $this->assertEquals('datetime', $attribute['dataType']);
+        $this->assertEquals('datetime(3)', $attribute['columnType']);
+        $this->assertEquals(null, $attribute['characterMaximumLength']);
+        $this->assertEquals('3', $attribute['datetimePrecision']);
 
         if ($db->getSharedTables()) {
             $attribute = $attributes['_tenant'];
-            $this->assertEquals('_tenant', $attribute['COLUMN_NAME']);
-            $this->assertEquals('int', $attribute['DATA_TYPE']);
-            $this->assertEquals('10', $attribute['NUMERIC_PRECISION']);
-            $this->assertTrue(in_array($attribute['COLUMN_TYPE'], ['int unsigned', 'int(11) unsigned']));
+            $this->assertEquals('_tenant', $attribute['columnName']);
+            $this->assertEquals('int', $attribute['dataType']);
+            $this->assertEquals('10', $attribute['numericPrecision']);
+            $this->assertTrue(in_array($attribute['columnType'], ['int unsigned', 'int(11) unsigned']));
         }
     }
 

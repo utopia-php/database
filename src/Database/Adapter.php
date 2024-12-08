@@ -1034,7 +1034,7 @@ abstract class Adapter
      * Get Schema Attributes
      *
      * @param string $collection
-     * @return array<mixed>
+     * @return array<Document>
      * @throws DatabaseException
      */
     abstract public function getSchemaAttributes(string $collection): array;

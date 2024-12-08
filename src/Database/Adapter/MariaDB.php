@@ -2439,7 +2439,7 @@ class MariaDB extends SQL
      * Get Schema Attributes
      *
      * @param string $collection
-     * @return array<mixed>
+     * @return array<Document>
      * @throws DatabaseException
      */
     public function getSchemaAttributes(string $collection): array
@@ -2448,27 +2448,31 @@ class MariaDB extends SQL
         $collection = $this->getNamespace().'_'.$this->filter($collection);
 
         try {
-            $stmt = $this->getPDO()->prepare("
-                SELECT 
-                COLUMN_NAME,
-                COLUMN_DEFAULT,
-                IS_NULLABLE,
-                DATA_TYPE,
-                CHARACTER_MAXIMUM_LENGTH,
-                NUMERIC_PRECISION,
-                NUMERIC_SCALE,
-                DATETIME_PRECISION,
-                COLUMN_TYPE,
-                COLUMN_KEY,
-                EXTRA
-                FROM INFORMATION_SCHEMA.COLUMNS 
+            $stmt = $this->getPDO()->prepare('
+                SELECT
+                COLUMN_NAME as columnName,
+                COLUMN_DEFAULT as columnDefault,
+                IS_NULLABLE as isNullable,
+                DATA_TYPE as dataType,
+                CHARACTER_MAXIMUM_LENGTH as characterMaximumLength,
+                NUMERIC_PRECISION as numericPrecision,
+                NUMERIC_SCALE as numericScale,
+                DATETIME_PRECISION as datetimePrecision,
+                COLUMN_TYPE as columnType,
+                COLUMN_KEY as columnKey,
+                EXTRA as extra
+                FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
-            ");
+            ');
             $stmt->bindParam(':schema', $schema);
             $stmt->bindParam(':table', $collection);
             $stmt->execute();
             $results = $stmt->fetchAll();
             $stmt->closeCursor();
+
+            foreach ($results as $index => $document) {
+                $results[$index] = new Document($document);
+            }
 
             return $results;
 

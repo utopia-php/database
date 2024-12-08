@@ -1325,7 +1325,7 @@ abstract class Base extends TestCase
              * @var $attribute Document
              */
             $attributes[$attribute->getAttribute('columnName')] = $attribute;
-        } 
+        }
 
         $attribute = $attributes['username'];
         $this->assertEquals('username', $attribute['columnName']);

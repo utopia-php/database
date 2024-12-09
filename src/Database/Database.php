@@ -4086,7 +4086,12 @@ class Database
                     }
 
                     // Check if document was updated after the request timestamp
-                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    try {
+                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    } catch (Exception $e) {
+                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                    }
+
                     if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }

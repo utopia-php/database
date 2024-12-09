@@ -2110,8 +2110,6 @@ abstract class Base extends TestCase
             $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
         }
 
-        // Test (FAIL) create documents with invalid timestamps
-
         return $documents;
     }
 

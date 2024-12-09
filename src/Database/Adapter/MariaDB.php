@@ -1457,6 +1457,7 @@ class MariaDB extends SQL
 
                 $permissionsStmt->execute();
                 $permissions = $permissionsStmt->fetchAll();
+                $permissionsStmt->closeCursor();
 
                 $initial = [];
                 foreach (Database::PERMISSIONS as $type) {
@@ -2432,5 +2433,56 @@ class MariaDB extends SQL
         }
 
         return $e;
+    }
+
+    /**
+     * Get Schema Attributes
+     *
+     * @param string $collection
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    public function getSchemaAttributes(string $collection): array
+    {
+        $schema = $this->getDatabase();
+        $collection = $this->getNamespace().'_'.$this->filter($collection);
+
+        try {
+            $stmt = $this->getPDO()->prepare('
+                SELECT
+                COLUMN_NAME as columnName,
+                COLUMN_DEFAULT as columnDefault,
+                IS_NULLABLE as isNullable,
+                DATA_TYPE as dataType,
+                CHARACTER_MAXIMUM_LENGTH as characterMaximumLength,
+                NUMERIC_PRECISION as numericPrecision,
+                NUMERIC_SCALE as numericScale,
+                DATETIME_PRECISION as datetimePrecision,
+                COLUMN_TYPE as columnType,
+                COLUMN_KEY as columnKey,
+                EXTRA as extra
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
+            ');
+            $stmt->bindParam(':schema', $schema);
+            $stmt->bindParam(':table', $collection);
+            $stmt->execute();
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
+
+            foreach ($results as $index => $document) {
+                $results[$index] = new Document($document);
+            }
+
+            return $results;
+
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get schema attributes', $e->getCode(), $e);
+        }
+    }
+
+    public function getSupportForSchemaAttributes(): bool
+    {
+        return true;
     }
 }

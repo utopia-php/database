@@ -5,7 +5,6 @@ namespace Tests\E2E\Adapter;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Throwable;
-use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;

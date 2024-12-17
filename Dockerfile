@@ -34,6 +34,8 @@ RUN \
     git \
     brotli-dev \
     linux-headers \
+    docker-cli \
+    docker-cli-compose \
   && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
   && apk del postgresql-dev \
   && rm -rf /var/cache/apk/*

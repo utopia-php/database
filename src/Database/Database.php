@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use Exception;
 use Utopia\Cache\Cache;
+use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
@@ -2956,7 +2957,14 @@ class Database
             $documentCacheHash .= ':' . \md5(\implode($selections));
         }
 
-        if ($cache = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash)) {
+        try {
+            $cache = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash);
+        } catch (Exception $e) {
+            Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
+            $cache = null;
+        }
+
+        if ($cache) {
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {
@@ -5321,8 +5329,13 @@ class Database
         $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
         $documentKey =  $collectionKey . ':' . $id;
 
-        $this->cache->purge($collectionKey, $documentKey);
-        $this->cache->purge($documentKey);
+        try {
+            $this->cache->purge($collectionKey, $documentKey);
+            $this->cache->purge($documentKey);
+        } catch (Exception $e) {
+            Console::warning('Warning: Failed to purge cache: ' . $e->getMessage());
+            return false;
+        }
 
         return true;
     }

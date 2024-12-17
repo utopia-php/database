@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter;
 
 use PDO;
 use Redis;
+use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
@@ -45,10 +46,15 @@ class MirrorTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
-        $redis = new Redis();
-        $redis->connect('redis');
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        
+        try {
+            $redis = new Redis();
+            $redis->connect('redis', 6379);
+            $redis->flushAll();
+            $cache = new Cache(new RedisAdapter($redis));
+        } catch (\Exception $e) {
+            $cache = new Cache(new None());
+        }
 
         self::$sourcePdo = $pdo;
         self::$source = new Database(new MariaDB($pdo), $cache);
@@ -59,10 +65,15 @@ class MirrorTest extends Base
         $mirrorPass = 'password';
 
         $mirrorPdo = new PDO("mysql:host={$mirrorHost};port={$mirrorPort};charset=utf8mb4", $mirrorUser, $mirrorPass, MariaDB::getPDOAttributes());
-        $mirrorRedis = new Redis();
-        $mirrorRedis->connect('redis-mirror');
-        $mirrorRedis->flushAll();
-        $mirrorCache = new Cache(new RedisAdapter($mirrorRedis));
+
+        try {
+            $mirrorRedis = new Redis();
+            $mirrorRedis->connect('redis-mirror');
+            $mirrorRedis->flushAll();
+            $mirrorCache = new Cache(new RedisAdapter($mirrorRedis));
+        } catch (\Exception $e) {
+            $mirrorCache = new Cache(new None());
+        }
 
         self::$destinationPdo = $mirrorPdo;
         self::$destination = new Database(new MariaDB($mirrorPdo), $mirrorCache);

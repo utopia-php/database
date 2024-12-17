@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter;
 
 use PDO;
 use Redis;
+use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
@@ -45,9 +46,14 @@ class SQLiteTest extends Base
         //$dsn = 'memory'; // Overwrite for fast tests
         $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
 
-        $redis = new Redis();
-        $redis->connect('redis');
-        $redis->flushAll();
+        try {
+            $redis = new Redis();
+            $redis->connect('redis', 6379);
+            $redis->flushAll();
+            $cache = new Cache(new RedisAdapter($redis));
+        } catch (\Exception $e) {
+            $cache = new Cache(new None());
+        }
 
         $cache = new Cache(new RedisAdapter($redis));
 

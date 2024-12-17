@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter;
 
 use PDO;
 use Redis;
+use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Postgres;
@@ -40,10 +41,14 @@ class PostgresTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("pgsql:host={$dbHost};port={$dbPort};", $dbUser, $dbPass, Postgres::getPDOAttributes());
-        $redis = new Redis();
-        $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        try {
+            $redis = new Redis();
+            $redis->connect('redis', 6379);
+            $redis->flushAll();
+            $cache = new Cache(new RedisAdapter($redis));
+        } catch (\Exception $e) {
+            $cache = new Cache(new None());
+        }
 
         $database = new Database(new Postgres($pdo), $cache);
         $database

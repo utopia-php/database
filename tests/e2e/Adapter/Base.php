@@ -17137,9 +17137,12 @@ abstract class Base extends TestCase
         ]));
 
         $database->createIndex('testRedisFallback', 'index1', Database::INDEX_KEY, ['string']);
+        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
 
         // Bring backup Redis
         Console::execute('cd /usr/src/code && docker compose up redis -d', "", $stdout, $stderr);
+
+        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
 
     public function testEvents(): void

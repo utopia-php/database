@@ -17140,7 +17140,8 @@ abstract class Base extends TestCase
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
 
         // Bring backup Redis
-        Console::execute('cd /usr/src/code && docker compose up redis -d', "", $stdout, $stderr);
+        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
+        sleep(2);
 
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }

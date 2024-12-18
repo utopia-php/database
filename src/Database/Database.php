@@ -3031,7 +3031,7 @@ class Database
         foreach ($this->map as $key => $value) {
             [$k, $v] = \explode('=>', $key);
             $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
-            
+
             try {
                 $cache = $this->cache->load($ck, self::TTL, $ck);
             } catch (Exception $e) {

@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Throwable;
+use Utopia\CLI\Console;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -70,6 +71,10 @@ abstract class Base extends TestCase
     public function tearDown(): void
     {
         Authorization::setDefaultStatus(true);
+
+        $stdout = '';
+        $stderr = '';
+        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
     }
 
     protected string $testDatabase = 'utopiaTests';
@@ -17100,6 +17105,45 @@ abstract class Base extends TestCase
         foreach ($documents as $document) {
             $this->assertEquals('doc1', $document->getAttribute('testUpdateDocumentsRelationships1')->getId());
         }
+    }
+
+    public function testRedisFallback(): void
+    {
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+        $database = static::getDatabase();
+
+        $stdout = '';
+        $stderr = '';
+        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
+
+        $database->createCollection('testRedisFallback', attributes: [
+            new Document([
+                '$id' => ID::custom('string'),
+                'type' => Database::VAR_STRING,
+                'size' => 767,
+                'required' => true,
+            ])
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        $database->createDocument('testRedisFallback', new Document([
+            '$id' => 'doc1',
+            'string' => 'text📝',
+        ]));
+
+        $database->createIndex('testRedisFallback', 'index1', Database::INDEX_KEY, ['string']);
+        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+
+        // Bring backup Redis
+        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
+        sleep(2);
+
+        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
 
     public function testEvents(): void

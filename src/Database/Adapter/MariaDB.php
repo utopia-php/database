@@ -433,12 +433,13 @@ class MariaDB extends SQL
             return $this->getPDO()
                 ->prepare($sql)
                 ->execute();
+
         } catch (PDOException $e) {
             if ($e->getCode() === "42000" && $e->errorInfo[1] === 1091) {
                 return true;
             }
 
-            throw $e;
+            throw $this->processException($e);
         }
     }
 
@@ -462,9 +463,14 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -766,7 +772,7 @@ class MariaDB extends SQL
 
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
-            if (!empty($collectionAttribute['array']) && $this->castIndexArray()) {
+            if (!empty($collectionAttribute['array']) && $this->getSupportForCastIndexArray()) {
                 $attributes[$i] = '(CAST(' . $attr . ' AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
@@ -796,14 +802,6 @@ class MariaDB extends SQL
             $this->processException($e);
             return false;
         }
-    }
-
-    /**
-     * @return bool
-     */
-    public function castIndexArray(): bool
-    {
-        return false;
     }
 
     /**

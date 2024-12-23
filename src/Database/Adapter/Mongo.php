@@ -1797,6 +1797,11 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForCastIndexArray(): bool
+    {
+        return false;
+    }
+
     /**
      * Get current attribute count from collection document
      *

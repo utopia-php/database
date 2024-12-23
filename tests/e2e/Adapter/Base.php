@@ -20,6 +20,7 @@ use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -2904,13 +2905,26 @@ abstract class Base extends TestCase
          */
         $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards']);
 
-        $database->deleteAttribute($collection, 'cards');
+        if ($this->getDatabase()->getAdapter()->getSupportForCastIndexArray()) {
+            try {
+                $database->deleteAttribute($collection, 'cards');
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(DependencyException::class, $e);
+                $this->assertEquals("Column 'cards' has a functional index dependency and cannot be dropped or renamed.", $e->getMessage());
+            }
 
-        try {
-            $database->renameAttribute($collection, 'cards', 'cards_new');
-            $this->fail('Failed to throw exception');
-        } catch (Throwable $e) {
-            $this->assertEquals("Can't rename attribute because of functional index dependency must drop index first.", $e->getMessage());
+            try {
+                $database->renameAttribute($collection, 'cards', 'cards_new');
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(DependencyException::class, $e);
+                $this->assertEquals("Column 'cards' has a functional index dependency and cannot be dropped or renamed.", $e->getMessage());
+            }
+        }
+        else {
+            $this->assertTrue($database->renameAttribute($collection, 'cards', 'cards_new'));
+            $this->assertTrue($database->deleteAttribute($collection, 'cards'));
         }
 
         try {

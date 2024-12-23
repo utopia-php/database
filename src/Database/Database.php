@@ -2099,9 +2099,9 @@ class Database
 
             foreach ($indexAttributes as $key => $indexAttribute) {
                 if($indexAttribute === $old){
-                    if($attribute->getAttribute('array', false)){
-                        throw new DependencyException("Can't rename attribute because of functional index dependency must drop index first.");
-                    }
+//                    if($attribute->getAttribute('array', false)){
+//                        throw new DependencyException("Can't rename attribute because of functional index dependency must drop index first.");
+//                    }
 
                     $indexAttributes[$key] = $new;
                 }

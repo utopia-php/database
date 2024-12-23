@@ -2903,7 +2903,7 @@ abstract class Base extends TestCase
         /**
          * functional index dependency cannot be dropped or rename
          */
-        $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards']);
+        $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
 
         if ($this->getDatabase()->getAdapter()->getSupportForCastIndexArray()) {
             try {

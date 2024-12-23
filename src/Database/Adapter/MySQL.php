@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 
 class MySQL extends MariaDB
@@ -74,10 +75,7 @@ class MySQL extends MariaDB
         return $size;
     }
 
-    /**
-     * @return bool
-     */
-    public function castIndexArray(): bool
+    public function getSupportForCastIndexArray(): bool
     {
         return true;
     }
@@ -87,6 +85,11 @@ class MySQL extends MariaDB
         // Timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
             return new TimeoutException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        // Functional index dependency
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3837) {
+            return new DependencyException($e->errorInfo[2], $e->getCode(), $e);
         }
 
         return parent::processException($e);

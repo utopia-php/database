@@ -2903,6 +2903,9 @@ abstract class Base extends TestCase
          * functional index dependency cannot be dropped or rename
          */
         $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards']);
+
+        $database->deleteAttribute($collection, 'cards');
+
         try {
             $database->renameAttribute($collection, 'cards', 'cards_new');
             $this->fail('Failed to throw exception');

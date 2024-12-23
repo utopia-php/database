@@ -7,6 +7,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -15,7 +16,6 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -2078,11 +2078,11 @@ class Database
         $attribute = new Document();
 
         foreach ($attributes as $value) {
-            if($value->getId() === $old){
+            if ($value->getId() === $old) {
                 $attribute = $value;
             }
 
-            if($value->getId() === $new){
+            if ($value->getId() === $new) {
                 throw new DuplicateException('Attribute name already used');
             }
         }
@@ -2098,10 +2098,10 @@ class Database
             $indexAttributes = $index->getAttribute('attributes', []);
 
             foreach ($indexAttributes as $key => $indexAttribute) {
-                if($indexAttribute === $old){
-//                    if($attribute->getAttribute('array', false)){
-//                        throw new DependencyException("Can't rename attribute because of functional index dependency must drop index first.");
-//                    }
+                if ($indexAttribute === $old) {
+                    //                    if($attribute->getAttribute('array', false)){
+                    //                        throw new DependencyException("Can't rename attribute because of functional index dependency must drop index first.");
+                    //                    }
 
                     $indexAttributes[$key] = $new;
                 }

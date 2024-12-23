@@ -12,6 +12,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -20,7 +21,6 @@ use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
-use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -2921,10 +2921,9 @@ abstract class Base extends TestCase
                 $this->assertInstanceOf(DependencyException::class, $e);
                 $this->assertEquals("Column 'cards' has a functional index dependency and cannot be dropped or renamed.", $e->getMessage());
             }
-        }
-        else {
+        } else {
             $this->assertTrue($database->renameAttribute($collection, 'cards', 'cards_new'));
-            $this->assertTrue($database->deleteAttribute($collection, 'cards'));
+            $this->assertTrue($database->deleteAttribute($collection, 'cards_new'));
         }
 
         try {

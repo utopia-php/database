@@ -7,7 +7,6 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
-use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -2049,17 +2048,16 @@ class Database
     }
 
     /**
-     * Rename Attribute
-     *
      * @param string $collection
-     * @param string $old Current attribute ID
+     * @param string $old
      * @param string $new
      * @return bool
      * @throws AuthorizationException
      * @throws ConflictException
-     * @throws DatabaseException
      * @throws DuplicateException
+     * @throws NotFoundException
      * @throws StructureException
+     * @throws DatabaseException
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
@@ -2097,15 +2095,7 @@ class Database
         foreach ($indexes as $index) {
             $indexAttributes = $index->getAttribute('attributes', []);
 
-            foreach ($indexAttributes as $key => $indexAttribute) {
-                if ($indexAttribute === $old) {
-                    //                    if($attribute->getAttribute('array', false)){
-                    //                        throw new DependencyException("Can't rename attribute because of functional index dependency must drop index first.");
-                    //                    }
-
-                    $indexAttributes[$key] = $new;
-                }
-            }
+            $indexAttributes = \array_map(fn ($attr) => ($attr === $old) ? $new : $attr, $indexAttributes);
 
             $index->setAttribute('attributes', $indexAttributes);
         }

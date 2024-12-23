@@ -2757,11 +2757,21 @@ abstract class Base extends TestCase
             array: true
         ));
 
+
         $this->assertEquals(true, $database->createAttribute(
             $collection,
             'names',
             Database::VAR_STRING,
             size: 255, // Does this mean each Element max is 255? We need to check this on Structure validation?
+            required: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'cards',
+            Database::VAR_STRING,
+            size: 5000,
             required: false,
             array: true
         ));
@@ -2888,6 +2898,17 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $document->getAttribute('booleans')[0]);
         $this->assertEquals('Antony', $document->getAttribute('names')[1]);
         $this->assertEquals(100, $document->getAttribute('numbers')[1]);
+
+        /**
+         * functional index dependency cannot be dropped or rename
+         */
+        $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards']);
+        try {
+            $database->renameAttribute($collection, 'cards', 'cards_new');
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals("Can't rename attribute because of functional index dependency must drop index first.", $e->getMessage());
+        }
 
         try {
             $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);

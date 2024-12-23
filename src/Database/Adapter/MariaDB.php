@@ -433,7 +433,6 @@ class MariaDB extends SQL
             return $this->getPDO()
                 ->prepare($sql)
                 ->execute();
-
         } catch (PDOException $e) {
             if ($e->getCode() === "42000" && $e->errorInfo[1] === 1091) {
                 return true;

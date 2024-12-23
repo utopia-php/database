@@ -2090,14 +2090,14 @@ class Database
             $index->setAttribute('attributes', $indexAttributes);
         }
 
+        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+
         $collection->setAttribute('attributes', $attributes);
         $collection->setAttribute('indexes', $indexes);
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
-
-        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
 
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributeNew);
 

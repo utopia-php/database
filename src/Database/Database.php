@@ -2048,16 +2048,17 @@ class Database
     }
 
     /**
+     * Rename Attribute
+     *
      * @param string $collection
-     * @param string $old
+     * @param string $old Current attribute ID
      * @param string $new
      * @return bool
      * @throws AuthorizationException
      * @throws ConflictException
-     * @throws DuplicateException
-     * @throws NotFoundException
-     * @throws StructureException
      * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws StructureException
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {

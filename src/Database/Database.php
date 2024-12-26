@@ -5967,10 +5967,15 @@ class Database
      * @param array<Query> $queries
      * @return array<Query>
      * @throws QueryException
+     * @throws Exception
      */
     public static function convertQueries(Document $collection, array $queries): array
     {
         $attributes = $collection->getAttribute('attributes', []);
+
+        foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+            $attributes[] = new Document($attribute);
+        }
 
         foreach ($attributes as $attribute) {
             foreach ($queries as $query) {

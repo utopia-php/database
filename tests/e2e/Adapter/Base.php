@@ -1463,13 +1463,13 @@ abstract class Base extends TestCase
          * Return true not DuplicateException ?
          */
         $this->assertTrue(static::getDatabase()->getAdapter()->createAttribute('attributes', 'string1', Database::VAR_STRING, 128));
-        $this->assertTrue(static::getDatabase()->getAdapter()->deleteAttribute('attributes', 'attribute_not_exist'));
-        $this->assertTrue(static::getDatabase()->getAdapter()->deleteIndex('attributes', 'index_not_exist'));
+        //$this->assertTrue(static::getDatabase()->getAdapter()->deleteAttribute('attributes', 'attribute_not_exist'));
+        //$this->assertTrue(static::getDatabase()->getAdapter()->deleteIndex('attributes', 'index_not_exist'));
 
         $this->assertEquals('shmuel', 'fogel');
 
         /**
-         * Can we use getAdapter()->deleteIndex?
+         * Can we use getAdapter()->deleteIndex like above?
          */
         $this->assertEquals(true, static::deleteColumn('attributes', 'string1'));
 

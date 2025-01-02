@@ -1219,12 +1219,7 @@ class Database
             return new Document(self::COLLECTION);
         }
 
-        try {
-            $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
-        } catch (Exception $e) {
-            $this->adapter->deleteCollection($id);
-            throw $e;
-        }
+        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 
@@ -2095,14 +2090,14 @@ class Database
             $index->setAttribute('attributes', $indexAttributes);
         }
 
+        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+
         $collection->setAttribute('attributes', $attributes);
         $collection->setAttribute('indexes', $indexes);
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
-
-        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
 
         $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributeNew);
 
@@ -2845,13 +2840,13 @@ class Database
             }
         }
 
+        $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+
         $collection->setAttribute('indexes', \array_values($indexes));
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
-
-        $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
 
         $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
 

@@ -869,6 +869,13 @@ abstract class Adapter
     abstract public function getSupportForGetConnectionId(): bool;
 
     /**
+     * Is cast index as array supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForCastIndexArray(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

@@ -12,6 +12,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -2768,6 +2769,15 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, $database->createAttribute(
             $collection,
+            'cards',
+            Database::VAR_STRING,
+            size: 5000,
+            required: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
             'numbers',
             Database::VAR_INTEGER,
             size: 0,
@@ -2888,6 +2898,32 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $document->getAttribute('booleans')[0]);
         $this->assertEquals('Antony', $document->getAttribute('names')[1]);
         $this->assertEquals(100, $document->getAttribute('numbers')[1]);
+
+        /**
+         * functional index dependency cannot be dropped or rename
+         */
+        $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
+
+        if ($this->getDatabase()->getAdapter()->getSupportForCastIndexArray()) {
+            try {
+                $database->deleteAttribute($collection, 'cards');
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(DependencyException::class, $e);
+                $this->assertEquals("Column 'cards' has a functional index dependency and cannot be dropped or renamed.", $e->getMessage());
+            }
+
+            try {
+                $database->renameAttribute($collection, 'cards', 'cards_new');
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(DependencyException::class, $e);
+                $this->assertEquals("Column 'cards' has a functional index dependency and cannot be dropped or renamed.", $e->getMessage());
+            }
+        } else {
+            $this->assertTrue($database->renameAttribute($collection, 'cards', 'cards_new'));
+            $this->assertTrue($database->deleteAttribute($collection, 'cards_new'));
+        }
 
         try {
             $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);

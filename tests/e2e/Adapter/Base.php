@@ -2758,7 +2758,6 @@ abstract class Base extends TestCase
             array: true
         ));
 
-
         $this->assertEquals(true, $database->createAttribute(
             $collection,
             'names',

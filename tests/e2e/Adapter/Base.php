@@ -1358,9 +1358,9 @@ abstract class Base extends TestCase
         if ($db->getSharedTables()) {
             $attribute = $attributes['_tenant'];
             $this->assertEquals('_tenant', $attribute['columnName']);
-            $this->assertEquals('bigint', $attribute['dataType']);
-            $this->assertEquals('20', $attribute['numericPrecision']);
-            $this->assertTrue(in_array($attribute['columnType'], ['bigint unsigned', 'bigint(20) unsigned']));
+            $this->assertEquals('int', $attribute['dataType']);
+            $this->assertEquals('10', $attribute['numericPrecision']);
+            $this->assertTrue(in_array($attribute['columnType'], ['int unsigned', 'int(11) unsigned']));
         }
     }
 

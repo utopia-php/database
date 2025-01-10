@@ -2421,22 +2421,22 @@ class Postgres extends SQL
     {
         // Timeout
         if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
+            return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
         // Duplicate table
         if ($e->getCode() === '42P07' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
         // Duplicate column
         if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException('Attribute already exists', $e->getCode(), $e);
         }
 
         // Duplicate row
         if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
         // Data is too big for column resize

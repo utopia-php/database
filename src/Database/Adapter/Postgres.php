@@ -197,11 +197,11 @@ class Postgres extends SQL
             $attributeStrings[] = "\"{$attrId}\" {$attrType}, ";
         }
 
-        $sqlTenant = $this->sharedTables ? '_tenant BIGINT DEFAULT NULL,' : '';
+        $sqlTenant = $this->sharedTables ? '_tenant INTEGER DEFAULT NULL,' : '';
 
         $collection = "
             CREATE TABLE {$this->getSQLTable($id)} (
-                _id BIGSERIAL NOT NULL,
+                _id SERIAL NOT NULL,
                 _uid VARCHAR(255) NOT NULL,
                 ". $sqlTenant ."
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
@@ -231,8 +231,8 @@ class Postgres extends SQL
 
         $permissions = "
             CREATE TABLE {$this->getSQLTable($id . '_perms')} (
-                _id BIGSERIAL NOT NULL,
-                _tenant BIGINT DEFAULT NULL,
+                _id SERIAL NOT NULL,
+                _tenant INTEGER DEFAULT NULL,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
                 _document VARCHAR(255) NOT NULL,

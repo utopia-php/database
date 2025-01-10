@@ -185,17 +185,10 @@ class Index extends Validator
                     $attributeSize = $attribute->getAttribute('size', 0);
                     $indexLength = $lengths[$attributePosition] ?? $attributeSize;
                     break;
-
                 case Database::VAR_FLOAT:
                     $attributeSize = 2; // 8 bytes / 4 mb4
                     $indexLength = 2;
                     break;
-
-                case Database::VAR_INTEGER:
-                    $attributeSize = $attribute->getAttribute('size', 0);
-                    $indexLength = $attributeSize = $attributeSize >= 8 ? 2 : 1; // bigint
-                    break;
-
                 default:
                     $attributeSize = 1; // 4 bytes / 4 mb4
                     $indexLength = 1;

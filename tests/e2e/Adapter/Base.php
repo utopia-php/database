@@ -17165,6 +17165,47 @@ abstract class Base extends TestCase
         }
     }
 
+    public function testNestedQueryValidation(): void
+    {
+        $this->getDatabase()->createCollection(__FUNCTION__, [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => true,
+            ])
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        $this->getDatabase()->createDocuments(__FUNCTION__, [
+            new Document([
+                '$id' => ID::unique(),
+                'name' => 'test1',
+            ]),
+            new Document([
+                '$id' => ID::unique(),
+                'name' => 'doc2',
+            ]),
+        ]);
+
+        try {
+            $this->getDatabase()->find(__FUNCTION__, [
+                Query::or([
+                    Query::equal('name', ['test1']),
+                    Query::search('name', 'doc'),
+                ])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(QueryException::class, $e);
+            $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $e->getMessage());
+        }
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {

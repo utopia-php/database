@@ -68,8 +68,20 @@ class IndexedQueries extends Queries
         }
         $queries = [];
         foreach ($value as $query) {
-            if (!$query instanceof Query) {
-                $query = Query::parse($query);
+            if (! $query instanceof Query) {
+                try {
+                    $query = Query::parse($query);
+                } catch (\Throwable $e) {
+                    $this->message = 'Invalid query: '.$e->getMessage();
+
+                    return false;
+                }
+            }
+
+            if ($query->isNested()) {
+                if (! self::isValid($query->getValues())) {
+                    return false;
+                }
             }
 
             $queries[] = $query;

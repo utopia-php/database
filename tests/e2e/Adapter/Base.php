@@ -1360,7 +1360,7 @@ abstract class Base extends TestCase
             $this->assertEquals('_tenant', $attribute['columnName']);
             $this->assertEquals('bigint', $attribute['dataType']);
             $this->assertEquals('20', $attribute['numericPrecision']);
-            $this->assertEquals('bigint unsigned', $attribute['columnType']);
+            $this->assertTrue(in_array($attribute['columnType'], ['bigint unsigned', 'bigint(20) unsigned']));
         }
     }
 

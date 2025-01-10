@@ -84,12 +84,12 @@ class MySQL extends MariaDB
     {
         // Timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
-            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
+            return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
         // Functional index dependency
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3837) {
-            return new DependencyException($e->errorInfo[2], $e->getCode(), $e);
+            return new DependencyException('Attribute cannot be deleted because it is used in an index', $e->getCode(), $e);
         }
 
         return parent::processException($e);

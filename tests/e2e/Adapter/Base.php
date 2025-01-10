@@ -1301,7 +1301,7 @@ abstract class Base extends TestCase
         $this->assertArrayHasKey('age', $document);
     }
 
-    public function testSchemaAttribute(): void
+    public function testSchemaAttributes(): void
     {
         if (!$this->getDatabase()->getAdapter()->getSupportForSchemaAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1358,9 +1358,9 @@ abstract class Base extends TestCase
         if ($db->getSharedTables()) {
             $attribute = $attributes['_tenant'];
             $this->assertEquals('_tenant', $attribute['columnName']);
-            $this->assertEquals('int', $attribute['dataType']);
-            $this->assertEquals('10', $attribute['numericPrecision']);
-            $this->assertTrue(in_array($attribute['columnType'], ['int unsigned', 'int(11) unsigned']));
+            $this->assertEquals('bigint', $attribute['dataType']);
+            $this->assertEquals('20', $attribute['numericPrecision']);
+            $this->assertTrue(in_array($attribute['columnType'], ['bigint unsigned', 'bigint(20) unsigned']));
         }
     }
 
@@ -2910,7 +2910,7 @@ abstract class Base extends TestCase
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
-                $this->assertEquals("Column 'cards' has a functional index dependency and cannot be dropped or renamed.", $e->getMessage());
+                $this->assertEquals('Attribute cannot be deleted because it is used in an index', $e->getMessage());
             }
 
             try {
@@ -2918,7 +2918,7 @@ abstract class Base extends TestCase
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
-                $this->assertEquals("Column 'cards' has a functional index dependency and cannot be dropped or renamed.", $e->getMessage());
+                $this->assertEquals('Attribute cannot be deleted because it is used in an index', $e->getMessage());
             }
         } else {
             $this->assertTrue($database->renameAttribute($collection, 'cards', 'cards_new'));

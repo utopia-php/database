@@ -1934,7 +1934,7 @@ class Mongo extends Adapter
     protected function processException(Exception $e): \Exception
     {
         if ($e->getCode() === 50) {
-            return new Timeout($e->getMessage());
+            return new Timeout('Query timed out', $e->getCode(), $e);
         }
 
         return $e;

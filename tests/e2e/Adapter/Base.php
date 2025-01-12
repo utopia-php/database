@@ -1364,7 +1364,65 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testCreateDeleteAttribute(): void
+    public function testRowSizeToLarge(): void
+    {
+        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() === 0) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        /**
+         * getDocumentSizeLimit = 65535
+         * mb4 65535 / 4 = 16383
+         */
+        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() > 0) {
+            $collection = static::getDatabase()->createCollection('row_size');
+
+            $this->assertEquals(true, static::getDatabase()->createAttribute($collection->getId(), 'attr_1', Database::VAR_STRING, 16000, true));
+           // $this->assertEquals(true, static::getDatabase()->createAttribute($collection->getId(), 'attr_1', Database::VAR_STRING, 100, true));
+
+            $collection = static::getDatabase()->getCollection($collection->getId());
+
+            var_dump(static::getDatabase()->getAdapter()->getAttributeWidth($collection));
+            var_dump(static::getDatabase()->getAdapter()->getDocumentSizeLimit());
+
+//            $attribute = new Document([
+//                '$id' => ID::custom('attr_2'),
+//                'type' => Database::VAR_STRING,
+//                'size' => 1,
+//                'required' => false,
+//                'default' => null,
+//                'signed' => true,
+//                'array' => false,
+//                'filters' => [],
+//            ]);
+//
+//            $this->assertEquals(false, static::getDatabase()->checkAttribute($collection, $attribute));
+
+            $collection2 = static::getDatabase()->createCollection('row_size2');
+var_dump($collection2);
+            static::getDatabase()->createRelationship(
+                collection: $collection2->getId(),
+                relatedCollection: $collection->getId(),
+                type: Database::RELATION_ONE_TO_ONE,
+                id: 'shmuel_id',
+                twoWay: true,
+                twoWayKey: 'shmuel_twoWayKey'
+            );
+
+            //$this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
+
+        }
+
+        //$this->adapter->getDocumentSizeLimit() > 0 &&
+       // $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
+
+        $this->assertEquals('shmuel', 'fogel');
+
+
+    }
+
+        public function testCreateDeleteAttribute(): void
     {
         static::getDatabase()->createCollection('attributes');
 

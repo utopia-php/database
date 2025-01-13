@@ -1391,7 +1391,7 @@ class Database
         $relationships = \array_filter(
             $collection->getAttribute('attributes'),
             fn ($attribute) =>
-            $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
+                $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
         );
 
         foreach ($relationships as $relationship) {
@@ -2989,7 +2989,7 @@ class Database
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-            $attribute['type'] === Database::VAR_RELATIONSHIP
+                $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
         $hasTwoWayRelationship = false;
@@ -3105,8 +3105,8 @@ class Database
                 // collection as an existing relationship, but a different two-way key (the third condition),
                 // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                 $transitive = (($existingKey === $twoWayKey
-                    && $existingCollection === $relatedCollection->getId()
-                    && $existingSide !== $side)
+                        && $existingCollection === $relatedCollection->getId()
+                        && $existingSide !== $side)
                     || ($existingTwoWayKey === $key
                         && $existingRelatedCollection === $collection->getId()
                         && $existingSide !== $side)
@@ -3443,7 +3443,7 @@ class Database
         $relationships = \array_filter(
             $attributes,
             fn ($attribute) =>
-            $attribute['type'] === Database::VAR_RELATIONSHIP
+                $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
         $stackCount = count($this->relationshipWriteStack);
@@ -4825,8 +4825,8 @@ class Database
                         // collection as an existing relationship, but a different two-way key (the third condition),
                         // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                         $transitive = (($existingKey === $twoWayKey
-                            && $existingCollection === $relatedCollection->getId()
-                            && $existingSide !== $side)
+                                && $existingCollection === $relatedCollection->getId()
+                                && $existingSide !== $side)
                             || ($existingTwoWayKey === $key
                                 && $existingRelatedCollection === $collection->getId()
                                 && $existingSide !== $side)
@@ -5681,13 +5681,13 @@ class Database
         $attributes = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-            $attribute['type'] !== self::VAR_RELATIONSHIP
+                $attribute['type'] !== self::VAR_RELATIONSHIP
         );
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-            $attribute['type'] === self::VAR_RELATIONSHIP
+                $attribute['type'] === self::VAR_RELATIONSHIP
         );
 
         foreach ($relationships as $relationship) {
@@ -6008,7 +6008,7 @@ class Database
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-            $attribute['type'] === Database::VAR_RELATIONSHIP
+                $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
         if (empty($relationships)) {

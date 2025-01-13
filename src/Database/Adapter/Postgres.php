@@ -298,13 +298,12 @@ class Postgres extends SQL
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
      * @param string $collection
      * @return int
      * @throws DatabaseException
-     *
      */
-    public function getSizeOfCollection(string $collection): int
+    public function getSizeOfCollectionOnDisk(string $collection): int
     {
         $collection = $this->filter($collection);
         $name = $this->getSQLTable($collection);
@@ -333,14 +332,38 @@ class Postgres extends SQL
     }
 
     /**
-     * Get Collection Size on disk
+     * Get Collection Size of raw data
      * @param string $collection
      * @return int
      * @throws DatabaseException
+     *
      */
-    public function getSizeOfCollectionOnDisk(string $collection): int
+    public function getSizeOfCollection(string $collection): int
     {
-        return $this->getSizeOfCollection($collection);
+        $collection = $this->filter($collection);
+        $name = $this->getSQLTable($collection);
+        $permissions = $this->getSQLTable($collection . '_perms');
+
+        $collectionSize = $this->getPDO()->prepare("
+             SELECT pg_relation_size(:name);
+        ");
+
+        $permissionsSize = $this->getPDO()->prepare("
+             SELECT pg_relation_size(:permissions);
+        ");
+
+        $collectionSize->bindParam(':name', $name);
+        $permissionsSize->bindParam(':permissions', $permissions);
+
+        try {
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+
+        return  $size;
     }
 
     /**

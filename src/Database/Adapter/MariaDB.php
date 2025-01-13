@@ -2481,4 +2481,5 @@ class MariaDB extends SQL
     {
         return true;
     }
+
 }

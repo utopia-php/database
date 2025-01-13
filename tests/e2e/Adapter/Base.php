@@ -7047,8 +7047,8 @@ abstract class Base extends TestCase
             $person1->setAttribute(
                 'library',
                 $person1
-                ->getAttribute('library')
-                ->setAttribute('name', 'Library 1 Updated')
+                    ->getAttribute('library')
+                    ->setAttribute('name', 'Library 1 Updated')
             )
         );
 
@@ -7519,8 +7519,8 @@ abstract class Base extends TestCase
             $country1->setAttribute(
                 'city',
                 $country1
-                ->getAttribute('city')
-                ->setAttribute('name', 'City 1 Updated')
+                    ->getAttribute('city')
+                    ->setAttribute('name', 'City 1 Updated')
             )
         );
 
@@ -7535,8 +7535,8 @@ abstract class Base extends TestCase
             $city2->setAttribute(
                 'country',
                 $city2
-                ->getAttribute('country')
-                ->setAttribute('name', 'Country 2 Updated')
+                    ->getAttribute('country')
+                    ->setAttribute('name', 'Country 2 Updated')
             )
         );
 
@@ -8538,8 +8538,8 @@ abstract class Base extends TestCase
             $account2->setAttribute(
                 'customer',
                 $account2
-                ->getAttribute('customer')
-                ->setAttribute('name', 'Customer 2 Updated')
+                    ->getAttribute('customer')
+                    ->setAttribute('name', 'Customer 2 Updated')
             )
         );
 
@@ -12451,19 +12451,19 @@ abstract class Base extends TestCase
             $level1Collection,
             'level1',
             $level1
-            ->setAttribute($level2Collection, [new Document([
-                '$id' => 'level2new',
-                $level3Collection => [
-                    [
-                        '$id' => 'level3new',
-                        $level4Collection => [
-                            [
-                                '$id' => 'level4new',
+                ->setAttribute($level2Collection, [new Document([
+                    '$id' => 'level2new',
+                    $level3Collection => [
+                        [
+                            '$id' => 'level3new',
+                            $level4Collection => [
+                                [
+                                    '$id' => 'level4new',
+                                ],
                             ],
                         ],
                     ],
-                ],
-            ])])
+                ])])
         );
         $this->assertEquals(1, count($level1[$level2Collection]));
         $this->assertEquals('level2new', $level1[$level2Collection][0]->getId());

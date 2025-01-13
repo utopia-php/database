@@ -700,7 +700,7 @@ abstract class Adapter
     abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
 
     /**
-     * Get Collection Size
+     * Get Collection Size of the raw data
      *
      * @param string $collection
      * @return int
@@ -972,7 +972,7 @@ abstract class Adapter
      */
     public function filter(string $value): string
     {
-        $value = \preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
+        $value = \preg_replace("/[^A-Za-z0-9_\-]/", '', $value);
 
         if (\is_null($value)) {
             throw new DatabaseException('Failed to filter key');

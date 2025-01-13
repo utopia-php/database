@@ -1376,50 +1376,50 @@ abstract class Base extends TestCase
          * mb4 65535 / 4 = 16383
          */
         if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() > 0) {
-            $collection = static::getDatabase()->createCollection('row_size');
+            $collection_1 = static::getDatabase()->createCollection('row_size_1');
+            $collection_2 = static::getDatabase()->createCollection('row_size_2');
 
-            $this->assertEquals(true, static::getDatabase()->createAttribute($collection->getId(), 'attr_1', Database::VAR_STRING, 16000, true));
-           // $this->assertEquals(true, static::getDatabase()->createAttribute($collection->getId(), 'attr_1', Database::VAR_STRING, 100, true));
+            $this->assertEquals(true, static::getDatabase()->createAttribute($collection_1->getId(), 'attr_1', Database::VAR_STRING, 16000, true));
 
-            $collection = static::getDatabase()->getCollection($collection->getId());
+            try {
+                $this->assertEquals(true, static::getDatabase()->createAttribute($collection_1->getId(), 'attr_2', Database::VAR_STRING, Database::LENGTH_KEY, true));
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(LimitException::class, $e);
+            }
 
-            var_dump(static::getDatabase()->getAdapter()->getAttributeWidth($collection));
-            var_dump(static::getDatabase()->getAdapter()->getDocumentSizeLimit());
+            $collection_1 = static::getDatabase()->getCollection($collection_1->getId());
 
-//            $attribute = new Document([
-//                '$id' => ID::custom('attr_2'),
-//                'type' => Database::VAR_STRING,
-//                'size' => 1,
-//                'required' => false,
-//                'default' => null,
-//                'signed' => true,
-//                'array' => false,
-//                'filters' => [],
-//            ]);
-//
-//            $this->assertEquals(false, static::getDatabase()->checkAttribute($collection, $attribute));
+            /**
+             * Relation takes length of Database::LENGTH_KEY so exceeding getDocumentSizeLimit
+             */
 
-            $collection2 = static::getDatabase()->createCollection('row_size2');
-var_dump($collection2);
-            static::getDatabase()->createRelationship(
-                collection: $collection2->getId(),
-                relatedCollection: $collection->getId(),
-                type: Database::RELATION_ONE_TO_ONE,
-                id: 'shmuel_id',
-                twoWay: true,
-                twoWayKey: 'shmuel_twoWayKey'
-            );
+            try {
+                static::getDatabase()->createRelationship(
+                    collection: $collection_2->getId(),
+                    relatedCollection: $collection_1->getId(),
+                    type: Database::RELATION_ONE_TO_ONE,
+                    twoWay: true,
+                );
 
-            //$this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(LimitException::class, $e);
+            }
 
+            try {
+                static::getDatabase()->createRelationship(
+                    collection: $collection_1->getId(),
+                    relatedCollection: $collection_2->getId(),
+                    type: Database::RELATION_ONE_TO_ONE,
+                    twoWay: true,
+                );
+
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(LimitException::class, $e);
+            }
         }
-
-        //$this->adapter->getDocumentSizeLimit() > 0 &&
-       // $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
-
-        $this->assertEquals('shmuel', 'fogel');
-
-
     }
 
         public function testCreateDeleteAttribute(): void

@@ -502,15 +502,7 @@ class MariaDB extends SQL
                 $sql = "ALTER TABLE {$table} ADD COLUMN `{$id}` {$sqlType} DEFAULT NULL;";
 
                 if ($twoWay) {
-                    //$sql .= "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL;";
-
-                    $x = $this->getPDO()
-                        ->prepare("ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL;")
-                        ->execute();
-
-                    var_dump("ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL;");
-                    var_dump($x);
-
+                    $sql .= "ALTER TABLE {$relatedTable} ADD COLUMN `{$twoWayKey}` {$sqlType} DEFAULT NULL;";
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
@@ -527,14 +519,9 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        $x = $this->getPDO()
+        return $this->getPDO()
             ->prepare($sql)
             ->execute();
-
-        var_dump($sql);
-        var_dump($x);
-
-        return $x;
     }
 
     /**
@@ -810,7 +797,6 @@ class MariaDB extends SQL
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
-            var_dump($e);
             $this->processException($e);
             return false;
         }

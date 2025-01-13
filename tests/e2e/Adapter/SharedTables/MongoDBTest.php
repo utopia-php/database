@@ -30,7 +30,7 @@ class MongoDBTest extends Base
      * @return Database
      * @throws Exception
      */
-    public function getDatabase(): Database
+    public static function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -53,7 +53,6 @@ class MongoDBTest extends Base
 
         $database = new Database(new Mongo($client), $cache);
         $database
-            ->setAuthorization(self::$authorization)
             ->setDatabase($schema)
             ->setSharedTables(true)
             ->setTenant(999)
@@ -98,5 +97,15 @@ class MongoDBTest extends Base
     public function testKeywords(): void
     {
         $this->assertTrue(true);
+    }
+
+    protected static function deleteColumn(string $collection, string $column): bool
+    {
+        return true;
+    }
+
+    protected static function deleteIndex(string $collection, string $index): bool
+    {
+        return true;
     }
 }

@@ -6,7 +6,7 @@ use Exception;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Exception\Transaction as TransactionException;
 
 abstract class Adapter
 {
@@ -38,41 +38,12 @@ abstract class Adapter
     protected array $metadata = [];
 
     /**
-     * @var Authorization
-     */
-    protected Authorization $authorization;
-
-    /**
-     * @param Authorization $authorization
-     *
-     * @return $this
-     */
-    public function setAuthorization(Authorization $authorization): self
-    {
-        $this->authorization = $authorization;
-
-        return $this;
-    }
-
-    /**
-     * @return $this
-     */
-    public function clearTransformations(): self
-    {
-        $this->transformations = [
-            '*' => [],
-        ];
-
-        return $this;
-    }
-
-    /**
      * @param string $key
      * @param mixed $value
      *
      * @return $this
      */
-    public function setDebug(string $key, mixed $value): self
+    public function setDebug(string $key, mixed $value): static
     {
         $this->debug[$key] = $value;
 
@@ -88,9 +59,9 @@ abstract class Adapter
     }
 
     /**
-     * @return self
+     * @return static
      */
-    public function resetDebug(): self
+    public function resetDebug(): static
     {
         $this->debug = [];
 
@@ -226,7 +197,7 @@ abstract class Adapter
      * @param mixed $value
      * @return $this
      */
-    public function setMetadata(string $key, mixed $value): self
+    public function setMetadata(string $key, mixed $value): static
     {
         $this->metadata[$key] = $value;
 
@@ -257,11 +228,40 @@ abstract class Adapter
      *
      * @return $this
      */
-    public function resetMetadata(): self
+    public function resetMetadata(): static
     {
         $this->metadata = [];
 
         return $this;
+    }
+
+    /**
+     * Set a global timeout for database queries in milliseconds.
+     *
+     * This function allows you to set a maximum execution time for all database
+     * queries executed using the library, or a specific event specified by the
+     * event parameter. Once this timeout is set, any database query that takes
+     * longer than the specified time will be automatically terminated by the library,
+     * and an appropriate error or exception will be raised to handle the timeout condition.
+     *
+     * @param int $milliseconds The timeout value in milliseconds for database queries.
+     * @param string $event     The event the timeout should fire fore
+     * @return void
+     *
+     * @throws Exception The provided timeout value must be greater than or equal to 0.
+     */
+    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+
+    /**
+     * Clears a global timeout for database queries.
+     *
+     * @param string $event
+     * @return void
+     */
+    public function clearTimeout(string $event): void
+    {
+        // Clear existing callback
+        $this->before($event, 'timeout', null);
     }
 
     /**
@@ -316,16 +316,36 @@ abstract class Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        $this->startTransaction();
+        for ($attempts = 0; $attempts < 3; $attempts++) {
+            try {
+                $this->startTransaction();
+                $result = $callback();
+                $this->commitTransaction();
+                return $result;
+            } catch (\Throwable $action) {
+                try {
+                    $this->rollbackTransaction();
+                } catch (\Throwable $rollback) {
+                    if ($attempts < 2) {
+                        \usleep(5000); // 5ms
+                        continue;
+                    }
 
-        try {
-            $result = $callback();
-            $this->commitTransaction();
-            return $result;
-        } catch (\Throwable $e) {
-            $this->rollbackTransaction();
-            throw $e;
+                    $this->inTransaction = 0;
+                    throw $rollback;
+                }
+
+                if ($attempts < 2) {
+                    \usleep(5000); // 5ms
+                    continue;
+                }
+
+                $this->inTransaction = 0;
+                throw $action;
+            }
         }
+
+        throw new TransactionException('Failed to execute transaction');
     }
 
     /**
@@ -334,9 +354,9 @@ abstract class Adapter
      * @param string $event
      * @param string $name
      * @param ?callable $callback
-     * @return self
+     * @return static
      */
-    public function before(string $event, string $name = '', ?callable $callback = null): self
+    public function before(string $event, string $name = '', ?callable $callback = null): static
     {
         if (!isset($this->transformations[$event])) {
             $this->transformations[$event] = [];
@@ -426,6 +446,14 @@ abstract class Adapter
     abstract public function deleteCollection(string $id): bool;
 
     /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    abstract public function analyzeCollection(string $collection): bool;
+
+    /**
      * Create Attribute
      *
      * @param string $collection
@@ -453,7 +481,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool;
+    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool;
 
     /**
      * Delete Attribute
@@ -718,6 +746,28 @@ abstract class Adapter
     abstract public function getLimitForIndexes(): int;
 
     /**
+     * @return int
+     */
+    abstract public function getMaxIndexLength(): int;
+
+    /**
+     * Get the minimum supported DateTime value
+     *
+     * @return \DateTime
+     */
+    abstract public function getMinDateTime(): \DateTime;
+
+    /**
+     * Get the maximum supported DateTime value
+     *
+     * @return \DateTime
+     */
+    public function getMaxDateTime(): \DateTime
+    {
+        return new \DateTime('9999-12-31 23:59:59');
+    }
+
+    /**
      * Is schemas supported?
      *
      * @return bool
@@ -730,6 +780,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForAttributes(): bool;
+
+    /**
+     * Are schema attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSchemaAttributes(): bool;
 
     /**
      * Is index supported?
@@ -803,6 +860,20 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForAttributeResizing(): bool;
+
+    /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForGetConnectionId(): bool;
+
+    /**
+     * Is cast index as array supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForCastIndexArray(): bool;
 
     /**
      * Get current attribute count from collection document
@@ -901,7 +972,7 @@ abstract class Adapter
      */
     public function filter(string $value): string
     {
-        $value = \preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
+        $value = \preg_replace("/[^A-Za-z0-9_\-]/", '', $value);
 
         if (\is_null($value)) {
             throw new DatabaseException('Failed to filter key');
@@ -953,45 +1024,25 @@ abstract class Adapter
     abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool;
 
     /**
-     * @return int
+     * Returns the connection ID identifier
+     *
+     * @return string
      */
-    abstract public function getMaxIndexLength(): int;
-
+    abstract public function getConnectionId(): string;
 
     /**
-     * Set a global timeout for database queries in milliseconds.
+     * Get List of internal index keys names
      *
-     * This function allows you to set a maximum execution time for all database
-     * queries executed using the library, or a specific event specified by the
-     * event parameter. Once this timeout is set, any database query that takes
-     * longer than the specified time will be automatically terminated by the library,
-     * and an appropriate error or exception will be raised to handle the timeout condition.
-     *
-     * @param int $milliseconds The timeout value in milliseconds for database queries.
-     * @param string $event     The event the timeout should fire fore
-     * @return void
-     *
-     * @throws Exception The provided timeout value must be greater than or equal to 0.
+     * @return array<string>
      */
-    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+    abstract public function getInternalIndexesKeys(): array;
 
     /**
-     * Clears a global timeout for database queries.
-     *
-     * @param string $event
-     * @return void
-     */
-    public function clearTimeout(string $event): void
-    {
-        // Clear existing callback
-        $this->before($event, 'timeout', null);
-    }
-
-    /**
-     * Analyze a collection updating it's metadata on the database engine
+     * Get Schema Attributes
      *
      * @param string $collection
-     * @return bool
+     * @return array<Document>
+     * @throws DatabaseException
      */
-    abstract public function analyzeCollection(string $collection): bool;
+    abstract public function getSchemaAttributes(string $collection): array;
 }

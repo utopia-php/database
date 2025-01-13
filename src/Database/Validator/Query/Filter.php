@@ -6,10 +6,10 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
-use Utopia\Http\Validator\Boolean;
-use Utopia\Http\Validator\FloatValidator;
-use Utopia\Http\Validator\Integer;
-use Utopia\Http\Validator\Text;
+use Utopia\Validator\Boolean;
+use Utopia\Validator\FloatValidator;
+use Utopia\Validator\Integer;
+use Utopia\Validator\Text;
 
 class Filter extends Base
 {
@@ -18,19 +18,21 @@ class Filter extends Base
      */
     protected array $schema = [];
 
-    private int $maxValuesCount;
-
     /**
      * @param array<Document> $attributes
      * @param int $maxValuesCount
+     * @param \DateTime $minAllowedDate
+     * @param \DateTime $maxAllowedDate
      */
-    public function __construct(array $attributes = [], int $maxValuesCount = 100)
-    {
+    public function __construct(
+        array $attributes = [],
+        private readonly int $maxValuesCount = 100,
+        private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
+        private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+    ) {
         foreach ($attributes as $attribute) {
             $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
         }
-
-        $this->maxValuesCount = $maxValuesCount;
     }
 
     /**
@@ -67,6 +69,7 @@ class Filter extends Base
     /**
      * @param string $attribute
      * @param array<mixed> $values
+     * @param string $method
      * @return bool
      */
     protected function isValidAttributeAndValues(string $attribute, array $values, string $method): bool
@@ -93,7 +96,6 @@ class Filter extends Base
         $attributeType = $attributeSchema['type'];
 
         foreach ($values as $value) {
-
             $validator = null;
 
             switch ($attributeType) {
@@ -114,7 +116,10 @@ class Filter extends Base
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator();
+                    $validator = new DatetimeValidator(
+                        min: $this->minAllowedDate,
+                        max: $this->maxAllowedDate
+                    );
                     break;
 
                 case Database::VAR_RELATIONSHIP:

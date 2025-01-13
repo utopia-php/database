@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 class SQLiteTest extends Base
 {
     public static ?Database $database = null;
+    protected static ?PDO $pdo = null;
     protected static string $namespace;
 
     // Remove once all methods are implemented
@@ -28,7 +29,7 @@ class SQLiteTest extends Base
     /**
      * @return Database
      */
-    public function getDatabase(): Database
+    public static function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -51,9 +52,9 @@ class SQLiteTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new SQLite($pdo), $cache);
-        $database->setAuthorization(self::$authorization);
-        $database->setDatabase('utopiaTests');
-        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         if ($database->exists()) {
             $database->delete();
@@ -61,6 +62,27 @@ class SQLiteTest extends Base
 
         $database->create();
 
+        self::$pdo = $pdo;
         return self::$database = $database;
+    }
+
+    protected static function deleteColumn(string $collection, string $column): bool
+    {
+        $sqlTable = "`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
+
+        self::$pdo->exec($sql);
+
+        return true;
+    }
+
+    protected static function deleteIndex(string $collection, string $index): bool
+    {
+        $index = "`".self::getDatabase()->getNamespace()."_".self::getDatabase()->getTenant()."_{$collection}_{$index}`";
+        $sql = "DROP INDEX {$index}";
+
+        self::$pdo->exec($sql);
+
+        return true;
     }
 }

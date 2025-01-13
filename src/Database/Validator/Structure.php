@@ -8,20 +8,15 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
-use Utopia\Http\Validator;
-use Utopia\Http\Validator\Boolean;
-use Utopia\Http\Validator\FloatValidator;
-use Utopia\Http\Validator\Integer;
-use Utopia\Http\Validator\Range;
-use Utopia\Http\Validator\Text;
+use Utopia\Validator;
+use Utopia\Validator\Boolean;
+use Utopia\Validator\FloatValidator;
+use Utopia\Validator\Integer;
+use Utopia\Validator\Range;
+use Utopia\Validator\Text;
 
 class Structure extends Validator
 {
-    /**
-     * @var Document
-     */
-    protected Document $collection;
-
     /**
      * @var array<array<string, mixed>>
      */
@@ -106,9 +101,11 @@ class Structure extends Validator
      * Structure constructor.
      *
      */
-    public function __construct(Document $collection)
-    {
-        $this->collection = $collection;
+    public function __construct(
+        protected readonly Document $collection,
+        private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
+        private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+    ) {
     }
 
     /**
@@ -126,7 +123,7 @@ class Structure extends Validator
      * Stores a callback and required params to create Validator
      *
      * @param string $name
-     * @param Closure $callback Callback that accepts $params in order and returns \Utopia\Http\Validator
+     * @param Closure $callback Callback that accepts $params in order and returns \Utopia\Validator
      * @param string $type Primitive data type for validation
      */
     public static function addFormat(string $name, Closure $callback, string $type): void
@@ -342,7 +339,10 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validators[] = new DatetimeValidator();
+                    $validators[] = new DatetimeValidator(
+                        min: $this->minAllowedDate,
+                        max: $this->maxAllowedDate
+                    );
                     break;
 
                 default:

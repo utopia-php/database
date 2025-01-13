@@ -9,6 +9,8 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -34,20 +36,26 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
+                if ($this->getPDO()->inTransaction()) {
+                    $this->getPDO()->rollBack();
+                } else {
+                    // If no active transaction, this has no effect.
+                    $this->getPDO()->prepare('ROLLBACK')->execute();
+                }
+
                 $result = $this->getPDO()->beginTransaction();
             } else {
-                $result = true;
+                $result = $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
             }
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
         if (!$result) {
-            throw new DatabaseException('Failed to start transaction');
+            throw new TransactionException('Failed to start transaction');
         }
 
         $this->inTransaction++;
-
         return $result;
     }
 
@@ -63,16 +71,20 @@ abstract class SQL extends Adapter
             return true;
         }
 
+        if (!$this->getPDO()->inTransaction()) {
+            $this->inTransaction = 0;
+            return false;
+        }
+
         try {
             $result = $this->getPDO()->commit();
+            $this->inTransaction = 0;
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
-        } finally {
-            $this->inTransaction--;
+            throw new TransactionException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
         if (!$result) {
-            throw new DatabaseException('Failed to commit transaction');
+            throw new TransactionException('Failed to commit transaction');
         }
 
         return $result;
@@ -88,15 +100,19 @@ abstract class SQL extends Adapter
         }
 
         try {
-            $result = $this->getPDO()->rollBack();
+            if ($this->inTransaction > 1) {
+                $result = $this->getPDO()->exec('ROLLBACK TO transaction' . ($this->inTransaction - 1));
+                $this->inTransaction--;
+            } else {
+                $result = $this->getPDO()->rollBack();
+                $this->inTransaction = 0;
+            }
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
-        } finally {
-            $this->inTransaction = 0;
         }
 
         if (!$result) {
-            throw new DatabaseException('Failed to rollback transaction');
+            throw new TransactionException('Failed to rollback transaction');
         }
 
         return $result;
@@ -148,10 +164,19 @@ abstract class SQL extends Adapter
             $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
         }
 
-        $stmt->execute();
+        try {
+            $stmt->execute();
+            $document = $stmt->fetchAll();
+            $stmt->closeCursor();
+        } catch (PDOException $e) {
+            $e = $this->processException($e);
 
-        $document = $stmt->fetchAll();
-        $stmt->closeCursor();
+            if ($e instanceof NotFoundException) {
+                return false;
+            }
+
+            throw $e;
+        }
 
         if (empty($document)) {
             return false;
@@ -194,7 +219,7 @@ abstract class SQL extends Adapter
 		";
 
         if ($this->sharedTables) {
-            $sql .= "AND _tenant = :_tenant";
+            $sql .= "AND (_tenant = :_tenant OR _tenant IS NULL)";
         }
 
         if ($this->getSupportForUpdateLock()) {
@@ -367,6 +392,16 @@ abstract class SQL extends Adapter
      * @return bool
      */
     public function getSupportForBatchOperations(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    public function getSupportForGetConnectionId(): bool
     {
         return true;
     }
@@ -811,6 +846,11 @@ abstract class SQL extends Adapter
      */
     abstract public function getSupportForJSONOverlaps(): bool;
 
+    public function getSupportForCastIndexArray(): bool
+    {
+        return false;
+    }
+
     public function getSupportForRelationships(): bool
     {
         return true;
@@ -988,7 +1028,7 @@ abstract class SQL extends Adapter
 
         $tenantQuery = '';
         if ($this->sharedTables) {
-            $tenantQuery = 'AND _tenant = :_tenant';
+            $tenantQuery = 'AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         return "table_main._uid IN (
@@ -1060,7 +1100,10 @@ abstract class SQL extends Adapter
      */
     public function getMaxIndexLength(): int
     {
-        return 768;
+        /**
+         * $tenant int = 1
+         */
+        return $this->sharedTables ? 767 : 768;
     }
 
     /**
@@ -1104,4 +1147,18 @@ abstract class SQL extends Adapter
         return 'LIKE';
     }
 
+    public function getInternalIndexesKeys(): array
+    {
+        return [];
+    }
+
+    protected function processException(PDOException $e): \Exception
+    {
+        return $e;
+    }
+
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
 }

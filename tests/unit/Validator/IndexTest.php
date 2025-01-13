@@ -310,6 +310,43 @@ class IndexTest extends TestCase
 
         $validator = new Index($collection->getAttribute('attributes'), 768);
         $index = $collection->getAttribute('indexes')[0];
-        $this->assertTrue($validator->isValid($index));
+        $this->assertFalse($validator->isValid($index));
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testReservedIndexKey(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('test'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('title'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 255,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ])
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => ID::custom('primary'),
+                    'type' => Database::INDEX_FULLTEXT,
+                    'attributes' => ['title'],
+                    'lengths' => [],
+                    'orders' => [],
+                ]),
+            ],
+        ]);
+
+        $validator = new Index($collection->getAttribute('attributes'), 768, ['PRIMARY']);
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertFalse($validator->isValid($index));
     }
 }

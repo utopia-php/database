@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Http\Validator;
+use Utopia\Validator;
 
 class Datetime extends Validator
 {
@@ -13,33 +13,18 @@ class Datetime extends Validator
     public const PRECISION_ANY = 'any';
 
     /**
-     * @var string
+     * @throws \Exception
      */
-    protected string $precision = self::PRECISION_ANY;
-
-    /**
-     * @var bool
-     */
-    protected bool $requireDateInFuture = false;
-
-
-    /**
-     * @var int minimum offset from now in seconds
-     */
-    protected int $offset = 0;
-
-    /**
-     * @param int $offset minimum offset from now in seconds
-     */
-    public function __construct(bool $requireDateInFuture = false, string $precision = self::PRECISION_ANY, int $offset = 0)
-    {
+    public function __construct(
+        private readonly \DateTime $min = new \DateTime('0000-01-01'),
+        private readonly \DateTime $max = new \DateTime('9999-12-31'),
+        private readonly bool $requireDateInFuture = false,
+        private readonly string $precision = self::PRECISION_ANY,
+        private readonly int $offset = 0,
+    ) {
         if ($offset < 0) {
-            throw new \Exception('Offset must be a positive number.');
+            throw new \Exception('Offset must be a positive integer.');
         }
-
-        $this->requireDateInFuture = $requireDateInFuture;
-        $this->offset = $offset;
-        $this->precision = $precision;
     }
 
     /**
@@ -51,16 +36,19 @@ class Datetime extends Validator
         $message = 'Value must be valid date';
 
         if ($this->offset > 0) {
-            $message .= " at least " . $this->offset . " seconds in future";
+            $message .= " at least " . $this->offset . " seconds in the future and";
         } elseif ($this->requireDateInFuture) {
-            $message .= " in future";
+            $message .= " in the future and";
         }
 
         if ($this->precision !== self::PRECISION_ANY) {
             $message .= " with " . $this->precision . " precision";
         }
 
-        $message .= '.';
+        $min = $this->min->format('Y-m-d H:i:s');
+        $max = $this->max->format('Y-m-d H:i:s');
+
+        $message .= " between {$min} and {$max}.";
         return $message;
     }
 
@@ -72,7 +60,7 @@ class Datetime extends Validator
      */
     public function isValid($value): bool
     {
-        if (empty($value)) {
+        if (empty($value) || ! is_string($value)) {
             return false;
         }
 
@@ -114,13 +102,24 @@ class Datetime extends Validator
                     return false;
                 }
             }
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             return false;
         }
 
-        [$year] = explode('-', $value);
+        // Custom year validation to account for PHP allowing year overflow
+        $matches = [];
+        if (preg_match('/(?<!\d)(\d{4})(?!\d)/', $value, $matches)) {
+            $year = (int)$matches[1];
+            $minYear = (int)$this->min->format('Y');
+            $maxYear = (int)$this->max->format('Y');
+            if ($year < $minYear || $year > $maxYear) {
+                return false;
+            }
+        } else {
+            return false;
+        }
 
-        if ((int)$year > 9999) {
+        if ($date < $this->min || $date > $this->max) {
             return false;
         }
 

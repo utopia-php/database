@@ -9,9 +9,11 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 
 class MariaDB extends SQL
 {
@@ -91,6 +93,23 @@ class MariaDB extends SQL
                 $attribute->getAttribute('array', false)
             );
 
+            // Ignore relationships with virtual attributes
+            if ($attribute->getAttribute('type') === Database::VAR_RELATIONSHIP) {
+                $options = $attribute->getAttribute('options', []);
+                $relationType = $options['relationType'] ?? null;
+                $twoWay = $options['twoWay'] ?? false;
+                $side = $options['side'] ?? null;
+
+                if (
+                    $relationType === Database::RELATION_MANY_TO_MANY
+                    || ($relationType === Database::RELATION_ONE_TO_ONE && !$twoWay && $side === Database::RELATION_SIDE_CHILD)
+                    || ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT)
+                    || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
+                ) {
+                    continue;
+                }
+            }
+
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
         }
 
@@ -129,8 +148,8 @@ class MariaDB extends SQL
             $indexStrings[$key] = "{$indexType} `{$indexId}` ({$indexAttributes}),";
         }
 
-        $sql = "
-			CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
+        $collection = "
+			CREATE TABLE {$this->getSQLTable($id)} (
 				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
 				_uid VARCHAR(255) NOT NULL,
 				_createdAt DATETIME(3) DEFAULT NULL,
@@ -142,64 +161,59 @@ class MariaDB extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= "
+            $collection .= "
             	_tenant INT(11) UNSIGNED DEFAULT NULL,
-				UNIQUE KEY _uid (_tenant, _uid),
+				UNIQUE KEY _uid (_uid, _tenant),
 				KEY _created_at (_tenant, _createdAt),
 				KEY _updated_at (_tenant, _updatedAt),
 				KEY _tenant_id (_tenant, _id)
 			";
         } else {
-            $sql .= "
+            $collection .= "
 				UNIQUE KEY _uid (_uid),
 				KEY _created_at (_createdAt),
 				KEY _updated_at (_updatedAt)
 			";
         }
 
-        $sql .= ")";
+        $collection .= ")";
+        $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
-        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+        $permissions = "
+            CREATE TABLE {$this->getSQLTable($id . '_perms')} (
+                _id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+                _type VARCHAR(12) NOT NULL,
+                _permission VARCHAR(255) NOT NULL,
+                _document VARCHAR(255) NOT NULL,
+                PRIMARY KEY (_id),
+        ";
+
+        if ($this->sharedTables) {
+            $permissions .= "
+                _tenant INT(11) UNSIGNED DEFAULT NULL,
+                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
+                INDEX _permission (_tenant, _permission, _type)
+            ";
+        } else {
+            $permissions .= "
+                UNIQUE INDEX _index1 (_document, _type, _permission),
+                INDEX _permission (_permission, _type)
+            ";
+        }
+
+        $permissions .= ")";
+        $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
 
         try {
             $this->getPDO()
-                ->prepare($sql)
+                ->prepare($collection)
                 ->execute();
-
-            $sql = "
-				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
-					_id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-					_type VARCHAR(12) NOT NULL,
-					_permission VARCHAR(255) NOT NULL,
-					_document VARCHAR(255) NOT NULL,
-					PRIMARY KEY (_id),
-			";
-
-            if ($this->sharedTables) {
-                $sql .= "
-                	_tenant INT(11) UNSIGNED DEFAULT NULL,
-					UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
-					INDEX _permission (_tenant, _permission, _type)
-				";
-            } else {
-                $sql .= "
-					UNIQUE INDEX _index1 (_document, _type, _permission),
-					INDEX _permission (_permission, _type)
-				";
-            }
-
-            $sql .= ")";
-
-            $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
 
             $this->getPDO()
-                ->prepare($sql)
+                ->prepare($permissions)
                 ->execute();
-        } catch (\Exception $th) {
-            $this->getPDO()
-                ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
-                ->execute();
-            throw $th;
+        } catch (PDOException $e) {
+            throw $this->processException($e);
         }
 
         return true;
@@ -312,6 +326,22 @@ class MariaDB extends SQL
     }
 
     /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+
+        $sql = "ANALYZE TABLE {$this->getSQLTable($name)}";
+
+        $stmt = $this->getPDO()->prepare($sql);
+        return $stmt->execute();
+    }
+
+    /**
      * Create Attribute
      *
      * @param string $collection
@@ -338,8 +368,7 @@ class MariaDB extends SQL
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
-            return false;
+            throw $this->processException($e);
         }
     }
 
@@ -357,7 +386,7 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
@@ -377,8 +406,7 @@ class MariaDB extends SQL
             ->prepare($sql)
             ->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
-            return false;
+            throw $this->processException($e);
         }
     }
 
@@ -401,9 +429,17 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            if ($e->getCode() === "42000" && $e->errorInfo[1] === 1091) {
+                return true;
+            }
+
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -426,9 +462,13 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -708,7 +748,7 @@ class MariaDB extends SQL
         $collection = $this->getDocument(Database::METADATA, $collection);
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
@@ -730,7 +770,7 @@ class MariaDB extends SQL
 
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
-            if (!empty($collectionAttribute['array']) && $this->castIndexArray()) {
+            if (!empty($collectionAttribute['array']) && $this->getSupportForCastIndexArray()) {
                 $attributes[$i] = '(CAST(' . $attr . ' AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
@@ -763,14 +803,6 @@ class MariaDB extends SQL
     }
 
     /**
-     * @return bool
-     */
-    public function castIndexArray(): bool
-    {
-        return false;
-    }
-
-    /**
      * Delete Index
      *
      * @param string $collection
@@ -788,9 +820,17 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            if ($e->getCode() === "42000" && $e->errorInfo[1] === 1091) {
+                return true;
+            }
+
+            throw $e;
+        }
     }
 
     /**
@@ -905,7 +945,6 @@ class MariaDB extends SQL
                 }
             }
 
-
             $stmt->execute();
 
             $document['$internalId'] = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])])->getInternalId();
@@ -913,16 +952,8 @@ class MariaDB extends SQL
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
-        } catch (\Throwable $e) {
-            if ($e instanceof PDOException) {
-                switch ($e->getCode()) {
-                    case 1062:
-                    case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
-                }
-            }
-
-            throw $e;
+        } catch (PDOException $e) {
+            throw $this->processException($e);
         }
 
         return $document;
@@ -948,7 +979,8 @@ class MariaDB extends SQL
 
         try {
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, max(1, $batchSize));
+            $batches = \array_chunk($documents, \max(1, $batchSize));
+            $internalIds = [];
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;
@@ -962,7 +994,9 @@ class MariaDB extends SQL
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
+
                     if (!empty($document->getInternalId())) {
+                        $internalIds[$document->getId()] = true;
                         $attributes['_id'] = $document->getInternalId();
                     }
 
@@ -1041,16 +1075,18 @@ class MariaDB extends SQL
                     $stmtPermissions?->execute();
                 }
             }
-        } catch (\Throwable $e) {
-            if ($e instanceof PDOException) {
-                switch ($e->getCode()) {
-                    case 1062:
-                    case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
-                }
-            }
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
 
-            throw $e;
+        foreach ($documents as $document) {
+            if (!isset($internalIds[$document->getId()])) {
+                $document['$internalId'] = $this->getDocument(
+                    $collection,
+                    $document->getId(),
+                    [Query::select(['$internalId'])]
+                )->getInternalId();
+            }
         }
 
         return $documents;
@@ -1090,7 +1126,7 @@ class MariaDB extends SQL
 			";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -1167,7 +1203,7 @@ class MariaDB extends SQL
                 ";
 
                 if ($this->sharedTables) {
-                    $sql .= ' AND _tenant = :_tenant';
+                    $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
                 }
 
                 $removeQuery = $sql . $removeQuery;
@@ -1254,7 +1290,7 @@ class MariaDB extends SQL
 			";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
@@ -1289,16 +1325,8 @@ class MariaDB extends SQL
                 $stmtAddPermissions->execute();
             }
 
-        } catch (\Throwable $e) {
-            if ($e instanceof PDOException) {
-                switch ($e->getCode()) {
-                    case 1062:
-                    case 23000:
-                        throw new DuplicateException('Duplicated document: ' . $e->getMessage(), previous: $e);
-                }
-            }
-
-            throw $e;
+        } catch (PDOException $e) {
+            throw $this->processException($e);
         }
 
         return $document;
@@ -1411,7 +1439,7 @@ class MariaDB extends SQL
                 ";
 
                 if ($this->sharedTables) {
-                    $sql .= ' AND _tenant = :_tenant';
+                    $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
                 }
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -1425,6 +1453,7 @@ class MariaDB extends SQL
 
                 $permissionsStmt->execute();
                 $permissions = $permissionsStmt->fetchAll();
+                $permissionsStmt->closeCursor();
 
                 $initial = [];
                 foreach (Database::PERMISSIONS as $type) {
@@ -1454,7 +1483,7 @@ class MariaDB extends SQL
 
                         $tenantQuery = '';
                         if ($this->sharedTables) {
-                            $tenantQuery = ' AND _tenant = :_tenant';
+                            $tenantQuery = ' AND (_tenant = :_tenant OR _tenant IS NULL)';
                         }
 
                         $removeQueries[] = "(
@@ -1590,7 +1619,7 @@ class MariaDB extends SQL
 		";
 
         if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
+            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
         }
 
         $sql .= $sqlMax . $sqlMin;
@@ -1625,12 +1654,12 @@ class MariaDB extends SQL
             $name = $this->filter($collection);
 
             $sql = "
-		    DELETE FROM {$this->getSQLTable($name)} 
-		    WHERE _uid = :_uid
+                DELETE FROM {$this->getSQLTable($name)} 
+                WHERE _uid = :_uid
 		    ";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
@@ -1649,7 +1678,7 @@ class MariaDB extends SQL
 		    ";
 
             if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
+                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
             }
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
@@ -1761,11 +1790,12 @@ class MariaDB extends SQL
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
+     * @throws Exception
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
+        $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
 
@@ -1851,12 +1881,12 @@ class MariaDB extends SQL
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
+        if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1868,7 +1898,7 @@ class MariaDB extends SQL
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, 'table_main')}
-            FROM {$this->getSQLTable($name)} as table_main
+            FROM {$this->getSQLTable($name)} AS table_main
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -1913,7 +1943,7 @@ class MariaDB extends SQL
         try {
             $stmt->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
 
         $results = $stmt->fetchAll();
@@ -1968,7 +1998,7 @@ class MariaDB extends SQL
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
+        $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
@@ -1979,12 +2009,12 @@ class MariaDB extends SQL
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
+        if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
         }
 
         $sqlWhere = !empty($where)
@@ -2041,7 +2071,7 @@ class MariaDB extends SQL
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
+        $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
@@ -2051,12 +2081,12 @@ class MariaDB extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        if ($this->authorization->getStatus()) {
+        if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
         }
 
         $sqlWhere = !empty($where)
@@ -2283,6 +2313,16 @@ class MariaDB extends SQL
         };
     }
 
+    public function getMinDateTime(): \DateTime
+    {
+        return new \DateTime('1000-01-01 00:00:00');
+    }
+
+    public function getMaxDateTime(): \DateTime
+    {
+        return new \DateTime('9999-12-31 23:59:59');
+    }
+
     /**
      * Is fulltext Wildcard index supported?
      *
@@ -2337,54 +2377,109 @@ class MariaDB extends SQL
     }
 
     /**
-     * @param PDOException $e
-     * @throws TimeoutException
-     * @throws DuplicateException
+     * @return string
      */
-    protected function processException(PDOException $e): void
+    public function getConnectionId(): string
     {
-        /**
-         * PDO and Swoole PDOProxy swap error codes and errorInfo
-         */
+        $stmt = $this->getPDO()->query("SELECT CONNECTION_ID();");
+        return $stmt->fetchColumn();
+    }
 
+    public function getInternalIndexesKeys(): array
+    {
+        return ['primary', '_created_at', '_updated_at', '_tenant_id'];
+    }
+
+    protected function processException(PDOException $e): \Exception
+    {
         // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+            return new TimeoutException('Query timed out', $e->getCode(), $e);
+        }
+
+        // Duplicate table
+        if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
+            return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
         // Duplicate column
         if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException('Attribute already exists', $e->getCode(), $e);
+        }
+
+        // Duplicate index
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
+            return new DuplicateException('Index already exists', $e->getCode(), $e);
+        }
+
+        // Duplicate row
+        if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
+            return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
         // Data is too big for column resize
         if (($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) ||
             ($e->getCode() === '01000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1265)) {
-            throw new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
+            return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
-        // Duplicate index
-        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+        // Unknown database
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {
+            return new NotFoundException('Database not found', $e->getCode(), $e);
         }
 
-        throw $e;
+        return $e;
     }
 
     /**
-     * Analyze a collection updating it's metadata on the database engine
+     * Get Schema Attributes
      *
      * @param string $collection
-     * @return bool
+     * @return array<Document>
+     * @throws DatabaseException
      */
-    public function analyzeCollection(string $collection): bool
+    public function getSchemaAttributes(string $collection): array
     {
-        $name = $this->filter($collection);
+        $schema = $this->getDatabase();
+        $collection = $this->getNamespace().'_'.$this->filter($collection);
 
-        $sql = "ANALYZE TABLE {$this->getSQLTable($name)}";
+        try {
+            $stmt = $this->getPDO()->prepare('
+                SELECT
+                COLUMN_NAME as columnName,
+                COLUMN_DEFAULT as columnDefault,
+                IS_NULLABLE as isNullable,
+                DATA_TYPE as dataType,
+                CHARACTER_MAXIMUM_LENGTH as characterMaximumLength,
+                NUMERIC_PRECISION as numericPrecision,
+                NUMERIC_SCALE as numericScale,
+                DATETIME_PRECISION as datetimePrecision,
+                COLUMN_TYPE as columnType,
+                COLUMN_KEY as columnKey,
+                EXTRA as extra
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
+            ');
+            $stmt->bindParam(':schema', $schema);
+            $stmt->bindParam(':table', $collection);
+            $stmt->execute();
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
 
-        $stmt = $this->getPDO()->prepare($sql);
-        return $stmt->execute();
+            foreach ($results as $index => $document) {
+                $results[$index] = new Document($document);
+            }
+
+            return $results;
+
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get schema attributes', $e->getCode(), $e);
+        }
+    }
+
+    public function getSupportForSchemaAttributes(): bool
+    {
+        return true;
     }
 
 }

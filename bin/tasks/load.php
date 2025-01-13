@@ -21,11 +21,9 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Http\Validator\Numeric;
-use Utopia\Http\Validator\Text;
 use Utopia\Mongo\Client;
-
-$authorization = new Authorization();
+use Utopia\Validator\Numeric;
+use Utopia\Validator\Text;
 
 /**
  * @Example
@@ -63,7 +61,7 @@ $cli
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
-                    $createSchema($database);
+                    createSchema($database);
 
                     // reclaim resources
                     $database = null;
@@ -123,7 +121,7 @@ $cli
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
-                    $createSchema($database);
+                    createSchema($database);
 
                     // reclaim resources
                     $database = null;
@@ -185,7 +183,7 @@ $cli
                     $database->setNamespace($namespace);
 
                     // Outline collection schema
-                    $createSchema($database);
+                    createSchema($database);
 
                     // Fill DB
                     $faker = Factory::create();
@@ -228,13 +226,14 @@ $cli
     });
 
 
-$createSchema = function (Database $database) use ($authorization): void {
+function createSchema(Database $database): void
+{
     if ($database->exists($database->getDatabase())) {
         $database->delete($database->getDatabase());
     }
     $database->create();
 
-    $authorization->addRole(Role::any()->toString());
+    Authorization::setRole(Role::any()->toString());
 
     $database->createCollection('articles', permissions: [
         Permission::create(Role::any()),
@@ -248,7 +247,7 @@ $createSchema = function (Database $database) use ($authorization): void {
     $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
     $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
     $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
-};
+}
 
 function createDocument($database, Generator $faker): void
 {

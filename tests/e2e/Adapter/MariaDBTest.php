@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 class MariaDBTest extends Base
 {
     protected static ?Database $database = null;
+    protected static ?PDO $pdo = null;
     protected static string $namespace;
 
     // Remove once all methods are implemented
@@ -28,7 +29,7 @@ class MariaDBTest extends Base
     /**
      * @return Database
      */
-    public function getDatabase(bool $fresh = false): Database
+    public static function getDatabase(bool $fresh = false): Database
     {
         if (!is_null(self::$database) && !$fresh) {
             return self::$database;
@@ -46,9 +47,9 @@ class MariaDBTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MariaDB($pdo), $cache);
-        $database->setAuthorization(self::$authorization);
-        $database->setDatabase('utopiaTests');
-        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         if ($database->exists()) {
             $database->delete();
@@ -56,6 +57,27 @@ class MariaDBTest extends Base
 
         $database->create();
 
+        self::$pdo = $pdo;
         return self::$database = $database;
+    }
+
+    protected static function deleteColumn(string $collection, string $column): bool
+    {
+        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
+
+        self::$pdo->exec($sql);
+
+        return true;
+    }
+
+    protected static function deleteIndex(string $collection, string $index): bool
+    {
+        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
+
+        self::$pdo->exec($sql);
+
+        return true;
     }
 }

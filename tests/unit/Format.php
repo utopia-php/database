@@ -2,15 +2,14 @@
 
 namespace Tests\Unit;
 
-use Utopia\Http\Validator;
-use Utopia\Http\Validator\Text;
+use Utopia\Validator\Text;
 
 /**
  * Format Test for Email
  *
  * Validate that an variable is a valid email address
  *
- * @package Utopia\Http\Validator
+ * @package Utopia\Validator
  */
 class Format extends Text
 {

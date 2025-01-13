@@ -57,6 +57,22 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        if (!$this->getSupportForTimeouts()) {
+            return;
+        }
+
+        $this->timeout = $milliseconds;
+    }
+
+    public function clearTimeout(string $event): void
+    {
+        parent::clearTimeout($event);
+
+        $this->timeout = null;
+    }
+
     public function startTransaction(): bool
     {
         return true;
@@ -106,7 +122,7 @@ class Mongo extends Adapter
      * @return bool
      * @throws Exception
      */
-    public function exists(string $database, string $collection = null): bool
+    public function exists(string $database, ?string $collection = null): bool
     {
         if (!\is_null($collection)) {
             $collection = $this->getNamespace() . "_" . $collection;
@@ -318,6 +334,17 @@ class Mongo extends Adapter
         $id = $this->getNamespace() . '_' . $this->filter($id);
 
         return (!!$this->getClient()->dropCollection($id));
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
     }
 
     /**
@@ -980,7 +1007,7 @@ class Mongo extends Adapter
      *
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
     {
         if (!empty($newKey) && $newKey !== $id) {
             return $this->renameAttribute($collection, $id, $newKey);
@@ -1020,8 +1047,8 @@ class Mongo extends Adapter
         }
 
         // permissions
-        if ($this->authorization->getStatus()) { // skip if authorization is disabled
-            $roles = \implode('|', $this->authorization->getRoles());
+        if (Authorization::$status) {
+            $roles = \implode('|', Authorization::getRoles());
             $filters['_permissions']['$in'] = [new Regex("{$forPermission}\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
@@ -1135,7 +1162,7 @@ class Mongo extends Adapter
         try {
             $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
         } catch (MongoException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
 
         if (empty($results)) {
@@ -1296,8 +1323,8 @@ class Mongo extends Adapter
         $filters = $this->buildFilters($queries);
 
         // permissions
-        if ($this->authorization->getStatus()) { // skip if authorization is disabled
-            $roles = \implode('|', $this->authorization->getRoles());
+        if (Authorization::$status) { // skip if authorization is disabled
+            $roles = \implode('|', Authorization::getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
@@ -1324,8 +1351,8 @@ class Mongo extends Adapter
         $filters = $this->buildFilters($queries);
 
         // permissions
-        if ($this->authorization->getStatus()) { // skip if authorization is disabled
-            $roles = \implode('|', $this->authorization->getRoles());
+        if (Authorization::$status) { // skip if authorization is disabled
+            $roles = \implode('|', Authorization::getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
@@ -1640,6 +1667,11 @@ class Mongo extends Adapter
         return 64;
     }
 
+    public function getMinDateTime(): \DateTime
+    {
+        return new \DateTime('-9999-01-01 00:00:00');
+    }
+
     /**
      * Is schemas supported?
      *
@@ -1647,7 +1679,7 @@ class Mongo extends Adapter
      */
     public function getSupportForSchemas(): bool
     {
-        return true;
+        return false;
     }
 
     /**
@@ -1741,6 +1773,31 @@ class Mongo extends Adapter
      * @return bool
      */
     public function getSupportForBatchOperations(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    public function getSupportForGetConnectionId(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is get schema attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSchemaAttributes(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForCastIndexArray(): bool
     {
         return false;
     }
@@ -1874,17 +1931,13 @@ class Mongo extends Adapter
         return [];
     }
 
-    /**
-     * @throws Timeout
-     * @throws Exception
-     */
-    protected function processException(Exception $e): void
+    protected function processException(Exception $e): \Exception
     {
         if ($e->getCode() === 50) {
-            throw new Timeout($e->getMessage());
+            return new Timeout('Query timed out', $e->getCode(), $e);
         }
 
-        throw $e;
+        return $e;
     }
 
     /**
@@ -1895,31 +1948,19 @@ class Mongo extends Adapter
         return 0;
     }
 
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    public function getConnectionId(): string
     {
-        if (!$this->getSupportForTimeouts()) {
-            return;
-        }
-
-        $this->timeout = $milliseconds;
+        return '0';
     }
 
-    public function clearTimeout(string $event): void
+    public function getInternalIndexesKeys(): array
     {
-        parent::clearTimeout($event);
-
-        $this->timeout = null;
+        return [];
     }
 
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
-     */
-    public function analyzeCollection(string $collection): bool
+    public function getSchemaAttributes(string $collection): array
     {
-        return false;
+        return [];
     }
 
 }

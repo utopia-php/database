@@ -2,35 +2,34 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Database\Validator\Authorization\Input;
-use Utopia\Http\Validator;
+use Utopia\Validator;
 
 class Authorization extends Validator
 {
     /**
-     * @var bool
-     */
-    protected bool $status = true;
-
-    /**
-     * Default value in case we need
-     *  to reset Authorization status
-     *
-     * @var bool
-     */
-    protected bool $statusDefault = true;
-
-    /**
      * @var array<string, bool>
      */
-    private array $roles = [
+    private static array $roles = [
         'any' => true
     ];
 
     /**
      * @var string
      */
+    protected string $action = '';
+
+    /**
+     * @var string
+     */
     protected string $message = 'Authorization Error';
+
+    /**
+     * @param string $action
+     */
+    public function __construct(string $action)
+    {
+        $this->action = $action;
+    }
 
     /**
      * Get Description.
@@ -44,43 +43,36 @@ class Authorization extends Validator
         return $this->message;
     }
 
-    /*
-     * Validation
+    /**
+     * Is valid.
      *
      * Returns true if valid or false if not.
-    */
-    public function isValid(mixed $input): bool // any, CREATE
+     *
+     * @param mixed $permissions
+     *
+     * @return bool
+     */
+    public function isValid($permissions): bool
     {
-        if (!($input instanceof Input)) {
-            $this->message = 'Invalid input provided';
-            return false;
-        }
-
-        /**
-         * @var Input $input
-         */
-
-        $permissions = $input->getPermissions();
-        $action = $input->getAction();
-
-        if (!$this->status) {
+        if (!self::$status) {
             return true;
         }
 
         if (empty($permissions)) {
-            $this->message = 'No permissions provided for action \''.$action.'\'';
+            $this->message = 'No permissions provided for action \''.$this->action.'\'';
             return false;
         }
 
         $permission = '-';
 
         foreach ($permissions as $permission) {
-            if (\array_key_exists($permission, $this->roles)) {
+            if (\array_key_exists($permission, self::$roles)) {
                 return true;
             }
         }
 
-        $this->message = 'Missing "'.$action.'" permission for role "'.$permission.'". Only "'.\json_encode($this->getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
+        $this->message = 'Missing "'.$this->action.'" permission for role "'.$permission.'". Only "'.\json_encode(self::getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
+
         return false;
     }
 
@@ -88,9 +80,9 @@ class Authorization extends Validator
      * @param string $role
      * @return void
      */
-    public function addRole(string $role): void // user:meldiron, users, any
+    public static function setRole(string $role): void
     {
-        $this->roles[$role] = true;
+        self::$roles[$role] = true;
     }
 
     /**
@@ -98,25 +90,25 @@ class Authorization extends Validator
      *
      * @return void
      */
-    public function removeRole(string $role): void
+    public static function unsetRole(string $role): void
     {
-        unset($this->roles[$role]);
+        unset(self::$roles[$role]);
     }
 
     /**
      * @return array<string>
      */
-    public function getRoles(): array
+    public static function getRoles(): array
     {
-        return \array_keys($this->roles);
+        return \array_keys(self::$roles);
     }
 
     /**
      * @return void
      */
-    public function cleanRoles(): void
+    public static function cleanRoles(): void
     {
-        $this->roles = [];
+        self::$roles = [];
     }
 
     /**
@@ -124,53 +116,36 @@ class Authorization extends Validator
      *
      * @return bool
      */
-    public function isRole(string $role): bool
+    public static function isRole(string $role): bool
     {
-        return (\array_key_exists($role, $this->roles));
+        return (\array_key_exists($role, self::$roles));
     }
+
+    /**
+     * @var bool
+     */
+    public static bool $status = true;
+
+    /**
+     * Default value in case we need
+     *  to reset Authorization status
+     *
+     * @var bool
+     */
+    public static bool $statusDefault = true;
 
     /**
      * Change default status.
      * This will be used for the
-     *  value set on the $this->reset() method
-     * @param bool $status
-     * @return void
-     */
-    public function setDefaultStatus(bool $status): void
-    {
-        $this->statusDefault = $status;
-        $this->status = $status;
-    }
-
-    /**
-     * Change status
+     *  value set on the self::reset() method
      *
      * @param bool $status
      * @return void
      */
-    public function setStatus(bool $status): void
+    public static function setDefaultStatus(bool $status): void
     {
-        $this->status = $status;
-    }
-
-    /**
-     * Get status
-     *
-     * @return bool
-     */
-    public function getStatus(): bool
-    {
-        return $this->status;
-    }
-
-    /**
-     * Get default status
-     *
-     * @return bool
-     */
-    public function getStatusDefault(): bool
-    {
-        return $this->statusDefault;
+        self::$statusDefault = $status;
+        self::$status = $status;
     }
 
     /**
@@ -182,15 +157,15 @@ class Authorization extends Validator
      * @param callable(): T $callback
      * @return T
      */
-    public function skip(callable $callback): mixed
+    public static function skip(callable $callback): mixed
     {
-        $initialStatus = $this->status;
-        $this->disable();
+        $initialStatus = self::$status;
+        self::disable();
 
         try {
             return $callback();
         } finally {
-            $this->status = $initialStatus;
+            self::$status = $initialStatus;
         }
     }
 
@@ -199,9 +174,9 @@ class Authorization extends Validator
      *
      * @return void
      */
-    public function enable(): void
+    public static function enable(): void
     {
-        $this->status = true;
+        self::$status = true;
     }
 
     /**
@@ -209,9 +184,9 @@ class Authorization extends Validator
      *
      * @return void
      */
-    public function disable(): void
+    public static function disable(): void
     {
-        $this->status = false;
+        self::$status = false;
     }
 
     /**
@@ -219,9 +194,9 @@ class Authorization extends Validator
      *
      * @return void
      */
-    public function reset(): void
+    public static function reset(): void
     {
-        $this->status = $this->statusDefault;
+        self::$status = self::$statusDefault;
     }
 
     /**

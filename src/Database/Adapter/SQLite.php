@@ -10,7 +10,9 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 
 /**
@@ -29,6 +31,36 @@ use Utopia\Database\Helpers\ID;
  */
 class SQLite extends MariaDB
 {
+    /**
+     * @inheritDoc
+     */
+    public function startTransaction(): bool
+    {
+        try {
+            if ($this->inTransaction === 0) {
+                if ($this->getPDO()->inTransaction()) {
+                    $this->getPDO()->rollBack();
+                }
+
+                $result = $this->getPDO()->beginTransaction();
+            } else {
+                $result = $this->getPDO()
+                    ->prepare('SAVEPOINT transaction' . $this->inTransaction)
+                    ->execute();
+            }
+        } catch (PDOException $e) {
+            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+        if (!$result) {
+            throw new TransactionException('Failed to start transaction');
+        }
+
+        $this->inTransaction++;
+
+        return $result;
+    }
+
     /**
      * Check if Database exists
      * Optionally check if collection exists in Database
@@ -128,8 +160,8 @@ class SQLite extends MariaDB
 
         $tenantQuery = $this->sharedTables ? '`_tenant` INTEGER DEFAULT NULL,' : '';
 
-        $sql = "
-			CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($id)}` (
+        $collection = "
+			CREATE TABLE {$this->getSQLTable($id)} (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
 				`_uid` VARCHAR(36) NOT NULL,
 				{$tenantQuery}
@@ -140,32 +172,10 @@ class SQLite extends MariaDB
 			)
 		";
 
-        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+        $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
-        $this->getPDO()->prepare($sql)->execute();
-
-        $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
-        $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
-        $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
-
-        if ($this->sharedTables) {
-            $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
-        }
-
-        foreach ($indexes as $index) {
-            $indexId = $this->filter($index->getId());
-            $indexType = $index->getAttribute('type');
-            $indexAttributes = $index->getAttribute('attributes', []);
-            $indexLengths = $index->getAttribute('lengths', []);
-            $indexOrders = $index->getAttribute('orders', []);
-
-            $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
-        }
-
-        $tenantQuery = $this->sharedTables ? '`_tenant` INTEGER DEFAULT NULL,' : '';
-
-        $sql = "
-			CREATE TABLE IF NOT EXISTS `{$this->getSQLTable($id)}_perms` (
+        $permissions = "
+			CREATE TABLE {$this->getSQLTable($id . '_perms')} (
 				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
 				{$tenantQuery}
 				`_type` VARCHAR(12) NOT NULL,
@@ -174,16 +184,52 @@ class SQLite extends MariaDB
 			)
 		";
 
-        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+        $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
 
-        $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            $this->getPDO()
+                ->prepare($collection)
+                ->execute();
 
-        $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
-        $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
+            $this->getPDO()
+                ->prepare($permissions)
+                ->execute();
 
-        // Update $this->getCountOfIndexes when adding another default index
+            $this->createIndex($id, '_index1', Database::INDEX_UNIQUE, ['_uid'], [], []);
+            $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
+            $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
+
+            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
+            $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
+
+            if ($this->sharedTables) {
+                $this->createIndex($id, '_tenant_id', Database::INDEX_KEY, [ '_id'], [], []);
+            }
+
+            foreach ($indexes as $index) {
+                $indexId = $this->filter($index->getId());
+                $indexType = $index->getAttribute('type');
+                $indexAttributes = $index->getAttribute('attributes', []);
+                $indexLengths = $index->getAttribute('lengths', []);
+                $indexOrders = $index->getAttribute('orders', []);
+
+                $this->createIndex($id, $indexId, $indexType, $indexAttributes, $indexLengths, $indexOrders);
+            }
+
+            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
+            $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
+
+        } catch (PDOException $e) {
+            $e = $this->processException($e);
+
+            if (!($e instanceof Duplicate)) {
+                $this->getPDO()
+                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+                    ->execute();
+            }
+
+            throw $e;
+        }
         return true;
     }
 
@@ -250,14 +296,14 @@ class SQLite extends MariaDB
     {
         $id = $this->filter($id);
 
-        $sql = "DROP TABLE IF EXISTS `{$this->getSQLTable($id)}`";
+        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id)}";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         $this->getPDO()
             ->prepare($sql)
             ->execute();
 
-        $sql = "DROP TABLE IF EXISTS `{$this->getSQLTable($id)}_perms`";
+        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id . '_perms')}";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
         $this->getPDO()
@@ -265,6 +311,17 @@ class SQLite extends MariaDB
             ->execute();
 
         return true;
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
     }
 
     /**
@@ -276,12 +333,12 @@ class SQLite extends MariaDB
      * @param int $size
      * @param bool $signed
      * @param bool $array
-     * @param string $newKey
+     * @param string|null $newKey
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
     {
         if (!empty($newKey) && $newKey !== $id) {
             return $this->renameAttribute($collection, $id, $newKey);
@@ -308,7 +365,7 @@ class SQLite extends MariaDB
         $collection = $this->getDocument(Database::METADATA, $name);
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $indexes = \json_decode($collection->getAttribute('indexes', []), true);
@@ -323,16 +380,21 @@ class SQLite extends MariaDB
             }
         }
 
-        $sql = "
-			ALTER TABLE {$this->getSQLTable($name)}
-			DROP COLUMN `{$id}`
-		";
+        $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`";
 
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            if (str_contains($e->getMessage(), 'no such column')) {
+                return true;
+            }
+
+            throw $e;
+        }
     }
 
     /**
@@ -350,7 +412,7 @@ class SQLite extends MariaDB
         $collection = $this->getDocument(Database::METADATA, $collection);
 
         if ($collection->isEmpty()) {
-            throw new DatabaseException('Collection not found');
+            throw new NotFoundException('Collection not found');
         }
 
         $old = $this->filter($old);
@@ -438,9 +500,17 @@ class SQLite extends MariaDB
         $sql = "DROP INDEX `{$this->getNamespace()}_{$this->tenant}_{$name}_{$id}`";
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            if (str_contains($e->getMessage(), 'no such index')) {
+                return true;
+            }
+
+            throw $e;
+        }
     }
 
     /**
@@ -593,7 +663,7 @@ class SQLite extends MariaDB
 		";
 
         if ($this->sharedTables) {
-            $sql .= " AND _tenant = :_tenant";
+            $sql .= " AND (_tenant = :_tenant OR _tenant IS NULL)";
         }
 
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
@@ -670,7 +740,7 @@ class SQLite extends MariaDB
 			";
 
             if ($this->sharedTables) {
-                $sql .= " AND _tenant = :_tenant";
+                $sql .= " AND (_tenant = :_tenant OR _tenant IS NULL)";
             }
 
             $removeQuery = $sql . $removeQuery;
@@ -742,7 +812,7 @@ class SQLite extends MariaDB
 		";
 
         if ($this->sharedTables) {
-            $sql .= " AND _tenant = :_tenant";
+            $sql .= " AND (_tenant = :_tenant OR _tenant IS NULL)";
         }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
@@ -856,6 +926,26 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    public function getSupportForGetConnectionId(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is get schema attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSchemaAttributes(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get SQL Index Type
      *
      * @param string $type
@@ -955,7 +1045,7 @@ class SQLite extends MariaDB
      */
     protected function getSQLTable(string $name): string
     {
-        return "{$this->getNamespace()}_{$name}";
+        return "`{$this->getNamespace()}_{$name}`";
     }
 
     /**
@@ -1117,38 +1207,18 @@ class SQLite extends MariaDB
         ];
     }
 
-    /**
-     * @param PDOException $e
-     * @throws TimeoutException
-     * @throws DuplicateException
-     */
-    protected function processException(PDOException $e): void
+    protected function processException(PDOException $e): \Exception
     {
-        /**
-         * PDO and Swoole PDOProxy swap error codes and errorInfo
-         */
-
         // Timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
-            throw new TimeoutException($e->getMessage(), $e->getCode(), $e);
+            return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
         // Duplicate
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1) {
-            throw new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
-        throw $e;
-    }
-
-    /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return false;
+        return $e;
     }
 }

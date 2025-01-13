@@ -5,7 +5,7 @@ namespace Utopia\Database\Validator;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Http\Validator;
+use Utopia\Validator;
 
 class Index extends Validator
 {
@@ -18,13 +18,20 @@ class Index extends Validator
     protected array $attributes;
 
     /**
+     * @var array<string> $reservedKeys
+     */
+    protected array $reservedKeys;
+
+    /**
      * @param array<Document> $attributes
      * @param int $maxLength
+     * @param array<string> $reservedKeys
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength)
+    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [])
     {
         $this->maxLength = $maxLength;
+        $this->reservedKeys = $reservedKeys;
 
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -80,15 +87,15 @@ class Index extends Validator
     public function checkDuplicatedAttributes(Document $index): bool
     {
         $attributes = $index->getAttribute('attributes', []);
-        $orders = $index->getAttribute('orders', []);
         $stack = [];
-        foreach ($attributes as $key => $attribute) {
-            $direction = $orders[$key] ?? 'ASC';
-            $value = \strtolower($attribute . '|' . $direction);
+        foreach ($attributes as $attribute) {
+            $value = \strtolower($attribute);
+
             if (\in_array($value, $stack)) {
                 $this->message = 'Duplicate attributes provided';
                 return false;
             }
+
             $stack[] = $value;
         }
         return true;
@@ -210,6 +217,24 @@ class Index extends Validator
     }
 
     /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkReservedNames(Document $index): bool
+    {
+        $key = $index->getAttribute('key', $index->getAttribute('$id'));
+
+        foreach ($this->reservedKeys as $reserved) {
+            if (\strtolower($key) === \strtolower($reserved)) {
+                $this->message = 'Index key name is reserved';
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Is valid.
      *
      * Returns true index if valid.
@@ -240,6 +265,10 @@ class Index extends Validator
         }
 
         if (!$this->checkIndexLength($value)) {
+            return false;
+        }
+
+        if (!$this->checkReservedNames($value)) {
             return false;
         }
 

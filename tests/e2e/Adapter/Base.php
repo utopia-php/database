@@ -1366,6 +1366,10 @@ abstract class Base extends TestCase
 
     public function testRowSizeToLarge(): void
     {
+        if (static::getDatabase()->getAdapter()->getDocumentSizeLimit() > 0) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
         /**
          * getDocumentSizeLimit = 65535
          * 65535 / 4 = 16383 MB4

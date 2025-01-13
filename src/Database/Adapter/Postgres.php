@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 
 class Postgres extends SQL
 {
@@ -875,7 +876,7 @@ class Postgres extends SQL
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-            if ($sqlTenant) {
+            if($sqlTenant) {
                 $stmtPermissions->bindValue(':_tenant', $this->tenant);
             }
         }
@@ -934,7 +935,7 @@ class Postgres extends SQL
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                    if ($this->sharedTables) {
+                    if($this->sharedTables) {
                         $attributes['_tenant'] = $this->tenant;
                     }
 
@@ -1691,7 +1692,7 @@ class Postgres extends SQL
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
+        $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
 
@@ -1767,7 +1768,7 @@ class Postgres extends SQL
         }
 
         $conditions = $this->getSQLConditions($queries);
-        if (!empty($conditions)) {
+        if(!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -1775,8 +1776,8 @@ class Postgres extends SQL
             $where[] = "table_main._tenant = :_tenant";
         }
 
-        if ($this->authorization->getStatus()) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1888,14 +1889,14 @@ class Postgres extends SQL
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
+        $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $conditions = $this->getSQLConditions($queries);
-        if (!empty($conditions)) {
+        if(!empty($conditions)) {
             $where[] = $conditions;
         }
 
@@ -1903,7 +1904,7 @@ class Postgres extends SQL
             $where[] = "table_main._tenant = :_tenant";
         }
 
-        if ($this->authorization->getStatus()) {
+        if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -1954,7 +1955,7 @@ class Postgres extends SQL
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
+        $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
@@ -1968,7 +1969,7 @@ class Postgres extends SQL
             $where[] = "table_main._tenant = :_tenant";
         }
 
-        if ($this->authorization->getStatus()) {
+        if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -2135,7 +2136,7 @@ class Postgres extends SQL
      */
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
-        if ($array === true) {
+        if($array === true) {
             return 'JSONB';
         }
 

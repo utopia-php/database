@@ -6,7 +6,6 @@ use Exception;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Validator\Authorization;
 
 abstract class Adapter
 {
@@ -36,35 +35,6 @@ abstract class Adapter
      * @var array<string, mixed>
      */
     protected array $metadata = [];
-
-    /**
-     * @var Authorization
-     */
-    protected Authorization $authorization;
-
-    /**
-     * @param Authorization $authorization
-     *
-     * @return $this
-     */
-    public function setAuthorization(Authorization $authorization): self
-    {
-        $this->authorization = $authorization;
-
-        return $this;
-    }
-
-    /**
-     * @return $this
-     */
-    public function clearTransformations(): self
-    {
-        $this->transformations = [
-            '*' => [],
-        ];
-
-        return $this;
-    }
 
     /**
      * @param string $key
@@ -901,7 +871,7 @@ abstract class Adapter
      */
     public function filter(string $value): string
     {
-        $value = \preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
+        $value = \preg_replace("/[^A-Za-z0-9_\-]/", '', $value);
 
         if (\is_null($value)) {
             throw new DatabaseException('Failed to filter key');

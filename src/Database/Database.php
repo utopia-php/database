@@ -18,7 +18,6 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
@@ -347,11 +346,6 @@ class Database
     protected array $relationshipDeleteStack = [];
 
     /**
-     * @var Authorization
-     */
-    private Authorization $authorization;
-
-    /**
      * @param Adapter $adapter
      * @param Cache $cache
      * @param array<string, array{encode: callable, decode: callable}> $filters
@@ -361,8 +355,6 @@ class Database
         $this->adapter = $adapter;
         $this->cache = $cache;
         $this->instanceFilters = $filters;
-
-        $this->setAuthorization(new Authorization());
 
         self::addFilter(
             'json',
@@ -433,29 +425,6 @@ class Database
                 return DateTime::formatTz($value);
             }
         );
-    }
-
-    /**
-     * Sets instance of authorization for permission checks
-     *
-     * @param Authorization $authorization
-     * @return self
-     */
-    public function setAuthorization(Authorization $authorization): self
-    {
-        $this->adapter->setAuthorization($authorization);
-        $this->authorization = $authorization;
-        return $this;
-    }
-
-    /**
-     * Get instance of authorization
-     *
-     * @return Authorization
-     */
-    public function getAuthorization(): Authorization
-    {
-        return $this->authorization;
     }
 
     /**
@@ -2874,6 +2843,7 @@ class Database
 
         $queries = \array_values($queries);
 
+        $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
         /**
@@ -2890,12 +2860,10 @@ class Database
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {
-                $isValid = $this->authorization->isValid(new Input(self::PERMISSION_READ, [
+                if (!$validator->isValid([
                     ...$collection->getRead(),
                     ...($documentSecurity ? $document->getRead() : [])
-                ]));
-
-                if (!$isValid) {
+                ])) {
                     return new Document();
                 }
             }
@@ -2914,12 +2882,10 @@ class Database
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
-            $isValid = $this->authorization->isValid(new Input(self::PERMISSION_READ, [
+            if (!$validator->isValid([
                 ...$collection->getRead(),
                 ...($documentSecurity ? $document->getRead() : [])
-            ]));
-
-            if (!$isValid) {
+            ])) {
                 return new Document();
             }
         }
@@ -3244,9 +3210,9 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
-            $isValid = $this->authorization->isValid(new Input(self::PERMISSION_CREATE, $collection->getCreate()));
-            if (!$isValid) {
-                throw new AuthorizationException($this->authorization->getDescription());
+            $authorization = new Authorization(self::PERMISSION_CREATE);
+            if (!$authorization->isValid($collection->getCreate())) {
+                throw new AuthorizationException($authorization->getDescription());
             }
         }
 
@@ -3715,7 +3681,7 @@ class Database
 
         $document = $this->withTransaction(function () use ($collection, $id, $document) {
             $time = DateTime::now();
-            $old = $this->authorization->skip(fn () => $this->silent(
+            $old = Authorization::skip(fn () => $this->silent(
                 fn () =>
                 $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
@@ -3734,6 +3700,8 @@ class Database
                 return $attribute['type'] === Database::VAR_RELATIONSHIP;
             });
 
+            $updateValidator = new Authorization(self::PERMISSION_UPDATE);
+            $readValidator = new Authorization(self::PERMISSION_READ);
             $shouldUpdate = false;
 
             if ($collection->getId() !== self::METADATA) {
@@ -3827,19 +3795,20 @@ class Database
                     }
                 }
 
-                $updateValidator = new Input(self::PERMISSION_UPDATE, [
+                $updatePermissions = [
                     ...$collection->getUpdate(),
                     ...($documentSecurity ? $old->getUpdate() : [])
-                ]);
+                ];
 
-                $readValidator = new Input(self::PERMISSION_READ, [
+                $readPermissions = [
                     ...$collection->getRead(),
                     ...($documentSecurity ? $old->getRead() : [])
-                ]);
+                ];
 
-                if (($shouldUpdate && !$this->authorization->isValid($updateValidator))
-                            || (!$shouldUpdate && !$this->authorization->isValid($readValidator))) {
-                    throw new AuthorizationException($this->authorization->getDescription());
+                if ($shouldUpdate && !$updateValidator->isValid($updatePermissions)) {
+                    throw new AuthorizationException($updateValidator->getDescription());
+                } elseif (!$shouldUpdate && !$readValidator->isValid($readPermissions)) {
+                    throw new AuthorizationException($readValidator->getDescription());
                 }
             }
 
@@ -4196,7 +4165,7 @@ class Database
                             $removedDocuments = \array_diff($oldIds, $newIds);
 
                             foreach ($removedDocuments as $relation) {
-                                $this->authorization->skip(fn () => $this->skipRelationships(fn () => $this->updateDocument(
+                                Authorization::skip(fn () => $this->skipRelationships(fn () => $this->updateDocument(
                                     $relatedCollection->getId(),
                                     $relation,
                                     new Document([$twoWayKey => null])
@@ -4326,7 +4295,7 @@ class Database
                             ]);
 
                             foreach ($junctions as $junction) {
-                                $this->authorization->skip(fn () => $this->deleteDocument($junction->getCollection(), $junction->getId()));
+                                Authorization::skip(fn () => $this->deleteDocument($junction->getCollection(), $junction->getId()));
                             }
                         }
 
@@ -4419,10 +4388,12 @@ class Database
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
 
-        /* @var $document Document */
-        $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+        $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        if ($document->isEmpty()) {
+        /* @var $document Document */
+        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        if($document->isEmpty()) {
             return false;
         }
 
@@ -4430,12 +4401,11 @@ class Database
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            $isValid = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
+            if (!$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $document->getUpdate() : [])
-            ]));
-            if (!$isValid) {
-                throw new AuthorizationException($this->authorization->getDescription());
+            ])) {
+                throw new AuthorizationException($validator->getDescription());
             }
         }
 
@@ -4512,10 +4482,13 @@ class Database
         if ($value <= 0) { // Can be a float
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
-        /* @var $document Document */
-        $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
 
-        if ($document->isEmpty()) {
+        $validator = new Authorization(self::PERMISSION_UPDATE);
+
+        /* @var $document Document */
+        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
+
+        if($document->isEmpty()) {
             return false;
         }
 
@@ -4523,12 +4496,11 @@ class Database
 
         if ($collection->getId() !== self::METADATA) {
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            $isValid = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
+            if (!$validator->isValid([
                 ...$collection->getUpdate(),
                 ...($documentSecurity ? $document->getUpdate() : [])
-            ]));
-            if (!$isValid) {
-                throw new AuthorizationException($this->authorization->getDescription());
+            ])) {
+                throw new AuthorizationException($validator->getDescription());
             }
         }
 
@@ -4606,23 +4578,24 @@ class Database
 
         $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
             /* @var $document Document */
-            $document = $this->authorization->skip(fn () => $this->silent(
+            $document = Authorization::skip(fn () => $this->silent(
                 fn () =>
                 $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
-            if ($document->isEmpty()) {
+            if($document->isEmpty()) {
                 return false;
             }
 
+            $validator = new Authorization(self::PERMISSION_DELETE);
+
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
-                $isValid = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
+                if (!$validator->isValid([
                     ...$collection->getDelete(),
                     ...($documentSecurity ? $document->getDelete() : [])
-                ]));
-                if (!$isValid) {
-                    throw new AuthorizationException($this->authorization->getDescription());
+                ])) {
+                    throw new AuthorizationException($validator->getDescription());
                 }
             }
 
@@ -4783,7 +4756,7 @@ class Database
             && $side === Database::RELATION_SIDE_CHILD
             && !$twoWay
         ) {
-            $this->authorization->skip(function () use ($document, $relatedCollection, $twoWayKey) {
+            Authorization::skip(function () use ($document, $relatedCollection, $twoWayKey) {
                 $related = $this->findOne($relatedCollection->getId(), [
                     Query::select(['$id']),
                     Query::equal($twoWayKey, [$document->getId()])
@@ -4807,7 +4780,7 @@ class Database
             $relationType === Database::RELATION_MANY_TO_ONE
             && $side === Database::RELATION_SIDE_CHILD
         ) {
-            $related = $this->authorization->skip(fn () => $this->findOne($relatedCollection->getId(), [
+            $related = Authorization::skip(fn () => $this->findOne($relatedCollection->getId(), [
                 Query::select(['$id']),
                 Query::equal($twoWayKey, [$document->getId()])
             ]));
@@ -4843,7 +4816,7 @@ class Database
                 }
 
                 // Shouldn't need read or update permission to delete
-                $this->authorization->skip(function () use ($document, $value, $relatedCollection, $twoWay, $twoWayKey, $side) {
+                Authorization::skip(function () use ($document, $value, $relatedCollection, $twoWay, $twoWayKey, $side) {
                     if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
                         $related = $this->findOne($relatedCollection->getId(), [
                             Query::select(['$id']),
@@ -4875,7 +4848,7 @@ class Database
                     break;
                 }
                 foreach ($value as $relation) {
-                    $this->authorization->skip(function () use ($relatedCollection, $twoWayKey, $relation) {
+                    Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
                             $relation->getId(),
@@ -4901,7 +4874,7 @@ class Database
                 }
 
                 foreach ($value as $relation) {
-                    $this->authorization->skip(function () use ($relatedCollection, $twoWayKey, $relation) {
+                    Authorization::skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
                             $relation->getId(),
@@ -5188,12 +5161,12 @@ class Database
             }
         }
 
+        $authorization = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-
-        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
+        $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission)));
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-            throw new AuthorizationException($this->authorization->getDescription());
+            throw new AuthorizationException($authorization->getDescription());
         }
 
         $relationships = \array_filter(
@@ -5281,9 +5254,9 @@ class Database
             $forPermission
         );
 
-        $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
+        $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        foreach ($results as &$node) {
+        foreach ($results as  &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
@@ -5368,13 +5341,16 @@ class Database
             }
         }
 
-        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+        $authorization = new Authorization(self::PERMISSION_READ);
+        if ($authorization->isValid($collection->getRead())) {
+            $skipAuth = true;
+        }
 
         $queries = Query::groupByType($queries)['filters'];
         $queries = self::convertQueries($collection, $queries);
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
-        $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
+        $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
 

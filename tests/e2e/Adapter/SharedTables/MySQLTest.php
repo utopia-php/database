@@ -29,7 +29,7 @@ class MySQLTest extends Base
     /**
      * @return Database
      */
-    public function getDatabase(): Database
+    public static function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -50,7 +50,6 @@ class MySQLTest extends Base
 
         $database = new Database(new MySQL($pdo), $cache);
         $database
-            ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
             ->setSharedTables(true)
             ->setTenant(999)

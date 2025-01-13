@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Http\Validator;
+use Utopia\Validator;
 
 class Datetime extends Validator
 {
@@ -33,7 +33,7 @@ class Datetime extends Validator
      */
     public function __construct(bool $requireDateInFuture = false, string $precision = self::PRECISION_ANY, int $offset = 0)
     {
-        if ($offset < 0) {
+        if($offset < 0) {
             throw new \Exception('Offset must be a positive number.');
         }
 
@@ -50,13 +50,13 @@ class Datetime extends Validator
     {
         $message = 'Value must be valid date';
 
-        if ($this->offset > 0) {
+        if($this->offset > 0) {
             $message .= " at least " . $this->offset . " seconds in future";
-        } elseif ($this->requireDateInFuture) {
+        } elseif($this->requireDateInFuture) {
             $message .= " in future";
         }
 
-        if ($this->precision !== self::PRECISION_ANY) {
+        if($this->precision !== self::PRECISION_ANY) {
             $message .= " with " . $this->precision . " precision";
         }
 
@@ -84,9 +84,9 @@ class Datetime extends Validator
                 return false;
             }
 
-            if ($this->offset !== 0) {
+            if($this->offset !== 0) {
                 $diff = $date->getTimestamp() - $now->getTimestamp();
-                if ($diff <= $this->offset) {
+                if($diff <= $this->offset) {
                     return false;
                 }
             }
@@ -109,12 +109,12 @@ class Datetime extends Validator
                     break;
             }
 
-            foreach ($denyConstants as $constant) {
-                if (\intval($date->format($constant)) !== 0) {
+            foreach($denyConstants as $constant) {
+                if(\intval($date->format($constant)) !== 0) {
                     return false;
                 }
             }
-        } catch (\Exception $e) {
+        } catch(\Exception $e) {
             return false;
         }
 

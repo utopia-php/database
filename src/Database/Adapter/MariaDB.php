@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 
 class MariaDB extends SQL
 {
@@ -730,7 +731,7 @@ class MariaDB extends SQL
 
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
-            if (!empty($collectionAttribute['array']) && $this->castIndexArray()) {
+            if(!empty($collectionAttribute['array']) && $this->castIndexArray()) {
                 $attributes[$i] = '(CAST(' . $attr . ' AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
@@ -914,7 +915,7 @@ class MariaDB extends SQL
                 $stmtPermissions->execute();
             }
         } catch (\Throwable $e) {
-            if ($e instanceof PDOException) {
+            if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -962,7 +963,7 @@ class MariaDB extends SQL
                     $attributes['_createdAt'] = $document->getCreatedAt();
                     $attributes['_updatedAt'] = $document->getUpdatedAt();
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
-                    if (!empty($document->getInternalId())) {
+                    if(!empty($document->getInternalId())) {
                         $attributes['_id'] = $document->getInternalId();
                     }
 
@@ -1042,7 +1043,7 @@ class MariaDB extends SQL
                 }
             }
         } catch (\Throwable $e) {
-            if ($e instanceof PDOException) {
+            if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -1290,7 +1291,7 @@ class MariaDB extends SQL
             }
 
         } catch (\Throwable $e) {
-            if ($e instanceof PDOException) {
+            if($e instanceof PDOException) {
                 switch ($e->getCode()) {
                     case 1062:
                     case 23000:
@@ -1765,7 +1766,7 @@ class MariaDB extends SQL
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
+        $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
 
@@ -1847,11 +1848,11 @@ class MariaDB extends SQL
         }
 
         $conditions = $this->getSQLConditions($queries);
-        if (!empty($conditions)) {
+        if(!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
+        if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
         }
 
@@ -1968,18 +1969,18 @@ class MariaDB extends SQL
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
+        $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $conditions = $this->getSQLConditions($queries);
-        if (!empty($conditions)) {
+        if(!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
+        if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -2041,7 +2042,7 @@ class MariaDB extends SQL
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
-        $roles = $this->authorization->getRoles();
+        $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
@@ -2051,7 +2052,7 @@ class MariaDB extends SQL
             $where[] = $this->getSQLCondition($query);
         }
 
-        if ($this->authorization->getStatus()) {
+        if (Authorization::$status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles);
         }
 
@@ -2192,7 +2193,7 @@ class MariaDB extends SQL
                 return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
-                if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
+                if($this->getSupportForJSONOverlaps() && $query->onArray()) {
                     return "JSON_OVERLAPS(`table_main`.{$attribute}, :{$placeholder}_0)";
                 }
 
@@ -2218,7 +2219,7 @@ class MariaDB extends SQL
      */
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
-        if ($array === true) {
+        if($array === true) {
             return 'JSON';
         }
 

@@ -828,14 +828,14 @@ abstract class SQL extends Adapter
             return;
         }
 
-        if ($query->isNested()) {
+        if($query->isNested()) {
             foreach ($query->getValues() as $value) {
                 $this->bindConditionValue($stmt, $value);
             }
             return;
         }
 
-        if ($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
+        if($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
             $placeholder = $this->getSQLPlaceholder($query) . '_0';
             $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
             return;
@@ -1085,7 +1085,7 @@ abstract class SQL extends Adapter
                 continue;
             }
 
-            if ($query->isNested()) {
+            if($query->isNested()) {
                 $conditions[] = $this->getSQLConditions($query->getValues(), $query->getMethod());
             } else {
                 $conditions[] = $this->getSQLCondition($query);

@@ -28,7 +28,7 @@ class MySQLTest extends Base
     /**
      * @return Database
      */
-    public function getDatabase(): Database
+    public static function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -48,9 +48,9 @@ class MySQLTest extends Base
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MySQL($pdo), $cache);
-        $database->setAuthorization(self::$authorization);
-        $database->setDatabase('utopiaTests');
-        $database->setNamespace(static::$namespace = 'myapp_' . uniqid());
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
         if ($database->exists()) {
             $database->delete();

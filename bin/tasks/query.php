@@ -14,9 +14,10 @@ use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Database;
 use Utopia\Database\Query;
-use Utopia\Http\Validator\Numeric;
-use Utopia\Http\Validator\Text;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
+use Utopia\Validator\Numeric;
+use Utopia\Validator\Text;
 
 /**
  * @Example
@@ -83,35 +84,35 @@ $cli
 
         $report = [];
 
-        $count = $setRoles($faker, 1);
+        $count = setRoles($faker, 1);
         Console::info("\n{$count} roles:");
         $report[] = [
             'roles' => $count,
             'results' => runQueries($database, $limit)
         ];
 
-        $count = $setRoles($faker, 100);
+        $count = setRoles($faker, 100);
         Console::info("\n{$count} roles:");
         $report[] = [
             'roles' => $count,
             'results' => runQueries($database, $limit)
         ];
 
-        $count = $setRoles($faker, 400);
+        $count = setRoles($faker, 400);
         Console::info("\n{$count} roles:");
         $report[] = [
             'roles' => $count,
             'results' => runQueries($database, $limit)
         ];
 
-        $count = $setRoles($faker, 500);
+        $count = setRoles($faker, 500);
         Console::info("\n{$count} roles:");
         $report[] = [
             'roles' => $count,
             'results' => runQueries($database, $limit)
         ];
 
-        $count = $setRoles($faker, 1000);
+        $count = setRoles($faker, 1000);
         Console::info("\n{$count} roles:");
         $report[] = [
             'roles' => $count,
@@ -135,12 +136,13 @@ $cli
         Console::error($error->getMessage());
     });
 
-$setRoles = function ($faker, $count) use ($authorization): int {
+function setRoles($faker, $count): int
+{
     for ($i = 0; $i < $count; $i++) {
-        $authorization->addRole($faker->numerify('user####'));
+        Authorization::setRole($faker->numerify('user####'));
     }
-    return \count($authorization->getRoles());
-};
+    return \count(Authorization::getRoles());
+}
 
 function runQueries(Database $database, int $limit): array
 {

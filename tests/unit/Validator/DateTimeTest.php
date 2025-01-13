@@ -128,7 +128,7 @@ class DateTimeTest extends TestCase
         $threwException = false;
         try {
             $dateValidator = new DatetimeValidator(offset: -60);
-        } catch (\Exception $e) {
+        } catch(\Exception $e) {
             $threwException = true;
         }
         $this->assertTrue($threwException);

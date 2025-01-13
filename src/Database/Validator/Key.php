@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
-use Utopia\Http\Validator;
+use Utopia\Validator;
 
 class Key extends Validator
 {

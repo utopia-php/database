@@ -30,7 +30,7 @@ class MongoDBTest extends Base
      * @return Database
      * @throws Exception
      */
-    public function getDatabase(): Database
+    public static function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -53,7 +53,6 @@ class MongoDBTest extends Base
 
         $database = new Database(new Mongo($client), $cache);
         $database
-            ->setAuthorization(self::$authorization)
             ->setDatabase($schema)
             ->setSharedTables(true)
             ->setTenant(999)

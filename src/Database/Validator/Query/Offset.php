@@ -3,8 +3,8 @@
 namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Query;
-use Utopia\Http\Validator\Numeric;
-use Utopia\Http\Validator\Range;
+use Utopia\Validator\Numeric;
+use Utopia\Validator\Range;
 
 class Offset extends Base
 {

@@ -311,7 +311,7 @@ class Structure extends Validator
                 continue;
             }
 
-            if($type === Database::VAR_RELATIONSHIP) {
+            if ($type === Database::VAR_RELATIONSHIP) {
                 continue;
             }
 

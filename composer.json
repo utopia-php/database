@@ -27,15 +27,15 @@
             "Composer\\Config::disableProcessTimeout",
             "docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml"
         ],
-        "lint": "./vendor/bin/pint --test",
-        "format": "./vendor/bin/pint",
+        "lint": "php -d memory_limit=2G ./vendor/bin/pint --test",
+        "format": "php -d memory_limit=2G ./vendor/bin/pint",
         "check": "./vendor/bin/phpstan analyse --level 7 src tests --memory-limit 2G",
         "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
     },
     "require": {
+        "php": ">=8.3",
         "ext-pdo": "*",
         "ext-mbstring": "*",
-        "php": ">=8.0",
         "utopia-php/framework": "0.33.*",
         "utopia-php/cache": "0.11.*",
         "utopia-php/mongo": "0.3.*"
@@ -55,5 +55,11 @@
         "ext-redis": "Needed to support Redis Cache Adapter",
         "ext-pdo": "Needed to support MariaDB, MySQL or SQLite Database Adapter",
         "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true,
+            "tbachert/spi": true
+        }
     }
 }

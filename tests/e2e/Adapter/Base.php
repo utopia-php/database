@@ -1388,8 +1388,6 @@ abstract class Base extends TestCase
                 $this->assertInstanceOf(LimitException::class, $e);
             }
 
-            $collection_1 = static::getDatabase()->getCollection($collection_1->getId());
-
             /**
              * Relation takes length of Database::LENGTH_KEY so exceeding getDocumentSizeLimit
              */
@@ -1422,7 +1420,7 @@ abstract class Base extends TestCase
         }
     }
 
-        public function testCreateDeleteAttribute(): void
+    public function testCreateDeleteAttribute(): void
     {
         static::getDatabase()->createCollection('attributes');
 

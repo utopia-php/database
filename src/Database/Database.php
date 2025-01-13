@@ -2209,10 +2209,6 @@ class Database
             ],
         ]);
 
-        var_dump('getAttributeWidth ++++++++');
-        var_dump($this->adapter->getAttributeWidth($collection));
-        var_dump($this->adapter->getAttributeWidth($relatedCollection));
-
         $this->checkAttribute($collection, $relationship);
         $this->checkAttribute($relatedCollection, $twoWayRelationship);
 

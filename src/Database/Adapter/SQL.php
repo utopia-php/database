@@ -518,8 +518,8 @@ abstract class SQL extends Adapter
                     break;
 
                 case Database::VAR_RELATIONSHIP:
-                    // INT(11)
-                    $total += 4;
+                    // VARCHAR(255)
+                    $total += Database::LENGTH_KEY * 4 + 2;
                     break;
 
                 case Database::VAR_DATETIME:

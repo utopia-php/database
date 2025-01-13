@@ -2169,22 +2169,6 @@ class Database
             }
         }
 
-        if (
-            $this->adapter->getLimitForAttributes() > 0 &&
-            ($this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
-                || $this->adapter->getCountOfAttributes($relatedCollection) >= $this->adapter->getLimitForAttributes())
-        ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
-
-        if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            ($this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
-                || $this->adapter->getAttributeWidth($relatedCollection) >= $this->adapter->getDocumentSizeLimit())
-        ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
-
         $relationship = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -2216,6 +2200,9 @@ class Database
                 'side' => Database::RELATION_SIDE_CHILD,
             ],
         ]);
+
+        $this->checkAttribute($collection, $relationship);
+        $this->checkAttribute($relatedCollection, $twoWayRelationship);
 
         $collection->setAttribute('attributes', $relationship, Document::SET_TYPE_APPEND);
         $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);

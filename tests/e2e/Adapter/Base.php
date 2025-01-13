@@ -1366,57 +1366,50 @@ abstract class Base extends TestCase
 
     public function testRowSizeToLarge(): void
     {
-        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() === 0) {
-            $this->expectNotToPerformAssertions();
-            return;
+        /**
+         * getDocumentSizeLimit = 65535
+         * 65535 / 4 = 16383 MB4
+         */
+        $collection_1 = static::getDatabase()->createCollection('row_size_1');
+        $collection_2 = static::getDatabase()->createCollection('row_size_2');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection_1->getId(), 'attr_1', Database::VAR_STRING, 16000, true));
+
+        try {
+            static::getDatabase()->createAttribute($collection_1->getId(), 'attr_2', Database::VAR_STRING, Database::LENGTH_KEY, true);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
         }
 
         /**
-         * getDocumentSizeLimit = 65535
-         * mb4 65535 / 4 = 16383
+         * Relation takes length of Database::LENGTH_KEY so exceeding getDocumentSizeLimit
          */
-        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() > 0) {
-            $collection_1 = static::getDatabase()->createCollection('row_size_1');
-            $collection_2 = static::getDatabase()->createCollection('row_size_2');
 
-            $this->assertEquals(true, static::getDatabase()->createAttribute($collection_1->getId(), 'attr_1', Database::VAR_STRING, 16000, true));
+        try {
+            static::getDatabase()->createRelationship(
+                collection: $collection_2->getId(),
+                relatedCollection: $collection_1->getId(),
+                type: Database::RELATION_ONE_TO_ONE,
+                twoWay: true,
+            );
 
-            try {
-                $this->assertEquals(true, static::getDatabase()->createAttribute($collection_1->getId(), 'attr_2', Database::VAR_STRING, Database::LENGTH_KEY, true));
-                $this->fail('Failed to throw exception');
-            } catch (Exception $e) {
-                $this->assertInstanceOf(LimitException::class, $e);
-            }
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+        }
 
-            /**
-             * Relation takes length of Database::LENGTH_KEY so exceeding getDocumentSizeLimit
-             */
+        try {
+            static::getDatabase()->createRelationship(
+                collection: $collection_1->getId(),
+                relatedCollection: $collection_2->getId(),
+                type: Database::RELATION_ONE_TO_ONE,
+                twoWay: true,
+            );
 
-            try {
-                static::getDatabase()->createRelationship(
-                    collection: $collection_2->getId(),
-                    relatedCollection: $collection_1->getId(),
-                    type: Database::RELATION_ONE_TO_ONE,
-                    twoWay: true,
-                );
-
-                $this->fail('Failed to throw exception');
-            } catch (Exception $e) {
-                $this->assertInstanceOf(LimitException::class, $e);
-            }
-
-            try {
-                static::getDatabase()->createRelationship(
-                    collection: $collection_1->getId(),
-                    relatedCollection: $collection_2->getId(),
-                    type: Database::RELATION_ONE_TO_ONE,
-                    twoWay: true,
-                );
-
-                $this->fail('Failed to throw exception');
-            } catch (Exception $e) {
-                $this->assertInstanceOf(LimitException::class, $e);
-            }
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
         }
     }
 

@@ -2169,14 +2169,6 @@ class Database
             }
         }
 
-        if (
-            $this->adapter->getLimitForAttributes() > 0 &&
-            ($this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
-                || $this->adapter->getCountOfAttributes($relatedCollection) >= $this->adapter->getLimitForAttributes())
-        ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
-
         $relationship = new Document([
             '$id' => ID::custom($id),
             'key' => $id,

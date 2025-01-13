@@ -1133,11 +1133,7 @@ class Database
             'deleted' => $deleted
         ]);
 
-        try {
-            $this->cache->flush();
-        } catch (Exception $e) {
-            Console::warning('Failed to flush cache: ' . $e->getMessage());
-        }
+        $this->cache->flush();
 
         return $deleted;
     }
@@ -3977,6 +3973,9 @@ class Database
 
             $this->adapter->updateDocument($collection->getId(), $id, $document);
 
+            $this->purgeRelatedDocuments($collection, $id);
+            $this->purgeCachedDocument($collection->getId(), $id);
+
             return $document;
         });
 
@@ -3986,8 +3985,6 @@ class Database
 
         $document = $this->decode($collection, $document);
 
-        $this->purgeRelatedDocuments($collection, $id);
-        $this->purgeCachedDocument($collection->getId(), $id);
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
         return $document;
@@ -4787,11 +4784,13 @@ class Database
                 $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
             }
 
-            return $this->adapter->deleteDocument($collection->getId(), $id);
-        });
+            $result = $this->adapter->deleteDocument($collection->getId(), $id);
 
-        $this->purgeRelatedDocuments($collection, $id);
-        $this->purgeCachedDocument($collection->getId(), $id);
+            $this->purgeRelatedDocuments($collection, $id);
+            $this->purgeCachedDocument($collection->getId(), $id);
+
+            return $result;
+        });
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
@@ -5325,14 +5324,10 @@ class Database
     public function purgeCachedCollection(string $collectionId): bool
     {
         $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
-        try {
-            $documentKeys = $this->cache->list($collectionKey);
-            foreach ($documentKeys as $documentKey) {
-                $this->cache->purge($documentKey);
-            }
-        } catch (Exception $e) {
-            Console::warning('Warning: Failed to purge cached collection: ' . $e->getMessage());
-            return false;
+
+        $documentKeys = $this->cache->list($collectionKey);
+        foreach ($documentKeys as $documentKey) {
+            $this->cache->purge($documentKey);
         }
 
         return true;
@@ -5352,13 +5347,8 @@ class Database
         $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
         $documentKey =  $collectionKey . ':' . $id;
 
-        try {
-            $this->cache->purge($collectionKey, $documentKey);
-            $this->cache->purge($documentKey);
-        } catch (Exception $e) {
-            Console::warning('Warning: Failed to purge cache: ' . $e->getMessage());
-            return false;
-        }
+        $this->cache->purge($collectionKey, $documentKey);
+        $this->cache->purge($documentKey);
 
         return true;
     }
@@ -6059,12 +6049,8 @@ class Database
         }
 
         $key = $this->cacheName . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
-        try {
-            $cache = $this->cache->load($key, self::TTL, $key);
-        } catch (Exception $e) {
-            Console::warning('Warning: Failed to load cache: ' . $e->getMessage());
-            return;
-        }
+
+        $cache = $this->cache->load($key, self::TTL, $key);
 
         if (!empty($cache)) {
             foreach ($cache as $v) {

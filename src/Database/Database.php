@@ -4284,7 +4284,7 @@ class Database
                                     $document->setAttribute($key, $related->getId());
                                     break;
                                 }
-                            // no break
+                                // no break
                             case 'NULL':
                                 if (!\is_null($oldValue?->getId())) {
                                     $oldRelated = $this->skipRelationships(

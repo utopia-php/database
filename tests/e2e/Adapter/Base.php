@@ -1085,7 +1085,7 @@ abstract class Base extends TestCase
 
         $this->assertGreaterThan($size1, $size2);
 
-        self::$authorization->skip(function () use ($loopCount) {
+        Authorization::skip(function () use ($loopCount) {
             for ($i = 0; $i < $loopCount; $i++) {
                 static::getDatabase()->deleteDocument('sizeTest2', 'doc' . $i);
             }
@@ -2446,57 +2446,11 @@ abstract class Base extends TestCase
     }
 
     /**
-     * @depends testCreateDocuments
-     * @param array<Document> $documents
-     */
-    public function testUpdateDocuments(array $documents): void
-    {
-        $collection  = 'testCreateDocuments';
-
-        foreach ($documents as $document) {
-            $document
-                ->setAttribute('string', 'text📝 updated')
-                ->setAttribute('integer', 6)
-                ->setAttribute('$permissions', [
-                    Permission::read(Role::users()),
-                    Permission::create(Role::users()),
-                    Permission::update(Role::users()),
-                    Permission::delete(Role::users()),
-                ]);
-        }
-
-        $documents = static::getDatabase()->updateDocuments(
-            $collection,
-            $documents,
-            \count($documents)
-        );
-
-        foreach ($documents as $document) {
-            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
-            $this->assertEquals(6, $document->getAttribute('integer'));
-        }
-
-        $documents = static::getDatabase()->find($collection, [
-            Query::limit(\count($documents))
-        ]);
-
-        foreach ($documents as $document) {
-            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
-            $this->assertEquals(6, $document->getAttribute('integer'));
-            $this->assertEquals([
-                Permission::read(Role::users()),
-                Permission::create(Role::users()),
-                Permission::update(Role::users()),
-                Permission::delete(Role::users()),
-            ], $document->getAttribute('$permissions'));
-        }
-    }
-
-    /**
      * @depends testUpdateDocument
      */
     public function testUpdateDocumentConflict(Document $document): void
     {
+
         $document->setAttribute('integer_signed', 7);
         $result = static::getDatabase()->withRequestTimestamp(new \DateTime(), function () use ($document) {
             return static::getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
@@ -15701,7 +15655,7 @@ abstract class Base extends TestCase
         $deleted = static::getDatabase()->deleteDocuments('bulk_delete');
         $this->assertEquals(0, $deleted);
 
-        $documents = static::$authorization->skip(function () {
+        $documents = Authorization::skip(function () {
             return static::getDatabase()->find('bulk_delete');
         });
 
@@ -16258,8 +16212,8 @@ abstract class Base extends TestCase
         }
 
         $collection = 'testUpdateDocuments';
-        self::$authorization->cleanRoles();
-        self::$authorization->addRole(Role::any()->toString());
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
 
         static::getDatabase()->createCollection($collection, attributes: [
             new Document([
@@ -16363,7 +16317,7 @@ abstract class Base extends TestCase
         // Check document level permissions
         static::getDatabase()->updateCollection($collection, permissions: [], documentSecurity: true);
 
-        static::$authorization->skip(function () use ($collection) {
+        Authorization::skip(function () use ($collection) {
             static::getDatabase()->updateDocument($collection, 'doc0', new Document([
                 'string' => 'text📝 updated all',
                 '$permissions' => [
@@ -16375,7 +16329,7 @@ abstract class Base extends TestCase
             ]));
         });
 
-        static::$authorization->addRole(Role::user('asd')->toString());
+        Authorization::setRole(Role::user('asd')->toString());
 
         static::getDatabase()->updateDocuments($collection, new Document([
             'string' => 'permission text',
@@ -16387,7 +16341,7 @@ abstract class Base extends TestCase
 
         $this->assertCount(1, $documents);
 
-        self::$authorization->skip(function () use ($collection) {
+        Authorization::skip(function () use ($collection) {
             $unmodifiedDocuments = static::getDatabase()->find($collection, [
                 Query::equal('string', ['text📝 updated all']),
             ]);
@@ -16395,7 +16349,7 @@ abstract class Base extends TestCase
             $this->assertCount(9, $unmodifiedDocuments);
         });
 
-        static::$authorization->skip(function () use ($collection) {
+        Authorization::skip(function () use ($collection) {
             static::getDatabase()->updateDocuments($collection, new Document([
                 '$permissions' => [
                     Permission::read(Role::any()),
@@ -16419,8 +16373,8 @@ abstract class Base extends TestCase
             $this->assertEquals('batchSize Test', $document->getAttribute('string'));
         }
 
-        self::$authorization->cleanRoles();
-        self::$authorization->addRole(Role::any()->toString());
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
     }
 
     public function testUpdateDocumentsPermissions(): void
@@ -16442,7 +16396,7 @@ abstract class Base extends TestCase
         ], permissions: [], documentSecurity: true);
 
         // Test we can bulk update permissions we have access to
-        static::$authorization->skip(function () use ($collection) {
+        Authorization::skip(function () use ($collection) {
             for ($i = 0; $i < 10; $i++) {
                 static::getDatabase()->createDocument($collection, new Document([
                     '$id' => 'doc' . $i,
@@ -16477,7 +16431,7 @@ abstract class Base extends TestCase
             ],
         ]));
 
-        $documents = static::$authorization->skip(function () use ($collection) {
+        $documents = Authorization::skip(function () use ($collection) {
             return static::getDatabase()->find($collection);
         });
 
@@ -16506,7 +16460,7 @@ abstract class Base extends TestCase
 
         $this->assertCount(1, $unmodifiedDocuments);
 
-        static::$authorization->addRole(Role::user('user2')->toString());
+        Authorization::setRole(Role::user('user2')->toString());
 
         // Test Bulk permission update with data
         $affected = static::getDatabase()->updateDocuments($collection, new Document([
@@ -16521,10 +16475,9 @@ abstract class Base extends TestCase
 
         $this->assertEquals(10, $affected);
 
-        $documents = static::$authorization
-            ->skip(function () use ($collection) {
-                return static::getDatabase()->find($collection);
-            });
+        $documents = Authorization::skip(function () use ($collection) {
+            return static::getDatabase()->find($collection);
+        });
 
         $this->assertCount(11, $documents);
 
@@ -16549,8 +16502,8 @@ abstract class Base extends TestCase
             return;
         }
 
-        self::$authorization->cleanRoles();
-        self::$authorization->addRole(Role::any()->toString());
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
 
         static::getDatabase()->createCollection('testUpdateDocumentsRelationships1', attributes: [
             new Document([

@@ -93,84 +93,6 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
-    public function testWidthLimit(): void
-    {
-        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() === 0) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $collection = static::getDatabase()->createCollection('width_limit');
-
-        $init = static::getDatabase()->getAdapter()->getAttributeWidth($collection);
-        $this->assertEquals(1067, $init);
-
-        $attribute = new Document([
-            '$id' => ID::custom('varchar_100'),
-            'type' => Database::VAR_STRING,
-            'size' => 100,
-            'required' => false,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
-        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
-        $this->assertEquals(401, $res - $init); // 100 * 4 + 1 (length)
-
-        $attribute = new Document([
-            '$id' => ID::custom('json'),
-            'type' => Database::VAR_STRING,
-            'size' => 100,
-            'required' => false,
-            'default' => null,
-            'signed' => true,
-            'array' => true,
-            'filters' => [],
-        ]);
-        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
-        $this->assertEquals(20, $res - $init); // Pointer of Json / Longtext (mariaDB)
-
-        $attribute = new Document([
-            '$id' => ID::custom('text'),
-            'type' => Database::VAR_STRING,
-            'size' => 20000,
-            'required' => false,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
-        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
-        $this->assertEquals(20, $res - $init);
-
-        $attribute = new Document([
-            '$id' => ID::custom('bigint'),
-            'type' => Database::VAR_INTEGER,
-            'size' => 8,
-            'required' => false,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
-        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
-        $this->assertEquals(8, $res - $init);
-
-        $attribute = new Document([
-            '$id' => ID::custom('date'),
-            'type' => Database::VAR_DATETIME,
-            'size' => 8,
-            'required' => false,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
-        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
-        $this->assertEquals(7, $res - $init);
-    }
-
     /**
      * @throws LimitException
      * @throws DuplicateException
@@ -5473,6 +5395,84 @@ abstract class Base extends TestCase
         for ($i = 1; $i < 6; $i++) {
             static::getDatabase()->deleteCollection("level{$i}");
         }
+    }
+
+    public function testWidthLimit(): void
+    {
+        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() === 0) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = static::getDatabase()->createCollection('width_limit');
+
+        $init = static::getDatabase()->getAdapter()->getAttributeWidth($collection);
+        $this->assertEquals(1067, $init);
+
+        $attribute = new Document([
+            '$id' => ID::custom('varchar_100'),
+            'type' => Database::VAR_STRING,
+            'size' => 100,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(401, $res - $init); // 100 * 4 + 1 (length)
+
+        $attribute = new Document([
+            '$id' => ID::custom('json'),
+            'type' => Database::VAR_STRING,
+            'size' => 100,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => true,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(20, $res - $init); // Pointer of Json / Longtext (mariaDB)
+
+        $attribute = new Document([
+            '$id' => ID::custom('text'),
+            'type' => Database::VAR_STRING,
+            'size' => 20000,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(20, $res - $init);
+
+        $attribute = new Document([
+            '$id' => ID::custom('bigint'),
+            'type' => Database::VAR_INTEGER,
+            'size' => 8,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(8, $res - $init);
+
+        $attribute = new Document([
+            '$id' => ID::custom('date'),
+            'type' => Database::VAR_DATETIME,
+            'size' => 8,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(7, $res - $init);
     }
 
     public function testExceptionAttributeLimit(): void

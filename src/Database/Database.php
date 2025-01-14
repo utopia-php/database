@@ -1220,12 +1220,7 @@ class Database
             return new Document(self::COLLECTION);
         }
 
-        try {
-            $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
-        } catch (Exception $e) {
-            $this->adapter->deleteCollection($id);
-            throw $e;
-        }
+        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 
@@ -2064,37 +2059,45 @@ class Database
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        /**
+         * @var array<Document> $attributes
+         */
         $attributes = $collection->getAttribute('attributes', []);
+
+        /**
+         * @var array<Document> $indexes
+         */
         $indexes = $collection->getAttribute('indexes', []);
 
-        $attribute = \in_array($old, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
+        $attribute = new Document();
 
-        if ($attribute === false) {
+        foreach ($attributes as $value) {
+            if ($value->getId() === $old) {
+                $attribute = $value;
+            }
+
+            if ($value->getId() === $new) {
+                throw new DuplicateException('Attribute name already used');
+            }
+        }
+
+        if ($attribute->isEmpty()) {
             throw new NotFoundException('Attribute not found');
         }
 
-        $attributeNew = \in_array($new, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
-
-        if ($attributeNew !== false) {
-            throw new DuplicateException('Attribute name already used');
-        }
-
-        foreach ($attributes as $key => $value) {
-            if (isset($value['$id']) && $value['$id'] === $old) {
-                $attributes[$key]['key'] = $new;
-                $attributes[$key]['$id'] = $new;
-                $attributeNew = $attributes[$key];
-                break;
-            }
-        }
+        $attribute->setAttribute('$id', $new);
+        $attribute->setAttribute('key', $new);
 
         foreach ($indexes as $index) {
             $indexAttributes = $index->getAttribute('attributes', []);
 
-            $indexAttributes = \array_map(fn ($attribute) => ($attribute === $old) ? $new : $attribute, $indexAttributes);
+            $indexAttributes = \array_map(fn ($attr) => ($attr === $old) ? $new : $attr, $indexAttributes);
 
             $index->setAttribute('attributes', $indexAttributes);
         }
+
+        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
 
         $collection->setAttribute('attributes', $attributes);
         $collection->setAttribute('indexes', $indexes);
@@ -2103,9 +2106,7 @@ class Database
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
-        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
-
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributeNew);
+        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
 
         return $renamed;
     }
@@ -2846,13 +2847,13 @@ class Database
             }
         }
 
+        $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+
         $collection->setAttribute('indexes', \array_values($indexes));
 
         if ($collection->getId() !== self::METADATA) {
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
-
-        $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
 
         $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
 
@@ -5993,10 +5994,15 @@ class Database
      * @param array<Query> $queries
      * @return array<Query>
      * @throws QueryException
+     * @throws Exception
      */
     public static function convertQueries(Document $collection, array $queries): array
     {
         $attributes = $collection->getAttribute('attributes', []);
+
+        foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+            $attributes[] = new Document($attribute);
+        }
 
         foreach ($attributes as $attribute) {
             foreach ($queries as $query) {

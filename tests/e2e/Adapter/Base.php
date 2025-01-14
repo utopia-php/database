@@ -13,6 +13,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -1301,7 +1302,7 @@ abstract class Base extends TestCase
         $this->assertArrayHasKey('age', $document);
     }
 
-    public function testSchemaAttribute(): void
+    public function testSchemaAttributes(): void
     {
         if (!$this->getDatabase()->getAdapter()->getSupportForSchemaAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -2769,6 +2770,15 @@ abstract class Base extends TestCase
 
         $this->assertEquals(true, $database->createAttribute(
             $collection,
+            'cards',
+            Database::VAR_STRING,
+            size: 5000,
+            required: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
             'numbers',
             Database::VAR_INTEGER,
             size: 0,
@@ -2889,6 +2899,32 @@ abstract class Base extends TestCase
         $this->assertEquals(false, $document->getAttribute('booleans')[0]);
         $this->assertEquals('Antony', $document->getAttribute('names')[1]);
         $this->assertEquals(100, $document->getAttribute('numbers')[1]);
+
+        /**
+         * functional index dependency cannot be dropped or rename
+         */
+        $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
+
+        if ($this->getDatabase()->getAdapter()->getSupportForCastIndexArray()) {
+            try {
+                $database->deleteAttribute($collection, 'cards');
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(DependencyException::class, $e);
+                $this->assertEquals('Attribute cannot be deleted because it is used in an index', $e->getMessage());
+            }
+
+            try {
+                $database->renameAttribute($collection, 'cards', 'cards_new');
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(DependencyException::class, $e);
+                $this->assertEquals('Attribute cannot be deleted because it is used in an index', $e->getMessage());
+            }
+        } else {
+            $this->assertTrue($database->renameAttribute($collection, 'cards', 'cards_new'));
+            $this->assertTrue($database->deleteAttribute($collection, 'cards_new'));
+        }
 
         try {
             $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
@@ -6447,6 +6483,16 @@ abstract class Base extends TestCase
         foreach ($invalidDates as $date) {
             try {
                 static::getDatabase()->find('datetime', [
+                    Query::equal('$createdAt', [$date])
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertTrue($e instanceof QueryException);
+                $this->assertEquals('Invalid query: Query value is invalid for attribute "$createdAt"', $e->getMessage());
+            }
+
+            try {
+                static::getDatabase()->find('datetime', [
                     Query::equal('date', [$date])
                 ]);
                 $this->fail('Failed to throw exception');
@@ -6454,6 +6500,23 @@ abstract class Base extends TestCase
                 $this->assertTrue($e instanceof QueryException);
                 $this->assertEquals('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());
             }
+        }
+
+        $validDates = [
+            '2024-12-2509:00:21.891119',
+            'Tue Dec 31 2024',
+        ];
+
+        foreach ($validDates as $date) {
+            $docs = static::getDatabase()->find('datetime', [
+                Query::equal('$createdAt', [$date])
+            ]);
+            $this->assertCount(0, $docs);
+
+            $docs = static::getDatabase()->find('datetime', [
+                Query::equal('date', [$date])
+            ]);
+            $this->assertCount(0, $docs);
         }
     }
 
@@ -17116,6 +17179,63 @@ abstract class Base extends TestCase
                 'type' => Database::VAR_STRING,
                 'size' => 767,
                 'required' => true,
+                ])
+            ], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any())
+            ]);
+
+            $database->createDocument('testRedisFallback', new Document([
+                '$id' => 'doc1',
+                'string' => 'text📝',
+            ]));
+    
+            $database->createIndex('testRedisFallback', 'index1', Database::INDEX_KEY, ['string']);
+            $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+    
+            // Bring down Redis
+            $stdout = '';
+            $stderr = '';
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
+    
+            // Check we can read data still
+            $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+            $this->assertFalse(($database->getDocument('testRedisFallback', 'doc1'))->isEmpty());
+    
+            // Check we cannot modify data
+            try {
+                $database->updateDocument('testRedisFallback', 'doc1', new Document([
+                    'string' => 'text📝 updated',
+                ]));
+                $this->fail('Failed to throw exception');
+            } catch (\Throwable $e) {
+                $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
+            }
+    
+            try {
+                $database->deleteDocument('testRedisFallback', 'doc1');
+                $this->fail('Failed to throw exception');
+            } catch (\Throwable $e) {
+                $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
+            }
+    
+            // Bring backup Redis
+            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
+            sleep(5);
+    
+            $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+        }
+
+    public function testNestedQueryValidation(): void
+    {
+        $this->getDatabase()->createCollection(__FUNCTION__, [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'size' => 255,
+                'required' => true,
             ])
         ], permissions: [
             Permission::read(Role::any()),
@@ -17124,45 +17244,29 @@ abstract class Base extends TestCase
             Permission::delete(Role::any())
         ]);
 
-        $database->createDocument('testRedisFallback', new Document([
-            '$id' => 'doc1',
-            'string' => 'text📝',
-        ]));
-
-        $database->createIndex('testRedisFallback', 'index1', Database::INDEX_KEY, ['string']);
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
-
-        // Bring down Redis
-        $stdout = '';
-        $stderr = '';
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
-
-        // Check we can read data still
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
-        $this->assertFalse(($database->getDocument('testRedisFallback', 'doc1'))->isEmpty());
-
-        // Check we cannot modify data
-        try {
-            $database->updateDocument('testRedisFallback', 'doc1', new Document([
-                'string' => 'text📝 updated',
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
-        }
+        $this->getDatabase()->createDocuments(__FUNCTION__, [
+            new Document([
+                '$id' => ID::unique(),
+                'name' => 'test1',
+            ]),
+            new Document([
+                '$id' => ID::unique(),
+                'name' => 'doc2',
+            ]),
+        ]);
 
         try {
-            $database->deleteDocument('testRedisFallback', 'doc1');
+            $this->getDatabase()->find(__FUNCTION__, [
+                Query::or([
+                    Query::equal('name', ['test1']),
+                    Query::search('name', 'doc'),
+                ])
+            ]);
             $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(QueryException::class, $e);
+            $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $e->getMessage());
         }
-
-        // Bring backup Redis
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
-        sleep(5);
-
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
 
     public function testEvents(): void

@@ -438,7 +438,7 @@ class MariaDB extends SQL
                 return true;
             }
 
-            throw $e;
+            throw $this->processException($e);
         }
     }
 
@@ -462,9 +462,13 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -766,7 +770,7 @@ class MariaDB extends SQL
 
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
-            if (!empty($collectionAttribute['array']) && $this->castIndexArray()) {
+            if (!empty($collectionAttribute['array']) && $this->getSupportForCastIndexArray()) {
                 $attributes[$i] = '(CAST(' . $attr . ' AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
@@ -796,14 +800,6 @@ class MariaDB extends SQL
             $this->processException($e);
             return false;
         }
-    }
-
-    /**
-     * @return bool
-     */
-    public function castIndexArray(): bool
-    {
-        return false;
     }
 
     /**
@@ -1658,8 +1654,8 @@ class MariaDB extends SQL
             $name = $this->filter($collection);
 
             $sql = "
-		    DELETE FROM {$this->getSQLTable($name)} 
-		    WHERE _uid = :_uid
+                DELETE FROM {$this->getSQLTable($name)} 
+                WHERE _uid = :_uid
 		    ";
 
             if ($this->sharedTables) {
@@ -2398,27 +2394,27 @@ class MariaDB extends SQL
     {
         // Timeout
         if ($e->getCode() === '70100' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1969) {
-            return new TimeoutException($e->getMessage(), $e->getCode(), $e);
+            return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
         // Duplicate table
         if ($e->getCode() === '42S01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1050) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
         // Duplicate column
         if ($e->getCode() === '42S21' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1060) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException('Attribute already exists', $e->getCode(), $e);
         }
 
         // Duplicate index
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException('Index already exists', $e->getCode(), $e);
         }
 
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
-            return new DuplicateException($e->getMessage(), $e->getCode(), $e);
+            return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
         // Data is too big for column resize
@@ -2429,7 +2425,7 @@ class MariaDB extends SQL
 
         // Unknown database
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {
-            return new NotFoundException($e->getMessage(), $e->getCode(), $e);
+            return new NotFoundException('Database not found', $e->getCode(), $e);
         }
 
         return $e;

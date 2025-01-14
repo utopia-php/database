@@ -71,10 +71,6 @@ abstract class Base extends TestCase
     public function tearDown(): void
     {
         Authorization::setDefaultStatus(true);
-
-        $stdout = '';
-        $stderr = '';
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
     }
 
     protected string $testDatabase = 'utopiaTests';

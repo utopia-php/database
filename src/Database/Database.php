@@ -5272,7 +5272,7 @@ class Database
         foreach ($documentKeys as $documentKey) {
             $this->cache->purge($documentKey);
         }
-        
+
         $this->cache->purge($collectionKey);
 
         return true;

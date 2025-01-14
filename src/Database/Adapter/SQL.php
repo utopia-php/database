@@ -495,7 +495,7 @@ abstract class SQL extends Adapter
              * data is stored externally
              */
 
-            if($attribute['array'] ?? false){
+            if ($attribute['array'] ?? false) {
                 $total += 20;
                 continue;
             }

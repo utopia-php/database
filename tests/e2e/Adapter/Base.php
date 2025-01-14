@@ -5475,17 +5475,16 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testLimitForAttributes(): void
+    public function testLimitForAttributesCount(): void
     {
         if (static::getDatabase()->getAdapter()->getLimitForAttributes() === 0) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $attributes = [];
-
         $limit = static::getDatabase()->getAdapter()->getLimitForAttributes() - 7; // Internal attributes
-        $limit =2000;
+
+        $attributes = [];
 
         for ($i = 0; $i < $limit; $i++) {
             $attributes[] = new Document([
@@ -5501,9 +5500,9 @@ abstract class Base extends TestCase
         }
 
         try {
-            static::getDatabase()->createCollection("attributes_limit", $attributes);
+            static::getDatabase()->createCollection('attributes_limit', $attributes);
             $this->fail('Failed to throw exception');
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
             $this->assertEquals('Attribute limit of 1017 exceeded. Cannot create collection.', $e->getMessage());
         }
@@ -5514,7 +5513,7 @@ abstract class Base extends TestCase
 
         array_pop($attributes);
 
-        $collection = static::getDatabase()->createCollection("attributes_limit", $attributes);
+        $collection = static::getDatabase()->createCollection('attributes_limit', $attributes);
 
         $attribute = new Document([
             '$id' => ID::custom('breaking'),
@@ -5530,18 +5529,93 @@ abstract class Base extends TestCase
         try {
             static::getDatabase()->checkAttribute($collection, $attribute);
             $this->fail('Failed to throw exception');
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Column limit reached. Cannot create new attribute.', $e->getMessage());
         }
 
         try {
             static::getDatabase()->createAttribute($collection->getId(), 'breaking', Database::VAR_STRING, 100, true);
             $this->fail('Failed to throw exception');
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Column limit reached. Cannot create new attribute.', $e->getMessage());
+        }
+    }
+
+    public function testLimitForAttributesRowSize(): void
+    {
+        if (static::getDatabase()->getAdapter()->getDocumentSizeLimit() === 0) {
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
-        $this->assertEquals('shmuel', 'fogel');
+        $attributes = [];
+
+        $attributes[] = new Document([
+            '$id' => ID::custom('varchar_16000'),
+            'type' => Database::VAR_STRING,
+            'size' => 16000,
+            'required' => true,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $attributes[] = new Document([
+            '$id' => ID::custom('varchar_200'),
+            'type' => Database::VAR_STRING,
+            'size' => 200,
+            'required' => true,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        try {
+            static::getDatabase()->createCollection("attributes_row_size", $attributes);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Document size limit of 65535 exceeded. Cannot create collection.', $e->getMessage());
+        }
+
+        /**
+         * Remove last attribute
+         */
+
+        array_pop($attributes);
+
+        $collection = static::getDatabase()->createCollection("attributes_row_size", $attributes);
+
+        $attribute = new Document([
+            '$id' => ID::custom('breaking'),
+            'type' => Database::VAR_STRING,
+            'size' => 200,
+            'required' => true,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        try {
+            static::getDatabase()->checkAttribute($collection, $attribute);
+            $this->fail('Failed to throw exception');
+        } catch (\Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createAttribute($collection->getId(), 'breaking', Database::VAR_STRING, 200, true);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+        }
     }
 
     public function testExceptionIndexLimit(): void

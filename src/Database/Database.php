@@ -3003,35 +3003,9 @@ class Database
                 $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
-        $hasTwoWayRelationship = false;
-        foreach ($relationships as $relationship) {
-            if ($relationship['options']['twoWay']) {
-                $hasTwoWayRelationship = true;
-                break;
-            }
-        }
-
-        /**
-         * Bug with function purity in PHPStan means it thinks $this->map is always empty
-         * @phpstan-ignore-next-line
-         */
-        foreach ($this->map as $key => $value) {
-            [$k, $v] = \explode('=>', $key);
-            $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
-            $cache = $this->cache->load($ck, self::TTL, $ck);
-            if (empty($cache)) {
-                $cache = [];
-            }
-            if (!\in_array($v, $cache)) {
-                $cache[] = $v;
-                $this->cache->save($ck, $cache, $ck);
-            }
-        }
-
         // Don't save to cache if it's part of a relationship
-        if (!$hasTwoWayRelationship && empty($relationships)) {
+        if (empty($relationships)) {
             $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
-            // Add document reference to the collection key
             $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
         }
 
@@ -3959,7 +3933,6 @@ class Database
 
         $document = $this->decode($collection, $document);
 
-        $this->purgeRelatedDocuments($collection, $id);
         $this->purgeCachedDocument($collection->getId(), $id);
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -4114,7 +4087,6 @@ class Database
             }
 
             foreach ($documents as $document) {
-                $this->purgeRelatedDocuments($collection, $document->getId());
                 $this->purgeCachedDocument($collection->getId(), $document->getId());
             }
 
@@ -4763,7 +4735,6 @@ class Database
             return $this->adapter->deleteDocument($collection->getId(), $id);
         });
 
-        $this->purgeRelatedDocuments($collection, $id);
         $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
@@ -5257,7 +5228,6 @@ class Database
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
 
-                    $this->purgeRelatedDocuments($collection, $document->getId());
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
 
@@ -6004,39 +5974,6 @@ class Database
         }
 
         return $queries;
-    }
-
-    /**
-     * @param Document $collection
-     * @param string $id
-     * @return void
-     * @throws DatabaseException
-     */
-    private function purgeRelatedDocuments(Document $collection, string $id): void
-    {
-        if ($collection->getId() === self::METADATA) {
-            return;
-        }
-
-        $relationships = \array_filter(
-            $collection->getAttribute('attributes', []),
-            fn ($attribute) =>
-                $attribute['type'] === Database::VAR_RELATIONSHIP
-        );
-
-        if (empty($relationships)) {
-            return;
-        }
-
-        $key = $this->cacheName . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
-        $cache = $this->cache->load($key, self::TTL, $key);
-        if (!empty($cache)) {
-            foreach ($cache as $v) {
-                list($collectionId, $documentId) = explode(':', $v);
-                $this->purgeCachedDocument($collectionId, $documentId);
-            }
-            $this->cache->purge($key);
-        }
     }
 
     /**

@@ -5475,7 +5475,7 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testLimitForAttributesCount(): void
+    public function testExceptionAttributeLimit(): void
     {
         if (static::getDatabase()->getAdapter()->getLimitForAttributes() === 0) {
             $this->expectNotToPerformAssertions();
@@ -5543,7 +5543,7 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testLimitForAttributesRowSize(): void
+    public function testExceptionWidthLimit(): void
     {
         if (static::getDatabase()->getAdapter()->getDocumentSizeLimit() === 0) {
             $this->expectNotToPerformAssertions();

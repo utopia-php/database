@@ -324,7 +324,7 @@ $database->getKeywords();
 // Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
 // The second collection is named '$namespace_$collectionName_perms' with attribute names '_id', '_type', '_permission', '_document'
 $database->createCollection(
-    name: 'users'
+    id: 'users'
 );
 
 // Create collection with attributes and indexes
@@ -369,7 +369,7 @@ $indexes = [
 ];
 
 $database->createCollection(
-    name: 'users', 
+    id: 'users', 
     attributes: $attributes, 
     indexes: $indexes
 );

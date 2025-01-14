@@ -1494,7 +1494,6 @@ class Database
                     throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                 }
                 break;
-
             case self::VAR_INTEGER:
                 $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
@@ -2249,8 +2248,24 @@ class Database
         }
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+            try {
+                $this->withTransaction(function () use ($collection, $relatedCollection) {
+                    $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                    $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                });
+            } catch (\Throwable $e) {
+                $this->adapter->deleteRelationship(
+                    $collection->getId(),
+                    $relatedCollection->getId(),
+                    $type,
+                    $twoWay,
+                    $id,
+                    $twoWayKey,
+                    Database::RELATION_SIDE_PARENT
+                );
+
+                throw new DatabaseException('Failed to create relationship: ' . $e->getMessage());
+            }
 
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
@@ -2535,8 +2550,14 @@ class Database
         $relatedCollection->setAttribute('attributes', \array_values($relatedAttributes));
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+            try {
+                $this->withTransaction(function () use ($collection, $relatedCollection) {
+                    $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                    $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                });
+            } catch (\Throwable $e) {
+                throw new DatabaseException('Failed to delete relationship: ' . $e->getMessage());
+            }
 
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;

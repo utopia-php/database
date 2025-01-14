@@ -473,57 +473,77 @@ abstract class SQL extends Adapter
      */
     public function getAttributeWidth(Document $collection): int
     {
-        // Default collection has:
-        // `_id` int(11) => 4 bytes
-        // `_uid` char(255) => 1020 (255 bytes * 4 for utf8mb4)
-        // but this number seems to vary, so we give a +500 byte buffer
-        $total = 1500;
+        /**
+         * @link https://dev.mysql.com/doc/refman/8.0/en/storage-requirements.html
+         *
+         * `_id` bigint => 8 bytes
+         * `_uid` varchar(255) => 1021 (4 * 255 + 1) bytes
+         * `_tenant` int => 4 bytes
+         * `_createdAt` datetime(3) => 7 bytes
+         * `_updatedAt` datetime(3) => 7 bytes
+         * `_permissions` mediumtext => 20
+         */
+
+        $total = 1067;
 
         $attributes = $collection->getAttributes()['attributes'];
 
         foreach ($attributes as $attribute) {
+            /**
+             * Json / Longtext
+             * only the pointer contributes 20 bytes
+             * data is stored externally
+             */
+
+            if($attribute['array'] ?? false){
+                $total += 20;
+                continue;
+            }
+
             switch ($attribute['type']) {
                 case Database::VAR_STRING:
+                    /**
+                     * Text / Mediumtext / Longtext
+                     * only the pointer contributes 20 bytes to the row size
+                     * data is stored externally
+                     */
+
                     $total += match (true) {
-                        // 8 bytes length + 4 bytes for LONGTEXT
-                        $attribute['size'] > 16777215 => 12,
-                        // 8 bytes length + 3 bytes for MEDIUMTEXT
-                        $attribute['size'] > 65535 => 11,
-                        // 8 bytes length + 2 bytes for TEXT
-                        $attribute['size'] > $this->getMaxVarcharLength() => 10,
-                        // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                        // 8 bytes length + 2 bytes for VARCHAR(>255)
-                        $attribute['size'] > 255 => ($attribute['size'] * 4) + 2,
-                        // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                        // 8 bytes length + 1 bytes for VARCHAR(<=255)
-                        default => ($attribute['size'] * 4) + 1,
+                        $attribute['size'] > $this->getMaxVarcharLength() => 20,
+                        $attribute['size'] > 255 => $attribute['size'] * 4 + 2, //  VARCHAR(>255) + 2 length
+                        default => $attribute['size'] * 4 + 1, //  VARCHAR(<=255) + 1 length
                     };
+
                     break;
 
                 case Database::VAR_INTEGER:
                     if ($attribute['size'] >= 8) {
-                        $total += 8; // BIGINT takes 8 bytes
+                        $total += 8; //  BIGINT 8 bytes
                     } else {
-                        $total += 4; // INT takes 4 bytes
+                        $total += 4; // INT 4 bytes
                     }
                     break;
+
                 case Database::VAR_FLOAT:
-                    // DOUBLE takes 8 bytes
-                    $total += 8;
+                    $total += 8; // DOUBLE 8 bytes
                     break;
 
                 case Database::VAR_BOOLEAN:
-                    // TINYINT(1) takes one byte
-                    $total += 1;
+                    $total += 1; // TINYINT(1) 1 bytes
                     break;
 
                 case Database::VAR_RELATIONSHIP:
-                    // VARCHAR(255)
-                    $total += Database::LENGTH_KEY * 4 + 2;
+                    $total += Database::LENGTH_KEY * 4 + 1; // VARCHAR(<=255)
                     break;
 
                 case Database::VAR_DATETIME:
-                    $total += 19; // 2022-06-26 14:46:24
+                    /**
+                     * 1 byte year + month
+                     * 1 byte for the day
+                     * 3 bytes for the hour, minute, and second
+                     * 2 bytes miliseconds DATETIME(3)
+                     */
+                    $total += 7;
                     break;
                 default:
                     throw new DatabaseException('Unknown type: ' . $attribute['type']);

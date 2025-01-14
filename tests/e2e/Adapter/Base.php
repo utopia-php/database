@@ -93,6 +93,84 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->create());
     }
 
+    public function testWidthLimit(): void
+    {
+        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() === 0) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = static::getDatabase()->createCollection('width_limit');
+
+        $init = static::getDatabase()->getAdapter()->getAttributeWidth($collection);
+        $this->assertEquals(1067, $init);
+
+        $attribute = new Document([
+            '$id' => ID::custom('varchar_100'),
+            'type' => Database::VAR_STRING,
+            'size' => 100,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(401, $res - $init); // 100 * 4 + 1 (length)
+
+        $attribute = new Document([
+            '$id' => ID::custom('json'),
+            'type' => Database::VAR_STRING,
+            'size' => 100,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => true,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(20, $res - $init); // Pointer of Json / Longtext (mariaDB)
+
+        $attribute = new Document([
+            '$id' => ID::custom('text'),
+            'type' => Database::VAR_STRING,
+            'size' => 20000,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(20, $res - $init);
+
+        $attribute = new Document([
+            '$id' => ID::custom('bigint'),
+            'type' => Database::VAR_INTEGER,
+            'size' => 8,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(8, $res - $init);
+
+        $attribute = new Document([
+            '$id' => ID::custom('date'),
+            'type' => Database::VAR_DATETIME,
+            'size' => 8,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(7, $res - $init);
+    }
+
     /**
      * @throws LimitException
      * @throws DuplicateException
@@ -5397,188 +5475,73 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testExceptionAttributeLimit(): void
+    public function testLimitForAttributes(): void
     {
-        if ($this->getDatabase()->getLimitForAttributes() > 0) {
-            // Load the collection up to the limit
-            $attributes = [];
-            for ($i = 0; $i < $this->getDatabase()->getLimitForAttributes(); $i++) {
-                $attributes[] = new Document([
-                    '$id' => ID::custom("test{$i}"),
-                    'type' => Database::VAR_INTEGER,
-                    'size' => 0,
-                    'required' => false,
-                    'default' => null,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]);
-            }
-
-            static::getDatabase()->createCollection('attributeLimit', $attributes);
-
-            $this->expectException(LimitException::class);
-            $this->assertEquals(false, static::getDatabase()->createAttribute('attributeLimit', "breaking", Database::VAR_INTEGER, 0, true));
+        if (static::getDatabase()->getAdapter()->getLimitForAttributes() === 0) {
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
-        // Default assertion for other adapters
-        $this->assertEquals(1, 1);
-    }
+        $attributes = [];
 
-    /**
-     * @depends testExceptionAttributeLimit
-     */
-    public function testCheckAttributeCountLimit(): void
-    {
-        if ($this->getDatabase()->getLimitForAttributes() > 0) {
-            $collection = static::getDatabase()->getCollection('attributeLimit');
+        $limit = static::getDatabase()->getAdapter()->getLimitForAttributes() - 7; // Internal attributes
+        $limit =2000;
 
-            // create same attribute in testExceptionAttributeLimit
-            $attribute = new Document([
-                '$id' => ID::custom('breaking'),
+        for ($i = 0; $i < $limit; $i++) {
+            $attributes[] = new Document([
+                '$id' => ID::custom("attr_{$i}"),
                 'type' => Database::VAR_INTEGER,
                 'size' => 0,
-                'required' => true,
+                'required' => false,
                 'default' => null,
                 'signed' => true,
                 'array' => false,
                 'filters' => [],
             ]);
-
-            $this->expectException(LimitException::class);
-            $this->assertEquals(false, static::getDatabase()->checkAttribute($collection, $attribute));
         }
 
-        // Default assertion for other adapters
-        $this->assertEquals(1, 1);
-    }
-
-    /**
-     * Using phpunit dataProviders to check that all these combinations of types/sizes throw exceptions
-     * https://phpunit.de/manual/3.7/en/writing-tests-for-phpunit.html#writing-tests-for-phpunit.data-providers
-     *
-     * @return array<array<int>>
-     */
-    public function rowWidthExceedsMaximum(): array
-    {
-        return [
-            // These combinations of attributes gets exactly to the 64k limit
-            // [$key, $stringSize, $stringCount, $intCount, $floatCount, $boolCount]
-            // [0, 1024, 15, 0, 731, 3],
-            // [1, 512, 31, 0, 0, 833],
-            // [2, 256, 62, 128, 0, 305],
-            // [3, 128, 125, 30, 24, 2],
-            //
-            // Taken 500 bytes off for tests
-            [0, 1024, 15, 0, 304, 3],
-            [1, 512, 31, 0, 0, 333],
-            [2, 256, 62, 103, 0, 5],
-            [3, 128, 124, 30, 12, 14],
-        ];
-    }
-
-    /**
-     * @dataProvider rowWidthExceedsMaximum
-     */
-    public function testExceptionWidthLimit(int $key, int $stringSize, int $stringCount, int $intCount, int $floatCount, int $boolCount): void
-    {
-        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() > 0) {
-            $attributes = [];
-
-            // Load the collection up to the limit
-            // Strings
-            for ($i = 0; $i < $stringCount; $i++) {
-                $attributes[] = new Document([
-                    '$id' => ID::custom("test_string{$i}"),
-                    'type' => Database::VAR_STRING,
-                    'size' => $stringSize,
-                    'required' => false,
-                    'default' => null,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]);
-            }
-
-            // Integers
-            for ($i = 0; $i < $intCount; $i++) {
-                $attributes[] = new Document([
-                    '$id' => ID::custom("test_int{$i}"),
-                    'type' => Database::VAR_INTEGER,
-                    'size' => 0,
-                    'required' => false,
-                    'default' => null,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]);
-            }
-
-            // Floats
-            for ($i = 0; $i < $floatCount; $i++) {
-                $attributes[] = new Document([
-                    '$id' => ID::custom("test_float{$i}"),
-                    'type' => Database::VAR_FLOAT,
-                    'size' => 0,
-                    'required' => false,
-                    'default' => null,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]);
-            }
-
-            // Booleans
-            for ($i = 0; $i < $boolCount; $i++) {
-                $attributes[] = new Document([
-                    '$id' => ID::custom("test_bool{$i}"),
-                    'type' => Database::VAR_BOOLEAN,
-                    'size' => 0,
-                    'required' => false,
-                    'default' => null,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]);
-            }
-
-            $collection = static::getDatabase()->createCollection("widthLimit{$key}", $attributes);
-
-            $this->expectException(LimitException::class);
-            $this->assertEquals(false, static::getDatabase()->createAttribute("widthLimit{$key}", "breaking", Database::VAR_STRING, 100, true));
+        try {
+            static::getDatabase()->createCollection("attributes_limit", $attributes);
+            $this->fail('Failed to throw exception');
+        } catch (\Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Attribute limit of 1017 exceeded. Cannot create collection.', $e->getMessage());
         }
 
-        // Default assertion for other adapters
-        $this->assertEquals(1, 1);
-    }
+        /**
+         * Remove last attribute
+         */
 
-    /**
-     * @dataProvider rowWidthExceedsMaximum
-     * @depends      testExceptionWidthLimit
-     */
-    public function testCheckAttributeWidthLimit(int $key, int $stringSize, int $stringCount, int $intCount, int $floatCount, int $boolCount): void
-    {
-        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() > 0) {
-            $collection = static::getDatabase()->getCollection("widthLimit{$key}");
+        array_pop($attributes);
 
-            // create same attribute in testExceptionWidthLimit
-            $attribute = new Document([
-                '$id' => ID::custom('breaking'),
-                'type' => Database::VAR_STRING,
-                'size' => 100,
-                'required' => true,
-                'default' => null,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]);
+        $collection = static::getDatabase()->createCollection("attributes_limit", $attributes);
 
-            $this->expectException(LimitException::class);
-            $this->assertEquals(false, static::getDatabase()->checkAttribute($collection, $attribute));
+        $attribute = new Document([
+            '$id' => ID::custom('breaking'),
+            'type' => Database::VAR_STRING,
+            'size' => 100,
+            'required' => true,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        try {
+            static::getDatabase()->checkAttribute($collection, $attribute);
+            $this->fail('Failed to throw exception');
+        } catch (\Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
         }
 
-        // Default assertion for other adapters
-        $this->assertEquals(1, 1);
+        try {
+            static::getDatabase()->createAttribute($collection->getId(), 'breaking', Database::VAR_STRING, 100, true);
+            $this->fail('Failed to throw exception');
+        } catch (\Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+        }
+
+        $this->assertEquals('shmuel', 'fogel');
     }
 
     public function testExceptionIndexLimit(): void

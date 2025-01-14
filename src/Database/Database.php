@@ -1462,17 +1462,8 @@ class Database
             throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
         }
 
-        if (
-            $this->adapter->getLimitForAttributes() > 0 &&
-            $this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
-        ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
-
-        if ($format) {
-            if (!Structure::hasFormat($format, $type)) {
-                throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
-            }
+        if ($format && !Structure::hasFormat($format, $type)) {
+            throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
         }
 
         $attribute = new Document([
@@ -1489,14 +1480,13 @@ class Database
             'filters' => $filters,
         ]);
 
-        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+        $this->checkAttribute($collection, $attribute);
 
-        if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
-        ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
+        $collection->setAttribute(
+            'attributes',
+            $attribute,
+            Document::SET_TYPE_APPEND
+        );
 
         switch ($type) {
             case self::VAR_STRING:

@@ -2333,13 +2333,13 @@ class Database
             !\is_null($newKey)
             && \in_array($newKey, \array_map(fn ($attribute) => $attribute['key'], $attributes))
         ) {
-            throw new DuplicateException('Attribute already exists');
+            throw new DuplicateException('Relationship already exists');
         }
 
         $attributeIndex = array_search($id, array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($attributeIndex === false) {
-            throw new NotFoundException('Attribute not found');
+            throw new NotFoundException('Relationship not found');
         }
 
         $attribute = $attributes[$attributeIndex];
@@ -2526,7 +2526,7 @@ class Database
         }
 
         if (\is_null($relationship)) {
-            throw new NotFoundException('Attribute not found');
+            throw new NotFoundException('Relationship not found');
         }
 
         $collection->setAttribute('attributes', \array_values($attributes));

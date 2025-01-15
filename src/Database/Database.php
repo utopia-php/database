@@ -5911,19 +5911,6 @@ class Database
     }
 
     /**
-     * Get adapter attribute limit, accounting for internal metadata
-     * Returns 0 to indicate no limit
-     *
-     * @return int
-     */
-    public function getLimitForAttributes(): int
-    {
-        // If negative, return 0
-        // -1 ==> virtual columns count as total, so treat as buffer
-        return \max($this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes() - 1, 0);
-    }
-
-    /**
      * Get adapter index limit
      *
      * @return int

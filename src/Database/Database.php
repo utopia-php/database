@@ -1462,17 +1462,8 @@ class Database
             throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
         }
 
-        if (
-            $this->adapter->getLimitForAttributes() > 0 &&
-            $this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
-        ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
-
-        if ($format) {
-            if (!Structure::hasFormat($format, $type)) {
-                throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
-            }
+        if ($format && !Structure::hasFormat($format, $type)) {
+            throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
         }
 
         $attribute = new Document([
@@ -1489,14 +1480,13 @@ class Database
             'filters' => $filters,
         ]);
 
-        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+        $this->checkAttribute($collection, $attribute);
 
-        if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
-        ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
+        $collection->setAttribute(
+            'attributes',
+            $attribute,
+            Document::SET_TYPE_APPEND
+        );
 
         switch ($type) {
             case self::VAR_STRING:
@@ -1504,7 +1494,6 @@ class Database
                     throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                 }
                 break;
-
             case self::VAR_INTEGER:
                 $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
@@ -2259,8 +2248,24 @@ class Database
         }
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+            try {
+                $this->withTransaction(function () use ($collection, $relatedCollection) {
+                    $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                    $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                });
+            } catch (\Throwable $e) {
+                $this->adapter->deleteRelationship(
+                    $collection->getId(),
+                    $relatedCollection->getId(),
+                    $type,
+                    $twoWay,
+                    $id,
+                    $twoWayKey,
+                    Database::RELATION_SIDE_PARENT
+                );
+
+                throw new DatabaseException('Failed to create relationship: ' . $e->getMessage());
+            }
 
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
@@ -2328,13 +2333,13 @@ class Database
             !\is_null($newKey)
             && \in_array($newKey, \array_map(fn ($attribute) => $attribute['key'], $attributes))
         ) {
-            throw new DuplicateException('Attribute already exists');
+            throw new DuplicateException('Relationship already exists');
         }
 
         $attributeIndex = array_search($id, array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($attributeIndex === false) {
-            throw new NotFoundException('Attribute not found');
+            throw new NotFoundException('Relationship not found');
         }
 
         $attribute = $attributes[$attributeIndex];
@@ -2521,7 +2526,7 @@ class Database
         }
 
         if (\is_null($relationship)) {
-            throw new NotFoundException('Attribute not found');
+            throw new NotFoundException('Relationship not found');
         }
 
         $collection->setAttribute('attributes', \array_values($attributes));
@@ -2545,8 +2550,14 @@ class Database
         $relatedCollection->setAttribute('attributes', \array_values($relatedAttributes));
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+            try {
+                $this->withTransaction(function () use ($collection, $relatedCollection) {
+                    $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                    $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                });
+            } catch (\Throwable $e) {
+                throw new DatabaseException('Failed to delete relationship: ' . $e->getMessage());
+            }
 
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
@@ -2992,35 +3003,9 @@ class Database
                 $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
-        $hasTwoWayRelationship = false;
-        foreach ($relationships as $relationship) {
-            if ($relationship['options']['twoWay']) {
-                $hasTwoWayRelationship = true;
-                break;
-            }
-        }
-
-        /**
-         * Bug with function purity in PHPStan means it thinks $this->map is always empty
-         * @phpstan-ignore-next-line
-         */
-        foreach ($this->map as $key => $value) {
-            [$k, $v] = \explode('=>', $key);
-            $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
-            $cache = $this->cache->load($ck, self::TTL, $ck);
-            if (empty($cache)) {
-                $cache = [];
-            }
-            if (!\in_array($v, $cache)) {
-                $cache[] = $v;
-                $this->cache->save($ck, $cache, $ck);
-            }
-        }
-
         // Don't save to cache if it's part of a relationship
-        if (!$hasTwoWayRelationship && empty($relationships)) {
+        if (empty($relationships)) {
             $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
-            // Add document reference to the collection key
             $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
         }
 
@@ -3948,7 +3933,6 @@ class Database
 
         $document = $this->decode($collection, $document);
 
-        $this->purgeRelatedDocuments($collection, $id);
         $this->purgeCachedDocument($collection->getId(), $id);
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -4103,7 +4087,6 @@ class Database
             }
 
             foreach ($documents as $document) {
-                $this->purgeRelatedDocuments($collection, $document->getId());
                 $this->purgeCachedDocument($collection->getId(), $document->getId());
             }
 
@@ -4752,7 +4735,6 @@ class Database
             return $this->adapter->deleteDocument($collection->getId(), $id);
         });
 
-        $this->purgeRelatedDocuments($collection, $id);
         $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
@@ -5246,7 +5228,6 @@ class Database
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
 
-                    $this->purgeRelatedDocuments($collection, $document->getId());
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
 
@@ -5291,6 +5272,8 @@ class Database
         foreach ($documentKeys as $documentKey) {
             $this->cache->purge($documentKey);
         }
+
+        $this->cache->purge($collectionKey);
 
         return true;
     }
@@ -5978,39 +5961,6 @@ class Database
         }
 
         return $queries;
-    }
-
-    /**
-     * @param Document $collection
-     * @param string $id
-     * @return void
-     * @throws DatabaseException
-     */
-    private function purgeRelatedDocuments(Document $collection, string $id): void
-    {
-        if ($collection->getId() === self::METADATA) {
-            return;
-        }
-
-        $relationships = \array_filter(
-            $collection->getAttribute('attributes', []),
-            fn ($attribute) =>
-                $attribute['type'] === Database::VAR_RELATIONSHIP
-        );
-
-        if (empty($relationships)) {
-            return;
-        }
-
-        $key = $this->cacheName . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
-        $cache = $this->cache->load($key, self::TTL, $key);
-        if (!empty($cache)) {
-            foreach ($cache as $v) {
-                list($collectionId, $documentId) = explode(':', $v);
-                $this->purgeCachedDocument($collectionId, $documentId);
-            }
-            $this->cache->purge($key);
-        }
     }
 
     /**

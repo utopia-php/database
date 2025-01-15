@@ -7929,7 +7929,7 @@ abstract class Base extends TestCase
             );
             $this->fail('Failed to throw Exception');
         } catch (Exception $e) {
-            $this->assertEquals('Attribute already exists', $e->getMessage());
+            $this->assertEquals('Relationship already exists', $e->getMessage());
         }
 
         try {
@@ -12987,10 +12987,12 @@ abstract class Base extends TestCase
             return;
         }
 
-        $this->expectException(Exception::class);
-        $this->expectExceptionMessage('Attribute not found');
-
-        static::getDatabase()->deleteRelationship('test', 'test2');
+        try {
+            static::getDatabase()->deleteRelationship('test', 'test2');
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertEquals('Relationship not found', $e->getMessage());
+        }
     }
 
     public function testCreateInvalidIntValueRelationship(): void
@@ -13353,7 +13355,7 @@ abstract class Base extends TestCase
             static::getDatabase()->updateRelationship('ovens', 'cakes', newKey: 'owner');
             $this->fail('Failed to throw exception');
         } catch (DuplicateException $e) {
-            $this->assertEquals('Attribute already exists', $e->getMessage());
+            $this->assertEquals('Relationship already exists', $e->getMessage());
         }
 
         try {

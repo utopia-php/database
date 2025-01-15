@@ -416,8 +416,7 @@ abstract class SQL extends Adapter
     {
         $attributes = \count($collection->getAttribute('attributes') ?? []);
 
-        // +1 ==> virtual columns count as total, so add as buffer
-        return $attributes + static::getCountOfDefaultAttributes() + 1;
+        return $attributes + static::getCountOfDefaultAttributes();
     }
 
     /**

@@ -5482,11 +5482,11 @@ abstract class Base extends TestCase
             return;
         }
 
-        $limit = static::getDatabase()->getAdapter()->getLimitForAttributes() - 7; // Internal attributes
+        $limit = static::getDatabase()->getAdapter()->getLimitForAttributes() - static::getDatabase()->getAdapter()::getCountOfDefaultAttributes();
 
         $attributes = [];
 
-        for ($i = 0; $i < $limit; $i++) {
+        for ($i = 0; $i <= $limit; $i++) {
             $attributes[] = new Document([
                 '$id' => ID::custom("attr_{$i}"),
                 'type' => Database::VAR_INTEGER,

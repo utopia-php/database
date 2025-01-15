@@ -5736,6 +5736,11 @@ abstract class Base extends TestCase
         static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name', 'Frozen'));
     }
 
+    public function testGetAttributeLimit(): void
+    {
+        $this->assertIsInt($this->getDatabase()->getLimitForAttributes());
+    }
+
     public function testGetIndexLimit(): void
     {
         $this->assertEquals(58, $this->getDatabase()->getLimitForIndexes());

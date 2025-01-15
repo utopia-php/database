@@ -5928,21 +5928,6 @@ class Database
     }
 
     /**
-     * Get adapter attribute limit, accounting for internal metadata
-     * Returns 0 to indicate no limit
-     *
-     * @return int
-     */
-    public function getLimitForAttributes(): int
-    {
-        if($this->adapter->getLimitForAttributes() === 0){
-            return 0;
-        }
-
-        return $this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes();
-    }
-
-    /**
      * Get adapter index limit
      *
      * @return int

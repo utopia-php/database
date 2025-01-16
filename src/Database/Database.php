@@ -5918,9 +5918,11 @@ class Database
      */
     public function getLimitForAttributes(): int
     {
-        // If negative, return 0
-        // -1 ==> virtual columns count as total, so treat as buffer
-        return \max($this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes() - 1, 0);
+        if ($this->adapter->getLimitForAttributes() === 0) {
+            return 0;
+        }
+
+        return $this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes();
     }
 
     /**

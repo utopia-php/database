@@ -18,9 +18,7 @@ class IndexDependency extends Validator
 
     public function __construct(array $indexes, bool $castIndexSupport)
     {
-        $castIndexSupport = true; // Only for testing Appwrite Remove before merge!
         $this->castIndexSupport = $castIndexSupport;
-
         $this->indexes = $indexes;
     }
 

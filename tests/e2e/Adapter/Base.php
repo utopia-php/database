@@ -17166,68 +17166,6 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testCacheFallback(): void
-    {
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
-        $database = static::getDatabase();
-
-        // Write mock data
-        $database->createCollection('testRedisFallback', attributes: [
-            new Document([
-                '$id' => ID::custom('string'),
-                'type' => Database::VAR_STRING,
-                'size' => 767,
-                'required' => true,
-            ])
-        ], permissions: [
-            Permission::read(Role::any()),
-            Permission::create(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
-
-        $database->createDocument('testRedisFallback', new Document([
-            '$id' => 'doc1',
-            'string' => 'text📝',
-        ]));
-
-        $database->createIndex('testRedisFallback', 'index1', Database::INDEX_KEY, ['string']);
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
-
-        // Bring down Redis
-        $stdout = '';
-        $stderr = '';
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
-
-        // Check we can read data still
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
-        $this->assertFalse(($database->getDocument('testRedisFallback', 'doc1'))->isEmpty());
-
-        // Check we cannot modify data
-        try {
-            $database->updateDocument('testRedisFallback', 'doc1', new Document([
-                'string' => 'text📝 updated',
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
-        }
-
-        try {
-            $database->deleteDocument('testRedisFallback', 'doc1');
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
-        }
-
-        // Bring backup Redis
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
-        sleep(5);
-
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
-    }
-
     public function testNestedQueryValidation(): void
     {
         $this->getDatabase()->createCollection(__FUNCTION__, [
@@ -17376,5 +17314,67 @@ abstract class Base extends TestCase
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
+    }
+
+    public function testCacheFallback(): void
+    {
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+        $database = static::getDatabase();
+
+        // Write mock data
+        $database->createCollection('testRedisFallback', attributes: [
+            new Document([
+                '$id' => ID::custom('string'),
+                'type' => Database::VAR_STRING,
+                'size' => 767,
+                'required' => true,
+            ])
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        $database->createDocument('testRedisFallback', new Document([
+            '$id' => 'doc1',
+            'string' => 'text📝',
+        ]));
+
+        $database->createIndex('testRedisFallback', 'index1', Database::INDEX_KEY, ['string']);
+        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+
+        // Bring down Redis
+        $stdout = '';
+        $stderr = '';
+        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
+
+        // Check we can read data still
+        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+        $this->assertFalse(($database->getDocument('testRedisFallback', 'doc1'))->isEmpty());
+
+        // Check we cannot modify data
+        try {
+            $database->updateDocument('testRedisFallback', 'doc1', new Document([
+                'string' => 'text📝 updated',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
+        }
+
+        try {
+            $database->deleteDocument('testRedisFallback', 'doc1');
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
+        }
+
+        // Bring backup Redis
+        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
+        sleep(5);
+
+        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
 }

@@ -15,11 +15,13 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
@@ -1898,6 +1900,18 @@ class Database
                             }, $index['attributes']);
                         }
                     }
+
+                    /**
+                     * Check index dependency if we are changing the key
+                     */
+                    $validator = new IndexDependencyValidator(
+                        $collectionDoc->getAttribute('indexes', []),
+                        $this->adapter->getSupportForCastIndexArray(),
+                    );
+
+                    if (! $validator->isValid($attribute)) {
+                        throw new DependencyException($validator->getDescription());
+                    }
                 }
 
                 /**
@@ -1998,6 +2012,17 @@ class Database
             throw new DatabaseException('Cannot delete relationship as an attribute');
         }
 
+        if ($this->validate) {
+            $validator = new IndexDependencyValidator(
+                $collection->getAttribute('indexes', []),
+                $this->adapter->getSupportForCastIndexArray(),
+            );
+
+            if (! $validator->isValid($attribute)) {
+                throw new DependencyException($validator->getDescription());
+            }
+        }
+
         foreach ($indexes as $indexKey => $index) {
             $indexAttributes = $index->getAttribute('attributes', []);
 
@@ -2072,6 +2097,17 @@ class Database
 
         if ($attribute->isEmpty()) {
             throw new NotFoundException('Attribute not found');
+        }
+
+        if ($this->validate) {
+            $validator = new IndexDependencyValidator(
+                $collection->getAttribute('indexes', []),
+                $this->adapter->getSupportForCastIndexArray(),
+            );
+
+            if (! $validator->isValid($attribute)) {
+                throw new DependencyException($validator->getDescription());
+            }
         }
 
         $attribute->setAttribute('$id', $new);

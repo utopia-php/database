@@ -2958,21 +2958,39 @@ abstract class Base extends TestCase
         $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
 
         if ($this->getDatabase()->getAdapter()->getSupportForCastIndexArray()) {
+            /**
+             * Delete attribute
+             */
             try {
                 $database->deleteAttribute($collection, 'cards');
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
-                $this->assertEquals('Attribute cannot be deleted because it is used in an index', $e->getMessage());
+                $this->assertEquals('Attribute cannot be renamed or deleted because it is used in an index', $e->getMessage());
             }
 
+            /**
+             * Rename attribute
+             */
             try {
                 $database->renameAttribute($collection, 'cards', 'cards_new');
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
-                $this->assertEquals('Attribute cannot be deleted because it is used in an index', $e->getMessage());
+                $this->assertEquals('Attribute cannot be renamed or deleted because it is used in an index', $e->getMessage());
             }
+
+            /**
+             * Update attribute
+             */
+            try {
+                $database->updateAttribute($collection, id:'cards', newKey: 'cards_new');
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(DependencyException::class, $e);
+                $this->assertEquals('Attribute cannot be renamed or deleted because it is used in an index', $e->getMessage());
+            }
+
         } else {
             $this->assertTrue($database->renameAttribute($collection, 'cards', 'cards_new'));
             $this->assertTrue($database->deleteAttribute($collection, 'cards_new'));

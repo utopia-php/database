@@ -7,7 +7,7 @@ use Utopia\Validator;
 
 class IndexDependency extends Validator
 {
-    protected string $message = 'Attribute cannot be renamed or deleted because it is used in an index';
+    protected string $message = "Attribute can't be deleted or renamed because it is used in an index";
 
     protected bool $castIndexSupport;
 

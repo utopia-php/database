@@ -2966,7 +2966,7 @@ abstract class Base extends TestCase
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
-                $this->assertEquals('Attribute cannot be renamed or deleted because it is used in an index', $e->getMessage());
+                $this->assertEquals("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
             }
 
             /**
@@ -2977,7 +2977,7 @@ abstract class Base extends TestCase
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
-                $this->assertEquals('Attribute cannot be renamed or deleted because it is used in an index', $e->getMessage());
+                $this->assertEquals("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
             }
 
             /**
@@ -2988,7 +2988,7 @@ abstract class Base extends TestCase
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
                 $this->assertInstanceOf(DependencyException::class, $e);
-                $this->assertEquals('Attribute cannot be renamed or deleted because it is used in an index', $e->getMessage());
+                $this->assertEquals("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
             }
 
         } else {

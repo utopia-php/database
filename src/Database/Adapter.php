@@ -1049,8 +1049,9 @@ abstract class Adapter
     /**
      * Get the query to check for tenant when in shared tables mode
      *
-     * @param string $collection
+     * @param string $collection   The collection being queried
+     * @param string $parentAlias  The alias of the parent collection if in a subquery
      * @return string
      */
-    abstract public function getTenantQuery(string $collection, string $alias = ''): string;
+    abstract public function getTenantQuery(string $collection, string $parentAlias = ''): string;
 }

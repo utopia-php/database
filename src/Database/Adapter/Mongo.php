@@ -1964,7 +1964,7 @@ class Mongo extends Adapter
         return [];
     }
 
-    public function getTenantQuery(string $collection, string $alias = ''): string
+    public function getTenantQuery(string $collection, string $parentAlias = ''): string
     {
         return (string)$this->getTenant();
     }

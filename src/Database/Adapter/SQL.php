@@ -1163,34 +1163,34 @@ abstract class SQL extends Adapter
         return [];
     }
 
-    protected function processException(PDOException $e): \Exception
-    {
-        return $e;
-    }
-
     public function getSchemaAttributes(string $collection): array
     {
         return [];
     }
 
-    public function getTenantQuery(string $collection, string $alias = ''): string
+    public function getTenantQuery(string $collection, string $parentAlias = ''): string
     {
         if (!$this->sharedTables) {
             return '';
         }
 
-        if (!empty($alias) || $alias === '0') {
-            $alias .= '.';
+        if (!empty($parentAlias) || $parentAlias === '0') {
+            $parentAlias .= '.';
         }
 
-        $query = "AND ({$alias}_tenant = :_tenant";
+        $query = "AND ({$parentAlias}_tenant = :_tenant";
 
         if ($collection === Database::METADATA) {
-            $query .= " OR {$alias}_tenant IS NULL";
+            $query .= " OR {$parentAlias}_tenant IS NULL";
         }
 
         $query .= ")";
 
         return $query;
+    }
+
+    protected function processException(PDOException $e): \Exception
+    {
+        return $e;
     }
 }

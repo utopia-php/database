@@ -17320,7 +17320,7 @@ abstract class Base extends TestCase
     {
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
-        $database = static::getDatabase();
+        $database = static::getDatabase(true);
 
         // Write mock data
         $database->createCollection('testRedisFallback', attributes: [

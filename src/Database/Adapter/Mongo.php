@@ -798,6 +798,7 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
+
             if ($this->sharedTables) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
@@ -1963,4 +1964,8 @@ class Mongo extends Adapter
         return [];
     }
 
+    public function getTenantQuery(string $collection, string $parentAlias = ''): string
+    {
+        return (string)$this->getTenant();
+    }
 }

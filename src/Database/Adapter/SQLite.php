@@ -660,11 +660,8 @@ class SQLite extends MariaDB
 			SELECT _type, _permission
 			FROM `{$this->getNamespace()}_{$name}_perms`
 			WHERE _document = :_uid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= " AND (_tenant = :_tenant OR _tenant IS NULL)";
-        }
 
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
@@ -737,11 +734,8 @@ class SQLite extends MariaDB
 				DELETE
                 FROM `{$this->getNamespace()}_{$name}_perms`
                 WHERE _document = :_uid
+                {$this->getTenantQuery($collection)}
 			";
-
-            if ($this->sharedTables) {
-                $sql .= " AND (_tenant = :_tenant OR _tenant IS NULL)";
-            }
 
             $removeQuery = $sql . $removeQuery;
             $removeQuery = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $removeQuery);
@@ -809,11 +803,8 @@ class SQLite extends MariaDB
 			UPDATE `{$this->getNamespace()}_{$name}`
 			SET {$columns} _uid = :_newUid 
 			WHERE _uid = :_existingUid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= " AND (_tenant = :_tenant OR _tenant IS NULL)";
-        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
 

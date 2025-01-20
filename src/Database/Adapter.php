@@ -446,7 +446,7 @@ abstract class Adapter
     abstract public function deleteCollection(string $id): bool;
 
     /**
-     * Analyze a collection updating it's metadata on the database engine
+     * Analyze a collection updating its metadata on the database engine
      *
      * @param string $collection
      * @return bool
@@ -1045,4 +1045,13 @@ abstract class Adapter
      * @throws DatabaseException
      */
     abstract public function getSchemaAttributes(string $collection): array;
+
+    /**
+     * Get the query to check for tenant when in shared tables mode
+     *
+     * @param string $collection   The collection being queried
+     * @param string $parentAlias  The alias of the parent collection if in a subquery
+     * @return string
+     */
+    abstract public function getTenantQuery(string $collection, string $parentAlias = ''): string;
 }

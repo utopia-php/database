@@ -1161,11 +1161,8 @@ class Postgres extends SQL
 			SELECT _type, _permission
 			FROM {$this->getSQLTable($name . '_perms')}
 			WHERE _document = :_uid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-        }
 
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
@@ -1239,11 +1236,8 @@ class Postgres extends SQL
 				DELETE
                 FROM {$this->getSQLTable($name . '_perms')}
                 WHERE _document = :_uid
+                {$this->getTenantQuery($collection)}
 			";
-
-            if ($this->sharedTables) {
-                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-            }
 
             $removeQuery = $sql . $removeQuery;
 
@@ -1311,11 +1305,8 @@ class Postgres extends SQL
 			UPDATE {$this->getSQLTable($name)}
 			SET {$columns} _uid = :_newUid 
 			WHERE _uid = :_existingUid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
 
@@ -1395,7 +1386,13 @@ class Postgres extends SQL
         $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($ids))) . ")";
 
         if ($this->sharedTables) {
-            $where[] = "(_tenant = :_tenant OR _tenant IS NULL)";
+            $whereTenant = "(_tenant = :_tenant";
+
+            if ($collection === Database::METADATA) {
+                $whereTenant .= " OR _tenant IS NULL";
+            }
+
+            $where[] = $whereTenant . ')';
         }
 
         $sqlWhere = 'WHERE ' . implode(' AND ', $where);
@@ -1504,14 +1501,9 @@ class Postgres extends SQL
                         $removeBindKeys[] = ':uid_' . $index;
                         $removeBindValues[$bindKey] = $document->getId();
 
-                        $tenantQuery = '';
-                        if ($this->sharedTables) {
-                            $tenantQuery = ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-                        }
-
                         $removeQueries[] = "(
                             _document = :uid_{$index}
-                            {$tenantQuery}
+                            {$this->getTenantQuery($collection)}
                             AND _type = '{$type}'
                             AND _permission IN (" . \implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
                             $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
@@ -1638,12 +1630,9 @@ class Postgres extends SQL
 			SET 
 			    \"{$attribute}\" = \"{$attribute}\" + :val,
                 \"_updatedAt\" = :updatedAt
-			WHERE _uid = :_uid 
+			WHERE _uid = :_uid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-        }
 
         $sql .= $sqlMax . $sqlMin;
 
@@ -1677,11 +1666,8 @@ class Postgres extends SQL
         $sql = "
 			DELETE FROM {$this->getSQLTable($name)} 
 			WHERE _uid = :_uid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
         $stmt = $this->getPDO()->prepare($sql);
@@ -1694,11 +1680,8 @@ class Postgres extends SQL
         $sql = "
 			DELETE FROM {$this->getSQLTable($name . '_perms')} 
 			WHERE _document = :_uid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-        }
 
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
@@ -1903,7 +1886,13 @@ class Postgres extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
+            $orIsNull = '';
+
+            if ($collection === Database::METADATA) {
+                $orIsNull = " OR table_main._tenant IS NULL";
+            }
+
+            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
         }
 
         if (Authorization::$status) {
@@ -2031,7 +2020,13 @@ class Postgres extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
+            $orIsNull = '';
+
+            if ($collection === Database::METADATA) {
+                $orIsNull = " OR table_main._tenant IS NULL";
+            }
+
+            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
         }
 
         if (Authorization::$status) {
@@ -2096,7 +2091,13 @@ class Postgres extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
+            $orIsNull = '';
+
+            if ($collection === Database::METADATA) {
+                $orIsNull = " OR table_main._tenant IS NULL";
+            }
+
+            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
         }
 
         if (Authorization::$status) {

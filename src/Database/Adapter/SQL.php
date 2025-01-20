@@ -216,11 +216,8 @@ abstract class SQL extends Adapter
 		    SELECT {$this->getAttributeProjection($selections)}
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid 
+            {$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= "AND (_tenant = :_tenant OR _tenant IS NULL)";
-        }
 
         if ($this->getSupportForUpdateLock()) {
             $sql .= " {$forUpdate}";
@@ -1045,17 +1042,12 @@ abstract class SQL extends Adapter
 
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
 
-        $tenantQuery = '';
-        if ($this->sharedTables) {
-            $tenantQuery = 'AND (_tenant = :_tenant OR _tenant IS NULL)';
-        }
-
         return "table_main._uid IN (
                     SELECT _document
                     FROM {$this->getSQLTable($collection . '_perms')}
                     WHERE _permission IN (" . implode(', ', $roles) . ")
                       AND _type = '{$type}'
-                      {$tenantQuery}
+                      {$this->getTenantQuery($collection)}
                 )";
     }
 
@@ -1179,5 +1171,26 @@ abstract class SQL extends Adapter
     public function getSchemaAttributes(string $collection): array
     {
         return [];
+    }
+
+    public function getTenantQuery(string $collection, string $alias = ''): string
+    {
+        if (!$this->sharedTables) {
+            return '';
+        }
+
+        if (!empty($alias) || $alias === '0') {
+            $alias .= '.';
+        }
+
+        $query = "AND ({$alias}_tenant = :_tenant";
+
+        if ($collection === Database::METADATA) {
+            $query .= " OR {$alias}_tenant IS NULL";
+        }
+
+        $query .= ")";
+
+        return $query;
     }
 }

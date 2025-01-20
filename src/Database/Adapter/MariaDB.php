@@ -1123,11 +1123,8 @@ class MariaDB extends SQL
 			    SELECT _type, _permission
 			    FROM {$this->getSQLTable($name . '_perms')}
 			    WHERE _document = :_uid
+			    {$this->getTenantQuery($collection)}
 			";
-
-            if ($this->sharedTables) {
-                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-            }
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
@@ -1200,11 +1197,8 @@ class MariaDB extends SQL
 				    DELETE
                     FROM {$this->getSQLTable($name . '_perms')}
                     WHERE _document = :_uid
+                    {$this->getTenantQuery($collection)}
                 ";
-
-                if ($this->sharedTables) {
-                    $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-                }
 
                 $removeQuery = $sql . $removeQuery;
 
@@ -1287,11 +1281,8 @@ class MariaDB extends SQL
                 UPDATE {$this->getSQLTable($name)}
                 SET {$columns} _uid = :_newUid
                 WHERE _uid = :_existingUid
+                {$this->getTenantQuery($collection)}
 			";
-
-            if ($this->sharedTables) {
-                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-            }
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
 
@@ -1436,11 +1427,8 @@ class MariaDB extends SQL
                     SELECT _type, _permission
                     FROM {$this->getSQLTable($name . '_perms')}
                     WHERE _document = :_uid
+                    {$this->getTenantQuery($collection)}
                 ";
-
-                if ($this->sharedTables) {
-                    $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-                }
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
@@ -1481,14 +1469,9 @@ class MariaDB extends SQL
                         $removeBindKeys[] = ':uid_' . $index;
                         $removeBindValues[$bindKey] = $document->getId();
 
-                        $tenantQuery = '';
-                        if ($this->sharedTables) {
-                            $tenantQuery = ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-                        }
-
                         $removeQueries[] = "(
                             _document = :uid_{$index}
-                            {$tenantQuery}
+                            {$this->getTenantQuery($collection)}
                             AND _type = '{$type}'
                             AND _permission IN (" . \implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
                             $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
@@ -1616,11 +1599,9 @@ class MariaDB extends SQL
 			    `{$attribute}` = `{$attribute}` + :val,
 			    `_updatedAt` = :updatedAt
 			WHERE _uid = :_uid
+			{$this->getTenantQuery($collection)}
 		";
 
-        if ($this->sharedTables) {
-            $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-        }
 
         $sql .= $sqlMax . $sqlMin;
 
@@ -1656,11 +1637,8 @@ class MariaDB extends SQL
             $sql = "
                 DELETE FROM {$this->getSQLTable($name)} 
                 WHERE _uid = :_uid
+                {$this->getTenantQuery($collection)}
 		    ";
-
-            if ($this->sharedTables) {
-                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-            }
 
             $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
 
@@ -1675,11 +1653,8 @@ class MariaDB extends SQL
             $sql = "
 			    DELETE FROM {$this->getSQLTable($name . '_perms')} 
 		        WHERE _document = :_uid
+		        {$this->getTenantQuery($collection)}
 		    ";
-
-            if ($this->sharedTables) {
-                $sql .= ' AND (_tenant = :_tenant OR _tenant IS NULL)';
-            }
 
             $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
@@ -1886,7 +1861,13 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
+            $whereTenant = "(table_main._tenant = :_tenant";
+
+            if ($collection === Database::METADATA) {
+                $whereTenant .= " OR table_main._tenant IS NULL";
+            }
+
+            $where[] = $whereTenant . ')';
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -2014,7 +1995,13 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
+            $whereTenant = "(table_main._tenant = :_tenant";
+
+            if ($collection === Database::METADATA) {
+                $whereTenant .= " OR table_main._tenant IS NULL";
+            }
+
+            $where[] = $whereTenant . ')';
         }
 
         $sqlWhere = !empty($where)
@@ -2086,7 +2073,13 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "(table_main._tenant = :_tenant OR table_main._tenant IS NULL)";
+            $whereTenant = "(table_main._tenant = :_tenant";
+
+            if ($collection === Database::METADATA) {
+                $whereTenant .= " OR table_main._tenant IS NULL";
+            }
+
+            $where[] = $whereTenant . ')';
         }
 
         $sqlWhere = !empty($where)

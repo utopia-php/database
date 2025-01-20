@@ -1886,13 +1886,13 @@ class Postgres extends SQL
         }
 
         if ($this->sharedTables) {
-            $whereTenant = "(table_main._tenant = :_tenant";
+            $orIsNull = '';
 
             if ($collection === Database::METADATA) {
-                $whereTenant .= " OR table_main._tenant IS NULL";
+                $orIsNull = " OR table_main._tenant IS NULL";
             }
 
-            $where[] = $whereTenant . ')';
+            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
         }
 
         if (Authorization::$status) {
@@ -2020,13 +2020,13 @@ class Postgres extends SQL
         }
 
         if ($this->sharedTables) {
-            $whereTenant = "(table_main._tenant = :_tenant";
+            $orIsNull = '';
 
             if ($collection === Database::METADATA) {
-                $whereTenant .= " OR table_main._tenant IS NULL";
+                $orIsNull = " OR table_main._tenant IS NULL";
             }
 
-            $where[] = $whereTenant . ')';
+            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
         }
 
         if (Authorization::$status) {
@@ -2091,13 +2091,13 @@ class Postgres extends SQL
         }
 
         if ($this->sharedTables) {
-            $whereTenant = "(table_main._tenant = :_tenant";
+            $orIsNull = '';
 
             if ($collection === Database::METADATA) {
-                $whereTenant .= " OR table_main._tenant IS NULL";
+                $orIsNull = " OR table_main._tenant IS NULL";
             }
 
-            $where[] = $whereTenant . ')';
+            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
         }
 
         if (Authorization::$status) {

@@ -41,7 +41,7 @@ abstract class Base extends TestCase
     /**
      * @return Database
      */
-    abstract protected static function getDatabase(): Database;
+    abstract protected static function getDatabase(bool $fresh = false): Database;
 
     /**
      * @param string $collection

@@ -1899,9 +1899,12 @@ class MariaDB extends SQL
         $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
 
         $selections = $this->getAttributeSelections($queries);
+        $sumSelections = $this->getAttributeSums($queries);
+
+        $sqlSelection = !empty($sumSelections) ? $this->getAttributeSumProjection($sumSelections, 'table_main') : $this->getAttributeProjection($selections, 'table_main');
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, 'table_main')}
+            SELECT {$sqlSelection}
             FROM {$this->getSQLTable($name)} AS table_main
             {$sqlWhere}
             {$sqlOrder}
@@ -1977,6 +1980,10 @@ class MariaDB extends SQL
             if (\array_key_exists('_permissions', $document)) {
                 $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
                 unset($results[$index]['_permissions']);
+            }
+
+            if (!empty($sumSelections)) {
+                $results[$index] = $this->filterSumAttributes($results[$index], 'table_main');
             }
 
             $results[$index] = new Document($results[$index]);
@@ -2138,10 +2145,11 @@ class MariaDB extends SQL
      *
      * @param array<string> $selections
      * @param string $prefix
+     * @param bool $addMetadata
      * @return mixed
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    protected function getAttributeProjection(array $selections, string $prefix = '', bool $addMetadata = true): mixed
     {
         if (empty($selections) || \in_array('*', $selections)) {
             if (!empty($prefix)) {
@@ -2151,10 +2159,12 @@ class MariaDB extends SQL
         }
 
         // Remove $id, $permissions and $collection if present since it is always selected by default
-        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
+        if ($addMetadata) {
+            $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
 
-        $selections[] = '_uid';
-        $selections[] = '_permissions';
+            $selections[] = '_uid';
+            $selections[] = '_permissions';
+        }
 
         if (\in_array('$internalId', $selections)) {
             $selections[] = '_id';
@@ -2180,6 +2190,58 @@ class MariaDB extends SQL
         }
 
         return \implode(', ', $selections);
+    }
+
+    /**
+     * Get the SQL sum projection given the selected attributes
+     *
+     * @param array<string> $sumSelections
+     * @return string
+     */
+    protected function getAttributeSumProjection(array $sumSelections, string $prefix = ''): string
+    {
+        $sqlQuery = [];
+
+        foreach ($sumSelections as $sumSelection) {
+            if (is_array($sumSelection)) {
+                foreach ($sumSelection as &$selection) {
+                    $selection = "`{$prefix}`.`{$this->filter($selection)}`";
+                }
+                $queryData = implode('+', $sumSelection);
+
+                $sqlQuery[] = "SUM({$queryData})";
+            } else {
+                $sqlQuery[] = "SUM(`{$prefix}`.`{$this->filter($sumSelection)}`)";
+            }
+        }
+
+        return \implode(', ', $sqlQuery);
+    }
+
+    /**
+     * Convert the data received from the sum query back to the original attribute names
+     *
+     * @param array<string> $results
+     * @return array<string>
+     */
+    protected function filterSumAttributes(array $results, string $prefix): array
+    {
+        $newResults = [];
+
+        foreach ($results as $key => $value) {
+            // Remove SUM( from the beginning and ) from the end
+            $newKey = \preg_replace('/^SUM\(|\)$/', '', $key);
+
+            // Remove any remaining backticks
+            $newKey = \str_replace('`', '', $newKey);
+
+            // Remove the prefixes
+            $newKey = \str_replace("{$prefix}.", '', $newKey);
+
+            $newResults[$newKey] = $value;
+        }
+
+        return $newResults;
     }
 
     /**

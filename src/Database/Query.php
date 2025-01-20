@@ -23,6 +23,7 @@ class Query
     public const TYPE_ENDS_WITH = 'endsWith';
 
     public const TYPE_SELECT = 'select';
+    public const TYPE_SUM = 'sum';
 
     // Order methods
     public const TYPE_ORDER_DESC = 'orderDesc';
@@ -53,6 +54,7 @@ class Query
         self::TYPE_STARTS_WITH,
         self::TYPE_ENDS_WITH,
         self::TYPE_SELECT,
+        self::TYPE_SUM,
         self::TYPE_ORDER_DESC,
         self::TYPE_ORDER_ASC,
         self::TYPE_LIMIT,
@@ -214,6 +216,7 @@ class Query
             self::TYPE_ENDS_WITH,
             self::TYPE_OR,
             self::TYPE_AND,
+            self::TYPE_SUM,
             self::TYPE_SELECT => true,
             default => false,
         };
@@ -457,6 +460,17 @@ class Query
     public static function select(array $attributes): self
     {
         return new self(self::TYPE_SELECT, values: $attributes);
+    }
+
+    /**
+     * Helper method to create Query with sum method
+     *
+     * @param array<string> $attributes
+     * @return Query
+     */
+    public static function sum(array $attributes): self
+    {
+        return new self(self::TYPE_SUM, values: $attributes);
     }
 
     /**

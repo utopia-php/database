@@ -859,7 +859,7 @@ abstract class SQL extends Adapter
      */
     protected function bindConditionValue(mixed $stmt, Query $query): void
     {
-        if ($query->getMethod() == Query::TYPE_SELECT) {
+        if ($query->getMethod() == Query::TYPE_SELECT || $query->getMethod() == Query::TYPE_SUM) {
             return;
         }
 
@@ -1119,7 +1119,7 @@ abstract class SQL extends Adapter
         $conditions = [];
         foreach ($queries as $query) {
 
-            if ($query->getMethod() === Query::TYPE_SELECT) {
+            if ($query->getMethod() === Query::TYPE_SELECT || $query->getMethod() === Query::TYPE_SUM) {
                 continue;
             }
 

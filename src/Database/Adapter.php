@@ -957,6 +957,26 @@ abstract class Adapter
     }
 
     /**
+     * Get all sum attributes from queries
+     *
+     * @param Query[] $queries
+     * @return string[]
+     */
+    protected function getAttributeSums(array $queries): array
+    {
+        $selections = [];
+
+        foreach ($queries as $query) {
+            switch ($query->getMethod()) {
+                case Query::TYPE_SUM:
+                    $selections[] = $query->getValues();
+            }
+        }
+
+        return $selections;
+    }
+
+    /**
      * Filter Keys
      *
      * @param string $value

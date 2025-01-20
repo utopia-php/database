@@ -80,6 +80,7 @@ class Queries extends Validator
             $method = $query->getMethod();
             $methodType = match ($method) {
                 Query::TYPE_SELECT => Base::METHOD_TYPE_SELECT,
+                Query::TYPE_SUM => Base::METHOD_TYPE_SUM,
                 Query::TYPE_LIMIT => Base::METHOD_TYPE_LIMIT,
                 Query::TYPE_OFFSET => Base::METHOD_TYPE_OFFSET,
                 Query::TYPE_CURSOR_AFTER,

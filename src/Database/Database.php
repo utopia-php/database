@@ -5332,7 +5332,7 @@ class Database
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
 
-        $this->trigger(self::EVENT_DOCUMENT_PURGE,  [
+        $this->trigger(self::EVENT_DOCUMENT_PURGE, [
             'id' => $id,
             'collectionId' => $collectionId
         ]);

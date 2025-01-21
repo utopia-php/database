@@ -17339,7 +17339,6 @@ abstract class Base extends TestCase
                 Database::EVENT_DOCUMENT_SUM,
                 Database::EVENT_DOCUMENT_INCREASE,
                 Database::EVENT_DOCUMENT_DECREASE,
-                Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_DOCUMENTS_CREATE,
                 Database::EVENT_DOCUMENTS_UPDATE,
                 Database::EVENT_INDEX_DELETE,
@@ -17347,7 +17346,8 @@ abstract class Base extends TestCase
                 Database::EVENT_DOCUMENTS_DELETE,
                 Database::EVENT_ATTRIBUTE_DELETE,
                 Database::EVENT_COLLECTION_DELETE,
-                Database::EVENT_DATABASE_DELETE
+                Database::EVENT_DATABASE_DELETE,
+                Database::EVENT_DOCUMENT_PURGE
             ];
 
             $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {

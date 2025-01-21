@@ -17399,7 +17399,6 @@ abstract class Base extends TestCase
                 $database->sum($collectionId, 'attr1');
                 $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
                 $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-                $database->purgeCachedDocument($collectionId, $document->getId());
             }, ['should-not-execute']);
 
             $this->assertFalse($executed);
@@ -17424,6 +17423,7 @@ abstract class Base extends TestCase
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
+            $database->purgeCachedDocument($collectionId, $document->getId());
         });
     }
 }

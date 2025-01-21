@@ -17339,6 +17339,7 @@ abstract class Base extends TestCase
                 Database::EVENT_DOCUMENT_SUM,
                 Database::EVENT_DOCUMENT_INCREASE,
                 Database::EVENT_DOCUMENT_DECREASE,
+                Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_DOCUMENTS_CREATE,
                 Database::EVENT_DOCUMENTS_UPDATE,
                 Database::EVENT_INDEX_DELETE,
@@ -17398,6 +17399,7 @@ abstract class Base extends TestCase
                 $database->sum($collectionId, 'attr1');
                 $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
                 $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
+                $database->purgeCachedDocument($collectionId, $document->getId());
             }, ['should-not-execute']);
 
             $this->assertFalse($executed);

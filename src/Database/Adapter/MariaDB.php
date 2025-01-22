@@ -1091,6 +1091,10 @@ class MariaDB extends SQL
                 $stmt->bindValue(":_key_{$index}", $id);
             }
 
+            if ($this->sharedTables) {
+                $stmt->bindValue(':_tenant', $this->tenant);
+            }
+
             $stmt->execute();
             $internalIds = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
             $stmt->closeCursor();
@@ -1820,6 +1824,10 @@ class MariaDB extends SQL
 
             foreach ($documentIds as $index => $id) {
                 $stmt->bindValue(":_key_{$index}", $id);
+            }
+
+            if ($this->sharedTables) {
+                $stmt->bindValue(':_tenant', $this->tenant);
             }
 
             $stmt->execute();

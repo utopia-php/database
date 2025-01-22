@@ -2387,16 +2387,12 @@ abstract class Base extends TestCase
             $this->assertEquals(6, $document->getAttribute('integer'));
         }
 
-        $documents = static::getDatabase()->createOrUpdateDocumentsWithIncrease(
+        static::getDatabase()->createOrUpdateDocumentsWithIncrease(
             collection: $collection,
             attribute:'integer',
             value: -1,
             documents: $documents
         );
-
-        foreach ($documents as $document) {
-            $this->assertEquals(5, $document->getAttribute('integer'));
-        }
 
         $documents = static::getDatabase()->find($collection);
 

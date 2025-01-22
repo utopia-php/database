@@ -1684,8 +1684,8 @@ class MariaDB extends SQL
                         " . \implode(', ', $updateColumns)
                 );
 
-                foreach ($bindValues as $key => $value) {
-                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                foreach ($bindValues as $key => $binding) {
+                    $stmt->bindValue($key, $binding, $this->getPDOType($binding));
                 }
 
                 if (!empty($attribute) && !empty($value)) {

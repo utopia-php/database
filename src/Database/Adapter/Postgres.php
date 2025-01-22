@@ -1605,6 +1605,14 @@ class Postgres extends SQL
         return $affected;
     }
 
+    /**
+     * @param string $collection
+     * @param string $attribute
+     * @param float|int $value
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return array<Document>
+     */
     public function createOrUpdateDocuments(string $collection, string $attribute, float|int $value, array $documents, int $batchSize): array
     {
         return $documents;

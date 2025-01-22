@@ -647,7 +647,7 @@ abstract class Adapter
      * @param int|float $value
      * @param array<Document> $documents
      * @param int $batchSize
-     * @return mixed
+     * @return array<Document>
      */
     abstract public function createOrUpdateDocuments(
         string $collection,

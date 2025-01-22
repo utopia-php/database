@@ -638,6 +638,24 @@ abstract class Adapter
     abstract public function updateDocuments(string $collection, Document $updates, array $documents): int;
 
     /**
+     * Create documents if they do not exist, otherwise increase the value of the attribute by the given value.
+     *
+     * @param string $collection
+     * @param string $attribute
+     * @param int|float $value
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return mixed
+     */
+    abstract public function createOrUpdateDocuments(
+        string $collection,
+        string $attribute,
+        int|float $value,
+        array $documents,
+        int $batchSize
+    );
+
+    /**
      * Delete Document
      *
      * @param string $collection
@@ -874,6 +892,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForCastIndexArray(): bool;
+
+    /**
+     * Is upserting with an increase supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUpsertWithIncrease(): bool;
 
     /**
      * Get current attribute count from collection document

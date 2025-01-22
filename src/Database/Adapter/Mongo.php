@@ -891,6 +891,10 @@ class Mongo extends Adapter
         return 1;
     }
 
+    public function createOrUpdateDocuments(string $collection, string $attribute, float|int $value, array $documents, int $batchSize)
+    {
+    }
+
     /**
      * Increase or decrease an attribute value
      *
@@ -1799,6 +1803,11 @@ class Mongo extends Adapter
     }
 
     public function getSupportForCastIndexArray(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForUpsertWithIncrease(): bool
     {
         return false;
     }

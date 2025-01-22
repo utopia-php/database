@@ -2230,6 +2230,189 @@ abstract class Base extends TestCase
         return $documents;
     }
 
+    public function testCreateOrUpdateDocuments(): void
+    {
+        $collection = 'testCreateOrUpdateDocuments';
+
+        static::getDatabase()->createCollection($collection);
+
+        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true);
+        static::getDatabase()->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, true);
+
+        $documents = [
+            new Document([
+                '$id' => 'first',
+                'string' => 'text📝',
+                'integer' => 5,
+                'bigint' => Database::BIG_INT_MAX,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'second',
+                'string' => 'text📝',
+                'integer' => 5,
+                'bigint' => Database::BIG_INT_MAX,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+        ];
+
+        $documents = static::getDatabase()->createOrUpdateDocuments($collection, $documents);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+        }
+
+        $documents = static::getDatabase()->find($collection);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+        }
+
+        $documents[0]->setAttribute('string', 'new text📝');
+        $documents[0]->setAttribute('integer', 10);
+        $documents[1]->setAttribute('string', 'new text📝');
+        $documents[1]->setAttribute('integer', 10);
+
+        $documents = static::getDatabase()->createOrUpdateDocuments($collection, $documents);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(10, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+        }
+
+        $documents = static::getDatabase()->find($collection);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(10, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+        }
+    }
+
+    public function testCreateOrUpdateDocumentsWithIncrease(): void
+    {
+        $collection = 'testCreateOrUpdateWithIncrease';
+
+        static::getDatabase()->createCollection($collection);
+
+        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true);
+
+        $documents = [
+            new Document([
+                '$id' => 'first',
+                'string' => 'text📝',
+                'integer' => 5,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'second',
+                'string' => 'text📝',
+                'integer' => 5,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+        ];
+
+        $documents = static::getDatabase()->createOrUpdateDocuments($collection, $documents);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+        }
+
+        $documents = static::getDatabase()->find($collection);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+        }
+
+        $documents = static::getDatabase()->createOrUpdateDocumentsWithIncrease(
+            collection: $collection,
+            attribute:'integer',
+            value: 1,
+            documents: $documents
+        );
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertEquals(6, $document->getAttribute('integer'));
+        }
+
+        $documents = static::getDatabase()->find($collection);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertEquals(6, $document->getAttribute('integer'));
+        }
+    }
+
     public function testRespectNulls(): Document
     {
         static::getDatabase()->createCollection('documents_nulls');

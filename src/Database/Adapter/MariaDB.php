@@ -1661,24 +1661,25 @@ class MariaDB extends SQL
                         $bindIndex++;
                     }
 
-                    if (!empty($attribute) && !empty($value)) {
-                        $document->setAttribute($attribute, $document->getAttribute($attribute) + $value);
-                    }
-
                     $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
                 }
 
-                if (empty($attribute) && empty($value)) {
+                if (!empty($attribute) && !empty($value)) {
+                    // Increment specific column by the specified value
+                    $updateColumns = [
+                        "`{$attribute}` = `{$attribute}` + :_increment"
+                    ];
+                } elseif (!empty($attribute) && empty($value)) {
+                    // Increment specific column by its new value in place
+                    $updateColumns = [
+                        "`{$attribute}` = `{$attribute}` + VALUES(`{$attribute}`)"
+                    ];
+                } else {
                     // Update all columns
                     $updateColumns = [];
                     foreach (\array_keys($attributes) as $key => $attr) {
                         $updateColumns[] = "`{$this->filter($attr)}` = VALUES(`{$this->filter($attr)}`)";
                     }
-                } else {
-                    // Increment specific column
-                    $updateColumns = [
-                        "`{$attribute}` = `{$attribute}` + :_increment"
-                    ];
                 }
 
                 $stmt = $this->getPDO()->prepare(

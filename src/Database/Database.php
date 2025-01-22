@@ -4559,6 +4559,32 @@ class Database
     }
 
     /**
+     * Create or update documents
+     *
+     * @param string $collection
+     * @param string $attribute
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return array<Document>
+     * @throws StructureException
+     * @throws \Throwable
+     */
+    public function createOrUpdateDocumentsWithInplaceIncrease(
+        string $collection,
+        string $attribute,
+        array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE
+    ): array {
+        return $this->createOrUpdateDocumentsWithIncrease(
+            $collection,
+            $attribute,
+            0,
+            $documents,
+            $batchSize
+        );
+    }
+
+    /**
      * @param string $collection
      * @param string $attribute
      * @param int|float $value

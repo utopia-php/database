@@ -2374,18 +2374,12 @@ abstract class Base extends TestCase
 
         static::getDatabase()->createDocuments($collection, $documents);
 
-        $documents = static::getDatabase()->createOrUpdateDocumentsWithIncrease(
+        static::getDatabase()->createOrUpdateDocumentsWithIncrease(
             collection: $collection,
             attribute:'integer',
             value: 1,
             documents: $documents
         );
-
-        $this->assertEquals(2, count($documents));
-
-        foreach ($documents as $document) {
-            $this->assertEquals(6, $document->getAttribute('integer'));
-        }
 
         $documents = static::getDatabase()->find($collection);
 
@@ -2408,6 +2402,59 @@ abstract class Base extends TestCase
 
         foreach ($documents as $document) {
             $this->assertEquals(5, $document->getAttribute('integer'));
+        }
+    }
+
+    public function testCreateOrUpdateDocumentsWithInplaceIncrease(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'testCreateOrUpdateInplace';
+
+        static::getDatabase()->createCollection($collection);
+        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true);
+
+        $documents = [
+            new Document([
+                '$id' => 'first',
+                'string' => 'text📝',
+                'integer' => 5,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'second',
+                'string' => 'text📝',
+                'integer' => 5,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+        ];
+
+        static::getDatabase()->createDocuments($collection, $documents);
+
+        static::getDatabase()->createOrUpdateDocumentsWithInplaceIncrease(
+            collection: $collection,
+            attribute:'integer',
+            documents: $documents
+        );
+
+        $documents = static::getDatabase()->find($collection);
+
+        foreach ($documents as $document) {
+            $this->assertEquals(10, $document->getAttribute('integer'));
         }
     }
 

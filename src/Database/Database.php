@@ -116,6 +116,7 @@ class Database
 
     public const EVENT_DOCUMENT_FIND = 'document_find';
     public const EVENT_DOCUMENT_CREATE = 'document_create';
+    public const EVENT_DOCUMENT_PURGE = 'document_purge';
     public const EVENT_DOCUMENTS_CREATE = 'documents_create';
     public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
     public const EVENT_DOCUMENT_READ = 'document_read';
@@ -5330,6 +5331,11 @@ class Database
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
+
+        $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
+            '$id' => $id,
+            '$collection' => $collectionId
+        ]));
 
         return true;
     }

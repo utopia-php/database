@@ -4584,6 +4584,19 @@ class Database
         $time = DateTime::now();
 
         foreach ($documents as $key => $document) {
+            $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $document->getId())));
+
+            if (!$old->isEmpty()) {
+                $validator = new Authorization(self::PERMISSION_UPDATE);
+
+                if (!$validator->isValid([
+                    ...$collection->getUpdate(),
+                    ...($collection->getAttribute('documentSecurity') ? $old->getUpdate() : [])
+                ])) {
+                    throw new AuthorizationException($validator->getDescription());
+                }
+            }
+
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 
@@ -4600,6 +4613,7 @@ class Database
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
+
             if (!$validator->isValid($document)) {
                 throw new StructureException($validator->getDescription());
             }

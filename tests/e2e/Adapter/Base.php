@@ -3122,11 +3122,13 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'with-dash', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'nullable', Database::VAR_STRING, 128, false));
 
-        $document = static::getDatabase()->createDocument('movies', new Document([
-            '$id' => [ID::custom('frozen')],
-        ]));
-
-        $this->assertEquals('dsdsdsd', 'dsdddd');
+        try {
+            static::getDatabase()->createDocument('movies', new Document(['$id' => ['id_as_array']]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('$id must be of type string', $e->getMessage());
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
 
         $document = static::getDatabase()->createDocument('movies', new Document([
             '$id' => ID::custom('frozen'),

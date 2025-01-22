@@ -1656,6 +1656,10 @@ class MariaDB extends SQL
                         $bindIndex++;
                     }
 
+                    if (!empty($attribute) && !empty($value)) {
+                        $document->setAttribute($attribute, $document->getAttribute($attribute) + $value);
+                    }
+
                     $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
                 }
 

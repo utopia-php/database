@@ -1081,7 +1081,7 @@ class MariaDB extends SQL
             $sql = "
                 SELECT _uid, _id
                 FROM {$this->getSQLTable($collection)}
-                WHERE _uid IN (" . implode(',', array_map(fn($index) => ":_key_{$index}", array_keys($documentIds))) . ")
+                WHERE _uid IN (" . implode(',', array_map(fn ($index) => ":_key_{$index}", array_keys($documentIds))) . ")
                 {$this->getTenantQuery($collection)}
             ";
 
@@ -1703,7 +1703,7 @@ class MariaDB extends SQL
                 $sql = "
                     SELECT _document, _type, _permission
                     FROM {$this->getSQLTable($name . '_perms')}
-                    WHERE _document IN (" . \implode(',', \array_map(fn($index) => ":_key_{$index}", \array_keys($documentIds))) . ")
+                    WHERE _document IN (" . \implode(',', \array_map(fn ($index) => ":_key_{$index}", \array_keys($documentIds))) . ")
                     {$this->getTenantQuery($collection)}
                 ";
 
@@ -1816,7 +1816,7 @@ class MariaDB extends SQL
             $sql = "
                 SELECT _uid, _id
                 FROM {$this->getSQLTable($collection)}
-                WHERE _uid IN (" . \implode(',', \array_map(fn($index) => ":_key_{$index}", \array_keys($documentIds))) . ")
+                WHERE _uid IN (" . \implode(',', \array_map(fn ($index) => ":_key_{$index}", \array_keys($documentIds))) . ")
                 {$this->getTenantQuery($collection)}
             ";
 

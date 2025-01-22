@@ -1081,13 +1081,14 @@ class MariaDB extends SQL
             $sql = "
                 SELECT _uid, _id
                 FROM {$this->getSQLTable($collection)}
-                WHERE _uid IN (" . implode(',', \array_fill(0, \count($documentIds), '?')) . ")
+                WHERE _uid IN (" . implode(',', array_map(fn($index) => ":_key_{$index}", array_keys($documentIds))) . ")
                 {$this->getTenantQuery($collection)}
             ";
 
             $stmt = $this->getPDO()->prepare($sql);
+
             foreach ($documentIds as $index => $id) {
-                $stmt->bindValue($index + 1, $id, PDO::PARAM_STR);
+                $stmt->bindValue(":_key_{$index}", $id);
             }
 
             $stmt->execute();
@@ -1698,13 +1699,14 @@ class MariaDB extends SQL
                 $sql = "
                     SELECT _document, _type, _permission
                     FROM {$this->getSQLTable($name . '_perms')}
-                    WHERE _document IN (" . implode(',', \array_fill(0, \count($documentIds), '?')) . ")
+                    WHERE _document IN (" . \implode(',', \array_map(fn($index) => ":_key_{$index}", \array_keys($documentIds))) . ")
                     {$this->getTenantQuery($collection)}
                 ";
 
                 $stmt = $this->getPDO()->prepare($sql);
+
                 foreach ($documentIds as $index => $id) {
-                    $stmt->bindValue($index + 1, $id, PDO::PARAM_STR);
+                    $stmt->bindValue(":_key_{$index}", $id);
                 }
 
                 if ($this->sharedTables) {
@@ -1810,13 +1812,14 @@ class MariaDB extends SQL
             $sql = "
                 SELECT _uid, _id
                 FROM {$this->getSQLTable($collection)}
-                WHERE _uid IN (" . implode(',', \array_fill(0, count($documentIds), '?')) . ")
+                WHERE _uid IN (" . \implode(',', \array_map(fn($index) => ":_key_{$index}", \array_keys($documentIds))) . ")
                 {$this->getTenantQuery($collection)}
             ";
 
             $stmt = $this->getPDO()->prepare($sql);
+
             foreach ($documentIds as $index => $id) {
-                $stmt->bindValue($index + 1, $id, PDO::PARAM_STR);
+                $stmt->bindValue(":_key_{$index}", $id);
             }
 
             $stmt->execute();

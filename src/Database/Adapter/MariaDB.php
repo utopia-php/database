@@ -1095,7 +1095,7 @@ class MariaDB extends SQL
             $stmt->closeCursor();
 
             foreach ($documents as $document) {
-                if (!isset($internalIds[$document->getId()]) && isset($internalIds[$document->getId()])) {
+                if (isset($internalIds[$document->getId()])) {
                     $document['$internalId'] = $internalIds[$document->getId()];
                 }
             }
@@ -1824,7 +1824,7 @@ class MariaDB extends SQL
             $stmt->closeCursor();
 
             foreach ($documents as $document) {
-                if (!isset($internalIds[$document->getId()]) && isset($internalIds[$document->getId()])) {
+                if (isset($internalIds[$document->getId()])) {
                     $document['$internalId'] = $internalIds[$document->getId()];
                 }
             }

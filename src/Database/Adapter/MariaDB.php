@@ -2608,7 +2608,7 @@ class MariaDB extends SQL
         return true;
     }
 
-    public function getSupportForUpsertWithIncrease(): bool
+    public function getSupportForUpserts(): bool
     {
         return true;
     }

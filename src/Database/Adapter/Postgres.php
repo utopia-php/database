@@ -1605,8 +1605,9 @@ class Postgres extends SQL
         return $affected;
     }
 
-    public function createOrUpdateDocuments(string $collection, string $attribute, float|int $value, array $documents, int $batchSize)
+    public function createOrUpdateDocuments(string $collection, string $attribute, float|int $value, array $documents, int $batchSize): array
     {
+        return $documents;
     }
 
     /**
@@ -2436,7 +2437,7 @@ class Postgres extends SQL
         return false;
     }
 
-    public function getSupportForUpsertWithIncrease(): bool
+    public function getSupportForUpserts(): bool
     {
         return false;
     }

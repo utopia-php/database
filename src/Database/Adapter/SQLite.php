@@ -936,7 +936,7 @@ class SQLite extends MariaDB
         return false;
     }
 
-    public function getSupportForUpsertWithIncrease(): bool
+    public function getSupportForUpserts(): bool
     {
         return false;
     }

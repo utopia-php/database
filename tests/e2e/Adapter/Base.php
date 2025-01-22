@@ -2232,6 +2232,11 @@ abstract class Base extends TestCase
 
     public function testCreateOrUpdateDocuments(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collection = 'testCreateOrUpdateDocuments';
 
         static::getDatabase()->createCollection($collection);
@@ -2331,6 +2336,11 @@ abstract class Base extends TestCase
 
     public function testCreateOrUpdateDocumentsWithIncrease(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collection = 'testCreateOrUpdateWithIncrease';
 
         static::getDatabase()->createCollection($collection);
@@ -2403,6 +2413,11 @@ abstract class Base extends TestCase
 
     public function testCreateOrUpdateDocumentsPermissions(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collection = 'testCreateOrUpdateDocumentPermissions';
 
         static::getDatabase()->createCollection($collection);

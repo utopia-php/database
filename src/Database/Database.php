@@ -4641,6 +4641,8 @@ class Database
             }
 
             $documents[$key] = $this->decode($collection, $document);
+
+            $this->purgeCachedDocument($collection->getId(), $document->getId());
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_CREATE, new Document([

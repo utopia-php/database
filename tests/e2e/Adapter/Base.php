@@ -3123,6 +3123,12 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('movies', 'nullable', Database::VAR_STRING, 128, false));
 
         $document = static::getDatabase()->createDocument('movies', new Document([
+            '$id' => [ID::custom('frozen')],
+        ]));
+
+        $this->assertEquals('dsdsdsd', 'dsdddd');
+
+        $document = static::getDatabase()->createDocument('movies', new Document([
             '$id' => ID::custom('frozen'),
             '$permissions' => [
                 Permission::read(Role::any()),

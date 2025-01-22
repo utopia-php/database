@@ -1079,7 +1079,7 @@ class MariaDB extends SQL
 
             // Get internal IDs
             $sql = "
-                SELECT _id
+                SELECT _uid, _id
                 FROM {$this->getSQLTable($collection)}
                 WHERE _uid IN (" . implode(',', \array_fill(0, \count($documentIds), '?')) . ")
                 {$this->getTenantQuery($collection)}
@@ -1610,7 +1610,6 @@ class MariaDB extends SQL
             $name = $this->filter($collection);
             $attribute = $this->filter($attribute);
             $batches = \array_chunk($documents, \max(1, $batchSize));
-            $internalIds = [];
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;

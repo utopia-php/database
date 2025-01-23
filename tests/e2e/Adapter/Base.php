@@ -2341,73 +2341,6 @@ abstract class Base extends TestCase
             return;
         }
 
-        $collection = 'testCreateOrUpdateWithIncrease';
-
-        static::getDatabase()->createCollection($collection);
-        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
-        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true);
-
-        $documents = [
-            new Document([
-                '$id' => 'first',
-                'string' => 'text📝',
-                'integer' => 5,
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-            ]),
-            new Document([
-                '$id' => 'second',
-                'string' => 'text📝',
-                'integer' => 5,
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-            ]),
-        ];
-
-        static::getDatabase()->createDocuments($collection, $documents);
-
-        static::getDatabase()->createOrUpdateDocumentsWithIncrease(
-            collection: $collection,
-            attribute:'integer',
-            value: 1,
-            documents: $documents
-        );
-
-        $documents = static::getDatabase()->find($collection);
-
-        foreach ($documents as $document) {
-            $this->assertEquals(6, $document->getAttribute('integer'));
-        }
-
-        static::getDatabase()->createOrUpdateDocumentsWithIncrease(
-            collection: $collection,
-            attribute:'integer',
-            value: -1,
-            documents: $documents
-        );
-
-        $documents = static::getDatabase()->find($collection);
-
-        foreach ($documents as $document) {
-            $this->assertEquals(5, $document->getAttribute('integer'));
-        }
-    }
-
-    public function testCreateOrUpdateDocumentsWithInplaceIncrease(): void
-    {
-        if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
         $collection = 'testCreateOrUpdateInplace';
 
         static::getDatabase()->createCollection($collection);
@@ -2444,7 +2377,7 @@ abstract class Base extends TestCase
         $documents[0]->setAttribute('integer', 1);
         $documents[1]->setAttribute('integer', 1);
 
-        static::getDatabase()->createOrUpdateDocumentsWithInplaceIncrease(
+        static::getDatabase()->createOrUpdateDocumentsWithIncrease(
             collection: $collection,
             attribute:'integer',
             documents: $documents

@@ -425,7 +425,7 @@ class Database
                     $value = new \DateTime($value);
                     $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
                     return DateTime::format($value);
-                } catch (\Throwable $th) {
+                } catch (\Throwable) {
                     return $value;
                 }
             },
@@ -4536,7 +4536,7 @@ class Database
     }
 
     /**
-     * Create or update documents
+     * Create or update documents.
      *
      * @param string $collection
      * @param array<Document> $documents
@@ -4552,42 +4552,16 @@ class Database
         return $this->createOrUpdateDocumentsWithIncrease(
             $collection,
             '',
-            0,
             $documents,
             $batchSize
         );
     }
 
     /**
-     * Create or update documents
+     * Create or update documents, increasing the value of the given attribute by the value in each document.
      *
      * @param string $collection
      * @param string $attribute
-     * @param array<Document> $documents
-     * @param int $batchSize
-     * @return array<Document>
-     * @throws StructureException
-     * @throws \Throwable
-     */
-    public function createOrUpdateDocumentsWithInplaceIncrease(
-        string $collection,
-        string $attribute,
-        array $documents,
-        int $batchSize = self::INSERT_BATCH_SIZE
-    ): array {
-        return $this->createOrUpdateDocumentsWithIncrease(
-            $collection,
-            $attribute,
-            0,
-            $documents,
-            $batchSize
-        );
-    }
-
-    /**
-     * @param string $collection
-     * @param string $attribute
-     * @param int|float $value
      * @param array<Document> $documents
      * @param int $batchSize
      * @return array<Document>
@@ -4598,7 +4572,6 @@ class Database
     public function createOrUpdateDocumentsWithIncrease(
         string $collection,
         string $attribute,
-        int|float $value,
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): array {
@@ -4652,11 +4625,10 @@ class Database
             $documents[$key] = $document;
         }
 
-        $documents = $this->withTransaction(function () use ($collection, $attribute, $value, $documents, $batchSize) {
+        $documents = $this->withTransaction(function () use ($collection, $attribute, $documents, $batchSize) {
             return $this->adapter->createOrUpdateDocuments(
                 $collection->getId(),
                 $attribute,
-                $value,
                 $documents,
                 $batchSize,
             );

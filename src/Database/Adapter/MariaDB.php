@@ -1594,7 +1594,6 @@ class MariaDB extends SQL
     /**
      * @param string $collection
      * @param string $attribute
-     * @param int|float $value
      * @param array<Document> $documents
      * @param int $batchSize
      * @return array<Document>
@@ -1603,7 +1602,6 @@ class MariaDB extends SQL
     public function createOrUpdateDocuments(
         string $collection,
         string $attribute,
-        int|float $value,
         array $documents,
         int $batchSize
     ): array {
@@ -1664,12 +1662,7 @@ class MariaDB extends SQL
                     $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
                 }
 
-                if (!empty($attribute) && !empty($value)) {
-                    // Increment specific column by the specified value
-                    $updateColumns = [
-                        "`{$attribute}` = `{$attribute}` + :_increment"
-                    ];
-                } elseif (!empty($attribute) && empty($value)) {
+                if (!empty($attribute)) {
                     // Increment specific column by its new value in place
                     $updateColumns = [
                         "`{$attribute}` = `{$attribute}` + VALUES(`{$attribute}`)"
@@ -1692,10 +1685,6 @@ class MariaDB extends SQL
 
                 foreach ($bindValues as $key => $binding) {
                     $stmt->bindValue($key, $binding, $this->getPDOType($binding));
-                }
-
-                if (!empty($attribute) && !empty($value)) {
-                    $stmt->bindValue(':_increment', $value, $this->getPDOType($value));
                 }
 
                 $stmt->execute();

@@ -2441,6 +2441,9 @@ abstract class Base extends TestCase
 
         static::getDatabase()->createDocuments($collection, $documents);
 
+        $documents[0]->setAttribute('integer', 1);
+        $documents[1]->setAttribute('integer', 1);
+
         static::getDatabase()->createOrUpdateDocumentsWithInplaceIncrease(
             collection: $collection,
             attribute:'integer',
@@ -2450,7 +2453,7 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find($collection);
 
         foreach ($documents as $document) {
-            $this->assertEquals(10, $document->getAttribute('integer'));
+            $this->assertEquals(6, $document->getAttribute('integer'));
         }
     }
 

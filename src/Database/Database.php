@@ -3387,15 +3387,13 @@ class Database
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
-     *
      * @return array<Document>
-     *
-     * @throws AuthorizationException
-     * @throws StructureException
-     * @throws Exception
      */
-    public function createDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
-    {
+    public function createDocuments(
+        string $collection,
+        array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE,
+    ): array {
         if (empty($documents)) {
             return [];
         }
@@ -3433,7 +3431,11 @@ class Database
         }
 
         $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
-            return $this->adapter->createDocuments($collection->getId(), $documents, $batchSize);
+            return $this->adapter->createDocuments(
+                $collection->getId(),
+                $documents,
+                $batchSize,
+            );
         });
 
         foreach ($documents as $key => $document) {
@@ -4531,6 +4533,151 @@ class Database
         return $side === Database::RELATION_SIDE_PARENT
             ? '_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId()
             : '_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId();
+    }
+
+    /**
+     * Create or update documents
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return array<Document>
+     * @throws StructureException
+     */
+    public function createOrUpdateDocuments(
+        string $collection,
+        array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE
+    ): array {
+        return $this->createOrUpdateDocumentsWithIncrease(
+            $collection,
+            '',
+            0,
+            $documents,
+            $batchSize
+        );
+    }
+
+    /**
+     * Create or update documents
+     *
+     * @param string $collection
+     * @param string $attribute
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return array<Document>
+     * @throws StructureException
+     * @throws \Throwable
+     */
+    public function createOrUpdateDocumentsWithInplaceIncrease(
+        string $collection,
+        string $attribute,
+        array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE
+    ): array {
+        return $this->createOrUpdateDocumentsWithIncrease(
+            $collection,
+            $attribute,
+            0,
+            $documents,
+            $batchSize
+        );
+    }
+
+    /**
+     * @param string $collection
+     * @param string $attribute
+     * @param int|float $value
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return array<Document>
+     * @throws StructureException
+     * @throws \Throwable
+     * @throws Exception
+     */
+    public function createOrUpdateDocumentsWithIncrease(
+        string $collection,
+        string $attribute,
+        int|float $value,
+        array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE
+    ): array {
+        if (empty($documents)) {
+            return [];
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        $time = DateTime::now();
+
+        foreach ($documents as $key => $document) {
+            $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $document->getId())));
+
+            if (!$old->isEmpty()) {
+                $validator = new Authorization(self::PERMISSION_UPDATE);
+
+                if (!$validator->isValid([
+                    ...$collection->getUpdate(),
+                    ...($collection->getAttribute('documentSecurity') ? $old->getUpdate() : [])
+                ])) {
+                    throw new AuthorizationException($validator->getDescription());
+                }
+            }
+
+            $createdAt = $document->getCreatedAt();
+            $updatedAt = $document->getUpdatedAt();
+
+            $document
+                ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
+                ->setAttribute('$collection', $collection->getId())
+                ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
+                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
+            $document = $this->encode($collection, $document);
+
+            $validator = new Structure(
+                $collection,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
+
+            if (!$validator->isValid($document)) {
+                throw new StructureException($validator->getDescription());
+            }
+
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
+            }
+
+            $documents[$key] = $document;
+        }
+
+        $documents = $this->withTransaction(function () use ($collection, $attribute, $value, $documents, $batchSize) {
+            return $this->adapter->createOrUpdateDocuments(
+                $collection->getId(),
+                $attribute,
+                $value,
+                $documents,
+                $batchSize,
+            );
+        });
+
+        foreach ($documents as $key => $document) {
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+            }
+
+            $documents[$key] = $this->decode($collection, $document);
+
+            $this->purgeCachedDocument($collection->getId(), $document->getId());
+        }
+
+        $this->trigger(self::EVENT_DOCUMENTS_CREATE, new Document([
+            '$collection' => $collection->getId(),
+            'modified' => count($documents)
+        ]));
+
+        return $documents;
     }
 
     /**

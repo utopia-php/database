@@ -2230,6 +2230,313 @@ abstract class Base extends TestCase
         return $documents;
     }
 
+    public function testCreateOrUpdateDocuments(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'testCreateOrUpdateDocuments';
+
+        static::getDatabase()->createCollection($collection);
+
+        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true);
+        static::getDatabase()->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, true);
+
+        $documents = [
+            new Document([
+                '$id' => 'first',
+                'string' => 'text📝',
+                'integer' => 5,
+                'bigint' => Database::BIG_INT_MAX,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'second',
+                'string' => 'text📝',
+                'integer' => 5,
+                'bigint' => Database::BIG_INT_MAX,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+        ];
+
+        $documents = static::getDatabase()->createOrUpdateDocuments($collection, $documents);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+        }
+
+        $documents = static::getDatabase()->find($collection);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+        }
+
+        $documents[0]->setAttribute('string', 'new text📝');
+        $documents[0]->setAttribute('integer', 10);
+        $documents[1]->setAttribute('string', 'new text📝');
+        $documents[1]->setAttribute('integer', 10);
+
+        $documents = static::getDatabase()->createOrUpdateDocuments($collection, $documents);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(10, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+        }
+
+        $documents = static::getDatabase()->find($collection);
+
+        $this->assertEquals(2, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(10, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+        }
+    }
+
+    public function testCreateOrUpdateDocumentsWithIncrease(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'testCreateOrUpdateWithIncrease';
+
+        static::getDatabase()->createCollection($collection);
+        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true);
+
+        $documents = [
+            new Document([
+                '$id' => 'first',
+                'string' => 'text📝',
+                'integer' => 5,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'second',
+                'string' => 'text📝',
+                'integer' => 5,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+        ];
+
+        static::getDatabase()->createDocuments($collection, $documents);
+
+        static::getDatabase()->createOrUpdateDocumentsWithIncrease(
+            collection: $collection,
+            attribute:'integer',
+            value: 1,
+            documents: $documents
+        );
+
+        $documents = static::getDatabase()->find($collection);
+
+        foreach ($documents as $document) {
+            $this->assertEquals(6, $document->getAttribute('integer'));
+        }
+
+        static::getDatabase()->createOrUpdateDocumentsWithIncrease(
+            collection: $collection,
+            attribute:'integer',
+            value: -1,
+            documents: $documents
+        );
+
+        $documents = static::getDatabase()->find($collection);
+
+        foreach ($documents as $document) {
+            $this->assertEquals(5, $document->getAttribute('integer'));
+        }
+    }
+
+    public function testCreateOrUpdateDocumentsWithInplaceIncrease(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'testCreateOrUpdateInplace';
+
+        static::getDatabase()->createCollection($collection);
+        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true);
+
+        $documents = [
+            new Document([
+                '$id' => 'first',
+                'string' => 'text📝',
+                'integer' => 5,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'second',
+                'string' => 'text📝',
+                'integer' => 5,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]),
+        ];
+
+        static::getDatabase()->createDocuments($collection, $documents);
+
+        $documents[0]->setAttribute('integer', 1);
+        $documents[1]->setAttribute('integer', 1);
+
+        static::getDatabase()->createOrUpdateDocumentsWithInplaceIncrease(
+            collection: $collection,
+            attribute:'integer',
+            documents: $documents
+        );
+
+        $documents = static::getDatabase()->find($collection);
+
+        foreach ($documents as $document) {
+            $this->assertEquals(6, $document->getAttribute('integer'));
+        }
+    }
+
+    public function testCreateOrUpdateDocumentsPermissions(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'testCreateOrUpdateDocumentPermissions';
+
+        static::getDatabase()->createCollection($collection);
+        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
+
+        $document = new Document([
+            '$id' => 'first',
+            'string' => 'text📝',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ],
+        ]);
+
+        static::getDatabase()->createOrUpdateDocuments($collection, [$document]);
+
+        try {
+            static::getDatabase()->createOrUpdateDocuments($collection, [$document->setAttribute('string', 'updated')]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(AuthorizationException::class, $e);
+        }
+
+        $document = new Document([
+            '$id' => 'second',
+            'string' => 'text📝',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]);
+
+        static::getDatabase()->createOrUpdateDocuments($collection, [$document]);
+
+        $documents = static::getDatabase()->createOrUpdateDocuments(
+            $collection,
+            [$document->setAttribute('string', 'updated')]
+        );
+
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals('updated', $documents[0]->getAttribute('string'));
+
+        $document = new Document([
+            '$id' => 'third',
+            'string' => 'text📝',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        static::getDatabase()->createOrUpdateDocuments($collection, [$document]);
+
+        $newPermissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::user('user1')),
+            Permission::delete(Role::user('user1')),
+        ];
+
+        $documents = static::getDatabase()->createOrUpdateDocuments(
+            $collection,
+            [$document->setAttribute('$permissions', $newPermissions)]
+        );
+
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals($newPermissions, $documents[0]->getPermissions());
+
+        $document = static::getDatabase()->getDocument($collection, 'third');
+
+        $this->assertEquals($newPermissions, $document->getPermissions());
+    }
+
     public function testRespectNulls(): Document
     {
         static::getDatabase()->createCollection('documents_nulls');

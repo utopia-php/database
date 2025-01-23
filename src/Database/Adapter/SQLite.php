@@ -936,6 +936,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForUpserts(): bool
+    {
+        return false;
+    }
+
     /**
      * Get SQL Index Type
      *

@@ -1474,6 +1474,7 @@ class Postgres extends SQL
 
                 $permissionsStmt->execute();
                 $permissions = $permissionsStmt->fetchAll();
+                $permissionsStmt->closeCursor();
 
                 $initial = [];
                 foreach (Database::PERMISSIONS as $type) {
@@ -1585,7 +1586,7 @@ class Postgres extends SQL
                     $sqlAddPermissions .= ')';
                 }
 
-                $sqlAddPermissions .=  " VALUES {$addQuery}";
+                $sqlAddPermissions .= " VALUES {$addQuery}";
 
                 $stmtAddPermissions = $this->getPDO()->prepare($sqlAddPermissions);
 
@@ -1602,6 +1603,19 @@ class Postgres extends SQL
         }
 
         return $affected;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $attribute
+     * @param float|int $value
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return array<Document>
+     */
+    public function createOrUpdateDocuments(string $collection, string $attribute, float|int $value, array $documents, int $batchSize): array
+    {
+        return $documents;
     }
 
     /**
@@ -2427,6 +2441,11 @@ class Postgres extends SQL
      * @return bool
      */
     public function getSupportForSchemaAttributes(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForUpserts(): bool
     {
         return false;
     }

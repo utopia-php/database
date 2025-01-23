@@ -232,7 +232,6 @@ abstract class SQL extends Adapter
         }
 
         $stmt->execute();
-
         $document = $stmt->fetchAll();
         $stmt->closeCursor();
 

@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use ArrayObject;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Structure as StructureException;
 
 /**
  * @extends ArrayObject<string, mixed>
@@ -26,8 +27,12 @@ class Document extends ArrayObject
      */
     public function __construct(array $input = [])
     {
+        if (isset($input['$id']) && !\is_string($input['$id'])) {
+            throw new StructureException('$id must be of type string');
+        }
+
         if (isset($input['$permissions']) && !is_array($input['$permissions'])) {
-            throw new DatabaseException('$permissions must be of type array');
+            throw new StructureException('$permissions must be of type array');
         }
 
         foreach ($input as $key => &$value) {

@@ -47,14 +47,10 @@ class MirrorTest extends Base
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
 
-        try {
-            $redis = new Redis();
-            $redis->connect('redis', 6379);
-            $redis->flushAll();
-            $cache = new Cache(new RedisAdapter($redis));
-        } catch (\Exception $e) {
-            $cache = new Cache(new None());
-        }
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $redis->flushAll();
+        $cache = new Cache(new RedisAdapter($redis));
 
         self::$sourcePdo = $pdo;
         self::$source = new Database(new MariaDB($pdo), $cache);

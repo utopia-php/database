@@ -4,7 +4,6 @@ namespace Tests\E2E\Adapter;
 
 use Exception;
 use Redis;
-use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
@@ -36,14 +35,10 @@ class MongoDBTest extends Base
             return self::$database;
         }
 
-        try {
-            $redis = new Redis();
-            $redis->connect('redis', 6379);
-            $redis->flushAll();
-            $cache = new Cache(new RedisAdapter($redis));
-        } catch (\Exception $e) {
-            $cache = new Cache(new None());
-        }
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $redis->flushAll();
+        $cache = new Cache(new RedisAdapter($redis));
 
         $schema = 'utopiaTests'; // same as $this->testDatabase
         $client = new Client(

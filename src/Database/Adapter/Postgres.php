@@ -2481,6 +2481,16 @@ class Postgres extends SQL
     }
 
     /**
+     * Are sum queries supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSum(): bool
+    {
+        return true;
+    }
+
+    /**
      * @return string
      */
     public function getLikeOperator(): string

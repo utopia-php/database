@@ -17525,6 +17525,11 @@ abstract class Base extends TestCase
 
     public function testSumQueries(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForSum()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $database = static::getDatabase();
 
         $database->createCollection(

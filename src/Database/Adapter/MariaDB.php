@@ -2646,6 +2646,16 @@ class MariaDB extends SQL
     }
 
     /**
+     * Are sum queries supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSum(): bool
+    {
+        return true;
+    }
+
+    /**
      * Set max execution time
      * @param int $milliseconds
      * @param string $event

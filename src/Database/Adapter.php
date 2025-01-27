@@ -901,6 +901,13 @@ abstract class Adapter
     abstract public function getSupportForUpserts(): bool;
 
     /**
+     * Are sum queries supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSum(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

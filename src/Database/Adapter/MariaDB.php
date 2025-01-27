@@ -2442,9 +2442,9 @@ class MariaDB extends SQL
     }
 
     /**
-     * Get the SQL sum projection given the selected attributes
+     * Get the SQL sum queries given the selected attributes
      *
-     * @param array<string|array<string>> $attributeGroups
+     * @param array<array<string>|string> $attributeGroups
      * @return string
      */
     protected function getSumQueries(array $attributeGroups): string
@@ -2452,6 +2452,10 @@ class MariaDB extends SQL
         $sumExpressions = [];
 
         foreach ($attributeGroups as $attributeGroup) {
+            if (\is_string($attributeGroup)) {
+                $attributeGroup = [$attributeGroup];
+            }
+
             $columnAlias = \implode('+', $attributeGroup);
             $sumExpression = implode('+', array_map(fn ($attribute) => "`{$this->filter($attribute)}`", $attributeGroup));
 

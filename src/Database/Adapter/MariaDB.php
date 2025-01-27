@@ -1986,10 +1986,6 @@ class MariaDB extends SQL
                 unset($results[$index]['_permissions']);
             }
 
-            if (!empty($sumSelections)) {
-                $results[$index] = $this->filterSumAttributes($results[$index], 'table_main');
-            }
-
             $results[$index] = new Document($results[$index]);
         }
 
@@ -2196,49 +2192,21 @@ class MariaDB extends SQL
     /**
      * Get the SQL sum projection given the selected attributes
      *
-     * @param array<mixed> $sumSelections
+     * @param array<string|array<string>> $attributeGroups
      * @return string
      */
-    protected function getSumQueries(array $sumSelections): string
+    protected function getSumQueries(array $attributeGroups): string
     {
-        $sqlQuery = [];
+        $sumExpressions = [];
 
-        foreach ($sumSelections as $sumSelection) {
-            foreach ($sumSelection as &$selection) {
-                $selection = "`{$this->filter($selection)}`";
-            }
-            $queryData = implode('+', $sumSelection);
+        foreach ($attributeGroups as $attributeGroup) {
+            $columnAlias = \implode('+', $attributeGroup);
+            $sumExpression = implode('+', array_map(fn ($attribute) => "`{$this->filter($attribute)}`", $attributeGroup));
 
-            $sqlQuery[] = "SUM({$queryData})";
+            $sumExpressions[] = "SUM({$sumExpression}) AS `{$columnAlias}`";
         }
 
-        return \implode(', ', $sqlQuery);
-    }
-
-    /**
-     * Convert the data received from the sum query back to the original attribute names
-     *
-     * @param array<string> $results
-     * @return array<string>
-     */
-    protected function filterSumAttributes(array $results, string $prefix): array
-    {
-        $newResults = [];
-
-        foreach ($results as $key => $value) {
-            // Remove SUM( from the beginning and ) from the end
-            $newKey = \preg_replace('/^SUM\(|\)$/', '', $key);
-
-            // Remove any remaining backticks
-            $newKey = \str_replace('`', '', $newKey);
-
-            // Remove the prefixes
-            $newKey = \str_replace("{$prefix}.", '', $newKey);
-
-            $newResults[$newKey] = $value;
-        }
-
-        return $newResults;
+        return \implode(', ', $sumExpressions);
     }
 
     /**

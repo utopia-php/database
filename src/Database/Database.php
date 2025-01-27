@@ -4021,7 +4021,6 @@ class Database
 
         $document = $this->decode($collection, $document);
 
-        $this->purgeCachedDocument($collection->getId(), $id);
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
         return $document;

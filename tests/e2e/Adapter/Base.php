@@ -17102,6 +17102,158 @@ abstract class Base extends TestCase
         }
     }
 
+    public function testSumQueries(): void
+    {
+        $database = static::getDatabase();
+
+        $database->createCollection(
+            'testSumQueries',
+            attributes: [
+                new Document([
+                    '$id' => ID::custom('integer'),
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 64,
+                    'required' => true,
+                ]),
+                new Document([
+                    '$id' => ID::custom('float'),
+                    'type' => Database::VAR_FLOAT,
+                    'size' => 64,
+                    'required' => true,
+                ]),
+                new Document([
+                    '$id' => ID::custom('string'),
+                    'type' => Database::VAR_STRING,
+                    'size' => 64,
+                    'required' => true,
+                ]),
+            ],
+            permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any())
+            ],
+            documentSecurity: false
+        );
+
+        $documents = $database->createDocuments('testSumQueries', [
+            new Document([
+                '$id' => 'doc1',
+                'integer' => 10,
+                'float' => 10.5,
+                'string' => 'test1',
+            ]),
+            new Document([
+                '$id' => 'doc2',
+                'integer' => 20,
+                'float' => 20.5,
+                'string' => 'test2',
+            ]),
+        ]);
+        $document = $documents[0];
+
+        // Check sum of integer attribute
+        $documents = $database->find('testSumQueries', [
+            Query::sum(['integer']),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(30, $documents[0]->getAttribute('integer'));
+        $this->assertEquals(['integer'], array_keys($documents[0]->getAttributes()));
+
+        // Check sum of float attribute
+        $documents = $database->find('testSumQueries', [
+            Query::sum(['float']),
+        ]);
+
+        $this->assertEquals(31, $documents[0]->getAttribute('float'));
+
+        // Check sum of multiple attributes
+        $documents = $database->find('testSumQueries', [
+            Query::sum(['integer', 'float']),
+        ]);
+
+        $this->assertEquals(61, $documents[0]->getAttribute('integer+float'));
+
+        // Check sum of multiple attributes separately
+        $documents = $database->find('testSumQueries', [
+            Query::sum(['integer']),
+            Query::sum(['float']),
+        ]);
+
+        $this->assertEquals(30, $documents[0]->getAttribute('integer'));
+        $this->assertEquals(31, $documents[0]->getAttribute('float'));
+
+        // Expect Fail: Sum of non-numeric attribute
+        try {
+            $database->find('testSumQueries', [
+                Query::sum(['string']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (QueryException $e) {
+            $this->assertEquals('Invalid query: Attribute is not a numeric value: string', $e->getMessage());
+        }
+
+        // Expect Fail: Sum of non-existent attribute
+        try {
+            $database->find('testSumQueries', [
+                Query::sum(['nonExistent']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (QueryException $e) {
+            $this->assertEquals('Invalid query: Attribute not found in schema: nonExistent', $e->getMessage());
+        }
+
+        // Expect Fail: Mix Select and Sum
+        try {
+            $database->find('testSumQueries', [
+                Query::sum(['integer']),
+                Query::select(['string']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (QueryException $e) {
+            $this->assertEquals('Invalid query: Cannot mix select and sum queries', $e->getMessage());
+        }
+
+        /**
+         * Test sum alongside other queries
+         */
+        $documents = $database->find('testSumQueries', [
+            Query::sum(['integer']),
+            Query::limit(1),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(10, $documents[0]->getAttribute('integer'));
+
+        $documents = $database->find('testSumQueries', [
+            Query::sum(['integer']),
+            Query::offset(1),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(20, $documents[0]->getAttribute('integer'));
+
+        $documents = $database->find('testSumQueries', [
+            Query::sum(['integer']),
+            Query::cursorAfter($document),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(20, $documents[0]->getAttribute('integer'));
+
+        $documents = $database->find('testSumQueries', [
+            Query::sum(['integer']),
+            Query::endsWith('string', 'st2'),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(20, $documents[0]->getAttribute('integer'));
+
+        $database->deleteCollection('testSumQueries');
+    }
+
     public function testEvents(): void
     {
         Authorization::skip(function () {
@@ -17209,118 +17361,5 @@ abstract class Base extends TestCase
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
         });
-    }
-
-    public function testSumQueries()
-    {
-        $database = static::getDatabase();
-
-        $database->createCollection(
-            'testSumQueries',
-            attributes: [
-                new Document([
-                    '$id' => ID::custom('integer'),
-                    'type' => Database::VAR_INTEGER,
-                    'size' => 64,
-                    'required' => true,
-                ]),
-                new Document([
-                    '$id' => ID::custom('float'),
-                    'type' => Database::VAR_FLOAT,
-                    'size' => 64,
-                    'required' => true,
-                ]),
-                new Document([
-                    '$id' => ID::custom('string'),
-                    'type' => Database::VAR_STRING,
-                    'size' => 64,
-                    'required' => true,
-                ]),
-            ],
-            permissions: [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any())
-            ],
-            documentSecurity: false
-        );
-
-        $database->createDocuments('testSumQueries', [
-            new Document([
-                'integer' => 10,
-                'float' => 10.5,
-                'string' => 'test',
-            ]),
-            new Document([
-                'integer' => 20,
-                'float' => 20.5,
-                'string' => 'test',
-            ]),
-        ]);
-
-        // Check sum of integer attribute
-        $documents = $database->find('testSumQueries', [
-            Query::sum(['integer']),
-        ]);
-
-        $this->assertCount(1, $documents);
-        $document = $documents[0];
-
-        $this->assertEquals(30, $document->getAttribute('integer'));
-
-        // Check sum of float attribute
-        $documents = $database->find('testSumQueries', [
-            Query::sum(['float']),
-        ]);
-
-        $this->assertEquals(31, $documents[0]->getAttribute('float'));
-
-        // Check sum of multiple attributes
-        $documents = $database->find('testSumQueries', [
-            Query::sum(['integer', 'float']),
-        ]);
-
-        $this->assertEquals(61, $documents[0]->getAttribute('integer+float'));
-
-        // Check sum of multiple attributes separately
-        $documents = $database->find('testSumQueries', [
-            Query::sum(['integer']),
-            Query::sum(['float']),
-        ]);
-
-        $this->assertEquals(30, $documents[0]->getAttribute('integer'));
-        $this->assertEquals(31, $documents[0]->getAttribute('float'));
-
-        // Expect Fail: Sum of non-numeric attribute
-        try {
-            $database->find('testSumQueries', [
-                Query::sum(['string']),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (QueryException $e) {
-            $this->assertEquals('Invalid query: Attribute is not a numeric value: string', $e->getMessage());
-        }
-
-        // Expect Fail: Sum of non-existent attribute
-        try {
-            $database->find('testSumQueries', [
-                Query::sum(['nonExistent']),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (QueryException $e) {
-            $this->assertEquals('Invalid query: Attribute not found in schema: nonExistent', $e->getMessage());
-        }
-
-        // Expect Fail: Mix Select and Sum
-        try {
-            $database->find('testSumQueries', [
-                Query::sum(['integer']),
-                Query::select(['string']),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (QueryException $e) {
-            $this->assertEquals('Invalid query: Cannot mix sum and select queries', $e->getMessage());
-        }
     }
 }

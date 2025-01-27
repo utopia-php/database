@@ -960,16 +960,15 @@ abstract class Adapter
      * Get all sum attributes from queries
      *
      * @param Query[] $queries
-     * @return string[]
+     * @return array<string|array<string>>
      */
     protected function getAttributeSums(array $queries): array
     {
         $selections = [];
 
         foreach ($queries as $query) {
-            switch ($query->getMethod()) {
-                case Query::TYPE_SUM:
-                    $selections[] = $query->getValues();
+            if ($query->getMethod() === Query::TYPE_SUM) {
+                $selections[] = $query->getValues();
             }
         }
 

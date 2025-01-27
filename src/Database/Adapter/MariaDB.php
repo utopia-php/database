@@ -1901,15 +1901,19 @@ class MariaDB extends SQL
         $selections = $this->getAttributeSelections($queries);
         $sumSelections = $this->getAttributeSums($queries);
 
-        $sqlSelection = !empty($sumSelections) ? $this->getAttributeSumProjection($sumSelections, 'table_main') : $this->getAttributeProjection($selections, 'table_main');
-
         $sql = "
-            SELECT {$sqlSelection}
+            SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} AS table_main
             {$sqlWhere}
             {$sqlOrder}
-            {$sqlLimit};
+            {$sqlLimit}
         ";
+
+        if (!empty($sumSelections)) {
+            $sql = "SELECT {$this->getSumQueries($sumSelections)} FROM ({$sql}) table_sum;";
+        } else {
+            $sql .= ';';
+        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
@@ -2145,11 +2149,10 @@ class MariaDB extends SQL
      *
      * @param array<string> $selections
      * @param string $prefix
-     * @param bool $addMetadata
      * @return mixed
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix = '', bool $addMetadata = true): mixed
+    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
     {
         if (empty($selections) || \in_array('*', $selections)) {
             if (!empty($prefix)) {
@@ -2159,12 +2162,10 @@ class MariaDB extends SQL
         }
 
         // Remove $id, $permissions and $collection if present since it is always selected by default
-        if ($addMetadata) {
-            $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
+        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
 
-            $selections[] = '_uid';
-            $selections[] = '_permissions';
-        }
+        $selections[] = '_uid';
+        $selections[] = '_permissions';
 
         if (\in_array('$internalId', $selections)) {
             $selections[] = '_id';
@@ -2195,24 +2196,20 @@ class MariaDB extends SQL
     /**
      * Get the SQL sum projection given the selected attributes
      *
-     * @param array<string> $sumSelections
+     * @param array<mixed> $sumSelections
      * @return string
      */
-    protected function getAttributeSumProjection(array $sumSelections, string $prefix = ''): string
+    protected function getSumQueries(array $sumSelections): string
     {
         $sqlQuery = [];
 
         foreach ($sumSelections as $sumSelection) {
-            if (is_array($sumSelection)) {
-                foreach ($sumSelection as &$selection) {
-                    $selection = "`{$prefix}`.`{$this->filter($selection)}`";
-                }
-                $queryData = implode('+', $sumSelection);
-
-                $sqlQuery[] = "SUM({$queryData})";
-            } else {
-                $sqlQuery[] = "SUM(`{$prefix}`.`{$this->filter($sumSelection)}`)";
+            foreach ($sumSelection as &$selection) {
+                $selection = "`{$this->filter($selection)}`";
             }
+            $queryData = implode('+', $sumSelection);
+
+            $sqlQuery[] = "SUM({$queryData})";
         }
 
         return \implode(', ', $sqlQuery);

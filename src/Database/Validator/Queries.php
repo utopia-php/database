@@ -61,6 +61,18 @@ class Queries extends Validator
             return false;
         }
 
+        $methodsUsed = array_map(
+            fn (Query|string $query) => $query instanceof Query ? $query->getMethod() : $query,
+            $value
+        );
+
+        $methodsUsed = array_unique($methodsUsed);
+
+        if (in_array(Query::TYPE_SELECT, $methodsUsed) && in_array(Query::TYPE_SUM, $methodsUsed)) {
+            $this->message = 'Invalid query: Cannot mix select and sum queries';
+            return false;
+        }
+
         foreach ($value as $query) {
             if (!$query instanceof Query) {
                 try {
@@ -80,6 +92,7 @@ class Queries extends Validator
             $method = $query->getMethod();
             $methodType = match ($method) {
                 Query::TYPE_SELECT => Base::METHOD_TYPE_SELECT,
+                Query::TYPE_SUM => Base::METHOD_TYPE_SUM,
                 Query::TYPE_LIMIT => Base::METHOD_TYPE_LIMIT,
                 Query::TYPE_OFFSET => Base::METHOD_TYPE_OFFSET,
                 Query::TYPE_CURSOR_AFTER,

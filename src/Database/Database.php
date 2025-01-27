@@ -5533,6 +5533,7 @@ class Database
 
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
+        $skipDecode = false;
 
         foreach ($queries as $index => &$query) {
             switch ($query->getMethod()) {
@@ -5567,6 +5568,12 @@ class Database
                     }
                     $query->setValues(\array_values($values));
                     break;
+                case Query::TYPE_SUM:
+                    $skipDecode = true;
+                    if (\str_contains($query->getAttribute(), '.')) {
+                        unset($queries[$index]);
+                    }
+                    break;
                 default:
                     if (\str_contains($query->getAttribute(), '.')) {
                         unset($queries[$index]);
@@ -5596,7 +5603,9 @@ class Database
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
             $node = $this->casting($collection, $node);
-            $node = $this->decode($collection, $node, $selections);
+            if (!$skipDecode) {
+                $node = $this->decode($collection, $node, $selections);
+            }
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());

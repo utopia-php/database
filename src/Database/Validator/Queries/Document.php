@@ -35,7 +35,7 @@ class Document extends Queries
         ]);
 
         $validators = [
-            new Select($attributes),
+            new Select($attributes)
         ];
 
         parent::__construct($validators);

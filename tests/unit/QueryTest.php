@@ -198,6 +198,11 @@ class QueryTest extends TestCase
         $this->assertEquals(1, $query->getAttribute());
         $this->assertEquals(['Hello /\ World'], $query->getValues());
 
+        $query = Query::parse(Query::sum(['title', 'director'])->toString());
+        $this->assertEquals('sum', $query->getMethod());
+        $this->assertEquals(null, $query->getAttribute());
+        $this->assertEquals(['title', 'director'], $query->getValues());
+
         $json = Query::or([
             Query::equal('actors', ['Brad Pitt']),
             Query::equal('actors', ['Johnny Depp'])
@@ -262,6 +267,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('isNotNull'));
         $this->assertTrue(Query::isMethod('between'));
         $this->assertTrue(Query::isMethod('select'));
+        $this->assertTrue(Query::isMethod('sum'));
         $this->assertTrue(Query::isMethod('or'));
         $this->assertTrue(Query::isMethod('and'));
 
@@ -283,6 +289,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NOT_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_BETWEEN));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SELECT));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_SUM));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_OR));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_AND));
 

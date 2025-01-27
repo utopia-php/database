@@ -2139,14 +2139,21 @@ class MariaDB extends SQL
         $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
 
         $selections = $this->getAttributeSelections($queries);
+        $sumSelections = $this->getAttributeSums($queries);
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, 'table_main')}
             FROM {$this->getSQLTable($name)} AS table_main
             {$sqlWhere}
             {$sqlOrder}
-            {$sqlLimit};
+            {$sqlLimit}
         ";
+
+        if (!empty($sumSelections)) {
+            $sql = "SELECT {$this->getSumQueries($sumSelections)} FROM ({$sql}) table_sum;";
+        } else {
+            $sql .= ';';
+        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
@@ -2435,6 +2442,30 @@ class MariaDB extends SQL
     }
 
     /**
+     * Get the SQL sum queries given the selected attributes
+     *
+     * @param array<array<string>|string> $attributeGroups
+     * @return string
+     */
+    protected function getSumQueries(array $attributeGroups): string
+    {
+        $sumExpressions = [];
+
+        foreach ($attributeGroups as $attributeGroup) {
+            if (\is_string($attributeGroup)) {
+                $attributeGroup = [$attributeGroup];
+            }
+
+            $columnAlias = \implode('+', $attributeGroup);
+            $sumExpression = implode('+', array_map(fn ($attribute) => "`{$this->filter($attribute)}`", $attributeGroup));
+
+            $sumExpressions[] = "SUM({$sumExpression}) AS `{$columnAlias}`";
+        }
+
+        return \implode(', ', $sumExpressions);
+    }
+
+    /**
      * Get SQL Condition
      *
      * @param Query $query
@@ -2610,6 +2641,16 @@ class MariaDB extends SQL
     }
 
     public function getSupportForUpserts(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Are sum queries supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSum(): bool
     {
         return true;
     }

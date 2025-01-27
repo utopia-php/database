@@ -901,6 +901,13 @@ abstract class Adapter
     abstract public function getSupportForUpserts(): bool;
 
     /**
+     * Are sum queries supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSum(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -982,6 +989,25 @@ abstract class Adapter
                         $selections[] = $value;
                     }
                     break;
+            }
+        }
+
+        return $selections;
+    }
+
+    /**
+     * Get all sum attributes from queries
+     *
+     * @param Query[] $queries
+     * @return array<string|array<string>>
+     */
+    protected function getAttributeSums(array $queries): array
+    {
+        $selections = [];
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SUM) {
+                $selections[] = $query->getValues();
             }
         }
 

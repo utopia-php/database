@@ -12,6 +12,7 @@ use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
+use Utopia\Database\Validator\Query\Sum;
 
 class Documents extends IndexedQueries
 {
@@ -66,6 +67,7 @@ class Documents extends IndexedQueries
             ),
             new Order($attributes),
             new Select($attributes),
+            new Sum($attributes),
         ];
 
         parent::__construct($attributes, $indexes, $validators);

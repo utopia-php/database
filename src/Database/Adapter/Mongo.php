@@ -1820,6 +1820,11 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForSum(): bool
+    {
+        return false;
+    }
+
     /**
      * Get current attribute count from collection document
      *

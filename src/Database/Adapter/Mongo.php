@@ -283,7 +283,18 @@ class Mongo extends Adapter
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
+     * Get Collection Size of raw data
      * @param string $collection
      * @return int
      * @throws DatabaseException
@@ -309,17 +320,6 @@ class Mongo extends Adapter
         } catch (Exception $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
-    }
-
-    /**
-    * Get Collection Size on disk
-    * @param string $collection
-    * @return int
-    * @throws DatabaseException
-    */
-    public function getSizeOfCollectionOnDisk(string $collection): int
-    {
-        return $this->getSizeOfCollection($collection);
     }
 
     /**
@@ -798,6 +798,7 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
+
             if ($this->sharedTables) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
@@ -888,6 +889,18 @@ class Mongo extends Adapter
         }
 
         return 1;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $attribute
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return array<Document>
+     */
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents, int $batchSize): array
+    {
+        return $documents;
     }
 
     /**
@@ -1797,6 +1810,16 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForCastIndexArray(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForUpserts(): bool
+    {
+        return false;
+    }
+
     /**
      * Get current attribute count from collection document
      *
@@ -1929,7 +1952,7 @@ class Mongo extends Adapter
     protected function processException(Exception $e): \Exception
     {
         if ($e->getCode() === 50) {
-            return new Timeout($e->getMessage());
+            return new Timeout('Query timed out', $e->getCode(), $e);
         }
 
         return $e;
@@ -1956,5 +1979,10 @@ class Mongo extends Adapter
     public function getSchemaAttributes(string $collection): array
     {
         return [];
+    }
+
+    public function getTenantQuery(string $collection, string $parentAlias = ''): string
+    {
+        return (string)$this->getTenant();
     }
 }

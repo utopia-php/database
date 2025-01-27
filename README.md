@@ -48,13 +48,13 @@ The database document interface only supports primitives types (`strings`, `inte
 
 Below is a list of supported databases, and their compatibly tested versions alongside a list of supported features and relevant limits.
 
-| Adapter | Status | Version |
-|---------|---------|---|
-| MariaDB | ✅ | 10.5 |
-| MySQL | ✅ | 8.0 |
-| Postgres | ✅ | 13.0 |
-| MongoDB | ✅ | 5.0 |
-| SQLlite | ✅ | 3.38 |
+| Adapter  | Status | Version |
+| -------- | ------ | ------- |
+| MariaDB  | ✅      | 10.5    |
+| MySQL    | ✅      | 8.0     |
+| Postgres | ✅      | 13.0    |
+| MongoDB  | ✅      | 5.0     |
+| SQLite   | ✅      | 3.38    |
 
 ` ✅  - supported `
 
@@ -200,7 +200,7 @@ $pdoConfig = [
     PDO::ATTR_STRINGIFY_FETCHES => true,
 ];
 
-$pdo = new PDO("{$dbPath}", $pdoConfig);
+$pdo = new PDO("sqlite:{$dbPath}", $pdoConfig);
 
 $cache = new Cache(new Memory()); // or use any cache adapter you wish
 
@@ -228,7 +228,7 @@ $mongoClient = new Client($dbName, $dbHost, $dbPort, $dbUser, $dbPass, true);
 
 $cache = new Cache(new Memory()); // or use any cache adapter you wish
 
-$database = new Database(new Mongo($client), $cache);
+$database = new Database(new Mongo($mongoClient), $cache);
 ```
 
 ### Database Methods
@@ -293,7 +293,6 @@ Database::EVENT_DOCUMENT_CREATE,
 Database::EVENT_DOCUMENT_UPDATE,
 Database::EVENT_DOCUMENT_READ,
 Database::EVENT_DOCUMENT_FIND,
-Database::EVENT_DOCUMENT_FIND,
 Database::EVENT_DOCUMENT_COUNT,
 Database::EVENT_DOCUMENT_SUM,
 Database::EVENT_DOCUMENT_INCREASE,
@@ -324,7 +323,7 @@ $database->getKeywords();
 // Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
 // The second collection is named '$namespace_$collectionName_perms' with attribute names '_id', '_type', '_permission', '_document'
 $database->createCollection(
-    name: 'users'
+    id: 'users'
 );
 
 // Create collection with attributes and indexes
@@ -369,7 +368,7 @@ $indexes = [
 ];
 
 $database->createCollection(
-    name: 'users', 
+    id: 'users', 
     attributes: $attributes, 
     indexes: $indexes
 );
@@ -667,7 +666,7 @@ Role::members(
 Permission::read(Role::any()),
 Permission::create(Role::user(ID::unique())),
 Permission::update(Role::user(ID::unique(padding: 23))),
-Permission::delete(Role::user(ID::custom(id: 'my_user_3235'))
+Permission::delete(Role::user(ID::custom(id: 'my_user_3235')))
 
 // To create a document
 $document = new Document([
@@ -794,7 +793,7 @@ $database->find(
     collection: 'movies', 
     queries:  [
         Query::equal(attribute: 'name', values: ['Captain Marvel']),
-        Query::notEqual(attribute: 'year', values: [2019])
+        Query::notEqual(attribute: 'year', value: 2019)
     ], 
     timeout: 1 //timeout is optional
 );  
@@ -850,7 +849,7 @@ Utopia Framework requires PHP 8.0 or later. We recommend using the latest PHP ve
 ## Contributing
 
 Thank you for considering contributing to the Utopia Framework! 
-Checkout the [CONTRIBUTING.md](https://github.com/utopia-php/database/blob/main/CONTRIBUTING.md) file for more information.
+Check out the [CONTRIBUTING.md](https://github.com/utopia-php/database/blob/main/CONTRIBUTING.md) file for more information.
 
 ## Copyright and License
 

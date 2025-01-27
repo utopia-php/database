@@ -7,6 +7,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -20,6 +21,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
@@ -114,6 +116,7 @@ class Database
 
     public const EVENT_DOCUMENT_FIND = 'document_find';
     public const EVENT_DOCUMENT_CREATE = 'document_create';
+    public const EVENT_DOCUMENT_PURGE = 'document_purge';
     public const EVENT_DOCUMENTS_CREATE = 'documents_create';
     public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
     public const EVENT_DOCUMENT_READ = 'document_read';
@@ -422,7 +425,7 @@ class Database
                     $value = new \DateTime($value);
                     $value->setTimezone(new \DateTimeZone(date_default_timezone_get()));
                     return DateTime::format($value);
-                } catch (\Throwable $th) {
+                } catch (\Throwable) {
                     return $value;
                 }
             },
@@ -1391,7 +1394,7 @@ class Database
         $relationships = \array_filter(
             $collection->getAttribute('attributes'),
             fn ($attribute) =>
-            $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
+                $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
         );
 
         foreach ($relationships as $relationship) {
@@ -1462,17 +1465,8 @@ class Database
             throw new DatabaseException("Attribute of type: $type requires the following filters: " . implode(",", $requiredFilters));
         }
 
-        if (
-            $this->adapter->getLimitForAttributes() > 0 &&
-            $this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
-        ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
-
-        if ($format) {
-            if (!Structure::hasFormat($format, $type)) {
-                throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
-            }
+        if ($format && !Structure::hasFormat($format, $type)) {
+            throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
         }
 
         $attribute = new Document([
@@ -1489,14 +1483,13 @@ class Database
             'filters' => $filters,
         ]);
 
-        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+        $this->checkAttribute($collection, $attribute);
 
-        if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            $this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
-        ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
+        $collection->setAttribute(
+            'attributes',
+            $attribute,
+            Document::SET_TYPE_APPEND
+        );
 
         switch ($type) {
             case self::VAR_STRING:
@@ -1504,7 +1497,6 @@ class Database
                     throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
                 }
                 break;
-
             case self::VAR_INTEGER:
                 $limit = ($signed) ? $this->adapter->getLimitForInt() / 2 : $this->adapter->getLimitForInt();
                 if ($size > $limit) {
@@ -1909,6 +1901,18 @@ class Database
                             }, $index['attributes']);
                         }
                     }
+
+                    /**
+                     * Check index dependency if we are changing the key
+                     */
+                    $validator = new IndexDependencyValidator(
+                        $collectionDoc->getAttribute('indexes', []),
+                        $this->adapter->getSupportForCastIndexArray(),
+                    );
+
+                    if (! $validator->isValid($attribute)) {
+                        throw new DependencyException($validator->getDescription());
+                    }
                 }
 
                 /**
@@ -2009,6 +2013,17 @@ class Database
             throw new DatabaseException('Cannot delete relationship as an attribute');
         }
 
+        if ($this->validate) {
+            $validator = new IndexDependencyValidator(
+                $collection->getAttribute('indexes', []),
+                $this->adapter->getSupportForCastIndexArray(),
+            );
+
+            if (! $validator->isValid($attribute)) {
+                throw new DependencyException($validator->getDescription());
+            }
+        }
+
         foreach ($indexes as $indexKey => $index) {
             $indexAttributes = $index->getAttribute('attributes', []);
 
@@ -2058,34 +2073,51 @@ class Database
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        /**
+         * @var array<Document> $attributes
+         */
         $attributes = $collection->getAttribute('attributes', []);
+
+        /**
+         * @var array<Document> $indexes
+         */
         $indexes = $collection->getAttribute('indexes', []);
 
-        $attribute = \in_array($old, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
+        $attribute = new Document();
 
-        if ($attribute === false) {
+        foreach ($attributes as $value) {
+            if ($value->getId() === $old) {
+                $attribute = $value;
+            }
+
+            if ($value->getId() === $new) {
+                throw new DuplicateException('Attribute name already used');
+            }
+        }
+
+        if ($attribute->isEmpty()) {
             throw new NotFoundException('Attribute not found');
         }
 
-        $attributeNew = \in_array($new, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
+        if ($this->validate) {
+            $validator = new IndexDependencyValidator(
+                $collection->getAttribute('indexes', []),
+                $this->adapter->getSupportForCastIndexArray(),
+            );
 
-        if ($attributeNew !== false) {
-            throw new DuplicateException('Attribute name already used');
-        }
-
-        foreach ($attributes as $key => $value) {
-            if (isset($value['$id']) && $value['$id'] === $old) {
-                $attributes[$key]['key'] = $new;
-                $attributes[$key]['$id'] = $new;
-                $attributeNew = $attributes[$key];
-                break;
+            if (! $validator->isValid($attribute)) {
+                throw new DependencyException($validator->getDescription());
             }
         }
+
+        $attribute->setAttribute('$id', $new);
+        $attribute->setAttribute('key', $new);
 
         foreach ($indexes as $index) {
             $indexAttributes = $index->getAttribute('attributes', []);
 
-            $indexAttributes = \array_map(fn ($attribute) => ($attribute === $old) ? $new : $attribute, $indexAttributes);
+            $indexAttributes = \array_map(fn ($attr) => ($attr === $old) ? $new : $attr, $indexAttributes);
 
             $index->setAttribute('attributes', $indexAttributes);
         }
@@ -2099,7 +2131,7 @@ class Database
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
 
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributeNew);
+        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
 
         return $renamed;
     }
@@ -2163,22 +2195,6 @@ class Database
             }
         }
 
-        if (
-            $this->adapter->getLimitForAttributes() > 0 &&
-            ($this->adapter->getCountOfAttributes($collection) >= $this->adapter->getLimitForAttributes()
-                || $this->adapter->getCountOfAttributes($relatedCollection) >= $this->adapter->getLimitForAttributes())
-        ) {
-            throw new LimitException('Column limit reached. Cannot create new attribute.');
-        }
-
-        if (
-            $this->adapter->getDocumentSizeLimit() > 0 &&
-            ($this->adapter->getAttributeWidth($collection) >= $this->adapter->getDocumentSizeLimit()
-                || $this->adapter->getAttributeWidth($relatedCollection) >= $this->adapter->getDocumentSizeLimit())
-        ) {
-            throw new LimitException('Row width limit reached. Cannot create new attribute.');
-        }
-
         $relationship = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -2210,6 +2226,9 @@ class Database
                 'side' => Database::RELATION_SIDE_CHILD,
             ],
         ]);
+
+        $this->checkAttribute($collection, $relationship);
+        $this->checkAttribute($relatedCollection, $twoWayRelationship);
 
         $collection->setAttribute('attributes', $relationship, Document::SET_TYPE_APPEND);
         $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
@@ -2266,8 +2285,24 @@ class Database
         }
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+            try {
+                $this->withTransaction(function () use ($collection, $relatedCollection) {
+                    $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                    $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                });
+            } catch (\Throwable $e) {
+                $this->adapter->deleteRelationship(
+                    $collection->getId(),
+                    $relatedCollection->getId(),
+                    $type,
+                    $twoWay,
+                    $id,
+                    $twoWayKey,
+                    Database::RELATION_SIDE_PARENT
+                );
+
+                throw new DatabaseException('Failed to create relationship: ' . $e->getMessage());
+            }
 
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
@@ -2335,13 +2370,13 @@ class Database
             !\is_null($newKey)
             && \in_array($newKey, \array_map(fn ($attribute) => $attribute['key'], $attributes))
         ) {
-            throw new DuplicateException('Attribute already exists');
+            throw new DuplicateException('Relationship already exists');
         }
 
         $attributeIndex = array_search($id, array_map(fn ($attribute) => $attribute['$id'], $attributes));
 
         if ($attributeIndex === false) {
-            throw new NotFoundException('Attribute not found');
+            throw new NotFoundException('Relationship not found');
         }
 
         $attribute = $attributes[$attributeIndex];
@@ -2528,7 +2563,7 @@ class Database
         }
 
         if (\is_null($relationship)) {
-            throw new NotFoundException('Attribute not found');
+            throw new NotFoundException('Relationship not found');
         }
 
         $collection->setAttribute('attributes', \array_values($attributes));
@@ -2552,8 +2587,14 @@ class Database
         $relatedCollection->setAttribute('attributes', \array_values($relatedAttributes));
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
-            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+            try {
+                $this->withTransaction(function () use ($collection, $relatedCollection) {
+                    $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                    $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                });
+            } catch (\Throwable $e) {
+                throw new DatabaseException('Failed to delete relationship: ' . $e->getMessage());
+            }
 
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
@@ -2996,38 +3037,12 @@ class Database
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-            $attribute['type'] === Database::VAR_RELATIONSHIP
+                $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
-        $hasTwoWayRelationship = false;
-        foreach ($relationships as $relationship) {
-            if ($relationship['options']['twoWay']) {
-                $hasTwoWayRelationship = true;
-                break;
-            }
-        }
-
-        /**
-         * Bug with function purity in PHPStan means it thinks $this->map is always empty
-         * @phpstan-ignore-next-line
-         */
-        foreach ($this->map as $key => $value) {
-            [$k, $v] = \explode('=>', $key);
-            $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
-            $cache = $this->cache->load($ck, self::TTL, $ck);
-            if (empty($cache)) {
-                $cache = [];
-            }
-            if (!\in_array($v, $cache)) {
-                $cache[] = $v;
-                $this->cache->save($ck, $cache, $ck);
-            }
-        }
-
         // Don't save to cache if it's part of a relationship
-        if (!$hasTwoWayRelationship && empty($relationships)) {
+        if (empty($relationships)) {
             $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
-            // Add document reference to the collection key
             $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
         }
 
@@ -3112,8 +3127,8 @@ class Database
                 // collection as an existing relationship, but a different two-way key (the third condition),
                 // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                 $transitive = (($existingKey === $twoWayKey
-                    && $existingCollection === $relatedCollection->getId()
-                    && $existingSide !== $side)
+                        && $existingCollection === $relatedCollection->getId()
+                        && $existingSide !== $side)
                     || ($existingTwoWayKey === $key
                         && $existingRelatedCollection === $collection->getId()
                         && $existingSide !== $side)
@@ -3372,15 +3387,13 @@ class Database
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
-     *
      * @return array<Document>
-     *
-     * @throws AuthorizationException
-     * @throws StructureException
-     * @throws Exception
      */
-    public function createDocuments(string $collection, array $documents, int $batchSize = self::INSERT_BATCH_SIZE): array
-    {
+    public function createDocuments(
+        string $collection,
+        array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE,
+    ): array {
         if (empty($documents)) {
             return [];
         }
@@ -3418,7 +3431,11 @@ class Database
         }
 
         $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
-            return $this->adapter->createDocuments($collection->getId(), $documents, $batchSize);
+            return $this->adapter->createDocuments(
+                $collection->getId(),
+                $documents,
+                $batchSize,
+            );
         });
 
         foreach ($documents as $key => $document) {
@@ -3450,7 +3467,7 @@ class Database
         $relationships = \array_filter(
             $attributes,
             fn ($attribute) =>
-            $attribute['type'] === Database::VAR_RELATIONSHIP
+                $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
         $stackCount = count($this->relationshipWriteStack);
@@ -3955,7 +3972,6 @@ class Database
 
         $document = $this->decode($collection, $document);
 
-        $this->purgeRelatedDocuments($collection, $id);
         $this->purgeCachedDocument($collection->getId(), $id);
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -4110,7 +4126,6 @@ class Database
             }
 
             foreach ($documents as $document) {
-                $this->purgeRelatedDocuments($collection, $document->getId());
                 $this->purgeCachedDocument($collection->getId(), $document->getId());
             }
 
@@ -4521,6 +4536,123 @@ class Database
     }
 
     /**
+     * Create or update documents.
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return array<Document>
+     * @throws StructureException
+     */
+    public function createOrUpdateDocuments(
+        string $collection,
+        array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE
+    ): array {
+        return $this->createOrUpdateDocumentsWithIncrease(
+            $collection,
+            '',
+            $documents,
+            $batchSize
+        );
+    }
+
+    /**
+     * Create or update documents, increasing the value of the given attribute by the value in each document.
+     *
+     * @param string $collection
+     * @param string $attribute
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return array<Document>
+     * @throws StructureException
+     * @throws \Throwable
+     * @throws Exception
+     */
+    public function createOrUpdateDocumentsWithIncrease(
+        string $collection,
+        string $attribute,
+        array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE
+    ): array {
+        if (empty($documents)) {
+            return [];
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        $time = DateTime::now();
+
+        foreach ($documents as $key => $document) {
+            $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $document->getId())));
+
+            if (!$old->isEmpty()) {
+                $validator = new Authorization(self::PERMISSION_UPDATE);
+
+                if (!$validator->isValid([
+                    ...$collection->getUpdate(),
+                    ...($collection->getAttribute('documentSecurity') ? $old->getUpdate() : [])
+                ])) {
+                    throw new AuthorizationException($validator->getDescription());
+                }
+            }
+
+            $createdAt = $document->getCreatedAt();
+            $updatedAt = $document->getUpdatedAt();
+
+            $document
+                ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
+                ->setAttribute('$collection', $collection->getId())
+                ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
+                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
+            $document = $this->encode($collection, $document);
+
+            $validator = new Structure(
+                $collection,
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
+
+            if (!$validator->isValid($document)) {
+                throw new StructureException($validator->getDescription());
+            }
+
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
+            }
+
+            $documents[$key] = $document;
+        }
+
+        $documents = $this->withTransaction(function () use ($collection, $attribute, $documents, $batchSize) {
+            return $this->adapter->createOrUpdateDocuments(
+                $collection->getId(),
+                $attribute,
+                $documents,
+                $batchSize,
+            );
+        });
+
+        foreach ($documents as $key => $document) {
+            if ($this->resolveRelationships) {
+                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+            }
+
+            $documents[$key] = $this->decode($collection, $document);
+
+            $this->purgeCachedDocument($collection->getId(), $document->getId());
+        }
+
+        $this->trigger(self::EVENT_DOCUMENTS_CREATE, new Document([
+            '$collection' => $collection->getId(),
+            'modified' => count($documents)
+        ]));
+
+        return $documents;
+    }
+
+    /**
      * Increase a document attribute by a value
      *
      * @param string $collection
@@ -4759,7 +4891,6 @@ class Database
             return $this->adapter->deleteDocument($collection->getId(), $id);
         });
 
-        $this->purgeRelatedDocuments($collection, $id);
         $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
@@ -4832,8 +4963,8 @@ class Database
                         // collection as an existing relationship, but a different two-way key (the third condition),
                         // or the same two-way key as an existing relationship, but a different key (the fourth condition).
                         $transitive = (($existingKey === $twoWayKey
-                            && $existingCollection === $relatedCollection->getId()
-                            && $existingSide !== $side)
+                                && $existingCollection === $relatedCollection->getId()
+                                && $existingSide !== $side)
                             || ($existingTwoWayKey === $key
                                 && $existingRelatedCollection === $collection->getId()
                                 && $existingSide !== $side)
@@ -5253,7 +5384,6 @@ class Database
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
 
-                    $this->purgeRelatedDocuments($collection, $document->getId());
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
 
@@ -5299,6 +5429,8 @@ class Database
             $this->cache->purge($documentKey);
         }
 
+        $this->cache->purge($collectionKey);
+
         return true;
     }
 
@@ -5318,6 +5450,11 @@ class Database
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
+
+        $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
+            '$id' => $id,
+            '$collection' => $collectionId
+        ]));
 
         return true;
     }
@@ -5697,13 +5834,13 @@ class Database
         $attributes = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-            $attribute['type'] !== self::VAR_RELATIONSHIP
+                $attribute['type'] !== self::VAR_RELATIONSHIP
         );
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn ($attribute) =>
-            $attribute['type'] === self::VAR_RELATIONSHIP
+                $attribute['type'] === self::VAR_RELATIONSHIP
         );
 
         foreach ($relationships as $relationship) {
@@ -5951,9 +6088,11 @@ class Database
      */
     public function getLimitForAttributes(): int
     {
-        // If negative, return 0
-        // -1 ==> virtual columns count as total, so treat as buffer
-        return \max($this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes() - 1, 0);
+        if ($this->adapter->getLimitForAttributes() === 0) {
+            return 0;
+        }
+
+        return $this->adapter->getLimitForAttributes() - $this->adapter->getCountOfDefaultAttributes();
     }
 
     /**
@@ -5971,10 +6110,15 @@ class Database
      * @param array<Query> $queries
      * @return array<Query>
      * @throws QueryException
+     * @throws Exception
      */
     public static function convertQueries(Document $collection, array $queries): array
     {
         $attributes = $collection->getAttribute('attributes', []);
+
+        foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+            $attributes[] = new Document($attribute);
+        }
 
         foreach ($attributes as $attribute) {
             foreach ($queries as $query) {
@@ -6002,39 +6146,6 @@ class Database
         }
 
         return $queries;
-    }
-
-    /**
-     * @param Document $collection
-     * @param string $id
-     * @return void
-     * @throws DatabaseException
-     */
-    private function purgeRelatedDocuments(Document $collection, string $id): void
-    {
-        if ($collection->getId() === self::METADATA) {
-            return;
-        }
-
-        $relationships = \array_filter(
-            $collection->getAttribute('attributes', []),
-            fn ($attribute) =>
-            $attribute['type'] === Database::VAR_RELATIONSHIP
-        );
-
-        if (empty($relationships)) {
-            return;
-        }
-
-        $key = $this->cacheName . '-cache-' . $this->getNamespace() . ':map:' . $collection->getId() . ':' . $id;
-        $cache = $this->cache->load($key, self::TTL, $key);
-        if (!empty($cache)) {
-            foreach ($cache as $v) {
-                list($collectionId, $documentId) = explode(':', $v);
-                $this->purgeCachedDocument($collectionId, $documentId);
-            }
-            $this->cache->purge($key);
-        }
     }
 
     /**

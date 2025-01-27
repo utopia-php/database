@@ -33,9 +33,9 @@
         "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
     },
     "require": {
+        "php": ">=8.3",
         "ext-pdo": "*",
         "ext-mbstring": "*",
-        "php": ">=8.3",
         "utopia-php/framework": "0.33.*",
         "utopia-php/cache": "0.11.*",
         "utopia-php/mongo": "0.3.*"
@@ -58,8 +58,8 @@
     },
     "config": {
         "allow-plugins": {
-            "php-http/discovery": false,
-            "tbachert/spi": false
+            "php-http/discovery": true,
+            "tbachert/spi": true
         }
     }
 }

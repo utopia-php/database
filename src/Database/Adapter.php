@@ -446,7 +446,7 @@ abstract class Adapter
     abstract public function deleteCollection(string $id): bool;
 
     /**
-     * Analyze a collection updating it's metadata on the database engine
+     * Analyze a collection updating its metadata on the database engine
      *
      * @param string $collection
      * @return bool
@@ -638,6 +638,24 @@ abstract class Adapter
     abstract public function updateDocuments(string $collection, Document $updates, array $documents): int;
 
     /**
+     * Create documents if they do not exist, otherwise update them.
+     *
+     * If attribute is not empty, only the specified attribute will be increased, by the new value in each document.
+     *
+     * @param string $collection
+     * @param string $attribute
+     * @param array<Document> $documents
+     * @param int $batchSize
+     * @return array<Document>
+     */
+    abstract public function createOrUpdateDocuments(
+        string $collection,
+        string $attribute,
+        array $documents,
+        int $batchSize
+    ): array;
+
+    /**
      * Delete Document
      *
      * @param string $collection
@@ -700,7 +718,7 @@ abstract class Adapter
     abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
 
     /**
-     * Get Collection Size
+     * Get Collection Size of the raw data
      *
      * @param string $collection
      * @return int
@@ -869,6 +887,20 @@ abstract class Adapter
     abstract public function getSupportForGetConnectionId(): bool;
 
     /**
+     * Is cast index as array supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForCastIndexArray(): bool;
+
+    /**
+     * Is upserting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUpserts(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -984,7 +1016,7 @@ abstract class Adapter
      */
     public function filter(string $value): string
     {
-        $value = \preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
+        $value = \preg_replace("/[^A-Za-z0-9_\-]/", '', $value);
 
         if (\is_null($value)) {
             throw new DatabaseException('Failed to filter key');
@@ -1057,4 +1089,13 @@ abstract class Adapter
      * @throws DatabaseException
      */
     abstract public function getSchemaAttributes(string $collection): array;
+
+    /**
+     * Get the query to check for tenant when in shared tables mode
+     *
+     * @param string $collection   The collection being queried
+     * @param string $parentAlias  The alias of the parent collection if in a subquery
+     * @return string
+     */
+    abstract public function getTenantQuery(string $collection, string $parentAlias = ''): string;
 }

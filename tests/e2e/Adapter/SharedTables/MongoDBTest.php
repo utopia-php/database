@@ -30,9 +30,9 @@ class MongoDBTest extends Base
      * @return Database
      * @throws Exception
      */
-    public static function getDatabase(): Database
+    public static function getDatabase(bool $fresh = false): Database
     {
-        if (!is_null(self::$database)) {
+        if (!is_null(self::$database) && !$fresh) {
             return self::$database;
         }
 

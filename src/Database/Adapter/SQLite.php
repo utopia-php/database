@@ -224,7 +224,7 @@ class SQLite extends MariaDB
 
             if (!($e instanceof Duplicate)) {
                 $this->getPDO()
-                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}; DROP TABLE IF EXISTS {$this->getSQLTable($id . '_perms')};")
                     ->execute();
             }
 

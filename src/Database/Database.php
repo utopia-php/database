@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use Exception;
 use Utopia\Cache\Cache;
+use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
@@ -2992,7 +2993,14 @@ class Database
             $documentCacheHash .= ':' . \md5(\implode($selections));
         }
 
-        if ($cache = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash)) {
+        try {
+            $cache = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash);
+        } catch (Exception $e) {
+            Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
+            $cache = null;
+        }
+
+        if ($cache) {
             $document = new Document($cache);
 
             if ($collection->getId() !== self::METADATA) {
@@ -3040,10 +3048,50 @@ class Database
                 $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
+        $hasTwoWayRelationship = false;
+        foreach ($relationships as $relationship) {
+            if ($relationship['options']['twoWay']) {
+                $hasTwoWayRelationship = true;
+                break;
+            }
+        }
+
+        /**
+         * Bug with function purity in PHPStan means it thinks $this->map is always empty
+         * @phpstan-ignore-next-line
+         */
+        foreach ($this->map as $key => $value) {
+            [$k, $v] = \explode('=>', $key);
+            $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
+
+            try {
+                $cache = $this->cache->load($ck, self::TTL, $ck);
+            } catch (Exception $e) {
+                Console::warning('Failed to load document from cache: ' . $e->getMessage());
+                $cache = [];
+            }
+            if (empty($cache)) {
+                $cache = [];
+            }
+            if (!\in_array($v, $cache)) {
+                $cache[] = $v;
+                try {
+                    $this->cache->save($ck, $cache, $ck);
+                } catch (Exception $e) {
+                    Console::warning('Failed to save document to cache: ' . $e->getMessage());
+                }
+            }
+        }
+
         // Don't save to cache if it's part of a relationship
-        if (empty($relationships)) {
-            $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
-            $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
+        if (!$hasTwoWayRelationship && empty($relationships)) {
+            try {
+                $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
+                // Add document reference to the collection key
+                $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
+            } catch (Exception $e) {
+                Console::warning('Failed to save document to cache: ' . $e->getMessage());
+            }
         }
 
         // Remove internal attributes if not queried for select query
@@ -3962,6 +4010,7 @@ class Database
             }
 
             $this->adapter->updateDocument($collection->getId(), $id, $document);
+            $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
         });
@@ -3972,7 +4021,6 @@ class Database
 
         $document = $this->decode($collection, $document);
 
-        $this->purgeCachedDocument($collection->getId(), $id);
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
         return $document;
@@ -4888,10 +4936,12 @@ class Database
                 $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
             }
 
-            return $this->adapter->deleteDocument($collection->getId(), $id);
-        });
+            $result = $this->adapter->deleteDocument($collection->getId(), $id);
 
-        $this->purgeCachedDocument($collection->getId(), $id);
+            $this->purgeCachedDocument($collection->getId(), $id);
+
+            return $result;
+        });
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
@@ -5424,6 +5474,7 @@ class Database
     public function purgeCachedCollection(string $collectionId): bool
     {
         $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
+
         $documentKeys = $this->cache->list($collectionKey);
         foreach ($documentKeys as $documentKey) {
             $this->cache->purge($documentKey);

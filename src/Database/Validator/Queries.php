@@ -83,6 +83,20 @@ class Queries extends Validator
                 }
             }
 
+            $methodsUsed = array_map(
+                fn (Query|string $query) => $query instanceof Query ? $query->getMethod() : $query,
+                $value
+            );
+
+            $methodsUsed = array_unique($methodsUsed);
+            $aggregateMethods = array_intersect($methodsUsed, Query::AGGREGATE_TYPES);
+
+            // Check if multiple aggregate methods are used
+            if (count($aggregateMethods) > 1) {
+                $this->message = 'Invalid query: Multiple types of aggregate methods are not supported';
+                return false;
+            }
+
             if ($query->isNested()) {
                 if (!self::isValid($query->getValues())) {
                     return false;
@@ -95,6 +109,7 @@ class Queries extends Validator
                 Query::TYPE_SUM => Base::METHOD_TYPE_SUM,
                 Query::TYPE_LIMIT => Base::METHOD_TYPE_LIMIT,
                 Query::TYPE_OFFSET => Base::METHOD_TYPE_OFFSET,
+                Query::TYPE_COUNT => Base::METHOD_TYPE_COUNT,
                 Query::TYPE_CURSOR_AFTER,
                 Query::TYPE_CURSOR_BEFORE => Base::METHOD_TYPE_CURSOR,
                 Query::TYPE_ORDER_ASC,

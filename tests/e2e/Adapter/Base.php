@@ -17525,7 +17525,7 @@ abstract class Base extends TestCase
 
     public function testSumQueries(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForSum()) {
+        if (!static::getDatabase()->getAdapter()->getSupportForAggregateQueries()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -17679,6 +17679,134 @@ abstract class Base extends TestCase
 
         $database->deleteCollection('testSumQueries');
     }
+
+    public function testCountQueries(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForAggregateQueries()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database = static::getDatabase();
+
+        $database->createCollection('testCountQueries', attributes: [
+            new Document([
+                '$id' => ID::custom('integer'),
+                'type' => Database::VAR_INTEGER,
+                'size' => 64,
+                'required' => false,
+            ]),
+            new Document([
+                '$id' => ID::custom('string'),
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => false,
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ], documentSecurity: false);
+
+        $database->createDocuments('testCountQueries', [
+            new Document([
+                '$id' => ID::unique(),
+                'integer' => 10,
+                'string' => 'test1',
+            ]),
+            new Document([
+                '$id' => ID::unique(),
+                'integer' => 20,
+                'string' => 'test2',
+            ]),
+            new Document([
+                '$id' => ID::unique(),
+                'integer' => 30,
+                'string' => null,
+            ]),
+            new Document([
+                '$id' => ID::unique(),
+                'integer' => null,
+                'string' => null,
+            ]),
+        ]);
+
+        $this->assertEquals(4, $database->count('testCountQueries'));
+
+        $documents = $database->find('testCountQueries', [
+            Query::count('integer'),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(3, $documents[0]->getAttribute('integer'));
+
+        $documents = $database->find('testCountQueries', [
+            Query::count('string'),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(2, $documents[0]->getAttribute('string'));
+
+        // Expect Fail: Count of non-existent attribute
+        try {
+            $database->find('testCountQueries', [
+                Query::count('nonExistent'),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (QueryException $e) {
+            $this->assertEquals('Invalid query: Attribute not found in schema: nonExistent', $e->getMessage());
+        }
+
+        // Test mixing count with other queries
+        $documents = $database->find('testCountQueries', [
+            Query::count('integer'),
+            Query::limit(1),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(1, $documents[0]->getAttribute('integer'));
+
+        $documents = $database->find('testCountQueries', [
+            Query::count('integer'),
+            Query::greaterThan('integer', 10),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(2, $documents[0]->getAttribute('integer'));
+
+        $documents = $database->find('testCountQueries', [
+            Query::count('integer'),
+            Query::lessThan('integer', 11),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(1, $documents[0]->getAttribute('integer'));
+
+        // Test multiple count queries
+        $documents = $database->find('testCountQueries', [
+            Query::count('integer'),
+            Query::count('string'),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals(3, $documents[0]->getAttribute('integer'));
+        $this->assertEquals(2, $documents[0]->getAttribute('string'));
+
+        // Expect Fail: Mixing aggregate queries with other aggregate queries
+        try {
+            $database->find('testCountQueries', [
+                Query::count('integer'),
+                Query::sum(['string']),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (QueryException $e) {
+            $this->assertEquals('Invalid query: Multiple types of aggregate methods are not supported', $e->getMessage());
+        }
+
+        $database->deleteCollection('testCountQueries');
+    }
+
     public function testNestedQueryValidation(): void
     {
         $this->getDatabase()->createCollection(__FUNCTION__, [

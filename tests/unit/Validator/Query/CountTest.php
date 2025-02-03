@@ -53,6 +53,6 @@ class CountTest extends TestCase
     {
         $this->assertFalse($this->validator->isValid(Query::limit(1)));
         $this->assertEquals('Invalid query', $this->validator->getDescription());
-        $this->assertFalse($this->validator->isValid(Query::count('valueStr')));
+        $this->assertFalse($this->validator->isValid(Query::count('notInSchema')));
     }
 }

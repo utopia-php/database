@@ -25,6 +25,9 @@ class Query
     public const TYPE_SELECT = 'select';
     public const TYPE_SUM = 'sum';
 
+    // Aggregate methods
+    public const TYPE_COUNT = 'count';
+
     // Order methods
     public const TYPE_ORDER_DESC = 'orderDesc';
     public const TYPE_ORDER_ASC = 'orderAsc';
@@ -63,11 +66,17 @@ class Query
         self::TYPE_CURSOR_BEFORE,
         self::TYPE_AND,
         self::TYPE_OR,
+        self::TYPE_COUNT,
     ];
 
     protected const LOGICAL_TYPES = [
         self::TYPE_AND,
         self::TYPE_OR,
+    ];
+
+    public const AGGREGATE_TYPES = [
+        self::TYPE_COUNT,
+        self::TYPE_SUM,
     ];
 
     protected string $method = '';
@@ -217,6 +226,7 @@ class Query
             self::TYPE_OR,
             self::TYPE_AND,
             self::TYPE_SUM,
+            self::TYPE_COUNT,
             self::TYPE_SELECT => true,
             default => false,
         };
@@ -569,6 +579,17 @@ class Query
     public static function endsWith(string $attribute, string $value): self
     {
         return new self(self::TYPE_ENDS_WITH, $attribute, [$value]);
+    }
+
+    /**
+     * Helper method to create Query with sum method
+     *
+     * @param string $attribute
+     * @return Query
+     */
+    public static function count(string $attribute): self
+    {
+        return new self(self::TYPE_COUNT, $attribute);
     }
 
     /**

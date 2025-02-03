@@ -203,6 +203,11 @@ class QueryTest extends TestCase
         $this->assertEquals(null, $query->getAttribute());
         $this->assertEquals(['title', 'director'], $query->getValues());
 
+        $query = Query::parse(Query::count('actors')->toString());
+        $this->assertEquals('count', $query->getMethod());
+        $this->assertEquals('actors', $query->getAttribute());
+        $this->assertEquals([], $query->getValues());
+
         $json = Query::or([
             Query::equal('actors', ['Brad Pitt']),
             Query::equal('actors', ['Johnny Depp'])
@@ -270,6 +275,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('sum'));
         $this->assertTrue(Query::isMethod('or'));
         $this->assertTrue(Query::isMethod('and'));
+        $this->assertTrue(Query::isMethod('count'));
 
         $this->assertTrue(Query::isMethod(Query::TYPE_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_NOT_EQUAL));
@@ -292,7 +298,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SUM));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_OR));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_AND));
-
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_COUNT));
         $this->assertFalse(Query::isMethod('invalid'));
         $this->assertFalse(Query::isMethod('lte '));
     }

@@ -1820,7 +1820,7 @@ class Mongo extends Adapter
         return false;
     }
 
-    public function getSupportForSum(): bool
+    public function getSupportForAggregateQueries(): bool
     {
         return false;
     }

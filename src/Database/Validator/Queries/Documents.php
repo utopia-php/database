@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Database\Validator\Query\Count;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
@@ -68,6 +69,7 @@ class Documents extends IndexedQueries
             new Order($attributes),
             new Select($attributes),
             new Sum($attributes),
+            new Count($attributes),
         ];
 
         parent::__construct($attributes, $indexes, $validators);

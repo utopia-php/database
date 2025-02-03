@@ -403,6 +403,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Are aggregate queries supported?
+     *
+     * @return bool
+     */
+    public function getSupportForAggregateQueries(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1134,7 +1144,7 @@ abstract class SQL extends Adapter
         $conditions = [];
         foreach ($queries as $query) {
 
-            if ($query->getMethod() === Query::TYPE_SELECT || $query->getMethod() === Query::TYPE_SUM) {
+            if ($query->getMethod() === Query::TYPE_SELECT || in_array($query->getMethod(), Query::AGGREGATE_TYPES)) {
                 continue;
             }
 

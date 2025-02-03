@@ -1917,7 +1917,6 @@ class Postgres extends SQL
         $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
         $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
         $selections = $this->getAttributeSelections($queries);
-        $sumSelections = $this->getAttributeSums($queries);
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, 'table_main')}
@@ -1927,8 +1926,10 @@ class Postgres extends SQL
             {$sqlLimit}
         ";
 
-        if (!empty($sumSelections)) {
-            $sql = "SELECT {$this->getSumQueries($sumSelections)} FROM ({$sql}) table_sum;";
+        $aggregateQueries = array_filter($queries, fn ($query) => in_array($query->getMethod(), Query::AGGREGATE_TYPES));
+
+        if (!empty($aggregateQueries)) {
+            $sql = $this->handleAggregateQueries($sql, $aggregateQueries);
         } else {
             $sql .= ';';
         }
@@ -2481,16 +2482,6 @@ class Postgres extends SQL
     }
 
     /**
-     * Are sum queries supported?
-     *
-     * @return bool
-     */
-    public function getSupportForSum(): bool
-    {
-        return true;
-    }
-
-    /**
      * @return string
      */
     public function getLikeOperator(): string
@@ -2528,6 +2519,37 @@ class Postgres extends SQL
         }
 
         return $e;
+    }
+
+    /**
+     * Handle Aggregate Queries
+     *
+     * @param string $sql
+     * @param array<Query> $aggregateQueries
+     * @return string
+     */
+    public function handleAggregateQueries(string $sql, array $aggregateQueries): string
+    {
+        if (empty($aggregateQueries)) {
+            return $sql;
+        }
+
+        $aggregateType = $aggregateQueries[0]->getMethod();
+
+        switch ($aggregateType) {
+            case Query::TYPE_COUNT:
+                $countSelections = [];
+                foreach ($aggregateQueries as $query) {
+                    $attribute = $query->getAttribute();
+                    $countSelections[] = "COUNT(\"{$attribute}\") as \"{$attribute}\"";
+                }
+                return "SELECT " . implode(', ', $countSelections) . " FROM ({$sql}) table_count;";
+            case Query::TYPE_SUM:
+                $selections = $this->getAttributeSums($aggregateQueries, $aggregateType);
+                return "SELECT {$this->getSumQueries($selections)} FROM ({$sql}) table_sum;";
+            default:
+                throw new DatabaseException('Unknown aggregate type: ' . $aggregateType);
+        }
     }
 
     /**

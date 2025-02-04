@@ -5624,6 +5624,42 @@ class Database
         return $results;
     }
 
+
+    public function foreach(string $collection, array $queries = [], callable $callback, string $forPermission = Database::PERMISSION_READ): void
+    {
+        $grouped = Query::groupByType($queries);
+        $limitExists = $grouped['limit'] !== null;
+        $limit = $grouped['limit'] ?? 25;
+
+        $results = [];
+        $sum = $limit;
+        $latestDocument = null;
+
+        while ($sum === $limit) {
+            $newQueries = $queries;
+            if ($latestDocument !== null) {
+                array_unshift($newQueries, Query::cursorAfter($latestDocument));
+            }
+            if (!$limitExists) {
+                $newQueries[] = Query::limit($limit);
+            }
+            $results = $this->find($collection, $newQueries, $forPermission);
+
+            if (empty($results)) {
+                return;
+            }
+
+            $sum = count($results);
+
+            foreach ($results as $document) {
+                if (is_callable($callback)) {
+                    $callback($document);
+                }
+            }
+
+            $latestDocument = $results[array_key_last($results)];
+        }
+    }
     /**
      * @param string $collection
      * @param array<Query> $queries

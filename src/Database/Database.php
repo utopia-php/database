@@ -3000,14 +3000,14 @@ class Database
         }
 
         try {
-            $cache = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash);
+            $cached = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash);
         } catch (Exception $e) {
             Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
-            $cache = null;
+            $cached = null;
         }
 
-        if ($cache) {
-            $document = new Document($cache);
+        if ($cached) {
+            $document = new Document($cached);
 
             if ($collection->getId() !== self::METADATA) {
                 if (!$validator->isValid([

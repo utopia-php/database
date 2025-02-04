@@ -442,32 +442,24 @@ class Database
 
     /**
      * Add listener to events
+     * Passing a null $callback will remove the listener
      *
      * @param string $event
      * @param string $name
-     * @param callable $callback
+     * @param ?callable $callback
      * @return static
      */
-    public function on(string $event, string $name, callable $callback): static
+    public function on(string $event, string $name, ?callable $callback): static
     {
+        if (empty($callback)) {
+            unset($this->listeners[$event][$name]);
+            return $this;
+        }
+
         if (!isset($this->listeners[$event])) {
             $this->listeners[$event] = [];
         }
         $this->listeners[$event][$name] = $callback;
-
-        return $this;
-    }
-
-    /**
-     * Clear all listeners, should only be used for testing.
-     *
-     * @return static
-     */
-    public function flushListeners(): static
-    {
-        $this->listeners = [
-            '*' => [],
-        ];
 
         return $this;
     }
@@ -3062,46 +3054,16 @@ class Database
                 $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
-        $hasTwoWayRelationship = false;
-        foreach ($relationships as $relationship) {
-            if ($relationship['options']['twoWay']) {
-                $hasTwoWayRelationship = true;
-                break;
-            }
-        }
-
-        /**
-         * Bug with function purity in PHPStan means it thinks $this->map is always empty
-         * @phpstan-ignore-next-line
-         */
-        foreach ($this->map as $key => $value) {
-            [$k, $v] = \explode('=>', $key);
-            $ck = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':map:' . $k;
-
-            try {
-                $cache = $this->cache->load($ck, self::TTL, $ck);
-            } catch (Exception $e) {
-                Console::warning('Failed to load document from cache: ' . $e->getMessage());
-                $cache = [];
-            }
-            if (empty($cache)) {
-                $cache = [];
-            }
-            if (!\in_array($v, $cache)) {
-                $cache[] = $v;
-                try {
-                    $this->cache->save($ck, $cache, $ck);
-                } catch (Exception $e) {
-                    Console::warning('Failed to save document to cache: ' . $e->getMessage());
-                }
-            }
-        }
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn ($attribute) =>
+                $attribute['type'] === Database::VAR_RELATIONSHIP
+        );
 
         // Don't save to cache if it's part of a relationship
-        if (!$hasTwoWayRelationship && empty($relationships)) {
+        if (empty($relationships)) {
             try {
                 $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
-                // Add document reference to the collection key
                 $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());

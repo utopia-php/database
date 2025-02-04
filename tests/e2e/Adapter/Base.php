@@ -17684,13 +17684,15 @@ abstract class Base extends TestCase
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
-            $database->flushListeners();
+
+            // Remove all listeners
+            $database->on(Database::EVENT_ALL, 'test', null);
         });
     }
 
     public function testCacheFallback(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForCacheFallback()) {
+        if (!static::getDatabase()->getAdapter()->getSupportForCacheSkipOnFailure()) {
             $this->expectNotToPerformAssertions();
             return;
         }

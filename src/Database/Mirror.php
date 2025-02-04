@@ -157,7 +157,7 @@ class Mirror extends Database
         return $this;
     }
 
-    public function on(string $event, string $name, callable $callback): static
+    public function on(string $event, string $name, ?callable $callback): static
     {
         $this->source->on($event, $name, $callback);
 
@@ -951,22 +951,5 @@ class Mirror extends Database
         foreach ($this->errorCallbacks as $callback) {
             $callback($action, $err);
         }
-    }
-
-    /**
-     * Clear all listeners, should only be used for testing.
-     *
-     * @return static
-     */
-    public function flushListeners(): static
-    {
-        $this->listeners = [
-            '*' => [],
-        ];
-
-        $this->source->flushListeners();
-        $this->destination->flushListeners();
-
-        return $this;
     }
 }

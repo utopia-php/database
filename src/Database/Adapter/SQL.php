@@ -407,7 +407,7 @@ abstract class SQL extends Adapter
      *
      * @return bool
      */
-    public function getSupportForCacheFallback(): bool
+    public function getSupportForCacheSkipOnFailure(): bool
     {
         return true;
     }

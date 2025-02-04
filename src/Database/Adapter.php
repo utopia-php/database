@@ -905,7 +905,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function getSupportForCacheFallback(): bool;
+    abstract public function getSupportForCacheSkipOnFailure(): bool;
 
     /**
      * Get current attribute count from collection document

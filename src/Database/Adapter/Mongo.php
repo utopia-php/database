@@ -1805,7 +1805,7 @@ class Mongo extends Adapter
      *
      * @return bool
      */
-    public function getSupportForCacheFallback(): bool
+    public function getSupportForCacheSkipOnFailure(): bool
     {
         return false;
     }

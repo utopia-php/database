@@ -157,7 +157,7 @@ class Mirror extends Database
         return $this;
     }
 
-    public function on(string $event, string $name, callable $callback): static
+    public function on(string $event, string $name, ?callable $callback): static
     {
         $this->source->on($event, $name, $callback);
 

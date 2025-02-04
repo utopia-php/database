@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use Exception;
 use Utopia\Cache\Cache;
+use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
@@ -441,14 +442,20 @@ class Database
 
     /**
      * Add listener to events
+     * Passing a null $callback will remove the listener
      *
      * @param string $event
      * @param string $name
-     * @param callable $callback
+     * @param ?callable $callback
      * @return static
      */
-    public function on(string $event, string $name, callable $callback): static
+    public function on(string $event, string $name, ?callable $callback): static
     {
+        if (empty($callback)) {
+            unset($this->listeners[$event][$name]);
+            return $this;
+        }
+
         if (!isset($this->listeners[$event])) {
             $this->listeners[$event] = [];
         }
@@ -2992,8 +2999,15 @@ class Database
             $documentCacheHash .= ':' . \md5(\implode($selections));
         }
 
-        if ($cache = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash)) {
-            $document = new Document($cache);
+        try {
+            $cached = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash);
+        } catch (Exception $e) {
+            Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
+            $cached = null;
+        }
+
+        if ($cached) {
+            $document = new Document($cached);
 
             if ($collection->getId() !== self::METADATA) {
                 if (!$validator->isValid([
@@ -3042,8 +3056,12 @@ class Database
 
         // Don't save to cache if it's part of a relationship
         if (empty($relationships)) {
-            $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
-            $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
+            try {
+                $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
+                $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
+            } catch (Exception $e) {
+                Console::warning('Failed to save document to cache: ' . $e->getMessage());
+            }
         }
 
         // Remove internal attributes if not queried for select query
@@ -3962,6 +3980,7 @@ class Database
             }
 
             $this->adapter->updateDocument($collection->getId(), $id, $document);
+            $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
         });
@@ -3972,7 +3991,6 @@ class Database
 
         $document = $this->decode($collection, $document);
 
-        $this->purgeCachedDocument($collection->getId(), $id);
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
         return $document;
@@ -4888,10 +4906,12 @@ class Database
                 $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
             }
 
-            return $this->adapter->deleteDocument($collection->getId(), $id);
-        });
+            $result = $this->adapter->deleteDocument($collection->getId(), $id);
 
-        $this->purgeCachedDocument($collection->getId(), $id);
+            $this->purgeCachedDocument($collection->getId(), $id);
+
+            return $result;
+        });
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
@@ -5424,6 +5444,7 @@ class Database
     public function purgeCachedCollection(string $collectionId): bool
     {
         $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
+
         $documentKeys = $this->cache->list($collectionKey);
         foreach ($documentKeys as $documentKey) {
             $this->cache->purge($documentKey);

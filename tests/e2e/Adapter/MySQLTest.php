@@ -45,7 +45,6 @@ class MySQLTest extends Base
         $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->flushAll();
-
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new MySQL($pdo), $cache);

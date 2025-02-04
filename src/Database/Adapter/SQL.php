@@ -403,6 +403,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Is cache fallback supported?
+     *
+     * @return bool
+     */
+    public function getSupportForCacheSkipOnFailure(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

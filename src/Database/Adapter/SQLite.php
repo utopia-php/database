@@ -220,15 +220,7 @@ class SQLite extends MariaDB
             $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
         } catch (PDOException $e) {
-            $e = $this->processException($e);
-
-            if (!($e instanceof Duplicate)) {
-                $this->getPDO()
-                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
-                    ->execute();
-            }
-
-            throw $e;
+            throw $this->processException($e);
         }
         return true;
     }

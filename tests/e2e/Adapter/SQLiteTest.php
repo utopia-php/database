@@ -46,9 +46,8 @@ class SQLiteTest extends Base
         $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
-        $redis->connect('redis');
+        $redis->connect('redis', 6379);
         $redis->flushAll();
-
         $cache = new Cache(new RedisAdapter($redis));
 
         $database = new Database(new SQLite($pdo), $cache);

@@ -901,6 +901,13 @@ abstract class Adapter
     abstract public function getSupportForUpserts(): bool;
 
     /**
+     * Is Cache Fallback supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForCacheSkipOnFailure(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

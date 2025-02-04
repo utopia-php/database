@@ -41,6 +41,7 @@ class MariaDBTest extends Base
         $dbPass = 'password';
 
         $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
+
         $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->flushAll();

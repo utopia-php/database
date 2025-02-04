@@ -31,58 +31,58 @@ use Utopia\Database\Validator\Structure;
 
 class Database
 {
-    public const string VAR_STRING = 'string';
+    public const VAR_STRING = 'string';
     // Simple Types
-    public const string VAR_INTEGER = 'integer';
-    public const string VAR_FLOAT = 'double';
-    public const string VAR_BOOLEAN = 'boolean';
-    public const string VAR_DATETIME = 'datetime';
+    public const VAR_INTEGER = 'integer';
+    public const VAR_FLOAT = 'double';
+    public const VAR_BOOLEAN = 'boolean';
+    public const VAR_DATETIME = 'datetime';
 
-    public const int INT_MAX = 2147483647;
-    public const int BIG_INT_MAX = PHP_INT_MAX;
-    public const float DOUBLE_MAX = PHP_FLOAT_MAX;
+    public const INT_MAX = 2147483647;
+    public const BIG_INT_MAX = PHP_INT_MAX;
+    public const DOUBLE_MAX = PHP_FLOAT_MAX;
 
     // Relationship Types
-    public const string VAR_RELATIONSHIP = 'relationship';
+    public const VAR_RELATIONSHIP = 'relationship';
 
     // Index Types
-    public const string INDEX_KEY = 'key';
-    public const string INDEX_FULLTEXT = 'fulltext';
-    public const string INDEX_UNIQUE = 'unique';
-    public const string INDEX_SPATIAL = 'spatial';
-    public const int ARRAY_INDEX_LENGTH = 255;
+    public const INDEX_KEY = 'key';
+    public const INDEX_FULLTEXT = 'fulltext';
+    public const INDEX_UNIQUE = 'unique';
+    public const INDEX_SPATIAL = 'spatial';
+    public const ARRAY_INDEX_LENGTH = 255;
 
     // Relation Types
-    public const string RELATION_ONE_TO_ONE = 'oneToOne';
-    public const string RELATION_ONE_TO_MANY = 'oneToMany';
-    public const string RELATION_MANY_TO_ONE = 'manyToOne';
-    public const string RELATION_MANY_TO_MANY = 'manyToMany';
+    public const RELATION_ONE_TO_ONE = 'oneToOne';
+    public const RELATION_ONE_TO_MANY = 'oneToMany';
+    public const RELATION_MANY_TO_ONE = 'manyToOne';
+    public const RELATION_MANY_TO_MANY = 'manyToMany';
 
     // Relation Actions
-    public const string RELATION_MUTATE_CASCADE = 'cascade';
-    public const string RELATION_MUTATE_RESTRICT = 'restrict';
-    public const string RELATION_MUTATE_SET_NULL = 'setNull';
+    public const RELATION_MUTATE_CASCADE = 'cascade';
+    public const RELATION_MUTATE_RESTRICT = 'restrict';
+    public const RELATION_MUTATE_SET_NULL = 'setNull';
 
     // Relation Sides
-    public const string RELATION_SIDE_PARENT = 'parent';
-    public const string RELATION_SIDE_CHILD = 'child';
+    public const RELATION_SIDE_PARENT = 'parent';
+    public const RELATION_SIDE_CHILD = 'child';
 
-    public const int RELATION_MAX_DEPTH = 3;
+    public const RELATION_MAX_DEPTH = 3;
 
     // Orders
-    public const string ORDER_ASC = 'ASC';
-    public const string ORDER_DESC = 'DESC';
+    public const ORDER_ASC = 'ASC';
+    public const ORDER_DESC = 'DESC';
 
     // Permissions
-    public const string PERMISSION_CREATE = 'create';
-    public const string PERMISSION_READ = 'read';
-    public const string PERMISSION_UPDATE = 'update';
-    public const string PERMISSION_DELETE = 'delete';
+    public const PERMISSION_CREATE = 'create';
+    public const PERMISSION_READ = 'read';
+    public const PERMISSION_UPDATE = 'update';
+    public const PERMISSION_DELETE = 'delete';
 
     // Aggregate permissions
-    public const string PERMISSION_WRITE = 'write';
+    public const PERMISSION_WRITE = 'write';
 
-    public const array PERMISSIONS = [
+    public const PERMISSIONS = [
         self::PERMISSION_CREATE,
         self::PERMISSION_READ,
         self::PERMISSION_UPDATE,
@@ -90,66 +90,66 @@ class Database
     ];
 
     // Collections
-    public const string METADATA = '_metadata';
+    public const METADATA = '_metadata';
 
     // Cursor
-    public const string CURSOR_BEFORE = 'before';
-    public const string CURSOR_AFTER = 'after';
+    public const CURSOR_BEFORE = 'before';
+    public const CURSOR_AFTER = 'after';
 
     // Lengths
-    public const int LENGTH_KEY = 255;
+    public const LENGTH_KEY = 255;
 
     // Cache
-    public const int|float TTL = 60 * 60 * 24; // 24 hours
+    public const TTL = 60 * 60 * 24; // 24 hours
 
     // Events
-    public const string EVENT_ALL = '*';
+    public const EVENT_ALL = '*';
 
-    public const string EVENT_DATABASE_LIST = 'database_list';
-    public const string EVENT_DATABASE_CREATE = 'database_create';
-    public const string EVENT_DATABASE_DELETE = 'database_delete';
+    public const EVENT_DATABASE_LIST = 'database_list';
+    public const EVENT_DATABASE_CREATE = 'database_create';
+    public const EVENT_DATABASE_DELETE = 'database_delete';
 
-    public const string EVENT_COLLECTION_LIST = 'collection_list';
-    public const string EVENT_COLLECTION_CREATE = 'collection_create';
-    public const string EVENT_COLLECTION_UPDATE = 'collection_update';
-    public const string EVENT_COLLECTION_READ = 'collection_read';
-    public const string EVENT_COLLECTION_DELETE = 'collection_delete';
+    public const EVENT_COLLECTION_LIST = 'collection_list';
+    public const EVENT_COLLECTION_CREATE = 'collection_create';
+    public const EVENT_COLLECTION_UPDATE = 'collection_update';
+    public const EVENT_COLLECTION_READ = 'collection_read';
+    public const EVENT_COLLECTION_DELETE = 'collection_delete';
 
-    public const string EVENT_DOCUMENT_FIND = 'document_find';
-    public const string EVENT_DOCUMENT_CREATE = 'document_create';
-    public const string EVENT_DOCUMENT_PURGE = 'document_purge';
-    public const string EVENT_DOCUMENTS_CREATE = 'documents_create';
-    public const string EVENT_DOCUMENTS_DELETE = 'documents_delete';
-    public const string EVENT_DOCUMENT_READ = 'document_read';
-    public const string EVENT_DOCUMENT_UPDATE = 'document_update';
-    public const string EVENT_DOCUMENTS_UPDATE = 'documents_update';
-    public const string EVENT_DOCUMENT_DELETE = 'document_delete';
-    public const string EVENT_DOCUMENT_COUNT = 'document_count';
-    public const string EVENT_DOCUMENT_SUM = 'document_sum';
-    public const string EVENT_DOCUMENT_INCREASE = 'document_increase';
-    public const string EVENT_DOCUMENT_DECREASE = 'document_decrease';
+    public const EVENT_DOCUMENT_FIND = 'document_find';
+    public const EVENT_DOCUMENT_CREATE = 'document_create';
+    public const EVENT_DOCUMENT_PURGE = 'document_purge';
+    public const EVENT_DOCUMENTS_CREATE = 'documents_create';
+    public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
+    public const EVENT_DOCUMENT_READ = 'document_read';
+    public const EVENT_DOCUMENT_UPDATE = 'document_update';
+    public const EVENT_DOCUMENTS_UPDATE = 'documents_update';
+    public const EVENT_DOCUMENT_DELETE = 'document_delete';
+    public const EVENT_DOCUMENT_COUNT = 'document_count';
+    public const EVENT_DOCUMENT_SUM = 'document_sum';
+    public const EVENT_DOCUMENT_INCREASE = 'document_increase';
+    public const EVENT_DOCUMENT_DECREASE = 'document_decrease';
 
-    public const string EVENT_PERMISSIONS_CREATE = 'permissions_create';
-    public const string EVENT_PERMISSIONS_READ = 'permissions_read';
-    public const string EVENT_PERMISSIONS_DELETE = 'permissions_delete';
+    public const EVENT_PERMISSIONS_CREATE = 'permissions_create';
+    public const EVENT_PERMISSIONS_READ = 'permissions_read';
+    public const EVENT_PERMISSIONS_DELETE = 'permissions_delete';
 
-    public const string EVENT_ATTRIBUTE_CREATE = 'attribute_create';
-    public const string EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
-    public const string EVENT_ATTRIBUTE_DELETE = 'attribute_delete';
+    public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
+    public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
+    public const EVENT_ATTRIBUTE_DELETE = 'attribute_delete';
 
-    public const string EVENT_INDEX_RENAME = 'index_rename';
-    public const string EVENT_INDEX_CREATE = 'index_create';
-    public const string EVENT_INDEX_DELETE = 'index_delete';
+    public const EVENT_INDEX_RENAME = 'index_rename';
+    public const EVENT_INDEX_CREATE = 'index_create';
+    public const EVENT_INDEX_DELETE = 'index_delete';
 
-    public const int INSERT_BATCH_SIZE = 10_000;
-    public const int DELETE_BATCH_SIZE = 10_000;
+    public const INSERT_BATCH_SIZE = 10_000;
+    public const DELETE_BATCH_SIZE = 10_000;
 
     /**
      * List of Internal attributes
      *
      * @var array<array<string, mixed>>
      */
-    public const array INTERNAL_ATTRIBUTES = [
+    public const INTERNAL_ATTRIBUTES = [
         [
             '$id' => '$id',
             'type' => self::VAR_STRING,
@@ -221,7 +221,7 @@ class Database
         ],
     ];
 
-    public const array INTERNAL_INDEXES = [
+    public const INTERNAL_INDEXES = [
         '_id',
         '_uid',
         '_createdAt',
@@ -236,7 +236,7 @@ class Database
      *
      * @var array<string, mixed>
      */
-    protected const array COLLECTION = [
+    protected const COLLECTION = [
         '$id' => self::METADATA,
         '$collection' => self::METADATA,
         'name' => 'collections',

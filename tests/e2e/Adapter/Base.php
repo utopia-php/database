@@ -1121,8 +1121,13 @@ abstract class Base extends TestCase
 
         $database->createCollection('indexes');
 
-        $database->createAttribute('indexes', 'int.2', Database::VAR_STRING, 100, false);
-        $database->createIndex('indexes', 'index_111', Database::INDEX_KEY, ['int.2']);
+        /**
+         * Check ticks
+         */
+        $database->createAttribute('indexes', 'int-1', Database::VAR_INTEGER, 8, false, array:true);
+        $database->createAttribute('indexes', 'int.2', Database::VAR_INTEGER, 8, false, array:true);
+        $database->createIndex('indexes', 'indx8711', Database::INDEX_KEY, ['int-1']);
+        $database->createIndex('indexes', 'indx8712', Database::INDEX_KEY, ['int.2']);
 
         $database->createAttribute('indexes', 'name', Database::VAR_STRING, 10, false);
 

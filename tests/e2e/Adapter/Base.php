@@ -5017,6 +5017,31 @@ abstract class Base extends TestCase
         }
     }
 
+    /** @depends testFind */
+    public function testForeach(): void
+    {
+        /**
+         * Test, foreach goes through all the documents
+         */
+        $documents = [];
+        static::getDatabase()->foreach('movies', [Query::limit(2)], function ($document) use (&$documents) {
+            $documents[] = $document;
+        });
+        $this->assertEquals(6, count($documents));
+
+        /**
+         * Test, foreach with initial cursor
+         */
+
+        $first = $documents[0];
+        $documents = [];
+        static::getDatabase()->foreach('movies', [Query::limit(2), Query::cursorAfter($first)], function ($document) use (&$documents) {
+            $documents[] = $document;
+        });
+        $this->assertEquals(5, count($documents));
+
+    }
+
     /**
      * @depends testFind
      */

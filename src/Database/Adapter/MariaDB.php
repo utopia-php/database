@@ -1621,7 +1621,7 @@ class MariaDB extends SQL
 
                 $documentIds = array_map(fn ($doc) => $doc->getId(), $batch);
 
-                foreach ($batch as $index => $document) {
+                foreach ($batch as $document) {
                     /**
                      * @var array<string, mixed> $attributes
                      */
@@ -1665,12 +1665,13 @@ class MariaDB extends SQL
                 if (!empty($attribute)) {
                     // Increment specific column by its new value in place
                     $updateColumns = [
-                        "`{$attribute}` = `{$attribute}` + VALUES(`{$attribute}`)"
+                        "`{$attribute}` = `{$attribute}` + VALUES(`{$attribute}`)",
+                        "`_updatedAt` = VALUES(`_updatedAt`)"
                     ];
                 } else {
                     // Update all columns
                     $updateColumns = [];
-                    foreach (\array_keys($attributes) as $key => $attr) {
+                    foreach (\array_keys($attributes) as $attr) {
                         $updateColumns[] = "`{$this->filter($attr)}` = VALUES(`{$this->filter($attr)}`)";
                     }
                 }
@@ -2687,6 +2688,11 @@ class MariaDB extends SQL
         // Unknown database
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {
             return new NotFoundException('Database not found', $e->getCode(), $e);
+        }
+
+        // Unknown collection
+        if ($e->getCode() === '42S02' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {
+            return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
         return $e;

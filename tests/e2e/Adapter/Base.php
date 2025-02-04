@@ -16326,7 +16326,7 @@ abstract class Base extends TestCase
         $this->assertTrue($result->isEmpty());
     }
 
-    public function propegateBulkDocuments(string $collection, int $amount = 10, bool $documentSecurity = false): void
+    public function propagateBulkDocuments(string $collection, int $amount = 10, bool $documentSecurity = false): void
     {
         for ($i = 0; $i < $amount; $i++) {
             static::getDatabase()->createDocument($collection, new Document(
@@ -16375,7 +16375,7 @@ abstract class Base extends TestCase
             ]
         );
 
-        $this->propegateBulkDocuments('bulk_delete');
+        $this->propagateBulkDocuments('bulk_delete');
 
         $docs = static::getDatabase()->find('bulk_delete');
         $this->assertCount(10, $docs);
@@ -16387,7 +16387,7 @@ abstract class Base extends TestCase
         $this->assertCount(0, $docs);
 
         // TEST: Bulk delete documents with queries.
-        $this->propegateBulkDocuments('bulk_delete');
+        $this->propagateBulkDocuments('bulk_delete');
 
         $modified = static::getDatabase()->deleteDocuments('bulk_delete', [
             Query::greaterThanEqual('integer', 5)
@@ -16434,7 +16434,7 @@ abstract class Base extends TestCase
         static::getDatabase()->updateCollection('bulk_delete', [
             Permission::create(Role::any()),
         ], true);
-        $this->propegateBulkDocuments('bulk_delete', documentSecurity: true);
+        $this->propagateBulkDocuments('bulk_delete', documentSecurity: true);
 
         $this->assertCount(0, static::getDatabase()->deleteDocuments('bulk_delete'));
 
@@ -16488,7 +16488,7 @@ abstract class Base extends TestCase
         );
 
         // Test limit
-        $this->propegateBulkDocuments('bulk_delete_queries');
+        $this->propagateBulkDocuments('bulk_delete_queries');
 
         $this->assertCount(5, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
         $this->assertCount(5, static::getDatabase()->find('bulk_delete_queries'));
@@ -16497,16 +16497,14 @@ abstract class Base extends TestCase
         $this->assertCount(0, static::getDatabase()->find('bulk_delete_queries'));
 
         // Test Limit more than batchSize
-        $this->propegateBulkDocuments('bulk_delete_queries', Database::DELETE_BATCH_SIZE * 2);
-        $this->assertCount(Database::DELETE_BATCH_SIZE * 2, static::getDatabase()->find('bulk_delete_queries', [Query::limit(200)]));
-
+        $this->propagateBulkDocuments('bulk_delete_queries', Database::DELETE_BATCH_SIZE * 2);
+        $this->assertCount(Database::DELETE_BATCH_SIZE * 2, static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)]));
         $this->assertCount(Database::DELETE_BATCH_SIZE + 2, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE + 2)]));
-
-        $this->assertCount(Database::DELETE_BATCH_SIZE - 2, static::getDatabase()->find('bulk_delete_queries', [Query::limit(200)]));
+        $this->assertCount(Database::DELETE_BATCH_SIZE - 2, static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)]));
         $this->assertCount(Database::DELETE_BATCH_SIZE - 2, $this->getDatabase()->deleteDocuments('bulk_delete_queries'));
 
         // Test Offset
-        $this->propegateBulkDocuments('bulk_delete_queries', 100);
+        $this->propagateBulkDocuments('bulk_delete_queries', 100);
         $this->assertCount(50, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::offset(50)]));
 
         $docs = static::getDatabase()->find('bulk_delete_queries', [Query::limit(100)]);
@@ -17268,7 +17266,7 @@ abstract class Base extends TestCase
         ], documentSecurity: true);
 
         // Test limit
-        $this->propegateBulkDocuments($collection, 100);
+        $this->propagateBulkDocuments($collection, 100);
 
         $this->assertCount(10, static::getDatabase()->updateDocuments($collection, new Document([
             'text' => 'text📝 updated',
@@ -17278,7 +17276,7 @@ abstract class Base extends TestCase
         $this->assertCount(0, static::getDatabase()->find($collection));
 
         // Test Offset
-        $this->propegateBulkDocuments($collection, 100);
+        $this->propagateBulkDocuments($collection, 100);
         $this->assertCount(50, static::getDatabase()->updateDocuments($collection, new Document([
             'text' => 'text📝 updated',
         ]), [Query::offset(50)]));

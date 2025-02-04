@@ -1124,11 +1124,11 @@ abstract class Base extends TestCase
         $database->createAttribute('indexes', 'int', Database::VAR_INTEGER, 8, false, array:true);
         $database->createIndex('indexes', 'indx8711', Database::INDEX_KEY, ['int']);
 
-//        if ($this->getDatabase()->getAdapter()->getSupportForCastIndexArray()) {
-//            /**
-//             * Check ticks sounding create index reserve words
-//             */
-//        }
+        //        if ($this->getDatabase()->getAdapter()->getSupportForCastIndexArray()) {
+        //            /**
+        //             * Check ticks sounding create index reserve words
+        //             */
+        //        }
 
         $database->createAttribute('indexes', 'name', Database::VAR_STRING, 10, false);
 

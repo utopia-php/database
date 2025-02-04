@@ -459,6 +459,20 @@ class Database
     }
 
     /**
+     * Clear all listeners, should only be used for testing.
+     *
+     * @return static
+     */
+    public function flushListeners(): static
+    {
+        $this->listeners = [
+            '*' => [],
+        ];
+
+        return $this;
+    }
+
+    /**
      * Add a transformation to be applied to a query string before an event occurs
      *
      * @param string $event

@@ -1801,6 +1801,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Is cache fallback supported?
+     *
+     * @return bool
+     */
+    public function getSupportForCacheFallback(): bool
+    {
+        return false;
+    }
+
+    /**
      * Is get schema attributes supported?
      *
      * @return bool

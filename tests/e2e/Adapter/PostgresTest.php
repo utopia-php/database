@@ -28,9 +28,9 @@ class PostgresTest extends Base
     /**
      * @reture Adapter
      */
-    public static function getDatabase(bool $fresh = false): Database
+    public static function getDatabase(): Database
     {
-        if (!is_null(self::$database) && !$fresh) {
+        if (!is_null(self::$database)) {
             return self::$database;
         }
 

@@ -41,7 +41,7 @@ abstract class Base extends TestCase
     /**
      * @return Database
      */
-    abstract protected static function getDatabase(bool $fresh = false): Database;
+    abstract protected static function getDatabase(): Database;
 
     /**
      * @param string $collection
@@ -17689,9 +17689,15 @@ abstract class Base extends TestCase
 
     public function testCacheFallback(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForCacheFallback()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
-        $database = static::getDatabase(true);
+        $database = static::getDatabase();
+        $database->flushListeners();
 
         // Write mock data
         $database->createCollection('testRedisFallback', attributes: [

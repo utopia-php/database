@@ -34,17 +34,26 @@ class SQLiteTest extends Base
     {
         if (!is_null(self::$database) && !$fresh) {
             return self::$database;
+        } elseif (!is_null(self::$pdo) && $fresh) {
+            // We want to reuse PDO because referencing the same file results in read-only access
+            self::$database->silent(function () {
+                self::$database->delete();
+            });
+
+            self::$database = null;
+            $pdo = self::$pdo;
+        } else {
+
+            $db = __DIR__."/database.sql";
+
+            if (file_exists($db)) {
+                unlink($db);
+            }
+
+            $dsn = $db;
+            //$dsn = 'memory'; // Overwrite for fast tests
+            $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
         }
-
-        $db = __DIR__."/database.sql";
-
-        if (file_exists($db)) {
-            unlink($db);
-        }
-
-        $dsn = $db;
-        //$dsn = 'memory'; // Overwrite for fast tests
-        $pdo = new PDO("sqlite:" . $dsn, null, null, SQLite::getPDOAttributes());
 
         $redis = new Redis();
         $redis->connect('redis');

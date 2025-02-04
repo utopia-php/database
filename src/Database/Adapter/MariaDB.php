@@ -2690,6 +2690,11 @@ class MariaDB extends SQL
             return new NotFoundException('Database not found', $e->getCode(), $e);
         }
 
+        // Unknown collection
+        if ($e->getCode() === '42S02' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {
+            return new NotFoundException('Collection not found', $e->getCode(), $e);
+        }
+
         return $e;
     }
 

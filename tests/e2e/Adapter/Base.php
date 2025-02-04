@@ -17684,6 +17684,7 @@ abstract class Base extends TestCase
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
+            $database->flushListeners();
         });
     }
 
@@ -17697,7 +17698,6 @@ abstract class Base extends TestCase
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
         $database = static::getDatabase();
-        $database->flushListeners();
 
         // Write mock data
         $database->createCollection('testRedisFallback', attributes: [

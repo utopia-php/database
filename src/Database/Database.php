@@ -3054,12 +3054,6 @@ class Database
                 $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
-        $relationships = \array_filter(
-            $collection->getAttribute('attributes', []),
-            fn ($attribute) =>
-                $attribute['type'] === Database::VAR_RELATIONSHIP
-        );
-
         // Don't save to cache if it's part of a relationship
         if (empty($relationships)) {
             try {

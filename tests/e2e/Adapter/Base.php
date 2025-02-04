@@ -17687,6 +17687,7 @@ abstract class Base extends TestCase
 
             // Remove all listeners
             $database->on(Database::EVENT_ALL, 'test', null);
+            $database->on(Database::EVENT_ALL, 'should-not-execute', null);
         });
     }
 

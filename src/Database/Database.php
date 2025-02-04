@@ -5630,6 +5630,15 @@ class Database
         $grouped = Query::groupByType($queries);
         $limitExists = $grouped['limit'] !== null;
         $limit = $grouped['limit'] ?? 25;
+        $offset = $grouped['offset'];
+
+        $cursor = $grouped['cursor'];
+        $cursorDirection = $grouped['cursorDirection'];
+
+        // Cursor before is not supported
+        if($cursor !== null && $cursorDirection === Database::CURSOR_BEFORE) {
+            throw new DatabaseException('Cursor ' . Database::CURSOR_AFTER . ' not supported in this method.');
+        }
 
         $results = [];
         $sum = $limit;
@@ -5638,6 +5647,11 @@ class Database
         while ($sum === $limit) {
             $newQueries = $queries;
             if ($latestDocument !== null) {
+                //reset offset and cursor as groupByType ignores same type query after first one is encountered
+                if($offset !== null) {
+                    array_unshift($newQueries, Query::offset(0));
+                }
+
                 array_unshift($newQueries, Query::cursorAfter($latestDocument));
             }
             if (!$limitExists) {

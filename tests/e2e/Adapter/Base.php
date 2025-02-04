@@ -5040,6 +5040,16 @@ abstract class Base extends TestCase
         });
         $this->assertEquals(5, count($documents));
 
+        /**
+         * Test, foreach with initial offset
+         */
+
+        $documents = [];
+        static::getDatabase()->foreach('movies', [Query::limit(2), Query::offset(2)], function ($document) use (&$documents) {
+            $documents[] = $document;
+        });
+        $this->assertEquals(4, count($documents));
+
     }
 
     /**

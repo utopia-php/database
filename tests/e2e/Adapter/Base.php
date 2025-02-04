@@ -1120,6 +1120,10 @@ abstract class Base extends TestCase
         $database = $this->getDatabase();
 
         $database->createCollection('indexes');
+
+        $database->createAttribute('indexes', 'int.2', Database::VAR_STRING, 100, false);
+        $database->createIndex('indexes', 'index_111', Database::INDEX_KEY, ['int.2']);
+
         $database->createAttribute('indexes', 'name', Database::VAR_STRING, 10, false);
 
         $database->createIndex('indexes', 'index_1', Database::INDEX_KEY, ['name']);

@@ -33,7 +33,7 @@
         "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
     },
     "require": {
-        "php": ">=8.3",
+        "php": ">=8.1",
         "ext-pdo": "*",
         "ext-mbstring": "*",
         "utopia-php/framework": "0.33.*",

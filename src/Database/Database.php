@@ -5624,8 +5624,18 @@ class Database
         return $results;
     }
 
-
-    public function foreach(string $collection, array $queries = [], callable $callback, string $forPermission = Database::PERMISSION_READ): void
+    /**
+     * Call callback for each document of the given collection
+     * that matches the given queries
+     *
+     * @param string $collection
+     * @param callable $callback
+     * @param array<Query> $queries
+     * @param string $forPermission
+     * @throws \Utopia\Database\Exception
+     * @return void
+     */
+    public function foreach(string $collection, callable $callback, array $queries = [], string $forPermission = Database::PERMISSION_READ): void
     {
         $grouped = Query::groupByType($queries);
         $limitExists = $grouped['limit'] !== null;

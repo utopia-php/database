@@ -5024,7 +5024,7 @@ abstract class Base extends TestCase
          * Test, foreach goes through all the documents
          */
         $documents = [];
-        static::getDatabase()->foreach('movies', [Query::limit(2)], function ($document) use (&$documents) {
+        static::getDatabase()->foreach('movies', queries: [Query::limit(2)], callback: function ($document) use (&$documents) {
             $documents[] = $document;
         });
         $this->assertEquals(6, count($documents));
@@ -5035,7 +5035,7 @@ abstract class Base extends TestCase
 
         $first = $documents[0];
         $documents = [];
-        static::getDatabase()->foreach('movies', [Query::limit(2), Query::cursorAfter($first)], function ($document) use (&$documents) {
+        static::getDatabase()->foreach('movies', queries: [Query::limit(2), Query::cursorAfter($first)], callback: function ($document) use (&$documents) {
             $documents[] = $document;
         });
         $this->assertEquals(5, count($documents));
@@ -5045,7 +5045,7 @@ abstract class Base extends TestCase
          */
 
         $documents = [];
-        static::getDatabase()->foreach('movies', [Query::limit(2), Query::offset(2)], function ($document) use (&$documents) {
+        static::getDatabase()->foreach('movies', queries: [Query::limit(2), Query::offset(2)], callback: function ($document) use (&$documents) {
             $documents[] = $document;
         });
         $this->assertEquals(4, count($documents));
@@ -5054,7 +5054,7 @@ abstract class Base extends TestCase
          * Test, cursor before throws error
          */
         try {
-            static::getDatabase()->foreach('movies', [Query::cursorBefore($documents[1]), Query::offset(2)], function ($document) use (&$documents) {
+            static::getDatabase()->foreach('movies', queries: [Query::cursorBefore($documents[0]), Query::offset(2)], callback: function ($document) use (&$documents) {
                 $documents[] = $document;
             });
 

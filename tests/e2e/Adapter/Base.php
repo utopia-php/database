@@ -5050,6 +5050,19 @@ abstract class Base extends TestCase
         });
         $this->assertEquals(4, count($documents));
 
+        /**
+         * Test, cursor before throws error
+         */
+        try {
+            static::getDatabase()->foreach('movies', [Query::cursorBefore($documents[1]), Query::offset(2)], function ($document) use (&$documents) {
+                $documents[] = $document;
+            });
+
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertEquals('Cursor ' . Database::CURSOR_BEFORE . ' not supported in this method.', $e->getMessage());
+        }
+
     }
 
     /**

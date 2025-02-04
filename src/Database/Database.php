@@ -5636,8 +5636,8 @@ class Database
         $cursorDirection = $grouped['cursorDirection'];
 
         // Cursor before is not supported
-        if($cursor !== null && $cursorDirection === Database::CURSOR_BEFORE) {
-            throw new DatabaseException('Cursor ' . Database::CURSOR_AFTER . ' not supported in this method.');
+        if ($cursor !== null && $cursorDirection === Database::CURSOR_BEFORE) {
+            throw new DatabaseException('Cursor ' . Database::CURSOR_BEFORE . ' not supported in this method.');
         }
 
         $results = [];
@@ -5648,7 +5648,7 @@ class Database
             $newQueries = $queries;
             if ($latestDocument !== null) {
                 //reset offset and cursor as groupByType ignores same type query after first one is encountered
-                if($offset !== null) {
+                if ($offset !== null) {
                     array_unshift($newQueries, Query::offset(0));
                 }
 

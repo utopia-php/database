@@ -952,4 +952,21 @@ class Mirror extends Database
             $callback($action, $err);
         }
     }
+
+    /**
+     * Clear all listeners, should only be used for testing.
+     *
+     * @return static
+     */
+    public function flushListeners(): static
+    {
+        $this->listeners = [
+            '*' => [],
+        ];
+
+        $this->source->flushListeners();
+        $this->destination->flushListeners();
+
+        return $this;
+    }
 }

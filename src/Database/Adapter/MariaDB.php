@@ -981,7 +981,7 @@ class MariaDB extends SQL
         try {
             $name = $this->filter($collection);
             $batches = \array_chunk($documents, \max(1, $batchSize));
-            $documentIds = \array_map(fn ($document) => $document->getId(), $documents);
+            $documentIds = [];
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;
@@ -990,6 +990,9 @@ class MariaDB extends SQL
                 $permissions = [];
 
                 foreach ($batch as $document) {
+                    /**
+                     * @var Document $document
+                     */
                     $attributes = $document->getAttributes();
                     $attributes['_uid'] = $document->getId();
                     $attributes['_createdAt'] = $document->getCreatedAt();
@@ -997,8 +1000,9 @@ class MariaDB extends SQL
                     $attributes['_permissions'] = \json_encode($document->getPermissions());
 
                     if (!empty($document->getInternalId())) {
-                        $internalIds[$document->getId()] = true;
                         $attributes['_id'] = $document->getInternalId();
+                    } else {
+                        $documentIds[] = $document->getId();
                     }
 
                     if ($this->sharedTables) {
@@ -1077,27 +1081,32 @@ class MariaDB extends SQL
                 }
             }
 
-            // Get internal IDs
-            $sql = "
+            $internalIds = [];
+
+            foreach (\array_chunk($documentIds, 3) as $documentIdsChunk) {
+                // Get internal IDs
+                $sql = "
                 SELECT _uid, _id
                 FROM {$this->getSQLTable($collection)}
-                WHERE _uid IN (" . implode(',', array_map(fn ($index) => ":_key_{$index}", array_keys($documentIds))) . ")
+                WHERE _uid IN (" . implode(',', array_map(fn ($index) => ":_key_{$index}", array_keys($documentIdsChunk))) . ")
                 {$this->getTenantQuery($collection)}
             ";
+                $stmt = $this->getPDO()->prepare($sql);
 
-            $stmt = $this->getPDO()->prepare($sql);
+                foreach ($documentIdsChunk as $index => $id) {
+                    $stmt->bindValue(":_key_{$index}", $id);
+                }
 
-            foreach ($documentIds as $index => $id) {
-                $stmt->bindValue(":_key_{$index}", $id);
+                if ($this->sharedTables) {
+                    $stmt->bindValue(':_tenant', $this->tenant);
+                }
+
+                $stmt->execute();
+                $results = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
+                $stmt->closeCursor();
+
+                $internalIds = array_merge($internalIds, $results);
             }
-
-            if ($this->sharedTables) {
-                $stmt->bindValue(':_tenant', $this->tenant);
-            }
-
-            $stmt->execute();
-            $internalIds = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
-            $stmt->closeCursor();
 
             foreach ($documents as $document) {
                 if (isset($internalIds[$document->getId()])) {

@@ -3418,6 +3418,16 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        /**
+         * Check collection exist
+         */
+        if ($collection->getId() !== self::METADATA) {
+            $authorization = new Authorization(self::PERMISSION_CREATE);
+            if (!$authorization->isValid($collection->getCreate())) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+        }
+
         $time = DateTime::now();
 
         foreach ($documents as $key => $document) {

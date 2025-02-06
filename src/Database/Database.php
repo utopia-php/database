@@ -141,8 +141,8 @@ class Database
     public const EVENT_INDEX_CREATE = 'index_create';
     public const EVENT_INDEX_DELETE = 'index_delete';
 
-    public const INSERT_BATCH_SIZE = 10_000;
-    public const DELETE_BATCH_SIZE = 10_000;
+    public const INSERT_BATCH_SIZE = 3_000;
+    public const DELETE_BATCH_SIZE = 3_000;
 
     /**
      * List of Internal attributes

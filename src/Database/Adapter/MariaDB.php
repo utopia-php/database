@@ -1083,7 +1083,10 @@ class MariaDB extends SQL
 
             $internalIds = [];
 
-            foreach (\array_chunk($documentIds, 3) as $documentIdsChunk) {
+            /**
+             * UID, _tenant bottleneck is ~ 5000 rows since we use _uid IN query
+             */
+            foreach (\array_chunk($documentIds, 3000) as $documentIdsChunk) {
                 // Get internal IDs
                 $sql = "
                 SELECT _uid, _id

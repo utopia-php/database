@@ -1103,7 +1103,7 @@ class MariaDB extends SQL
      *
      * @param string $collection
      * @param array<string> $documentIds
-     * @return array
+     * @return array<string>
      * @throws DatabaseException
      */
     private function translateUidsToInternalIds(string $collection, array $documentIds): array

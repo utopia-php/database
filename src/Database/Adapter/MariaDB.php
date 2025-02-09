@@ -1081,35 +1081,7 @@ class MariaDB extends SQL
                 }
             }
 
-            $internalIds = [];
-
-            /**
-             * UID, _tenant bottleneck is ~ 5000 rows since we use _uid IN query
-             */
-            foreach (\array_chunk($documentIds, 3000) as $documentIdsChunk) {
-                // Get internal IDs
-                $sql = "
-                SELECT _uid, _id
-                FROM {$this->getSQLTable($collection)}
-                WHERE _uid IN (" . implode(',', array_map(fn ($index) => ":_key_{$index}", array_keys($documentIdsChunk))) . ")
-                {$this->getTenantQuery($collection)}
-            ";
-                $stmt = $this->getPDO()->prepare($sql);
-
-                foreach ($documentIdsChunk as $index => $id) {
-                    $stmt->bindValue(":_key_{$index}", $id);
-                }
-
-                if ($this->sharedTables) {
-                    $stmt->bindValue(':_tenant', $this->tenant);
-                }
-
-                $stmt->execute();
-                $results = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
-                $stmt->closeCursor();
-
-                $internalIds = array_merge($internalIds, $results);
-            }
+            $internalIds = $this->translateUidsToInternalIds($collection, $documentIds);
 
             foreach ($documents as $document) {
                 if (isset($internalIds[$document->getId()])) {
@@ -1123,6 +1095,48 @@ class MariaDB extends SQL
         return $documents;
     }
 
+    /**
+     * Translate Uid's to internal id's
+     *
+     * @param string $collection
+     * @param array<string> $documentIds
+     * @return array
+     * @throws DatabaseException
+     */
+    private function translateUidsToInternalIds(string $collection, array $documentIds): array
+    {
+        $internalIds = [];
+
+        /**
+         * UID, _tenant bottleneck is ~ 5000 rows since we use _uid IN query
+         */
+        foreach (\array_chunk($documentIds, 1000) as $documentIdsChunk) {
+            // Get internal IDs
+            $sql = "
+                SELECT _uid, _id
+                FROM {$this->getSQLTable($collection)}
+                WHERE _uid IN (" . implode(',', array_map(fn ($index) => ":_key_{$index}", array_keys($documentIdsChunk))) . ")
+                {$this->getTenantQuery($collection)}
+            ";
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($documentIdsChunk as $index => $id) {
+                $stmt->bindValue(":_key_{$index}", $id);
+            }
+
+            if ($this->sharedTables) {
+                $stmt->bindValue(':_tenant', $this->tenant);
+            }
+
+            $stmt->execute();
+            $results = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
+            $stmt->closeCursor();
+
+            $internalIds = array_merge($internalIds, $results);
+        }
+
+        return $internalIds;
+    }
     /**
      * Update Document
      *
@@ -1625,11 +1639,13 @@ class MariaDB extends SQL
             $name = $this->filter($collection);
             $attribute = $this->filter($attribute);
             $batches = \array_chunk($documents, \max(1, $batchSize));
+            $documentIds = [];
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;
                 $batchKeys = [];
                 $bindValues = [];
+                $attributes = [];
 
                 $documentIds = array_map(fn ($doc) => $doc->getId(), $batch);
 

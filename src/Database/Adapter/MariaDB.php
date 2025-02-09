@@ -978,9 +978,12 @@ class MariaDB extends SQL
             return $documents;
         }
 
+        $batchSize = \max(1, $batchSize);
+        $batchSize = \min(Database::INSERT_BATCH_SIZE, $batchSize);
+
         try {
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, \max(1, $batchSize));
+            $batches = \array_chunk($documents, $batchSize);
             $documentIds = [];
 
             foreach ($batches as $batch) {
@@ -1635,10 +1638,13 @@ class MariaDB extends SQL
             return $documents;
         }
 
+        $batchSize = \max(1, $batchSize);
+        $batchSize = \min(Database::INSERT_BATCH_SIZE, $batchSize);
+
         try {
             $name = $this->filter($collection);
             $attribute = $this->filter($attribute);
-            $batches = \array_chunk($documents, \max(1, $batchSize));
+            $batches = \array_chunk($documents, $batchSize);
             $documentIds = [];
 
             foreach ($batches as $batch) {
@@ -1831,27 +1837,7 @@ class MariaDB extends SQL
                 }
             }
 
-            // Get internal IDs
-            $sql = "
-                SELECT _uid, _id
-                FROM {$this->getSQLTable($collection)}
-                WHERE _uid IN (" . \implode(',', \array_map(fn ($index) => ":_key_{$index}", \array_keys($documentIds))) . ")
-                {$this->getTenantQuery($collection)}
-            ";
-
-            $stmt = $this->getPDO()->prepare($sql);
-
-            foreach ($documentIds as $index => $id) {
-                $stmt->bindValue(":_key_{$index}", $id);
-            }
-
-            if ($this->sharedTables) {
-                $stmt->bindValue(':_tenant', $this->tenant);
-            }
-
-            $stmt->execute();
-            $internalIds = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
-            $stmt->closeCursor();
+            $internalIds = $this->translateUidsToInternalIds($collection, $documentIds);
 
             foreach ($documents as $document) {
                 if (isset($internalIds[$document->getId()])) {

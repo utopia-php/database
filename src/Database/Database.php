@@ -10,6 +10,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -1196,7 +1197,7 @@ class Database
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
-                    throw new DatabaseException($validator->getDescription());
+                    throw new IndexException($validator->getDescription());
                 }
             }
         }
@@ -1934,7 +1935,7 @@ class Database
 
                     foreach ($indexes as $index) {
                         if (!$validator->isValid($index)) {
-                            throw new DatabaseException($validator->getDescription());
+                            throw new IndexException($validator->getDescription());
                         }
                     }
                 }
@@ -2835,7 +2836,7 @@ class Database
                 $this->adapter->getInternalIndexesKeys()
             );
             if (!$validator->isValid($index)) {
-                throw new DatabaseException($validator->getDescription());
+                throw new IndexException($validator->getDescription());
             }
         }
 

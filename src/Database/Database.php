@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1196,7 +1197,7 @@ class Database
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
-                    throw new DatabaseException($validator->getDescription());
+                    throw new IndexException($validator->getDescription());
                 }
             }
         }
@@ -1934,7 +1935,7 @@ class Database
 
                     foreach ($indexes as $index) {
                         if (!$validator->isValid($index)) {
-                            throw new DatabaseException($validator->getDescription());
+                            throw new IndexException($validator->getDescription());
                         }
                     }
                 }
@@ -2835,7 +2836,7 @@ class Database
                 $this->adapter->getInternalIndexesKeys()
             );
             if (!$validator->isValid($index)) {
-                throw new DatabaseException($validator->getDescription());
+                throw new IndexException($validator->getDescription());
             }
         }
 

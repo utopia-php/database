@@ -894,10 +894,9 @@ class Mongo extends Adapter
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
-     * @param int $batchSize
      * @return array<Document>
      */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents, int $batchSize): array
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
     {
         return $documents;
     }

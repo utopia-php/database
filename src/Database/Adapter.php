@@ -644,14 +644,12 @@ abstract class Adapter
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
-     * @param int $batchSize
      * @return array<Document>
      */
     abstract public function createOrUpdateDocuments(
         string $collection,
         string $attribute,
-        array $documents,
-        int $batchSize
+        array $documents
     ): array;
 
     /**

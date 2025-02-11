@@ -4613,6 +4613,8 @@ class Database
             return [];
         }
 
+        $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $time = DateTime::now();
@@ -4660,12 +4662,13 @@ class Database
         }
 
         $documents = $this->withTransaction(function () use ($collection, $attribute, $documents, $batchSize) {
-            return $this->adapter->createOrUpdateDocuments(
-                $collection->getId(),
-                $attribute,
-                $documents,
-                $batchSize,
-            );
+            $stack = [];
+
+            foreach (\array_chunk($documents, $batchSize) as $chunk) {
+                $stack = array_merge($stack, $this->adapter->createOrUpdateDocuments($collection->getId(), $attribute, $chunk));
+            }
+
+            return $stack;
         });
 
         foreach ($documents as $key => $document) {

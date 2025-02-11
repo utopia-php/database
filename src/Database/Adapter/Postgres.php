@@ -1605,10 +1605,9 @@ class Postgres extends SQL
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
-     * @param int $batchSize
      * @return array<Document>
      */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents, int $batchSize): array
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
     {
         return $documents;
     }
@@ -1731,6 +1730,10 @@ class Postgres extends SQL
      */
     public function deleteDocuments(string $collection, array $ids): int
     {
+        if (empty($ids)){
+            return 0;
+        }
+
         try {
             $name = $this->filter($collection);
             $where = [];

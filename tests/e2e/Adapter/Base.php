@@ -2412,6 +2412,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Insert value list does not match column list', $e->getMessage());
         }
     }
 

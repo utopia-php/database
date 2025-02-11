@@ -3446,7 +3446,7 @@ class Database
 
             if(is_null($columnCount)){
                 $columnCount = count($document);
-            } if ($columnCount != count($document) ){
+            } elseif ($columnCount != count($document) ){
                 throw new StructureException('Insert value list does not match column list');
             }
 

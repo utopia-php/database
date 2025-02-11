@@ -2352,8 +2352,8 @@ abstract class Base extends TestCase
         $collection = 'testCreateOrUpdateInplace';
 
         static::getDatabase()->createCollection($collection);
-        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
-        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true);
+        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, false);
+        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, false);
 
         $documents = [
             new Document([
@@ -2395,6 +2395,23 @@ abstract class Base extends TestCase
 
         foreach ($documents as $document) {
             $this->assertEquals(6, $document->getAttribute('integer'));
+        }
+
+        $documents = [
+            new Document([
+                '$id' => 'with_integer',
+                'integer' => 1,
+            ]),
+            new Document([
+                '$id' => 'without_integer',
+            ]),
+        ];
+
+        try {
+            static::getDatabase()->createDocuments($collection, $documents);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
         }
     }
 

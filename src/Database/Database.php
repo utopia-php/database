@@ -5453,9 +5453,6 @@ class Database
                 'modified' => count($documents)
             ]));
 
-            /**
-             * abs is for phpstan
-             */
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
                 $this->adapter->deleteDocuments(
                     $collection->getId(),

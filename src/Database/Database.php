@@ -5393,7 +5393,7 @@ class Database
             $lastDocument = $cursor;
 
             while (true) {
-                if ($limit && $limit < $batchSize) {
+                if ($limit && $limit < $batchSize && $limit > 0) {
                     $batchSize = $limit;
                 } elseif (!empty($limit)) {
                     $limit -= $batchSize;
@@ -5453,7 +5453,10 @@ class Database
                 'modified' => count($documents)
             ]));
 
-            foreach (\array_chunk($documents, abs($batchSize)) as $chunk) {
+            /**
+             * abs is for phpstan
+             */
+            foreach (\array_chunk($documents, $batchSize) as $chunk) {
                 $this->adapter->deleteDocuments(
                     $collection->getId(),
                     array_map(fn ($document) => $document->getId(), $chunk)

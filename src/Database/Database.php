@@ -3444,9 +3444,9 @@ class Database
                 ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
-            if(is_null($columnCount)){
+            if (is_null($columnCount)) {
                 $columnCount = count($document);
-            } elseif ($columnCount != count($document) ){
+            } elseif ($columnCount != count($document)) {
                 throw new StructureException('Insert value list does not match column list');
             }
 

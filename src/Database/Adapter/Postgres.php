@@ -1730,7 +1730,7 @@ class Postgres extends SQL
      */
     public function deleteDocuments(string $collection, array $ids): int
     {
-        if (empty($ids)){
+        if (empty($ids)) {
             return 0;
         }
 

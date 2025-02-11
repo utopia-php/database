@@ -965,123 +965,116 @@ class MariaDB extends SQL
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param int $batchSize
      *
      * @return array<Document>
      *
      * @throws DuplicateException
      * @throws \Throwable
      */
-    public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
+    public function createDocuments(string $collection, array $documents): array
     {
         if (empty($documents)) {
             return $documents;
         }
 
-        $batchSize = \max(1, $batchSize);
-        $batchSize = \min(Database::INSERT_BATCH_SIZE, $batchSize);
-
         try {
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, $batchSize);
+
+            $bindIndex = 0;
+            $batchKeys = [];
+            $bindValues = [];
+            $permissions = [];
             $documentIds = [];
 
-            foreach ($batches as $batch) {
-                $bindIndex = 0;
-                $batchKeys = [];
-                $bindValues = [];
-                $permissions = [];
+            foreach ($documents as $document) {
+                /**
+                 * @var Document $document
+                 */
+                $attributes = $document->getAttributes();
+                $attributes['_uid'] = $document->getId();
+                $attributes['_createdAt'] = $document->getCreatedAt();
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                foreach ($batch as $document) {
-                    /**
-                     * @var Document $document
-                     */
-                    $attributes = $document->getAttributes();
-                    $attributes['_uid'] = $document->getId();
-                    $attributes['_createdAt'] = $document->getCreatedAt();
-                    $attributes['_updatedAt'] = $document->getUpdatedAt();
-                    $attributes['_permissions'] = \json_encode($document->getPermissions());
+                if (! empty($document->getInternalId())) {
+                    $attributes['_id'] = $document->getInternalId();
+                } else {
+                    $documentIds[] = $document->getId();
+                }
 
-                    if (!empty($document->getInternalId())) {
-                        $attributes['_id'] = $document->getInternalId();
-                    } else {
-                        $documentIds[] = $document->getId();
+                if ($this->sharedTables) {
+                    $attributes['_tenant'] = $this->tenant;
+                }
+
+                $columns = [];
+                foreach (\array_keys($attributes) as $key => $attribute) {
+                    $columns[$key] = "`{$this->filter($attribute)}`";
+                }
+
+                $columns = '(' . \implode(', ', $columns) . ')';
+
+                $bindKeys = [];
+
+                foreach ($attributes as $value) {
+                    if (\is_array($value)) {
+                        $value = \json_encode($value);
                     }
+                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $bindKey = 'key_' . $bindIndex;
+                    $bindKeys[] = ':' . $bindKey;
+                    $bindValues[$bindKey] = $value;
+                    $bindIndex++;
+                }
 
-                    if ($this->sharedTables) {
-                        $attributes['_tenant'] = $this->tenant;
-                    }
+                $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+                foreach (Database::PERMISSIONS as $type) {
+                    foreach ($document->getPermissionsByType($type) as $permission) {
+                        $permission = \str_replace('"', '', $permission);
+                        $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
 
-                    $columns = [];
-                    foreach (\array_keys($attributes) as $key => $attribute) {
-                        $columns[$key] = "`{$this->filter($attribute)}`";
-                    }
-
-                    $columns = '(' . \implode(', ', $columns) . ')';
-
-                    $bindKeys = [];
-
-                    foreach ($attributes as $value) {
-                        if (\is_array($value)) {
-                            $value = \json_encode($value);
+                        if ($this->sharedTables) {
+                            $permission .= ", :_tenant)";
+                        } else {
+                            $permission .= ")";
                         }
-                        $value = (\is_bool($value)) ? (int)$value : $value;
-                        $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = ':' . $bindKey;
-                        $bindValues[$bindKey] = $value;
-                        $bindIndex++;
-                    }
 
-                    $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
-                    foreach (Database::PERMISSIONS as $type) {
-                        foreach ($document->getPermissionsByType($type) as $permission) {
-                            $permission = \str_replace('"', '', $permission);
-                            $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
-
-                            if ($this->sharedTables) {
-                                $permission .= ", :_tenant)";
-                            } else {
-                                $permission .= ")";
-                            }
-
-                            $permissions[] = $permission;
-                        }
+                        $permissions[] = $permission;
                     }
                 }
+            }
 
-                $stmt = $this->getPDO()->prepare(
-                    "
-                    INSERT INTO {$this->getSQLTable($name)} {$columns}
-                    VALUES " . \implode(', ', $batchKeys)
-                );
+            $stmt = $this->getPDO()->prepare(
+                "
+                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                VALUES " . \implode(', ', $batchKeys)
+            );
 
-                foreach ($bindValues as $key => $value) {
-                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+            foreach ($bindValues as $key => $value) {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+
+            $stmt->execute();
+
+            if (!empty($permissions)) {
+                $sqlPermissions = "
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
+                ";
+
+                if ($this->sharedTables) {
+                    $sqlPermissions .= ', _tenant)';
+                } else {
+                    $sqlPermissions .= ")";
                 }
 
-                $stmt->execute();
+                $sqlPermissions .= " VALUES " . \implode(', ', $permissions);
 
-                if (!empty($permissions)) {
-                    $sqlPermissions = "
-						INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
-					";
+                $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
 
-                    if ($this->sharedTables) {
-                        $sqlPermissions .= ', _tenant)';
-                    } else {
-                        $sqlPermissions .= ")";
-                    }
-
-                    $sqlPermissions .= " VALUES " . \implode(', ', $permissions);
-
-                    $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
-
-                    if ($this->sharedTables) {
-                        $stmtPermissions->bindValue(':_tenant', $this->tenant);
-                    }
-
-                    $stmtPermissions?->execute();
+                if ($this->sharedTables) {
+                    $stmtPermissions->bindValue(':_tenant', $this->tenant);
                 }
+
+                $stmtPermissions?->execute();
             }
 
             $internalIds = $this->translateUidsToInternalIds($collection, $documentIds);

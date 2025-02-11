@@ -747,13 +747,12 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param int $batchSize
      *
      * @return array<Document>
      *
      * @throws Duplicate
      */
-    public function createDocuments(string $collection, array $documents, int $batchSize): array
+    public function createDocuments(string $collection, array $documents): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 

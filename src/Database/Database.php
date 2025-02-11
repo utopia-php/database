@@ -141,8 +141,8 @@ class Database
     public const EVENT_INDEX_CREATE = 'index_create';
     public const EVENT_INDEX_DELETE = 'index_delete';
 
-    public const INSERT_BATCH_SIZE = 3_000;
-    public const DELETE_BATCH_SIZE = 3_000;
+    public const INSERT_BATCH_SIZE = 1_000;
+    public const DELETE_BATCH_SIZE = 1_000;
 
     /**
      * List of Internal attributes
@@ -3418,6 +3418,8 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
+
         /**
          * Check collection exist
          */
@@ -3459,11 +3461,13 @@ class Database
         }
 
         $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
-            return $this->adapter->createDocuments(
-                $collection->getId(),
-                $documents,
-                $batchSize,
-            );
+            $stack = [];
+
+            foreach (\array_chunk($documents, $batchSize) as $chunk) {
+                $stack = array_merge($stack, $this->adapter->createDocuments($collection->getId(), $chunk));
+            }
+
+            return $stack;
         });
 
         foreach ($documents as $key => $document) {
@@ -4080,7 +4084,6 @@ class Database
         }
 
         $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates, $limit, $cursor) {
-            $lastDocument = null;
             $documents = [];
 
             $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -5330,6 +5333,9 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
+        $batchSize = \max(1, $batchSize);
+        $batchSize = \min(Database::DELETE_BATCH_SIZE, $batchSize);
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -5435,7 +5441,12 @@ class Database
                 'modified' => count($documents)
             ]));
 
-            $this->adapter->deleteDocuments($collection->getId(), array_map(fn ($document) => $document->getId(), $documents));
+            foreach (\array_chunk($documents, $batchSize) as $chunk) {
+                $this->adapter->deleteDocuments(
+                    $collection->getId(),
+                    array_map(fn ($document) => $document->getId(), $chunk)
+                );
+            }
 
             return $documents;
         });

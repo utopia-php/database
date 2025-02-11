@@ -3419,8 +3419,7 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $batchSize = \max(1, $batchSize);
-        $batchSize = \min(Database::INSERT_BATCH_SIZE, $batchSize);
+        $batchSize = (int)\min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
 
         /**
          * Check collection exist
@@ -4040,8 +4039,7 @@ class Database
             return [];
         }
 
-        $batchSize = \max(1, $batchSize);
-        $batchSize = \min(Database::INSERT_BATCH_SIZE, $batchSize);
+        $batchSize = (int)\min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -4622,8 +4620,7 @@ class Database
             return [];
         }
 
-        $batchSize = \max(1, $batchSize);
-        $batchSize = \min(Database::INSERT_BATCH_SIZE, $batchSize);
+        $batchSize = (int)\min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -5349,8 +5346,7 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        $batchSize = \max(1, $batchSize);
-        $batchSize = \min(Database::DELETE_BATCH_SIZE, $batchSize);
+        $batchSize = (int)\min(Database::DELETE_BATCH_SIZE, \max(1, $batchSize));
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 

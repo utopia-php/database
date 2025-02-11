@@ -5346,8 +5346,8 @@ class Database
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
-        $batchSize = \max($batchSize, 1);
-        $batchSize = \min(Database::DELETE_BATCH_SIZE, $batchSize);
+        /** @var int<1, 999> $batchSize */
+        $batchSize = \min(Database::DELETE_BATCH_SIZE, \max(1, $batchSize));
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 

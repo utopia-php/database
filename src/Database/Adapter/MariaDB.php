@@ -988,6 +988,10 @@ class MariaDB extends SQL
             }
             $attributeKeys = array_unique($attributeKeys);
 
+            if ($this->sharedTables) {
+                $attributeKeys[] = '_tenant';
+            }
+
             $batches = \array_chunk($documents, \max(1, $batchSize));
             $documentIds = \array_map(fn ($document) => $document->getId(), $documents);
 
@@ -1013,6 +1017,7 @@ class MariaDB extends SQL
                     if (!empty($document->getInternalId())) {
                         $internalIds[$document->getId()] = true;
                         $attributes['_id'] = $document->getInternalId();
+                        $attributeKeys[] = '_id';
                     }
 
                     if ($this->sharedTables) {

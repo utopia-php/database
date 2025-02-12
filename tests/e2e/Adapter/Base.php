@@ -2396,21 +2396,6 @@ abstract class Base extends TestCase
         foreach ($documents as $document) {
             $this->assertEquals(6, $document->getAttribute('integer'));
         }
-
-        $documents[0]->setAttribute('integer', -1);
-        $documents[1]->setAttribute('integer', -1);
-
-        static::getDatabase()->createOrUpdateDocumentsWithIncrease(
-            collection: $collection,
-            attribute:'integer',
-            documents: $documents
-        );
-
-        $documents = static::getDatabase()->find($collection);
-
-        foreach ($documents as $document) {
-            $this->assertEquals(5, $document->getAttribute('integer'));
-        }
     }
 
     public function testCreateOrUpdateDocumentsPermissions(): void

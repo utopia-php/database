@@ -757,7 +757,18 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $records = [];
+        $hasInternalId = null;
+        $documents = array_map(fn ($doc) => clone $doc, $documents);
+
         foreach ($documents as $document) {
+            $internalId = $document->getInternalId();
+
+            if ($hasInternalId === null) {
+                $hasInternalId = !empty($internalId);
+            } elseif ($hasInternalId == empty($internalId)) {
+                throw new DatabaseException('All documents must have an internalId if one is set');
+            }
+
             $document->removeAttribute('$internalId');
 
             if ($this->sharedTables) {
@@ -766,6 +777,10 @@ class Mongo extends Adapter
 
             $record = $this->replaceChars('$', '_', (array)$document);
             $record = $this->timeToMongo($record);
+
+            if (!empty($internalId)) {
+                $record['_id'] = $internalId;
+            }
 
             $records[] = $this->removeNullKeys($record);
         }

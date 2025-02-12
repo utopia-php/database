@@ -2291,16 +2291,14 @@ abstract class Base extends TestCase
         try {
             static::getDatabase()->createDocuments($collection, $documents);
             $this->fail('Failed to throw exception');
-        } catch (Throwable $e) {
-            $this->assertTrue($e instanceof DatabaseException);
+        } catch (DatabaseException $e) {
         }
 
         $documents = array_reverse($documents);
         try {
             static::getDatabase()->createDocuments($collection, $documents);
             $this->fail('Failed to throw exception');
-        } catch (Throwable $e) {
-            $this->assertTrue($e instanceof DatabaseException);
+        } catch (DatabaseException $e) {
         }
 
         static::getDatabase()->deleteCollection($collection);

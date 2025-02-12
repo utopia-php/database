@@ -1046,6 +1046,9 @@ class Postgres extends SQL
                 $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
             }
             $attributeKeys = array_unique($attributeKeys);
+            if ($this->sharedTables) {
+                $attributeKeys[] = '_tenant';
+            }
 
             $batches = \array_chunk($documents, max(1, $batchSize));
             $internalIds = [];
@@ -1073,6 +1076,7 @@ class Postgres extends SQL
                     if (!empty($document->getInternalId())) {
                         $internalIds[$document->getId()] = true;
                         $attributes['_id'] = $document->getInternalId();
+                        $attributeKeys[] = '_id';
                     }
 
                     if ($this->sharedTables) {

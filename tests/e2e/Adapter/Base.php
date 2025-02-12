@@ -2397,22 +2397,19 @@ abstract class Base extends TestCase
             $this->assertEquals(6, $document->getAttribute('integer'));
         }
 
-        $documents = [
-            new Document([
-                '$id' => 'with_integer',
-                'integer' => 1,
-            ]),
-            new Document([
-                '$id' => 'without_integer',
-            ]),
-        ];
+        $documents[0]->setAttribute('integer', -1);
+        $documents[1]->setAttribute('integer', -1);
 
-        try {
-            static::getDatabase()->createDocuments($collection, $documents);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Insert value list does not match column list', $e->getMessage());
+        static::getDatabase()->createOrUpdateDocumentsWithIncrease(
+            collection: $collection,
+            attribute:'integer',
+            documents: $documents
+        );
+
+        $documents = static::getDatabase()->find($collection);
+
+        foreach ($documents as $document) {
+            $this->assertEquals(5, $document->getAttribute('integer'));
         }
     }
 

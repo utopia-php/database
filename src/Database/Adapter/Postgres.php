@@ -1038,6 +1038,31 @@ class Postgres extends SQL
 
         try {
             $name = $this->filter($collection);
+            $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
+
+            $hasInternalId = null;
+            foreach ($documents as $document) {
+                $attributes = $document->getAttributes();
+                $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
+
+                if ($hasInternalId === null) {
+                    $hasInternalId = !empty($document->getInternalId());
+                } elseif ($hasInternalId == empty($document->getInternalId())) {
+                    throw new DatabaseException('All documents must have an internalId if one is set');
+                }
+            }
+            $attributeKeys = array_unique($attributeKeys);
+
+            if ($this->sharedTables) {
+                $attributeKeys[] = '_tenant';
+            }
+
+            $columns = [];
+            foreach ($attributeKeys as $key => $attribute) {
+                $columns[$key] = "\"{$this->filter($attribute)}\"";
+            }
+            $columns = '(' . \implode(', ', $columns) . ')';
+
             $internalIds = [];
 
             $bindIndex = 0;
@@ -1055,22 +1080,17 @@ class Postgres extends SQL
                 if (!empty($document->getInternalId())) {
                     $internalIds[$document->getId()] = true;
                     $attributes['_id'] = $document->getInternalId();
+                    $attributeKeys[] = '_id';
                 }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $this->tenant;
                 }
 
-                $columns = [];
-                foreach (\array_keys($attributes) as $key => $attribute) {
-                    $columns[$key] = "\"{$this->filter($attribute)}\"";
-                }
-
-                $columns = '(' . \implode(', ', $columns) . ')';
-
                 $bindKeys = [];
 
-                foreach ($attributes as $value) {
+                foreach ($attributeKeys as $key) {
+                    $value = $attributes[$key] ?? null;
                     if (\is_array($value)) {
                         $value = \json_encode($value);
                     }

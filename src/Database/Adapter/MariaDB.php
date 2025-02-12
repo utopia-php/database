@@ -980,6 +980,31 @@ class MariaDB extends SQL
         try {
             $name = $this->filter($collection);
 
+            $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
+
+            $hasInternalId = null;
+            foreach ($documents as $document) {
+                $attributes = $document->getAttributes();
+                $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
+
+                if ($hasInternalId === null) {
+                    $hasInternalId = !empty($document->getInternalId());
+                } elseif ($hasInternalId == empty($document->getInternalId())) {
+                    throw new DatabaseException('All documents must have an internalId if one is set');
+                }
+            }
+            $attributeKeys = array_unique($attributeKeys);
+
+            if ($this->sharedTables) {
+                $attributeKeys[] = '_tenant';
+            }
+
+            $columns = [];
+            foreach ($attributeKeys as $key => $attribute) {
+                $columns[$key] = "`{$this->filter($attribute)}`";
+            }
+            $columns = '(' . \implode(', ', $columns) . ')';
+
             $bindIndex = 0;
             $batchKeys = [];
             $bindValues = [];
@@ -998,6 +1023,7 @@ class MariaDB extends SQL
 
                 if (! empty($document->getInternalId())) {
                     $attributes['_id'] = $document->getInternalId();
+                    $attributeKeys[] = '_id';
                 } else {
                     $documentIds[] = $document->getId();
                 }
@@ -1006,16 +1032,10 @@ class MariaDB extends SQL
                     $attributes['_tenant'] = $this->tenant;
                 }
 
-                $columns = [];
-                foreach (\array_keys($attributes) as $key => $attribute) {
-                    $columns[$key] = "`{$this->filter($attribute)}`";
-                }
-
-                $columns = '(' . \implode(', ', $columns) . ')';
-
                 $bindKeys = [];
 
-                foreach ($attributes as $value) {
+                foreach ($attributeKeys as $key) {
+                    $value = $attributes[$key] ?? null;
                     if (\is_array($value)) {
                         $value = \json_encode($value);
                     }

@@ -2238,6 +2238,38 @@ abstract class Base extends TestCase
         return $documents;
     }
 
+    public function testCreateDocumentsWithDifferentAttributes(): void
+    {
+        $collection = 'testDiffAttributes';
+
+        static::getDatabase()->createCollection($collection);
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, false));
+
+        $documents = [
+            new Document([
+                '$id' => 'first',
+                'string' => 'text📝',
+                'integer' => 5,
+            ]),
+            new Document([
+                '$id' => 'second',
+                'string' => 'text📝',
+            ]),
+        ];
+
+        $documents = static::getDatabase()->createDocuments($collection, $documents);
+
+        $this->assertEquals(2, count($documents));
+
+        $this->assertEquals('text📝', $documents[0]->getAttribute('string'));
+        $this->assertEquals(5, $documents[0]->getAttribute('integer'));
+        $this->assertEquals('text📝', $documents[1]->getAttribute('string'));
+        $this->assertNull($documents[1]->getAttribute('integer'));
+    }
+
     public function testCreateOrUpdateDocuments(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {

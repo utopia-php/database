@@ -980,8 +980,27 @@ class MariaDB extends SQL
 
         try {
             $name = $this->filter($collection);
+
+            $attributeKeys = [
+                '_uid',
+                '_createdAt',
+                '_updatedAt',
+                '_permissions',
+            ];
+            foreach ($documents as $document) {
+                $attributes = $document->getAttributes();
+                $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
+            }
+            $attributeKeys = array_unique($attributeKeys);
+
             $batches = \array_chunk($documents, \max(1, $batchSize));
             $documentIds = \array_map(fn ($document) => $document->getId(), $documents);
+
+            $columns = [];
+            foreach ($attributeKeys as $key => $attribute) {
+                $columns[$key] = "`{$this->filter($attribute)}`";
+            }
+            $columns = '(' . \implode(', ', $columns) . ')';
 
             foreach ($batches as $batch) {
                 $bindIndex = 0;
@@ -1005,16 +1024,10 @@ class MariaDB extends SQL
                         $attributes['_tenant'] = $this->tenant;
                     }
 
-                    $columns = [];
-                    foreach (\array_keys($attributes) as $key => $attribute) {
-                        $columns[$key] = "`{$this->filter($attribute)}`";
-                    }
-
-                    $columns = '(' . \implode(', ', $columns) . ')';
-
                     $bindKeys = [];
 
-                    foreach ($attributes as $value) {
+                    foreach ($attributeKeys as $key) {
+                        $value = $attributes[$key] ?? null;
                         if (\is_array($value)) {
                             $value = \json_encode($value);
                         }

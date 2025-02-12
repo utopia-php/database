@@ -948,8 +948,7 @@ class MariaDB extends SQL
 
             $stmt->execute();
 
-            $result = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])]);
-            $document['$internalId'] = $result->getInternalId();
+            $document['$internalId'] = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])])->getInternalId();
 
             if (empty($document['$internalId'])) {
                 throw new DatabaseException('Error creating document empty "$internalId"');

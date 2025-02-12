@@ -1820,7 +1820,7 @@ class MariaDB extends SQL
                 $stmtAddPermissions->execute();
             }
 
-            $internalIds = $this->translateUidsToInternalIds($collection, $documentIds);
+            $internalIds = $this->getInternalIds($collection, $documentIds);
 
             foreach ($documents as $document) {
                 if (isset($internalIds[$document->getId()])) {

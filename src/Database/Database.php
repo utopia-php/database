@@ -1263,13 +1263,6 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if (
-            $this->adapter->getSharedTables()
-            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()
-        ) {
-            throw new NotFoundException('Collection not found');
-        }
-
         $collection
             ->setAttribute('$permissions', $permissions)
             ->setAttribute('documentSecurity', $documentSecurity);
@@ -1292,17 +1285,6 @@ class Database
     public function getCollection(string $id): Document
     {
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
-
-        $tenant = $collection->getAttribute('$tenant');
-
-        if (
-            $id !== self::METADATA
-            && $this->adapter->getSharedTables()
-            && $tenant !== null
-            && $tenant != $this->adapter->getTenant()
-        ) {
-            return new Document();
-        }
 
         $this->trigger(self::EVENT_COLLECTION_READ, $collection);
 
@@ -1346,10 +1328,6 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
-            throw new NotFoundException('Collection not found');
-        }
-
         return $this->adapter->getSizeOfCollection($collection->getId());
     }
 
@@ -1362,17 +1340,9 @@ class Database
      */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
-        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
-            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-        }
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1389,13 +1359,9 @@ class Database
      */
     public function deleteCollection(string $id): bool
     {
-        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        $collection = $this->silent(fn () => $this->getCollection($id));
 
         if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -5317,10 +5283,6 @@ class Database
      */
     public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): array
     {
-        if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
-            throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
-        }
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {

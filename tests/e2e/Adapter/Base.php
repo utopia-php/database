@@ -2273,6 +2273,36 @@ abstract class Base extends TestCase
         $this->assertNull($documents[1]->getAttribute('integer'));
         $this->assertEquals('default', $documents[1]->getAttribute('string_default'));
 
+        /**
+         * Expect fail, mix of internalId and no internalId
+         */
+        $documents = [
+            new Document([
+                '$id' => 'third',
+                '$internalId' => 'third',
+                'string' => 'text📝',
+            ]),
+            new Document([
+                '$id' => 'fourth',
+                'string' => 'text📝',
+            ]),
+        ];
+
+        try {
+            static::getDatabase()->createDocuments($collection, $documents);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+        }
+
+        $documents = array_reverse($documents);
+        try {
+            static::getDatabase()->createDocuments($collection, $documents);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+        }
+
         static::getDatabase()->deleteCollection($collection);
     }
 

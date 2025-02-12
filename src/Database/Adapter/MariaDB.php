@@ -982,9 +982,17 @@ class MariaDB extends SQL
             $name = $this->filter($collection);
 
             $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
+
+            $hasInternalId = null;
             foreach ($documents as $document) {
                 $attributes = $document->getAttributes();
                 $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
+
+                if ($hasInternalId === null) {
+                    $hasInternalId = !empty($document->getInternalId());
+                } elseif ($hasInternalId == empty($document->getInternalId())) {
+                    throw new DatabaseException('All documents must have an internalId if one is set');
+                }
             }
             $attributeKeys = array_unique($attributeKeys);
 

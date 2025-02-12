@@ -1077,7 +1077,7 @@ class MariaDB extends SQL
                 $stmtPermissions?->execute();
             }
 
-            $internalIds = $this->translateUidsToInternalIds($collection, $documentIds);
+            $internalIds = $this->getInternalIds($collection, $documentIds);
 
             foreach ($documents as $document) {
                 if (isset($internalIds[$document->getId()])) {
@@ -1092,14 +1092,14 @@ class MariaDB extends SQL
     }
 
     /**
-     * Translate Uid's to internal id's
+     * Get internal IDs for the given documents
      *
      * @param string $collection
      * @param array<string> $documentIds
      * @return array<string>
      * @throws DatabaseException
      */
-    private function translateUidsToInternalIds(string $collection, array $documentIds): array
+    private function getInternalIds(string $collection, array $documentIds): array
     {
         $internalIds = [];
 

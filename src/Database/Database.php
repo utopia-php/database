@@ -3432,7 +3432,6 @@ class Database
         }
 
         $time = DateTime::now();
-        $columnCount = null;
 
         foreach ($documents as $key => $document) {
             $createdAt = $document->getCreatedAt();
@@ -3443,12 +3442,6 @@ class Database
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
-
-            if (is_null($columnCount)) {
-                $columnCount = count($document);
-            } elseif ($columnCount != count($document)) {
-                throw new StructureException('Insert value list does not match column list');
-            }
 
             $document = $this->encode($collection, $document);
 

@@ -2247,12 +2247,14 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, false));
         $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, false));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($collection, 'string_default', Database::VAR_STRING, 128, false, 'default'));
 
         $documents = [
             new Document([
                 '$id' => 'first',
                 'string' => 'text📝',
                 'integer' => 5,
+                'string_default' => 'not_default',
             ]),
             new Document([
                 '$id' => 'second',
@@ -2266,8 +2268,12 @@ abstract class Base extends TestCase
 
         $this->assertEquals('text📝', $documents[0]->getAttribute('string'));
         $this->assertEquals(5, $documents[0]->getAttribute('integer'));
+        $this->assertEquals('not_default', $documents[0]->getAttribute('string_default'));
         $this->assertEquals('text📝', $documents[1]->getAttribute('string'));
         $this->assertNull($documents[1]->getAttribute('integer'));
+        $this->assertEquals('default', $documents[1]->getAttribute('string_default'));
+
+        static::getDatabase()->deleteCollection($collection);
     }
 
     public function testCreateOrUpdateDocuments(): void

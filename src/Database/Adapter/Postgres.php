@@ -1040,12 +1040,7 @@ class Postgres extends SQL
         try {
             $name = $this->filter($collection);
 
-            $attributeKeys = [
-                '_uid',
-                '_createdAt',
-                '_updatedAt',
-                '_permissions',
-            ];
+            $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
             foreach ($documents as $document) {
                 $attributes = $document->getAttributes();
                 $attributeKeys = array_merge($attributeKeys, array_keys($attributes));

@@ -222,6 +222,13 @@ class Database
         ],
     ];
 
+    public const INTERNAL_ATTRIBUTE_KEYS = [
+        '_uid',
+        '_createdAt',
+        '_updatedAt',
+        '_permissions',
+    ];
+
     public const INTERNAL_INDEXES = [
         '_id',
         '_uid',

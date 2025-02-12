@@ -2352,8 +2352,8 @@ abstract class Base extends TestCase
         $collection = 'testCreateOrUpdateInplace';
 
         static::getDatabase()->createCollection($collection);
-        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
-        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true);
+        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, false);
+        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, false);
 
         $documents = [
             new Document([

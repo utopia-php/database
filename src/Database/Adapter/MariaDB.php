@@ -948,7 +948,12 @@ class MariaDB extends SQL
 
             $stmt->execute();
 
-            $document['$internalId'] = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])])->getInternalId();
+            $result = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])]);
+            $document['$internalId'] = $result->getInternalId();
+
+            if (empty($document['$internalId'])) {
+                throw new DatabaseException('Error creating document empty "$internalId"');
+            }
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();

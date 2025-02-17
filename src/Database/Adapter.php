@@ -391,6 +391,11 @@ abstract class Adapter
     abstract public function ping(): bool;
 
     /**
+     * Reconnect Database
+     */
+    abstract public function reconnect(): void;
+
+    /**
      * Create Database
      *
      * @param string $name
@@ -903,6 +908,8 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForCacheSkipOnFailure(): bool;
+
+    abstract public function getSupportForReconnection(): bool;
 
     /**
      * Get current attribute count from collection document

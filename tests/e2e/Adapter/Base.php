@@ -144,6 +144,32 @@ abstract class Base extends TestCase
         $this->assertIsString(static::getDatabase()->getConnectionId());
     }
 
+    public function testJoin()
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $documents = static::getDatabase()->find(
+            __FUNCTION__,
+            [
+                Query::join(
+                    'users',
+                    'u',
+                    [
+                        Query::relation('main', 'id', Query::TYPE_EQUAL, 'u', 'user_id'),
+                        Query::equal('id', ['usa'], 'u'),
+                    ]
+                )
+            ]
+        );
+
+        $this->assertEquals('shmuel', 'fogel');
+    }
+
     public function testDeleteRelatedCollection(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -2852,26 +2878,6 @@ abstract class Base extends TestCase
         }
 
         static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
-    }
-
-    public function testJoin()
-    {
-        $documents = static::getDatabase()->find(
-            'documents',
-            [
-                Query::join(
-                    'users',
-                    'u',
-                    [
-                        Query::relation('main', 'id', Query::TYPE_EQUAL, 'u', 'user_id'),
-                        Query::equal('id', ['usa'], 'u'),
-                    ]
-                )
-            ]
-        );
-
-        $this->assertEquals('shmuel', 'fogel');
-
     }
 
     public function testListDocumentSearch(): void

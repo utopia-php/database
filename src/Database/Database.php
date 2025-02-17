@@ -27,6 +27,7 @@ use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
+use Utopia\Database\Validator\Queries\Documents as DocumentsValidatorOiginal;
 use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 use Utopia\Database\Validator\Structure;
 
@@ -4056,7 +4057,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,
@@ -5363,7 +5364,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,
@@ -5547,7 +5548,7 @@ class Database
         //   $indexes = $collection->getAttribute('indexes', []);
 
         //        if ($this->validate) {
-        //            $validator = new DocumentsValidator(
+        //            $validator = new DocumentsValidatorOiginal(
         //                $attributes,
         //                $indexes,
         //                $this->maxQueryValues,
@@ -5563,6 +5564,12 @@ class Database
             $collections = [];
             $collections[] = $collection;
             $joins = Query::getByType($queries, [Query::TYPE_JOIN]);
+
+            if(!empty($joins)){
+                var_dump($joins);
+                die;
+            }
+
             foreach ($joins as $join) {
                 $collections[] = $this->silent(fn () => $this->getCollection($join->getCollection()));
             }
@@ -5803,7 +5810,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,
@@ -5851,7 +5858,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,

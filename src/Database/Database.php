@@ -4166,17 +4166,17 @@ class Database
                 $lastDocument = end($affectedDocuments);
             }
 
-            foreach ($documents as $document) {
-                $this->purgeCachedDocument($collection->getId(), $document->getId());
-            }
-
-            $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
-                '$collection' => $collection->getId(),
-                'modified' => count($documents)
-            ]));
-
             return $documents;
         });
+
+        foreach ($documents as $document) {
+            $this->purgeCachedDocument($collection->getId(), $document->getId());
+        }
+
+        $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
+            '$collection' => $collection->getId(),
+            'modified' => count($documents)
+        ]));
 
         return $documents;
     }

@@ -9,9 +9,13 @@ use Utopia\Database\Query;
 
 class QueryTest extends TestCase
 {
-    public function setUp(): void {}
+    public function setUp(): void
+    {
+    }
 
-    public function tearDown(): void {}
+    public function tearDown(): void
+    {
+    }
 
     public function testCreate(): void
     {
@@ -65,7 +69,7 @@ class QueryTest extends TestCase
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals([10], $query->getValues());
 
-        $cursor = new Document;
+        $cursor = new Document();
         $query = Query::cursorAfter($cursor);
 
         $this->assertEquals(Query::TYPE_CURSOR_AFTER, $query->getMethod());

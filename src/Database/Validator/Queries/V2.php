@@ -52,7 +52,7 @@ class V2 extends Validator
     public function __construct(array $collections, int $length = 0, int $maxValuesCount = 100, int $maxLimit = PHP_INT_MAX, int $maxOffset = PHP_INT_MAX)
     {
         foreach ($collections as $i => $collection) {
-            if($i === 0){
+            if ($i === 0) {
                 $this->aliases[''] = $collection->getId();
             }
 
@@ -128,17 +128,17 @@ class V2 extends Validator
         $queries = [];
 
         foreach ($value as $query) {
-            if (!$query instanceof Query) {
+            if (! $query instanceof Query) {
                 try {
                     $query = Query::parse($query);
                 } catch (\Throwable $e) {
-                    $this->message = 'Invalid query: ' . $e->getMessage();
+                    $this->message = 'Invalid query: '.$e->getMessage();
 
                     return false;
                 }
             }
 
-            if($query->getMethod() === Query::TYPE_JOIN) {
+            if ($query->getMethod() === Query::TYPE_JOIN) {
                 $this->aliases[$query->getAlias()] = $query->getCollection();
             }
 
@@ -160,14 +160,15 @@ class V2 extends Validator
                 case Query::TYPE_CONTAINS:
                     if ($this->isEmpty($query->getValues())) {
                         $this->message = \ucfirst($method).' queries require at least one value.';
+
                         return false;
                     }
 
-                    if(!$this->isAttributeExist($query->getAttribute(), $query->getAlias())){
+                    if (! $this->isAttributeExist($query->getAttribute(), $query->getAlias())) {
                         return false;
                     }
 
-                    if(!$this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)){
+                    if (! $this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)) {
                         return false;
                     }
 
@@ -187,11 +188,11 @@ class V2 extends Validator
                         return false;
                     }
 
-                    if(!$this->isAttributeExist($query->getAttribute(), $query->getAlias())){
+                    if (! $this->isAttributeExist($query->getAttribute(), $query->getAlias())) {
                         return false;
                     }
 
-                    if(!$this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)){
+                    if (! $this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)) {
                         return false;
                     }
 
@@ -204,11 +205,11 @@ class V2 extends Validator
                         return false;
                     }
 
-                    if(!$this->isAttributeExist($query->getAttribute(), $query->getAlias())){
+                    if (! $this->isAttributeExist($query->getAttribute(), $query->getAlias())) {
                         return false;
                     }
 
-                    if(!$this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)){
+                    if (! $this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)) {
                         return false;
                     }
 
@@ -216,11 +217,11 @@ class V2 extends Validator
 
                 case Query::TYPE_IS_NULL:
                 case Query::TYPE_IS_NOT_NULL:
-                    if(!$this->isAttributeExist($query->getAttribute(), $query->getAlias())){
+                    if (! $this->isAttributeExist($query->getAttribute(), $query->getAlias())) {
                         return false;
                     }
 
-                    if(!$this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)){
+                    if (! $this->isValidValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method)) {
                         return false;
                     }
 
@@ -313,29 +314,29 @@ class V2 extends Validator
 
     protected function isAttributeExist(string $attributeId, string $alias): bool
     {
-        var_dump("=== isAttributeExist");
+        var_dump('=== isAttributeExist');
 
-//        if (\str_contains($attributeId, '.')) {
-//            // Check for special symbol `.`
-//            if (isset($this->schema[$attributeId])) {
-//                return true;
-//            }
-//
-//            // For relationships, just validate the top level.
-//            // will validate each nested level during the recursive calls.
-//            $attributeId = \explode('.', $attributeId)[0];
-//
-//            if (isset($this->schema[$attributeId])) {
-//                $this->message = 'Cannot query nested attribute on: '.$attributeId;
-//
-//                return false;
-//            }
-//        }
+        //        if (\str_contains($attributeId, '.')) {
+        //            // Check for special symbol `.`
+        //            if (isset($this->schema[$attributeId])) {
+        //                return true;
+        //            }
+        //
+        //            // For relationships, just validate the top level.
+        //            // will validate each nested level during the recursive calls.
+        //            $attributeId = \explode('.', $attributeId)[0];
+        //
+        //            if (isset($this->schema[$attributeId])) {
+        //                $this->message = 'Cannot query nested attribute on: '.$attributeId;
+        //
+        //                return false;
+        //            }
+        //        }
 
         $collectionId = $this->aliases[$alias];
-        var_dump("=== attribute === " . $attributeId);
-        var_dump("=== alias === " . $alias);
-        var_dump("=== collectionId === " . $collectionId);
+        var_dump('=== attribute === '.$attributeId);
+        var_dump('=== alias === '.$alias);
+        var_dump('=== collectionId === '.$collectionId);
 
         var_dump($this->schema[$collectionId][$attributeId]);
 
@@ -350,7 +351,7 @@ class V2 extends Validator
 
     protected function isValidValues(string $attributeId, string $alias, array $values, string $method): bool
     {
-        var_dump("=== isValidValues");
+        var_dump('=== isValidValues');
 
         if (count($values) > $this->maxValuesCount) {
             $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attributeId;
@@ -372,19 +373,19 @@ class V2 extends Validator
                     break;
 
                 case Database::VAR_INTEGER:
-                    $validator = new Integer;
+                    $validator = new Integer();
                     break;
 
                 case Database::VAR_FLOAT:
-                    $validator = new FloatValidator;
+                    $validator = new FloatValidator();
                     break;
 
                 case Database::VAR_BOOLEAN:
-                    $validator = new Boolean;
+                    $validator = new Boolean();
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator;
+                    $validator = new DatetimeValidator();
                     break;
 
                 case Database::VAR_RELATIONSHIP:
@@ -464,14 +465,16 @@ class V2 extends Validator
         $limit = $query->getValue();
 
         $validator = new Numeric();
-        if (!$validator->isValid($limit)) {
-            $this->message = 'Invalid limit: ' . $validator->getDescription();
+        if (! $validator->isValid($limit)) {
+            $this->message = 'Invalid limit: '.$validator->getDescription();
+
             return false;
         }
 
         $validator = new Range(1, $this->maxLimit);
-        if (!$validator->isValid($limit)) {
-            $this->message = 'Invalid limit: ' . $validator->getDescription();
+        if (! $validator->isValid($limit)) {
+            $this->message = 'Invalid limit: '.$validator->getDescription();
+
             return false;
         }
 
@@ -483,14 +486,16 @@ class V2 extends Validator
         $offset = $query->getValue();
 
         $validator = new Numeric();
-        if (!$validator->isValid($offset)) {
-            $this->message = 'Invalid limit: ' . $validator->getDescription();
+        if (! $validator->isValid($offset)) {
+            $this->message = 'Invalid limit: '.$validator->getDescription();
+
             return false;
         }
 
         $validator = new Range(0, $this->maxOffset);
-        if (!$validator->isValid($offset)) {
-            $this->message = 'Invalid offset: ' . $validator->getDescription();
+        if (! $validator->isValid($offset)) {
+            $this->message = 'Invalid offset: '.$validator->getDescription();
+
             return false;
         }
 
@@ -506,38 +511,38 @@ class V2 extends Validator
 
         foreach ($query->getValues() as $attribute) {
 
-            if(is_string()){
+            if (is_string()) {
 
-            }
-            else if($this->isArray()){
-
-            }
-
-            if($this->isAttributeExist()){
+            } elseif ($this->isArray()) {
 
             }
 
-//            if (\str_contains($attribute, '.')) {
-//                //special symbols with `dots`
-//                if (isset($this->schema[$attribute])) {
-//                    continue;
-//                }
-//
-//                // For relationships, just validate the top level.
-//                // Will validate each nested level during the recursive calls.
-//                $attribute = \explode('.', $attribute)[0];
-//            }
+            if ($this->isAttributeExist()) {
+
+            }
+
+            //            if (\str_contains($attribute, '.')) {
+            //                //special symbols with `dots`
+            //                if (isset($this->schema[$attribute])) {
+            //                    continue;
+            //                }
+            //
+            //                // For relationships, just validate the top level.
+            //                // Will validate each nested level during the recursive calls.
+            //                $attribute = \explode('.', $attribute)[0];
+            //            }
 
             if (\in_array($attribute, $internalKeys)) {
                 continue;
             }
 
-            if (!isset($this->schema[$attribute]) && $attribute !== '*') {
-                $this->message = 'Attribute not found in schema: ' . $attribute;
+            if (! isset($this->schema[$attribute]) && $attribute !== '*') {
+                $this->message = 'Attribute not found in schema: '.$attribute;
+
                 return false;
             }
         }
+
         return true;
     }
-
 }

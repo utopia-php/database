@@ -5376,7 +5376,7 @@ class Database
         $cursor = $grouped['cursor'];
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
+            throw new DatabaseException("Cursor document must be from the same Collection.");
         }
 
         $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $limit, $cursor) {
@@ -5413,12 +5413,14 @@ class Database
                     break;
                 }
 
-                $documents = array_merge($affectedDocuments, $documents);
+                $documents = \array_merge($affectedDocuments, $documents);
 
                 foreach ($affectedDocuments as $document) {
-                    // Delete Relationships
                     if ($this->resolveRelationships) {
-                        $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
+                        $document = $this->silent(fn () => $this->deleteDocumentRelationships(
+                            $collection,
+                            $document
+                        ));
                     }
 
                     // Check if document was updated after the request timestamp
@@ -5431,8 +5433,6 @@ class Database
                     if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
-
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
 
                 if (count($affectedDocuments) < $batchSize) {
@@ -5448,11 +5448,6 @@ class Database
                 return [];
             }
 
-            $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
-                '$collection' => $collection->getId(),
-                'modified' => count($documents)
-            ]));
-
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
                 $this->adapter->deleteDocuments(
                     $collection->getId(),
@@ -5462,6 +5457,15 @@ class Database
 
             return $documents;
         });
+
+        foreach ($documents as $document) {
+            $this->purgeCachedDocument($collection->getId(), $document->getId());
+        }
+
+        $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
+            '$collection' => $collection->getId(),
+            'modified' => count($documents)
+        ]));
 
         return $documents;
     }

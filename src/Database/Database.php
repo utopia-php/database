@@ -5565,10 +5565,9 @@ class Database
             $collections[] = $collection;
             $joins = Query::getByType($queries, [Query::TYPE_JOIN]);
 
-            if(!empty($joins)){
-                var_dump($joins);
-                die;
-            }
+//            if(!empty($joins)){
+//                var_dump($joins);
+//            }
 
             foreach ($joins as $join) {
                 $collections[] = $this->silent(fn () => $this->getCollection($join->getCollection()));

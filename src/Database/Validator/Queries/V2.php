@@ -119,7 +119,7 @@ class V2 extends Validator
             }
 
             if ($this->length && \count($value) > $this->length) {
-                throw new \Exception('Queries count is greater than ' . $this->length);
+                throw new \Exception('Queries count is greater than '.$this->length);
             }
 
             $queries = [];
@@ -211,28 +211,35 @@ class V2 extends Validator
                         break;
 
                     case Query::TYPE_RELATION:
+                        throw new \Exception('Hello TYPE_RELATION!!!!!');
+
                         echo 'Hello TYPE_RELATION!!!!!';
+
                         break;
 
                     case Query::TYPE_LIMIT:
                         $this->validateLimit($query);
+
                         break;
 
                     case Query::TYPE_OFFSET:
                         $this->validateOffset($query);
+
                         break;
 
                     case Query::TYPE_SELECT:
                         $this->validateSelect($query);
+
                         break;
 
                     default:
-                        throw new \Exception($this->message);
+                        throw new \Exception('Invalid query: Method not found ' . $method);
                 }
             }
         } catch (\Throwable $e) {
             $this->message = $e->getMessage();
             throw $e; // Remove this!
+
             return false;
         }
 
@@ -356,6 +363,7 @@ class V2 extends Validator
                 case Database::VAR_RELATIONSHIP:
                     $validator = new Text(255, 0); // The query is always on uid
                     break;
+
                 default:
                     throw new \Exception('Unknown Data type');
             }

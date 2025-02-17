@@ -2,7 +2,6 @@
 
 namespace Tests\E2E\Adapter;
 
-use PDO;
 use Redis;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
@@ -18,6 +17,7 @@ use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
+use Utopia\Database\PDO;
 
 class MirrorTest extends Base
 {

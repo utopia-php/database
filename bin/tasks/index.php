@@ -13,6 +13,7 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Database;
+use Utopia\Database\PDO;
 use Utopia\Mongo\Client;
 use Utopia\Validator\Text;
 

@@ -5543,21 +5543,21 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-     //   $attributes = $collection->getAttribute('attributes', []);
-     //   $indexes = $collection->getAttribute('indexes', []);
+        //   $attributes = $collection->getAttribute('attributes', []);
+        //   $indexes = $collection->getAttribute('indexes', []);
 
-//        if ($this->validate) {
-//            $validator = new DocumentsValidator(
-//                $attributes,
-//                $indexes,
-//                $this->maxQueryValues,
-//                $this->adapter->getMinDateTime(),
-//                $this->adapter->getMaxDateTime(),
-//            );
-//            if (!$validator->isValid($queries)) {
-//                throw new QueryException($validator->getDescription());
-//            }
-//        }
+        //        if ($this->validate) {
+        //            $validator = new DocumentsValidator(
+        //                $attributes,
+        //                $indexes,
+        //                $this->maxQueryValues,
+        //                $this->adapter->getMinDateTime(),
+        //                $this->adapter->getMaxDateTime(),
+        //            );
+        //            if (!$validator->isValid($queries)) {
+        //                throw new QueryException($validator->getDescription());
+        //            }
+        //        }
 
         if ($this->validate) {
             $collections = [];

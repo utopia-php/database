@@ -111,8 +111,7 @@ class Query
         string $collection = '',
         string $function = '',
         string $type = ''
-    )
-    {
+    ) {
         $this->method = $method;
         $this->alias = $alias;
         $this->attribute = $attribute;

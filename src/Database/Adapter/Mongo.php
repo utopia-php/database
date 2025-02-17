@@ -100,6 +100,11 @@ class Mongo extends Adapter
         return $this->getClient()->query(['ping' => 1])->ok ?? false;
     }
 
+    public function reconnect(): void
+    {
+        $this->client->connect();
+    }
+
     /**
      * Create Database
      *
@@ -1839,6 +1844,11 @@ class Mongo extends Adapter
     }
 
     public function getSupportForUpserts(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForReconnection(): bool
     {
         return false;
     }

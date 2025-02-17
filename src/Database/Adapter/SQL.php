@@ -132,6 +132,11 @@ abstract class SQL extends Adapter
             ->execute();
     }
 
+    public function reconnect(): void
+    {
+        $this->getPDO()->reconnect();
+    }
+
     /**
      * Check if Database exists
      * Optionally check if collection exists in Database
@@ -881,6 +886,11 @@ abstract class SQL extends Adapter
         return true;
     }
 
+    public function getSupportForReconnection(): bool
+    {
+        return true;
+    }
+
     /**
      * @param mixed $stmt
      * @param Query $query
@@ -1155,7 +1165,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $tmp = implode(' '. $separator .' ', $conditions);
+        $tmp = implode(' ' . $separator . ' ', $conditions);
         return empty($tmp) ? '' : '(' . $tmp . ')';
     }
 

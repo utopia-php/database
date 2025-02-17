@@ -1072,6 +1072,11 @@ class Database
         return $this->adapter->ping();
     }
 
+    public function reconnect(): void
+    {
+        $this->adapter->reconnect();
+    }
+
     /**
      * Create the database
      *

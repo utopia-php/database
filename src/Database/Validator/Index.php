@@ -18,13 +18,20 @@ class Index extends Validator
     protected array $attributes;
 
     /**
+     * @var array<string> $reservedKeys
+     */
+    protected array $reservedKeys;
+
+    /**
      * @param array<Document> $attributes
      * @param int $maxLength
+     * @param array<string> $reservedKeys
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength)
+    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [])
     {
         $this->maxLength = $maxLength;
+        $this->reservedKeys = $reservedKeys;
 
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -80,15 +87,15 @@ class Index extends Validator
     public function checkDuplicatedAttributes(Document $index): bool
     {
         $attributes = $index->getAttribute('attributes', []);
-        $orders = $index->getAttribute('orders', []);
         $stack = [];
-        foreach ($attributes as $key => $attribute) {
-            $direction = $orders[$key] ?? 'ASC';
-            $value = \strtolower($attribute . '|' . $direction);
+        foreach ($attributes as $attribute) {
+            $value = \strtolower($attribute);
+
             if (\in_array($value, $stack)) {
                 $this->message = 'Duplicate attributes provided';
                 return false;
             }
+
             $stack[] = $value;
         }
         return true;
@@ -126,30 +133,30 @@ class Index extends Validator
         foreach ($attributes as $attributePosition => $attributeName) {
             $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
 
-            if($attribute->getAttribute('array', false)) {
+            if ($attribute->getAttribute('array', false)) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
-                if($index->getAttribute('type') != Database::INDEX_KEY) {
+                if ($index->getAttribute('type') != Database::INDEX_KEY) {
                     $this->message = '"' . ucfirst($index->getAttribute('type')) . '" index is forbidden on array attributes';
                     return false;
                 }
 
-                if(empty($lengths[$attributePosition])) {
+                if (empty($lengths[$attributePosition])) {
                     $this->message = 'Index length for array not specified';
                     return false;
                 }
 
                 $arrayAttributes[] = $attribute->getAttribute('key', '');
-                if(count($arrayAttributes) > 1) {
+                if (count($arrayAttributes) > 1) {
                     $this->message = 'An index may only contain one array attribute';
                     return false;
                 }
 
                 $direction = $orders[$attributePosition] ?? '';
-                if(!empty($direction)) {
+                if (!empty($direction)) {
                     $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
                     return false;
                 }
-            } elseif($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
+            } elseif ($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
                 $this->message = 'Cannot set a length on "'. $attribute->getAttribute('type') . '" attributes';
                 return false;
             }
@@ -188,7 +195,7 @@ class Index extends Validator
                     break;
             }
 
-            if($attribute->getAttribute('array', false)) {
+            if ($attribute->getAttribute('array', false)) {
                 $attributeSize = Database::ARRAY_INDEX_LENGTH;
                 $indexLength = Database::ARRAY_INDEX_LENGTH;
             }
@@ -204,6 +211,24 @@ class Index extends Validator
         if ($total > $this->maxLength && $this->maxLength > 0) {
             $this->message = 'Index length is longer than the maximum: ' . $this->maxLength;
             return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkReservedNames(Document $index): bool
+    {
+        $key = $index->getAttribute('key', $index->getAttribute('$id'));
+
+        foreach ($this->reservedKeys as $reserved) {
+            if (\strtolower($key) === \strtolower($reserved)) {
+                $this->message = 'Index key name is reserved';
+                return false;
+            }
         }
 
         return true;
@@ -240,6 +265,10 @@ class Index extends Validator
         }
 
         if (!$this->checkIndexLength($value)) {
+            return false;
+        }
+
+        if (!$this->checkReservedNames($value)) {
             return false;
         }
 

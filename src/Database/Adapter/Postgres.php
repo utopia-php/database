@@ -5,12 +5,12 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
-use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\Timeout;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -25,6 +25,84 @@ class Postgres extends SQL
      * 3. DATETIME is TIMESTAMP
      * 4. Full-text search is different - to_tsvector() and to_tsquery()
      */
+
+    /**
+     * @inheritDoc
+     */
+    public function startTransaction(): bool
+    {
+        try {
+            if ($this->inTransaction === 0) {
+                if ($this->getPDO()->inTransaction()) {
+                    $this->getPDO()->rollBack();
+                } else {
+                    // If no active transaction, this has no effect.
+                    $this->getPDO()->prepare('ROLLBACK')->execute();
+                }
+
+                $result = $this->getPDO()->beginTransaction();
+            } else {
+                $result = true;
+            }
+        } catch (PDOException $e) {
+            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+        if (!$result) {
+            throw new TransactionException('Failed to start transaction');
+        }
+
+        $this->inTransaction++;
+
+        return $result;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function rollbackTransaction(): bool
+    {
+        if ($this->inTransaction === 0) {
+            return false;
+        }
+
+        try {
+            $result = $this->getPDO()->rollBack();
+            $this->inTransaction = 0;
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+        if (!$result) {
+            throw new TransactionException('Failed to rollback transaction');
+        }
+
+        return $result;
+    }
+
+    /**
+     * Returns Max Execution Time
+     * @param int $milliseconds
+     * @param string $event
+     * @return void
+     * @throws DatabaseException
+     */
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        if (!$this->getSupportForTimeouts()) {
+            return;
+        }
+        if ($milliseconds <= 0) {
+            throw new DatabaseException('Timeout must be greater than 0');
+        }
+        $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
+            return "
+				SET statement_timeout = {$milliseconds};
+				{$sql};
+				SET statement_timeout = 0;
+			";
+        });
+    }
 
     /**
      * Create Database
@@ -77,6 +155,7 @@ class Postgres extends SQL
      * @param array<Document> $attributes
      * @param array<Document> $indexes
      * @return bool
+     * @throws DuplicateException
      */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
@@ -98,13 +177,30 @@ class Postgres extends SQL
                 $attribute->getAttribute('array', false)
             );
 
+            // Ignore relationships with virtual attributes
+            if ($attribute->getAttribute('type') === Database::VAR_RELATIONSHIP) {
+                $options = $attribute->getAttribute('options', []);
+                $relationType = $options['relationType'] ?? null;
+                $twoWay = $options['twoWay'] ?? false;
+                $side = $options['side'] ?? null;
+
+                if (
+                    $relationType === Database::RELATION_MANY_TO_MANY
+                    || ($relationType === Database::RELATION_ONE_TO_ONE && !$twoWay && $side === Database::RELATION_SIDE_CHILD)
+                    || ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_PARENT)
+                    || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_CHILD)
+                ) {
+                    continue;
+                }
+            }
+
             $attributeStrings[] = "\"{$attrId}\" {$attrType}, ";
         }
 
         $sqlTenant = $this->sharedTables ? '_tenant INTEGER DEFAULT NULL,' : '';
 
-        $sql = "
-            CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id)} (
+        $collection = "
+            CREATE TABLE {$this->getSQLTable($id)} (
                 _id SERIAL NOT NULL,
                 _uid VARCHAR(255) NOT NULL,
                 ". $sqlTenant ."
@@ -115,59 +211,60 @@ class Postgres extends SQL
                 PRIMARY KEY (_id)
             );
         ";
+
         if ($this->sharedTables) {
-            $sql .= "
+            $collection .= "
 				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid), _tenant);
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_updated\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_tenant_id\" ON {$this->getSQLTable($id)} (_tenant, _id);
 			";
         } else {
-            $sql .= "
+            $collection .= "
 				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid));
             	CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
 			";
         }
 
-        $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+        $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
-        $stmt = $this->getPDO()->prepare($sql);
+        $permissions = "
+            CREATE TABLE {$this->getSQLTable($id . '_perms')} (
+                _id SERIAL NOT NULL,
+                _tenant INTEGER DEFAULT NULL,
+                _type VARCHAR(12) NOT NULL,
+                _permission VARCHAR(255) NOT NULL,
+                _document VARCHAR(255) NOT NULL,
+                PRIMARY KEY (_id)
+            );   
+        ";
+
+        if ($this->sharedTables) {
+            $permissions .= "
+                CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_ukey\" 
+                    ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_document,_type,_permission);
+                CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_permission\" 
+                    ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_permission,_type); 
+            ";
+        } else {
+            $permissions .= "
+                CREATE UNIQUE INDEX \"{$namespace}_{$id}_ukey\" 
+                    ON {$this->getSQLTable($id. '_perms')} USING btree (_document,_type,_permission);
+                CREATE INDEX \"{$namespace}_{$id}_permission\" 
+                    ON {$this->getSQLTable($id. '_perms')} USING btree (_permission,_type); 
+            ";
+        }
+
+        $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
 
         try {
-            $stmt->execute();
-
-            $sql = "
-				CREATE TABLE IF NOT EXISTS {$this->getSQLTable($id . '_perms')} (
-					_id SERIAL NOT NULL,
-					_tenant INTEGER DEFAULT NULL,
-					_type VARCHAR(12) NOT NULL,
-					_permission VARCHAR(255) NOT NULL,
-					_document VARCHAR(255) NOT NULL,
-					PRIMARY KEY (_id)
-				);   
-			";
-
-            if ($this->sharedTables) {
-                $sql .= "
-					CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_ukey\" 
-				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_document,_type,_permission);
-					CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_permission\" 
-				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_permission,_type); 
-				";
-            } else {
-                $sql .= "
-					CREATE UNIQUE INDEX \"{$namespace}_{$id}_ukey\" 
-				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_document,_type,_permission);
-					CREATE INDEX \"{$namespace}_{$id}_permission\" 
-				    	ON {$this->getSQLTable($id. '_perms')} USING btree (_permission,_type); 
-				";
-            }
-
-            $sql = $this->trigger(Database::EVENT_COLLECTION_CREATE, $sql);
+            $this->getPDO()
+                ->prepare($collection)
+                ->execute();
 
             $this->getPDO()
-                ->prepare($sql)
+                ->prepare($permissions)
                 ->execute();
 
             foreach ($indexes as $index) {
@@ -185,15 +282,57 @@ class Postgres extends SQL
                     $indexOrders
                 );
             }
-        } catch (Exception $e) {
-            throw new DatabaseException('Failed to create collection: ' . $e->getMessage());
+        } catch (PDOException $e) {
+            $e = $this->processException($e);
+
+            if (!($e instanceof DuplicateException)) {
+                $this->getPDO()
+                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
+                    ->execute();
+            }
+
+            throw $e;
         }
 
         return true;
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $name = $this->getSQLTable($collection);
+        $permissions = $this->getSQLTable($collection . '_perms');
+
+        $collectionSize = $this->getPDO()->prepare("
+             SELECT pg_total_relation_size(:name);
+        ");
+
+        $permissionsSize = $this->getPDO()->prepare("
+             SELECT pg_total_relation_size(:permissions);
+        ");
+
+        $collectionSize->bindParam(':name', $name);
+        $permissionsSize->bindParam(':permissions', $permissions);
+
+        try {
+            $collectionSize->execute();
+            $permissionsSize->execute();
+            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+        }
+
+        return  $size;
+    }
+
+    /**
+     * Get Collection Size of raw data
      * @param string $collection
      * @return int
      * @throws DatabaseException
@@ -206,11 +345,11 @@ class Postgres extends SQL
         $permissions = $this->getSQLTable($collection . '_perms');
 
         $collectionSize = $this->getPDO()->prepare("
-             SELECT pg_total_relation_size(:name);
+             SELECT pg_relation_size(:name);
         ");
 
         $permissionsSize = $this->getPDO()->prepare("
-             SELECT pg_total_relation_size(:permissions);
+             SELECT pg_relation_size(:permissions);
         ");
 
         $collectionSize->bindParam(':name', $name);
@@ -246,6 +385,17 @@ class Postgres extends SQL
     }
 
     /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
+    }
+
+    /**
      * Create Attribute
      *
      * @param string $collection
@@ -255,6 +405,7 @@ class Postgres extends SQL
      * @param bool $array
      *
      * @return bool
+     * @throws Exception
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
@@ -274,8 +425,7 @@ class Postgres extends SQL
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
-            return false;
+            throw $this->processException($e);
         }
     }
 
@@ -287,6 +437,7 @@ class Postgres extends SQL
      * @param bool $array
      *
      * @return bool
+     * @throws DatabaseException
      */
     public function deleteAttribute(string $collection, string $id, bool $array = false): bool
     {
@@ -300,9 +451,17 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            if ($e->getCode() === "42703" && $e->errorInfo[1] === 7) {
+                return true;
+            }
+
+            throw $e;
+        }
     }
 
     /**
@@ -342,15 +501,16 @@ class Postgres extends SQL
      * @param int $size
      * @param bool $signed
      * @param bool $array
-     * @param string $newKey
+     * @param string|null $newKey
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
+        $newKey = empty($newKey) ? null : $this->filter($newKey);
         $type = $this->getSQLType($type, $size, $signed, $array);
 
         if ($type == 'TIMESTAMP(3)') {
@@ -392,8 +552,7 @@ class Postgres extends SQL
 
             return $result;
         } catch (PDOException $e) {
-            $this->processException($e);
-            return false;
+            throw $this->processException($e);
         }
     }
 
@@ -841,7 +1000,7 @@ class Postgres extends SQL
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
-            if($sqlTenant) {
+            if ($sqlTenant) {
                 $stmtPermissions->bindValue(':_tenant', $this->tenant);
             }
         }
@@ -854,13 +1013,8 @@ class Postgres extends SQL
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }
-        } catch (Throwable $e) {
-            switch ($e->getCode()) {
-                case 23505:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
-                default:
-                    throw $e;
-            }
+        } catch (PDOException $e) {
+            throw $this->processException($e);
         }
 
         return $document;
@@ -871,13 +1025,12 @@ class Postgres extends SQL
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param int $batchSize
      *
      * @return array<Document>
      *
-     * @throws Duplicate
+     * @throws DuplicateException
      */
-    public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
+    public function createDocuments(string $collection, array $documents): array
     {
         if (empty($documents)) {
             return $documents;
@@ -885,96 +1038,128 @@ class Postgres extends SQL
 
         try {
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, max(1, $batchSize));
+            $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
 
-            foreach ($batches as $batch) {
-                $bindIndex = 0;
-                $batchKeys = [];
-                $bindValues = [];
-                $permissions = [];
+            $hasInternalId = null;
+            foreach ($documents as $document) {
+                $attributes = $document->getAttributes();
+                $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
 
-                foreach ($batch as $document) {
-                    $attributes = $document->getAttributes();
-                    $attributes['_uid'] = $document->getId();
-                    $attributes['_createdAt'] = $document->getCreatedAt();
-                    $attributes['_updatedAt'] = $document->getUpdatedAt();
-                    $attributes['_permissions'] = \json_encode($document->getPermissions());
+                if ($hasInternalId === null) {
+                    $hasInternalId = !empty($document->getInternalId());
+                } elseif ($hasInternalId == empty($document->getInternalId())) {
+                    throw new DatabaseException('All documents must have an internalId if one is set');
+                }
+            }
+            $attributeKeys = array_unique($attributeKeys);
 
-                    if($this->sharedTables) {
-                        $attributes['_tenant'] = $this->tenant;
-                    }
+            if ($this->sharedTables) {
+                $attributeKeys[] = '_tenant';
+            }
 
-                    $columns = [];
-                    foreach (\array_keys($attributes) as $key => $attribute) {
-                        $columns[$key] = "\"{$this->filter($attribute)}\"";
-                    }
+            $columns = [];
+            foreach ($attributeKeys as $key => $attribute) {
+                $columns[$key] = "\"{$this->filter($attribute)}\"";
+            }
+            $columns = '(' . \implode(', ', $columns) . ')';
 
-                    $columns = '(' . \implode(', ', $columns) . ')';
+            $internalIds = [];
 
-                    $bindKeys = [];
+            $bindIndex = 0;
+            $batchKeys = [];
+            $bindValues = [];
+            $permissions = [];
 
-                    foreach ($attributes as $value) {
-                        if (\is_array($value)) {
-                            $value = \json_encode($value);
-                        }
-                        $value = (\is_bool($value)) ? (int)$value : $value;
-                        $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = ':' . $bindKey;
-                        $bindValues[$bindKey] = $value;
-                        $bindIndex++;
-                    }
+            foreach ($documents as $document) {
+                $attributes = $document->getAttributes();
+                $attributes['_uid'] = $document->getId();
+                $attributes['_createdAt'] = $document->getCreatedAt();
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                    $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
-                    foreach (Database::PERMISSIONS as $type) {
-                        foreach ($document->getPermissionsByType($type) as $permission) {
-                            $permission = \str_replace('"', '', $permission);
-                            $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', :_tenant)";
-                        }
-                    }
+                if (!empty($document->getInternalId())) {
+                    $internalIds[$document->getId()] = true;
+                    $attributes['_id'] = $document->getInternalId();
+                    $attributeKeys[] = '_id';
                 }
 
-                $stmt = $this->getPDO()->prepare(
-                    "
-                    INSERT INTO {$this->getSQLTable($name)} {$columns}
-                    VALUES " . \implode(', ', $batchKeys)
-                );
-
-                foreach ($bindValues as $key => $value) {
-                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                if ($this->sharedTables) {
+                    $attributes['_tenant'] = $this->tenant;
                 }
 
-                $stmt->execute();
+                $bindKeys = [];
 
-                if (!empty($permissions)) {
-                    $stmtPermissions = $this->getPDO()->prepare(
-                        "
-                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _tenant) 
-                        VALUES " . \implode(', ', $permissions)
-                    );
-                    $stmtPermissions->bindValue(':_tenant', $this->tenant);
-                    $stmtPermissions?->execute();
+                foreach ($attributeKeys as $key) {
+                    $value = $attributes[$key] ?? null;
+                    if (\is_array($value)) {
+                        $value = \json_encode($value);
+                    }
+                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $bindKey = 'key_' . $bindIndex;
+                    $bindKeys[] = ':' . $bindKey;
+                    $bindValues[$bindKey] = $value;
+                    $bindIndex++;
+                }
+
+                $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+                foreach (Database::PERMISSIONS as $type) {
+                    foreach ($document->getPermissionsByType($type) as $permission) {
+                        $permission = \str_replace('"', '', $permission);
+                        $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', :_tenant)";
+                    }
                 }
             }
 
-            return $documents;
+            $stmt = $this->getPDO()->prepare(
+                "
+                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                VALUES " . \implode(', ', $batchKeys)
+            );
 
+            foreach ($bindValues as $key => $value) {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+
+            $stmt->execute();
+
+            if (!empty($permissions)) {
+                $stmtPermissions = $this->getPDO()->prepare(
+                    "
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _tenant) 
+                    VALUES " . \implode(', ', $permissions)
+                );
+                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+                $stmtPermissions?->execute();
+            }
         } catch (PDOException $e) {
-            throw match ($e->getCode()) {
-                1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            throw $this->processException($e);
         }
+
+        foreach ($documents as $document) {
+            if (!isset($internalIds[$document->getId()])) {
+                $document['$internalId'] = $this->getDocument(
+                    $collection,
+                    $document->getId(),
+                    [Query::select(['$internalId'])]
+                )->getInternalId();
+            }
+        }
+
+        return $documents;
     }
 
     /**
      * Update Document
      *
      * @param string $collection
+     * @param string $id
      * @param Document $document
      *
      * @return Document
+     * @throws DatabaseException
+     * @throws DuplicateException
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -992,11 +1177,8 @@ class Postgres extends SQL
 			SELECT _type, _permission
 			FROM {$this->getSQLTable($name . '_perms')}
 			WHERE _document = :_uid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
-        }
 
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
@@ -1070,11 +1252,8 @@ class Postgres extends SQL
 				DELETE
                 FROM {$this->getSQLTable($name . '_perms')}
                 WHERE _document = :_uid
+                {$this->getTenantQuery($collection)}
 			";
-
-            if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
-            }
 
             $removeQuery = $sql . $removeQuery;
 
@@ -1140,19 +1319,17 @@ class Postgres extends SQL
 
         $sql = "
 			UPDATE {$this->getSQLTable($name)}
-			SET {$columns} _uid = :_uid 
-			WHERE _uid = :_uid
+			SET {$columns} _uid = :_newUid 
+			WHERE _uid = :_existingUid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
-        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_UPDATE, $sql);
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        $stmt->bindValue(':_uid', $document->getId());
+        $stmt->bindValue(':_existingUid', $id);
+        $stmt->bindValue(':_newUid', $document->getId());
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
@@ -1179,265 +1356,280 @@ class Postgres extends SQL
                 $stmtAddPermissions->execute();
             }
         } catch (PDOException $e) {
-            switch ($e->getCode()) {
-                case 1062:
-                case 23505:
-                    throw new Duplicate('Duplicated document: ' . $e->getMessage());
-                default:
-                    throw $e;
-            }
+            throw $this->processException($e);
+
         }
 
         return $document;
     }
 
     /**
-     * Update Documents in batches
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
+     * @param Document $updates
      * @param array<Document> $documents
-     * @param int $batchSize
      *
-     * @return array<Document>
+     * @return int
      *
-     * @throws Duplicate
+     * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
+    public function updateDocuments(string $collection, Document $updates, array $documents): int
     {
-        if (empty($documents)) {
-            return $documents;
+        $attributes = $updates->getAttributes();
+
+        if (!empty($updates->getUpdatedAt())) {
+            $attributes['_updatedAt'] = $updates->getUpdatedAt();
         }
 
-        try {
-            $name = $this->filter($collection);
-            $batches = \array_chunk($documents, max(1, $batchSize));
+        if (!empty($updates->getPermissions())) {
+            $attributes['_permissions'] = json_encode($updates->getPermissions());
+        }
 
-            foreach ($batches as $batch) {
-                $bindIndex = 0;
-                $batchKeys = [];
-                $bindValues = [];
+        if (empty($attributes)) {
+            return 0;
+        }
 
-                $removeQuery = '';
-                $removeBindValues = [];
+        $name = $this->filter($collection);
 
-                $addQuery = '';
-                $addBindValues = [];
+        $columns = '';
 
-                foreach ($batch as $index => $document) {
-                    $attributes = $document->getAttributes();
-                    $attributes['_uid'] = $document->getId();
-                    $attributes['_createdAt'] = $document->getCreatedAt();
-                    $attributes['_updatedAt'] = $document->getUpdatedAt();
-                    $attributes['_permissions'] = json_encode($document->getPermissions());
+        $where = [];
 
-                    if($this->sharedTables) {
-                        $attributes['_tenant'] = $this->tenant;
-                    }
+        $ids = \array_map(fn ($document) => $document->getId(), $documents);
+        $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($ids))) . ")";
 
-                    $columns = \array_map(function ($attribute) {
-                        return '"' . $this->filter($attribute) . '"';
-                    }, \array_keys($attributes));
+        if ($this->sharedTables) {
+            $whereTenant = "(_tenant = :_tenant";
 
-                    $bindKeys = [];
+            if ($collection === Database::METADATA) {
+                $whereTenant .= " OR _tenant IS NULL";
+            }
 
-                    foreach ($attributes as $value) {
-                        if (\is_array($value)) {
-                            $value = json_encode($value);
-                        }
-                        $value = (is_bool($value)) ? (int)$value : $value;
-                        $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = ':' . $bindKey;
-                        $bindValues[$bindKey] = $value;
-                        $bindIndex++;
-                    }
+            $where[] = $whereTenant . ')';
+        }
 
-                    $batchKeys[] = '(' . implode(', ', $bindKeys) . ')';
+        $sqlWhere = 'WHERE ' . implode(' AND ', $where);
 
-                    // Permissions logic
-                    $sql = "
-                        SELECT _type, _permission
-                        FROM {$this->getSQLTable($name . '_perms')}
-                        WHERE _document = :_uid
-                    ";
+        $bindIndex = 0;
+        foreach ($attributes as $attribute => $value) {
+            $column = $this->filter($attribute);
+            $bindKey = 'key_' . $bindIndex;
+            $columns .= "\"{$column}\"" . '=:' . $bindKey;
 
-                    if ($this->sharedTables) {
-                        $sql .= ' AND _tenant = :_tenant';
-                    }
+            if ($attribute !== \array_key_last($attributes)) {
+                $columns .= ',';
+            }
 
-                    $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
+            $bindIndex++;
+        }
 
-                    $permissionsStmt = $this->getPDO()->prepare($sql);
-                    $permissionsStmt->bindValue(':_uid', $document->getId());
+        $sql = "
+                UPDATE {$this->getSQLTable($name)}
+                SET {$columns}
+                {$sqlWhere}
+            ";
 
-                    if ($this->sharedTables) {
-                        $permissionsStmt->bindValue(':_tenant', $this->tenant);
-                    }
+        $sql = $this->trigger(Database::EVENT_DOCUMENTS_UPDATE, $sql);
+        $stmt = $this->getPDO()->prepare($sql);
 
-                    $permissionsStmt->execute();
-                    $permissions = $permissionsStmt->fetchAll();
+        if ($this->sharedTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
+        }
 
-                    $initial = [];
-                    foreach (Database::PERMISSIONS as $type) {
-                        $initial[$type] = [];
-                    }
+        foreach ($ids as $id => $value) {
+            $stmt->bindValue(":_id_{$id}", $value);
+        }
 
-                    $permissions = \array_reduce($permissions, function (array $carry, array $item) {
-                        $carry[$item['_type']][] = $item['_permission'];
-                        return $carry;
-                    }, $initial);
+        $attributeIndex = 0;
+        foreach ($attributes as $attribute => $value) {
+            if (is_array($value)) {
+                $value = json_encode($value);
+            }
 
-                    // Get removed Permissions
-                    $removals = [];
-                    foreach (Database::PERMISSIONS as $type) {
-                        $diff = array_diff($permissions[$type], $document->getPermissionsByType($type));
-                        if (!empty($diff)) {
-                            $removals[$type] = $diff;
-                        }
-                    }
+            $bindKey = 'key_' . $attributeIndex;
+            $value = (is_bool($value)) ? (int)$value : $value;
+            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+            $attributeIndex++;
+        }
 
-                    // Build inner query to remove permissions
-                    if (!empty($removals)) {
-                        foreach ($removals as $type => $permissionsToRemove) {
-                            $bindKey = 'uid_' . $index;
-                            $removeBindKeys[] = ':uid_' . $index;
-                            $removeBindValues[$bindKey] = $document->getId();
+        $stmt->execute();
+        $affected = $stmt->rowCount();
 
-                            $tenantQuery = '';
-                            if ($this->sharedTables) {
-                                $tenantQuery = ' AND _tenant = :_tenant';
-                            }
+        // Permissions logic
+        if (!empty($updates->getPermissions())) {
+            $removeQueries = [];
+            $removeBindValues = [];
 
-                            $removeQuery .= "(
-                                _document = :uid_{$index}
-                                {$tenantQuery}
-                                AND _type = '{$type}'
-                                AND _permission IN (" . implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
-                                $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
-                                $removeBindKeys[] = ':' . $bindKey;
-                                $removeBindValues[$bindKey] = $permissionsToRemove[$i];
+            $addQuery = '';
+            $addBindValues = [];
 
-                                return ':' . $bindKey;
-                            }, \array_keys($permissionsToRemove))) .
-                                ")
-                            )";
-
-                            if ($type !== \array_key_last($removals)) {
-                                $removeQuery .= ' OR ';
-                            }
-                        }
-
-                        if ($index !== \array_key_last($batch)) {
-                            $removeQuery .= ' OR ';
-                        }
-                    }
-
-                    // Get added Permissions
-                    $additions = [];
-                    foreach (Database::PERMISSIONS as $type) {
-                        $diff = \array_diff($document->getPermissionsByType($type), $permissions[$type]);
-                        if (!empty($diff)) {
-                            $additions[$type] = $diff;
-                        }
-                    }
-
-                    // Build inner query to add permissions
-                    if (!empty($additions)) {
-                        foreach ($additions as $type => $permissionsToAdd) {
-                            foreach ($permissionsToAdd as $i => $permission) {
-                                $bindKey = 'uid_' . $index;
-                                $addBindValues[$bindKey] = $document->getId();
-
-                                $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
-                                $addBindValues[$bindKey] = $permission;
-
-                                $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
-
-                                $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey} {$tenantQuery})";
-
-                                if ($i !== \array_key_last($permissionsToAdd) || $type !== \array_key_last($additions)) {
-                                    $addQuery .= ', ';
-                                }
-                            }
-                        }
-                        if ($index !== \array_key_last($batch)) {
-                            $addQuery .= ', ';
-                        }
-                    }
-                }
-
-                $updateClause = '';
-                for ($i = 0; $i < \count($columns); $i++) {
-                    $column = $columns[$i];
-                    if (!empty($updateClause)) {
-                        $updateClause .= ', ';
-                    }
-                    $updateClause .= "{$column} = excluded.{$column}";
-                }
-
+            /* @var $document Document */
+            foreach ($documents as $index => $document) {
+                // Permissions logic
                 $sql = "
-                    INSERT INTO {$this->getSQLTable($name)} (" . \implode(", ", $columns) . ") 
-                    VALUES " . \implode(', ', $batchKeys) . "
+                    SELECT _type, _permission
+                    FROM {$this->getSQLTable($name . '_perms')}
+                    WHERE _document = :_uid
                 ";
 
                 if ($this->sharedTables) {
-                    $sql .= "ON CONFLICT (_tenant, LOWER(_uid)) DO UPDATE SET $updateClause";
-                } else {
-                    $sql .= "ON CONFLICT (LOWER(_uid)) DO UPDATE SET $updateClause";
+                    $sql .= ' AND _tenant = :_tenant';
                 }
 
-                $stmt = $this->getPDO()->prepare($sql);
+                $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
-                foreach ($bindValues as $key => $value) {
-                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                $permissionsStmt = $this->getPDO()->prepare($sql);
+                $permissionsStmt->bindValue(':_uid', $document->getId());
+
+                if ($this->sharedTables) {
+                    $permissionsStmt->bindValue(':_tenant', $this->tenant);
                 }
 
-                $stmt->execute();
+                $permissionsStmt->execute();
+                $permissions = $permissionsStmt->fetchAll();
+                $permissionsStmt->closeCursor();
 
-                if (!empty($removeQuery)) {
-                    $stmtRemovePermissions = $this->getPDO()->prepare("
-                        DELETE
-                        FROM {$this->getSQLTable($name . '_perms')}
-                        WHERE ({$removeQuery})
-                    ");
-
-                    foreach ($removeBindValues as $key => $value) {
-                        $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
-                    }
-                    if ($this->sharedTables) {
-                        $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
-                    }
-
-                    $stmtRemovePermissions->execute();
+                $initial = [];
+                foreach (Database::PERMISSIONS as $type) {
+                    $initial[$type] = [];
                 }
 
-                if (!empty($addQuery)) {
-                    $tenantQuery = $this->sharedTables ? ', _tenant' : '';
+                $permissions = \array_reduce($permissions, function (array $carry, array $item) {
+                    $carry[$item['_type']][] = $item['_permission'];
+                    return $carry;
+                }, $initial);
 
-                    $stmtAddPermissions = $this->getPDO()->prepare("
-                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$tenantQuery})
-                        VALUES {$addQuery}
-                    ");
-
-                    foreach ($addBindValues as $key => $value) {
-                        $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
+                // Get removed Permissions
+                $removals = [];
+                foreach (Database::PERMISSIONS as $type) {
+                    $diff = array_diff($permissions[$type], $updates->getPermissionsByType($type));
+                    if (!empty($diff)) {
+                        $removals[$type] = $diff;
                     }
+                }
 
-                    if($this->sharedTables) {
-                        $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+                // Build inner query to remove permissions
+                if (!empty($removals)) {
+                    foreach ($removals as $type => $permissionsToRemove) {
+                        $bindKey = 'uid_' . $index;
+                        $removeBindKeys[] = ':uid_' . $index;
+                        $removeBindValues[$bindKey] = $document->getId();
+
+                        $removeQueries[] = "(
+                            _document = :uid_{$index}
+                            {$this->getTenantQuery($collection)}
+                            AND _type = '{$type}'
+                            AND _permission IN (" . \implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
+                            $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
+                            $removeBindKeys[] = ':' . $bindKey;
+                            $removeBindValues[$bindKey] = $permissionsToRemove[$i];
+
+                            return ':' . $bindKey;
+                        }, \array_keys($permissionsToRemove))) .
+                            ")
+                        )";
                     }
+                }
 
-                    $stmtAddPermissions->execute();
+                // Get added Permissions
+                $additions = [];
+                foreach (Database::PERMISSIONS as $type) {
+                    $diff = \array_diff($updates->getPermissionsByType($type), $permissions[$type]);
+                    if (!empty($diff)) {
+                        $additions[$type] = $diff;
+                    }
+                }
+
+                // Build inner query to add permissions
+                if (!empty($additions)) {
+                    foreach ($additions as $type => $permissionsToAdd) {
+                        foreach ($permissionsToAdd as $i => $permission) {
+                            $bindKey = 'uid_' . $index;
+                            $addBindValues[$bindKey] = $document->getId();
+
+                            $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
+                            $addBindValues[$bindKey] = $permission;
+
+                            $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey}";
+
+                            if ($this->sharedTables) {
+                                $addQuery .= ", :_tenant)";
+                            } else {
+                                $addQuery .= ")";
+                            }
+
+                            if ($i !== \array_key_last($permissionsToAdd) || $type !== \array_key_last($additions)) {
+                                $addQuery .= ', ';
+                            }
+                        }
+                    }
+                    if ($index !== \array_key_last($documents)) {
+                        $addQuery .= ', ';
+                    }
                 }
             }
 
-            return $documents;
-        } catch (PDOException $e) {
+            if (!empty($removeQueries)) {
+                $removeQuery = \implode(' OR ', $removeQueries);
 
-            throw match ($e->getCode()) {
-                1062, 23000 => new Duplicate('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+                $stmtRemovePermissions = $this->getPDO()->prepare("
+                    DELETE
+                    FROM {$this->getSQLTable($name . '_perms')}
+                    WHERE ({$removeQuery})
+                ");
+
+                foreach ($removeBindValues as $key => $value) {
+                    $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
+                }
+
+                if ($this->sharedTables) {
+                    $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
+                }
+                $stmtRemovePermissions->execute();
+            }
+
+            if (!empty($addQuery)) {
+                $sqlAddPermissions = "
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (\"_document\", \"_type\", \"_permission\"
+                ";
+
+                if ($this->sharedTables) {
+                    $sqlAddPermissions .= ', "_tenant")';
+                } else {
+                    $sqlAddPermissions .= ')';
+                }
+
+                $sqlAddPermissions .= " VALUES {$addQuery}";
+
+                $stmtAddPermissions = $this->getPDO()->prepare($sqlAddPermissions);
+
+                foreach ($addBindValues as $key => $value) {
+                    $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
+                }
+
+                if ($this->sharedTables) {
+                    $stmtAddPermissions->bindValue(':_tenant', $this->tenant);
+                }
+
+                $stmtAddPermissions->execute();
+            }
         }
+
+        return $affected;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $attribute
+     * @param array<Document> $documents
+     * @return array<Document>
+     */
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
+    {
+        return $documents;
     }
 
     /**
@@ -1466,12 +1658,9 @@ class Postgres extends SQL
 			SET 
 			    \"{$attribute}\" = \"{$attribute}\" + :val,
                 \"_updatedAt\" = :updatedAt
-			WHERE _uid = :_uid 
+			WHERE _uid = :_uid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
-        }
 
         $sql .= $sqlMax . $sqlMin;
 
@@ -1505,11 +1694,8 @@ class Postgres extends SQL
         $sql = "
 			DELETE FROM {$this->getSQLTable($name)} 
 			WHERE _uid = :_uid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
-        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_DELETE, $sql);
         $stmt = $this->getPDO()->prepare($sql);
@@ -1522,11 +1708,8 @@ class Postgres extends SQL
         $sql = "
 			DELETE FROM {$this->getSQLTable($name . '_perms')} 
 			WHERE _document = :_uid
+			{$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= ' AND _tenant = :_tenant';
-        }
 
         $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
@@ -1556,6 +1739,80 @@ class Postgres extends SQL
         return $deleted;
     }
 
+
+    /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<string> $ids
+     *
+     * @return int
+     */
+    public function deleteDocuments(string $collection, array $ids): int
+    {
+        if (empty($ids)) {
+            return 0;
+        }
+
+        try {
+            $name = $this->filter($collection);
+            $where = [];
+
+            if ($this->sharedTables) {
+                $where[] = "_tenant = :_tenant";
+            }
+
+            $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($ids))) . ")";
+
+            $sql = "DELETE FROM {$this->getSQLTable($name)} WHERE " . \implode(' AND ', $where);
+
+            $sql = $this->trigger(Database::EVENT_DOCUMENTS_DELETE, $sql);
+
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($ids as $id => $value) {
+                $stmt->bindValue(":_id_{$id}", $value);
+            }
+
+            if ($this->sharedTables) {
+                $stmt->bindValue(':_tenant', $this->tenant);
+            }
+
+            $sql = "
+                DELETE FROM {$this->getSQLTable($name . '_perms')} 
+                WHERE _document IN (" . \implode(', ', \array_map(fn ($id) => ":_id_{$id}", \array_keys($ids))) . ")
+            ";
+
+            if ($this->sharedTables) {
+                $sql .= ' AND _tenant = :_tenant';
+            }
+
+            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
+
+            $stmtPermissions = $this->getPDO()->prepare($sql);
+
+            foreach ($ids as $id => $value) {
+                $stmtPermissions->bindValue(":_id_{$id}", $value);
+            }
+
+            if ($this->sharedTables) {
+                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+            }
+
+            if (!$stmt->execute()) {
+                throw new DatabaseException('Failed to delete documents');
+            }
+
+            if (!$stmtPermissions->execute()) {
+                throw new DatabaseException('Failed to delete permissions');
+            }
+        } catch (\Throwable $e) {
+            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        return $stmt->rowCount();
+    }
+
     /**
      * Find Documents
      *
@@ -1569,13 +1826,15 @@ class Postgres extends SQL
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      *
      * @return array<Document>
-     * @throws Exception
-     * @throws PDOException
-     * @throws Timeout
+     * @throws DatabaseException
+     * @throws TimeoutException
+
+     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1654,16 +1913,22 @@ class Postgres extends SQL
         }
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $orIsNull = '';
+
+            if ($collection === Database::METADATA) {
+                $orIsNull = " OR table_main._tenant IS NULL";
+            }
+
+            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1719,7 +1984,7 @@ class Postgres extends SQL
         try {
             $stmt->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
 
         $results = $stmt->fetchAll();
@@ -1782,12 +2047,18 @@ class Postgres extends SQL
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $conditions = $this->getSQLConditions($queries);
-        if(!empty($conditions)) {
+        if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $orIsNull = '';
+
+            if ($collection === Database::METADATA) {
+                $orIsNull = " OR table_main._tenant IS NULL";
+            }
+
+            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
         }
 
         if (Authorization::$status) {
@@ -1852,7 +2123,13 @@ class Postgres extends SQL
         }
 
         if ($this->sharedTables) {
-            $where[] = "table_main._tenant = :_tenant";
+            $orIsNull = '';
+
+            if ($collection === Database::METADATA) {
+                $orIsNull = " OR table_main._tenant IS NULL";
+            }
+
+            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
         }
 
         if (Authorization::$status) {
@@ -2022,7 +2299,7 @@ class Postgres extends SQL
      */
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
     {
-        if($array === true) {
+        if ($array === true) {
             return 'JSONB';
         }
 
@@ -2141,12 +2418,16 @@ class Postgres extends SQL
         return '{' . implode(",", $value) . '}';
     }
 
+    public function getMinDateTime(): \DateTime
+    {
+        return new \DateTime('-4713-01-01 00:00:00');
+    }
+
     /**
      * Is fulltext Wildcard index supported?
      *
      * @return bool
      */
-    // TODO: Fix full-text search logic for postgres and MariaDB
     public function getSupportForFulltextWildcardIndex(): bool
     {
         return false;
@@ -2173,54 +2454,18 @@ class Postgres extends SQL
     }
 
     /**
-     * Returns Max Execution Time
-     * @param int $milliseconds
-     * @param string $event
-     * @return void
-     * @throws DatabaseException
+     * Is get schema attributes supported?
+     *
+     * @return bool
      */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    public function getSupportForSchemaAttributes(): bool
     {
-        if (!$this->getSupportForTimeouts()) {
-            return;
-        }
-        if ($milliseconds <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
-        }
-        $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
-            return "
-				SET statement_timeout = {$milliseconds};
-				{$sql};
-				SET statement_timeout = 0;
-			";
-        });
+        return false;
     }
 
-    /**
-     * @param PDOException $e
-     * @throws Timeout
-     * @throws Duplicate
-     */
-    protected function processException(PDOException $e): void
+    public function getSupportForUpserts(): bool
     {
-        /**
-         * PDO and Swoole PDOProxy swap error codes and errorInfo
-         */
-
-        if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            throw new Timeout($e->getMessage(), $e->getCode(), $e);
-        }
-
-        if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
-        }
-
-        // Data is too big for column resize
-        if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            throw new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
-        }
-
-        throw $e;
+        return false;
     }
 
     /**
@@ -2229,5 +2474,46 @@ class Postgres extends SQL
     public function getLikeOperator(): string
     {
         return 'ILIKE';
+    }
+
+
+
+    protected function processException(PDOException $e): \Exception
+    {
+        // Timeout
+        if ($e->getCode() === '57014' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new TimeoutException('Query timed out', $e->getCode(), $e);
+        }
+
+        // Duplicate table
+        if ($e->getCode() === '42P07' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new DuplicateException('Collection already exists', $e->getCode(), $e);
+        }
+
+        // Duplicate column
+        if ($e->getCode() === '42701' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new DuplicateException('Attribute already exists', $e->getCode(), $e);
+        }
+
+        // Duplicate row
+        if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new DuplicateException('Document already exists', $e->getCode(), $e);
+        }
+
+        // Data is too big for column resize
+        if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
+        }
+
+        return $e;
+    }
+
+    /**
+     * @return string
+     */
+    public function getConnectionId(): string
+    {
+        $stmt = $this->getPDO()->query("SELECT pg_backend_pid();");
+        return $stmt->fetchColumn();
     }
 }

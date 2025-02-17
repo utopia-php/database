@@ -18,11 +18,6 @@ use Utopia\Validator\Text;
 class Structure extends Validator
 {
     /**
-     * @var Document
-     */
-    protected Document $collection;
-
-    /**
      * @var array<array<string, mixed>>
      */
     protected array $attributes = [
@@ -106,9 +101,11 @@ class Structure extends Validator
      * Structure constructor.
      *
      */
-    public function __construct(Document $collection)
-    {
-        $this->collection = $collection;
+    public function __construct(
+        protected readonly Document $collection,
+        private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
+        private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+    ) {
     }
 
     /**
@@ -227,6 +224,32 @@ class Structure extends Validator
         $structure = $document->getArrayCopy();
         $attributes = \array_merge($this->attributes, $this->collection->getAttribute('attributes', []));
 
+        if (!$this->checkForAllRequiredValues($structure, $attributes, $keys)) {
+            return false;
+        }
+
+        if (!$this->checkForUnknownAttributes($structure, $keys)) {
+            return false;
+        }
+
+        if (!$this->checkForInvalidAttributeValues($structure, $keys)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Check for all required values
+     *
+     * @param array<string, mixed> $structure
+     * @param array<string, mixed> $attributes
+     * @param array<string, mixed> $keys
+     *
+     * @return bool
+     */
+    protected function checkForAllRequiredValues(array $structure, array $attributes, array &$keys): bool
+    {
         foreach ($attributes as $key => $attribute) { // Check all required attributes are set
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
@@ -239,12 +262,40 @@ class Structure extends Validator
             }
         }
 
+        return true;
+    }
+
+    /**
+     * Check for Unknown Attributes
+     *
+     * @param array<string, mixed> $structure
+     * @param array<string, mixed> $keys
+     *
+     * @return bool
+     */
+    protected function checkForUnknownAttributes(array $structure, array $keys): bool
+    {
         foreach ($structure as $key => $value) {
             if (!array_key_exists($key, $keys)) { // Check no unknown attributes are set
                 $this->message = 'Unknown attribute: "'.$key.'"';
                 return false;
             }
+        }
 
+        return true;
+    }
+
+    /**
+     * Check for invalid attribute values
+     *
+     * @param array<string, mixed> $structure
+     * @param array<string, mixed> $keys
+     *
+     * @return bool
+     */
+    protected function checkForInvalidAttributeValues(array $structure, array $keys): bool
+    {
+        foreach ($structure as $key => $value) {
             $attribute = $keys[$key] ?? [];
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -257,7 +308,7 @@ class Structure extends Validator
                 continue;
             }
 
-            if($type === Database::VAR_RELATIONSHIP) {
+            if ($type === Database::VAR_RELATIONSHIP) {
                 continue;
             }
 
@@ -288,7 +339,10 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validators[] = new DatetimeValidator();
+                    $validators[] = new DatetimeValidator(
+                        min: $this->minAllowedDate,
+                        max: $this->maxAllowedDate
+                    );
                     break;
 
                 default:

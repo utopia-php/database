@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use ArrayObject;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Structure as StructureException;
 
 /**
  * @extends ArrayObject<string, mixed>
@@ -26,8 +27,12 @@ class Document extends ArrayObject
      */
     public function __construct(array $input = [])
     {
+        if (isset($input['$id']) && !\is_string($input['$id'])) {
+            throw new StructureException('$id must be of type string');
+        }
+
         if (isset($input['$permissions']) && !is_array($input['$permissions'])) {
-            throw new DatabaseException('$permissions must be of type array');
+            throw new StructureException('$permissions must be of type array');
         }
 
         foreach ($input as $key => &$value) {
@@ -210,9 +215,9 @@ class Document extends ArrayObject
      * @param mixed $value
      * @param string $type
      *
-     * @return self
+     * @return static
      */
-    public function setAttribute(string $key, mixed $value, string $type = self::SET_TYPE_ASSIGN): self
+    public function setAttribute(string $key, mixed $value, string $type = self::SET_TYPE_ASSIGN): static
     {
         switch ($type) {
             case self::SET_TYPE_ASSIGN:
@@ -235,9 +240,9 @@ class Document extends ArrayObject
      * Set Attributes.
      *
      * @param array<string, mixed> $attributes
-     * @return self
+     * @return static
      */
-    public function setAttributes(array $attributes): self
+    public function setAttributes(array $attributes): static
     {
         foreach ($attributes as $key => $value) {
             $this->setAttribute($key, $value);
@@ -253,14 +258,15 @@ class Document extends ArrayObject
      *
      * @param string $key
      *
-     * @return self
+     * @return static
      */
-    public function removeAttribute(string $key): self
+    public function removeAttribute(string $key): static
     {
         if (\array_key_exists($key, (array)$this)) {
             unset($this[$key]);
         }
 
+        /* @phpstan-ignore-next-line */
         return $this;
     }
 

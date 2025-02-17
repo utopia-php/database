@@ -5,7 +5,7 @@ services:
     build:
       context: .
       args:
-        DEBUG: false
+        DEBUG: true
     networks:
       - database
     volumes:
@@ -14,25 +14,37 @@ services:
       - ./tests:/usr/src/code/tests
       - ./dev:/usr/src/code/dev
       - ./phpunit.xml:/usr/src/code/phpunit.xml
-    ports:
-      - "8708:8708"
+      - ./dev/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/usr/src/code/docker-compose.yml
 
   adminer:
     image: adminer
     container_name: utopia-adminer
     restart: always
     ports:
-      - "8760:8080"
+      - "8700:8080"
     networks:
       - database
 
   postgres:
-    image: postgres:13
+    image: postgres:16.4
     container_name: utopia-postgres
     networks:
       - database
     ports:
-      - "8700:5432"
+      - "8701:5432"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: password
+
+  postgres-mirror:
+    image: postgres:16.4
+    container_name: utopia-postgres-mirror
+    networks:
+      - database
+    ports:
+      - "8702:5432"
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
@@ -44,7 +56,18 @@ services:
     networks:
       - database
     ports:
-      - "8701:3306"
+      - "8703:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+
+  mariadb-mirror:
+    image: mariadb:10.11
+    container_name: utopia-mariadb-mirror
+    command: mariadbd --max_allowed_packet=1G
+    networks:
+      - database
+    ports:
+      - "8704:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
   
@@ -54,7 +77,7 @@ services:
     networks:
       - database
     ports:
-      - "8702:27017"
+      - "8705:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
@@ -65,7 +88,23 @@ services:
     networks:
       - database
     ports:
-      - "8703:3307"
+      - "8706:3307"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: default
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_TCP_PORT: 3307
+    cap_add:
+      - SYS_NICE
+
+  mysql-mirror:
+    image: mysql:8.0.33
+    container_name: utopia-mysql-mirror
+    networks:
+      - database
+    ports:
+      - "8707:3307"
     environment:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: default
@@ -76,10 +115,18 @@ services:
       - SYS_NICE
 
   redis:
-    image: redis:6.0-alpine
+    image: redis:7.4.1-alpine3.20
     container_name: utopia-redis
     ports:
-      - "8706:6379"
+      - "8708:6379"
+    networks:
+      - database
+
+  redis-mirror:
+    image: redis:7.4.1-alpine3.20
+    container_name: utopia-redis-mirror
+    ports:
+      - "8709:6379"
     networks:
       - database
 

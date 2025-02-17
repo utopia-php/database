@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 
 abstract class Adapter
 {
@@ -42,7 +43,7 @@ abstract class Adapter
      *
      * @return $this
      */
-    public function setDebug(string $key, mixed $value): self
+    public function setDebug(string $key, mixed $value): static
     {
         $this->debug[$key] = $value;
 
@@ -58,9 +59,9 @@ abstract class Adapter
     }
 
     /**
-     * @return self
+     * @return static
      */
-    public function resetDebug(): self
+    public function resetDebug(): static
     {
         $this->debug = [];
 
@@ -196,7 +197,7 @@ abstract class Adapter
      * @param mixed $value
      * @return $this
      */
-    public function setMetadata(string $key, mixed $value): self
+    public function setMetadata(string $key, mixed $value): static
     {
         $this->metadata[$key] = $value;
 
@@ -227,11 +228,40 @@ abstract class Adapter
      *
      * @return $this
      */
-    public function resetMetadata(): self
+    public function resetMetadata(): static
     {
         $this->metadata = [];
 
         return $this;
+    }
+
+    /**
+     * Set a global timeout for database queries in milliseconds.
+     *
+     * This function allows you to set a maximum execution time for all database
+     * queries executed using the library, or a specific event specified by the
+     * event parameter. Once this timeout is set, any database query that takes
+     * longer than the specified time will be automatically terminated by the library,
+     * and an appropriate error or exception will be raised to handle the timeout condition.
+     *
+     * @param int $milliseconds The timeout value in milliseconds for database queries.
+     * @param string $event     The event the timeout should fire fore
+     * @return void
+     *
+     * @throws Exception The provided timeout value must be greater than or equal to 0.
+     */
+    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+
+    /**
+     * Clears a global timeout for database queries.
+     *
+     * @param string $event
+     * @return void
+     */
+    public function clearTimeout(string $event): void
+    {
+        // Clear existing callback
+        $this->before($event, 'timeout', null);
     }
 
     /**
@@ -286,16 +316,36 @@ abstract class Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        $this->startTransaction();
+        for ($attempts = 0; $attempts < 3; $attempts++) {
+            try {
+                $this->startTransaction();
+                $result = $callback();
+                $this->commitTransaction();
+                return $result;
+            } catch (\Throwable $action) {
+                try {
+                    $this->rollbackTransaction();
+                } catch (\Throwable $rollback) {
+                    if ($attempts < 2) {
+                        \usleep(5000); // 5ms
+                        continue;
+                    }
 
-        try {
-            $result = $callback();
-            $this->commitTransaction();
-            return $result;
-        } catch (\Throwable $e) {
-            $this->rollbackTransaction();
-            throw $e;
+                    $this->inTransaction = 0;
+                    throw $rollback;
+                }
+
+                if ($attempts < 2) {
+                    \usleep(5000); // 5ms
+                    continue;
+                }
+
+                $this->inTransaction = 0;
+                throw $action;
+            }
         }
+
+        throw new TransactionException('Failed to execute transaction');
     }
 
     /**
@@ -304,9 +354,9 @@ abstract class Adapter
      * @param string $event
      * @param string $name
      * @param ?callable $callback
-     * @return self
+     * @return static
      */
-    public function before(string $event, string $name = '', ?callable $callback = null): self
+    public function before(string $event, string $name = '', ?callable $callback = null): static
     {
         if (!isset($this->transformations[$event])) {
             $this->transformations[$event] = [];
@@ -339,6 +389,11 @@ abstract class Adapter
      * @return bool
      */
     abstract public function ping(): bool;
+
+    /**
+     * Reconnect Database
+     */
+    abstract public function reconnect(): void;
 
     /**
      * Create Database
@@ -396,6 +451,14 @@ abstract class Adapter
     abstract public function deleteCollection(string $id): bool;
 
     /**
+     * Analyze a collection updating its metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    abstract public function analyzeCollection(string $collection): bool;
+
+    /**
      * Create Attribute
      *
      * @param string $collection
@@ -423,7 +486,7 @@ abstract class Adapter
      *
      * @return bool
      */
-    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool;
+    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool;
 
     /**
      * Delete Attribute
@@ -546,13 +609,12 @@ abstract class Adapter
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param int $batchSize
      *
      * @return array<Document>
      *
      * @throws DatabaseException
      */
-    abstract public function createDocuments(string $collection, array $documents, int $batchSize): array;
+    abstract public function createDocuments(string $collection, array $documents): array;
 
     /**
      * Update Document
@@ -562,20 +624,38 @@ abstract class Adapter
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, Document $document): Document;
+    abstract public function updateDocument(string $collection, string $id, Document $document): Document;
 
     /**
-     * Update Documents in batches
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
+     * @param Document $updates
      * @param array<Document> $documents
-     * @param int $batchSize
      *
-     * @return array<Document>
+     * @return int
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, array $documents, int $batchSize): array;
+    abstract public function updateDocuments(string $collection, Document $updates, array $documents): int;
+
+    /**
+     * Create documents if they do not exist, otherwise update them.
+     *
+     * If attribute is not empty, only the specified attribute will be increased, by the new value in each document.
+     *
+     * @param string $collection
+     * @param string $attribute
+     * @param array<Document> $documents
+     * @return array<Document>
+     */
+    abstract public function createOrUpdateDocuments(
+        string $collection,
+        string $attribute,
+        array $documents
+    ): array;
 
     /**
      * Delete Document
@@ -586,6 +666,16 @@ abstract class Adapter
      * @return bool
      */
     abstract public function deleteDocument(string $collection, string $id): bool;
+
+    /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<string> $ids
+     *
+     * @return int
+     */
+    abstract public function deleteDocuments(string $collection, array $ids): int;
 
     /**
      * Find Documents
@@ -600,10 +690,11 @@ abstract class Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array;
+    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
 
     /**
      * Sum an attribute
@@ -629,13 +720,22 @@ abstract class Adapter
     abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
 
     /**
-     * Get Collection Size
+     * Get Collection Size of the raw data
      *
      * @param string $collection
      * @return int
      * @throws DatabaseException
      */
     abstract public function getSizeOfCollection(string $collection): int;
+
+    /**
+     * Get Collection Size on the disk
+     *
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
 
     /**
      * Get max STRING limit
@@ -666,6 +766,28 @@ abstract class Adapter
     abstract public function getLimitForIndexes(): int;
 
     /**
+     * @return int
+     */
+    abstract public function getMaxIndexLength(): int;
+
+    /**
+     * Get the minimum supported DateTime value
+     *
+     * @return \DateTime
+     */
+    abstract public function getMinDateTime(): \DateTime;
+
+    /**
+     * Get the maximum supported DateTime value
+     *
+     * @return \DateTime
+     */
+    public function getMaxDateTime(): \DateTime
+    {
+        return new \DateTime('9999-12-31 23:59:59');
+    }
+
+    /**
      * Is schemas supported?
      *
      * @return bool
@@ -678,6 +800,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForAttributes(): bool;
+
+    /**
+     * Are schema attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSchemaAttributes(): bool;
 
     /**
      * Is index supported?
@@ -739,11 +868,48 @@ abstract class Adapter
     abstract public function getSupportForUpdateLock(): bool;
 
     /**
+     * Are batch operations supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForBatchOperations(): bool;
+
+    /**
      * Is attribute resizing supported?
      *
      * @return bool
      */
     abstract public function getSupportForAttributeResizing(): bool;
+
+    /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForGetConnectionId(): bool;
+
+    /**
+     * Is cast index as array supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForCastIndexArray(): bool;
+
+    /**
+     * Is upserting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUpserts(): bool;
+
+    /**
+     * Is Cache Fallback supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForCacheSkipOnFailure(): bool;
+
+    abstract public function getSupportForReconnection(): bool;
 
     /**
      * Get current attribute count from collection document
@@ -842,7 +1008,7 @@ abstract class Adapter
      */
     public function filter(string $value): string
     {
-        $value = \preg_replace("/[^A-Za-z0-9\_\-]/", '', $value);
+        $value = \preg_replace("/[^A-Za-z0-9_\-]/", '', $value);
 
         if (\is_null($value)) {
             throw new DatabaseException('Failed to filter key');
@@ -894,37 +1060,34 @@ abstract class Adapter
     abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool;
 
     /**
-     * @return int
+     * Returns the connection ID identifier
+     *
+     * @return string
      */
-    abstract public function getMaxIndexLength(): int;
-
-
-    /**
-     * Set a global timeout for database queries in milliseconds.
-     *
-     * This function allows you to set a maximum execution time for all database
-     * queries executed using the library, or a specific event specified by the
-     * event parameter. Once this timeout is set, any database query that takes
-     * longer than the specified time will be automatically terminated by the library,
-     * and an appropriate error or exception will be raised to handle the timeout condition.
-     *
-     * @param int $milliseconds The timeout value in milliseconds for database queries.
-     * @param string $event     The event the timeout should fire fore
-     * @return void
-     *
-     * @throws Exception The provided timeout value must be greater than or equal to 0.
-     */
-    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+    abstract public function getConnectionId(): string;
 
     /**
-     * Clears a global timeout for database queries.
+     * Get List of internal index keys names
      *
-     * @param string $event
-     * @return void
+     * @return array<string>
      */
-    public function clearTimeout(string $event): void
-    {
-        // Clear existing callback
-        $this->before($event, 'timeout', null);
-    }
+    abstract public function getInternalIndexesKeys(): array;
+
+    /**
+     * Get Schema Attributes
+     *
+     * @param string $collection
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    abstract public function getSchemaAttributes(string $collection): array;
+
+    /**
+     * Get the query to check for tenant when in shared tables mode
+     *
+     * @param string $collection   The collection being queried
+     * @param string $parentAlias  The alias of the parent collection if in a subquery
+     * @return string
+     */
+    abstract public function getTenantQuery(string $collection, string $parentAlias = ''): string;
 }

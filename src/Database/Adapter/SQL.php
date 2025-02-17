@@ -9,6 +9,8 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -34,20 +36,26 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
+                if ($this->getPDO()->inTransaction()) {
+                    $this->getPDO()->rollBack();
+                } else {
+                    // If no active transaction, this has no effect.
+                    $this->getPDO()->prepare('ROLLBACK')->execute();
+                }
+
                 $result = $this->getPDO()->beginTransaction();
             } else {
-                $result = true;
+                $result = $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
             }
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+            throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
         if (!$result) {
-            throw new DatabaseException('Failed to start transaction');
+            throw new TransactionException('Failed to start transaction');
         }
 
         $this->inTransaction++;
-
         return $result;
     }
 
@@ -63,16 +71,20 @@ abstract class SQL extends Adapter
             return true;
         }
 
+        if (!$this->getPDO()->inTransaction()) {
+            $this->inTransaction = 0;
+            return false;
+        }
+
         try {
             $result = $this->getPDO()->commit();
+            $this->inTransaction = 0;
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
-        } finally {
-            $this->inTransaction--;
+            throw new TransactionException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
         if (!$result) {
-            throw new DatabaseException('Failed to commit transaction');
+            throw new TransactionException('Failed to commit transaction');
         }
 
         return $result;
@@ -88,15 +100,19 @@ abstract class SQL extends Adapter
         }
 
         try {
-            $result = $this->getPDO()->rollBack();
+            if ($this->inTransaction > 1) {
+                $result = $this->getPDO()->exec('ROLLBACK TO transaction' . ($this->inTransaction - 1));
+                $this->inTransaction--;
+            } else {
+                $result = $this->getPDO()->rollBack();
+                $this->inTransaction = 0;
+            }
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
-        } finally {
-            $this->inTransaction = 0;
         }
 
         if (!$result) {
-            throw new DatabaseException('Failed to rollback transaction');
+            throw new TransactionException('Failed to rollback transaction');
         }
 
         return $result;
@@ -114,6 +130,11 @@ abstract class SQL extends Adapter
         return $this->getPDO()
             ->prepare("SELECT 1;")
             ->execute();
+    }
+
+    public function reconnect(): void
+    {
+        $this->getPDO()->reconnect();
     }
 
     /**
@@ -148,10 +169,19 @@ abstract class SQL extends Adapter
             $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
         }
 
-        $stmt->execute();
+        try {
+            $stmt->execute();
+            $document = $stmt->fetchAll();
+            $stmt->closeCursor();
+        } catch (PDOException $e) {
+            $e = $this->processException($e);
 
-        $document = $stmt->fetchAll();
-        $stmt->closeCursor();
+            if ($e instanceof NotFoundException) {
+                return false;
+            }
+
+            throw $e;
+        }
 
         if (empty($document)) {
             return false;
@@ -191,11 +221,8 @@ abstract class SQL extends Adapter
 		    SELECT {$this->getAttributeProjection($selections)}
             FROM {$this->getSQLTable($name)}
             WHERE _uid = :_uid 
+            {$this->getTenantQuery($collection)}
 		";
-
-        if ($this->sharedTables) {
-            $sql .= "AND _tenant = :_tenant";
-        }
 
         if ($this->getSupportForUpdateLock()) {
             $sql .= " {$forUpdate}";
@@ -210,7 +237,6 @@ abstract class SQL extends Adapter
         }
 
         $stmt->execute();
-
         $document = $stmt->fetchAll();
         $stmt->closeCursor();
 
@@ -362,6 +388,36 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Are batch operations supported?
+     *
+     * @return bool
+     */
+    public function getSupportForBatchOperations(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    public function getSupportForGetConnectionId(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is cache fallback supported?
+     *
+     * @return bool
+     */
+    public function getSupportForCacheSkipOnFailure(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -371,8 +427,7 @@ abstract class SQL extends Adapter
     {
         $attributes = \count($collection->getAttribute('attributes') ?? []);
 
-        // +1 ==> virtual columns count as total, so add as buffer
-        return $attributes + static::getCountOfDefaultAttributes() + 1;
+        return $attributes + static::getCountOfDefaultAttributes();
     }
 
     /**
@@ -428,57 +483,77 @@ abstract class SQL extends Adapter
      */
     public function getAttributeWidth(Document $collection): int
     {
-        // Default collection has:
-        // `_id` int(11) => 4 bytes
-        // `_uid` char(255) => 1020 (255 bytes * 4 for utf8mb4)
-        // but this number seems to vary, so we give a +500 byte buffer
-        $total = 1500;
+        /**
+         * @link https://dev.mysql.com/doc/refman/8.0/en/storage-requirements.html
+         *
+         * `_id` bigint => 8 bytes
+         * `_uid` varchar(255) => 1021 (4 * 255 + 1) bytes
+         * `_tenant` int => 4 bytes
+         * `_createdAt` datetime(3) => 7 bytes
+         * `_updatedAt` datetime(3) => 7 bytes
+         * `_permissions` mediumtext => 20
+         */
+
+        $total = 1067;
 
         $attributes = $collection->getAttributes()['attributes'];
 
         foreach ($attributes as $attribute) {
+            /**
+             * Json / Longtext
+             * only the pointer contributes 20 bytes
+             * data is stored externally
+             */
+
+            if ($attribute['array'] ?? false) {
+                $total += 20;
+                continue;
+            }
+
             switch ($attribute['type']) {
                 case Database::VAR_STRING:
+                    /**
+                     * Text / Mediumtext / Longtext
+                     * only the pointer contributes 20 bytes to the row size
+                     * data is stored externally
+                     */
+
                     $total += match (true) {
-                        // 8 bytes length + 4 bytes for LONGTEXT
-                        $attribute['size'] > 16777215 => 12,
-                        // 8 bytes length + 3 bytes for MEDIUMTEXT
-                        $attribute['size'] > 65535 => 11,
-                        // 8 bytes length + 2 bytes for TEXT
-                        $attribute['size'] > $this->getMaxVarcharLength() => 10,
-                        // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                        // 8 bytes length + 2 bytes for VARCHAR(>255)
-                        $attribute['size'] > 255 => ($attribute['size'] * 4) + 2,
-                        // $size = $size * 4; // utf8mb4 up to 4 bytes per char
-                        // 8 bytes length + 1 bytes for VARCHAR(<=255)
-                        default => ($attribute['size'] * 4) + 1,
+                        $attribute['size'] > $this->getMaxVarcharLength() => 20,
+                        $attribute['size'] > 255 => $attribute['size'] * 4 + 2, //  VARCHAR(>255) + 2 length
+                        default => $attribute['size'] * 4 + 1, //  VARCHAR(<=255) + 1 length
                     };
+
                     break;
 
                 case Database::VAR_INTEGER:
                     if ($attribute['size'] >= 8) {
-                        $total += 8; // BIGINT takes 8 bytes
+                        $total += 8; //  BIGINT 8 bytes
                     } else {
-                        $total += 4; // INT takes 4 bytes
+                        $total += 4; // INT 4 bytes
                     }
                     break;
+
                 case Database::VAR_FLOAT:
-                    // DOUBLE takes 8 bytes
-                    $total += 8;
+                    $total += 8; // DOUBLE 8 bytes
                     break;
 
                 case Database::VAR_BOOLEAN:
-                    // TINYINT(1) takes one byte
-                    $total += 1;
+                    $total += 1; // TINYINT(1) 1 bytes
                     break;
 
                 case Database::VAR_RELATIONSHIP:
-                    // INT(11)
-                    $total += 4;
+                    $total += Database::LENGTH_KEY * 4 + 1; // VARCHAR(<=255)
                     break;
 
                 case Database::VAR_DATETIME:
-                    $total += 19; // 2022-06-26 14:46:24
+                    /**
+                     * 1 byte year + month
+                     * 1 byte for the day
+                     * 3 bytes for the hour, minute, and second
+                     * 2 bytes miliseconds DATETIME(3)
+                     */
+                    $total += 7;
                     break;
                 default:
                     throw new DatabaseException('Unknown type: ' . $attribute['type']);
@@ -801,7 +876,17 @@ abstract class SQL extends Adapter
      */
     abstract public function getSupportForJSONOverlaps(): bool;
 
+    public function getSupportForCastIndexArray(): bool
+    {
+        return false;
+    }
+
     public function getSupportForRelationships(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForReconnection(): bool
     {
         return true;
     }
@@ -818,14 +903,14 @@ abstract class SQL extends Adapter
             return;
         }
 
-        if($query->isNested()) {
+        if ($query->isNested()) {
             foreach ($query->getValues() as $value) {
                 $this->bindConditionValue($stmt, $value);
             }
             return;
         }
 
-        if($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
+        if ($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
             $placeholder = $this->getSQLPlaceholder($query) . '_0';
             $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
             return;
@@ -968,21 +1053,20 @@ abstract class SQL extends Adapter
      * @return string
      * @throws Exception
      */
-    protected function getSQLPermissionsCondition(string $collection, array $roles): string
+    protected function getSQLPermissionsCondition(string $collection, array $roles, string $type = Database::PERMISSION_READ): string
     {
-        $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
-
-        $tenantQuery = '';
-        if ($this->sharedTables) {
-            $tenantQuery = 'AND _tenant = :_tenant';
+        if (!in_array($type, Database::PERMISSIONS)) {
+            throw new DatabaseException('Unknown permission type: ' . $type);
         }
+
+        $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
 
         return "table_main._uid IN (
                     SELECT _document
                     FROM {$this->getSQLTable($collection . '_perms')}
                     WHERE _permission IN (" . implode(', ', $roles) . ")
-                      AND _type = 'read'
-                      {$tenantQuery}
+                      AND _type = '{$type}'
+                      {$this->getTenantQuery($collection)}
                 )";
     }
 
@@ -1046,7 +1130,10 @@ abstract class SQL extends Adapter
      */
     public function getMaxIndexLength(): int
     {
-        return 768;
+        /**
+         * $tenant int = 1
+         */
+        return $this->sharedTables ? 767 : 768;
     }
 
     /**
@@ -1071,14 +1158,14 @@ abstract class SQL extends Adapter
                 continue;
             }
 
-            if($query->isNested()) {
+            if ($query->isNested()) {
                 $conditions[] = $this->getSQLConditions($query->getValues(), $query->getMethod());
             } else {
                 $conditions[] = $this->getSQLCondition($query);
             }
         }
 
-        $tmp = implode(' '. $separator .' ', $conditions);
+        $tmp = implode(' ' . $separator . ' ', $conditions);
         return empty($tmp) ? '' : '(' . $tmp . ')';
     }
 
@@ -1090,4 +1177,39 @@ abstract class SQL extends Adapter
         return 'LIKE';
     }
 
+    public function getInternalIndexesKeys(): array
+    {
+        return [];
+    }
+
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getTenantQuery(string $collection, string $parentAlias = ''): string
+    {
+        if (!$this->sharedTables) {
+            return '';
+        }
+
+        if (!empty($parentAlias) || $parentAlias === '0') {
+            $parentAlias .= '.';
+        }
+
+        $query = "AND ({$parentAlias}_tenant = :_tenant";
+
+        if ($collection === Database::METADATA) {
+            $query .= " OR {$parentAlias}_tenant IS NULL";
+        }
+
+        $query .= ")";
+
+        return $query;
+    }
+
+    protected function processException(PDOException $e): \Exception
+    {
+        return $e;
+    }
 }

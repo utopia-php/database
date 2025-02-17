@@ -313,12 +313,20 @@ class Query
         $attribute = $query['attribute'] ?? '';
         $values = $query['values'] ?? [];
 
+        if (!\is_string($method)) {
+            throw new QueryException('Invalid query method. Must be a string, got ' . \gettype($method));
+        }
+
         if (!self::isMethod($method)) {
             throw new QueryException('Invalid query method: ' . $method);
         }
 
         if (!\is_string($attribute)) {
             throw new QueryException('Invalid query attribute. Must be a string, got ' . \gettype($attribute));
+        }
+
+        if (!\is_array($values)) {
+            throw new QueryException('Invalid query values. Must be an array, got ' . \gettype($values));
         }
 
         if (\in_array($method, self::LOGICAL_TYPES)) {
@@ -356,7 +364,7 @@ class Query
     {
         $array = ['method' => $this->method];
 
-        if(!empty($this->attribute)) {
+        if (!empty($this->attribute)) {
             $array['attribute'] = $this->attribute;
         }
 
@@ -784,7 +792,7 @@ class Query
      */
     public function isNested(): bool
     {
-        if(in_array($this->getMethod(), self::LOGICAL_TYPES)) {
+        if (in_array($this->getMethod(), self::LOGICAL_TYPES)) {
             return true;
         }
 

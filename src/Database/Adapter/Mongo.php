@@ -3,7 +3,6 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
-
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
@@ -58,6 +57,22 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    {
+        if (!$this->getSupportForTimeouts()) {
+            return;
+        }
+
+        $this->timeout = $milliseconds;
+    }
+
+    public function clearTimeout(string $event): void
+    {
+        parent::clearTimeout($event);
+
+        $this->timeout = null;
+    }
+
     public function startTransaction(): bool
     {
         return true;
@@ -85,6 +100,11 @@ class Mongo extends Adapter
         return $this->getClient()->query(['ping' => 1])->ok ?? false;
     }
 
+    public function reconnect(): void
+    {
+        $this->client->connect();
+    }
+
     /**
      * Create Database
      *
@@ -107,7 +127,7 @@ class Mongo extends Adapter
      * @return bool
      * @throws Exception
      */
-    public function exists(string $database, string $collection = null): bool
+    public function exists(string $database, ?string $collection = null): bool
     {
         if (!\is_null($collection)) {
             $collection = $this->getNamespace() . "_" . $collection;
@@ -268,7 +288,18 @@ class Mongo extends Adapter
     }
 
     /**
-     * Get Collection Size
+     * Get Collection Size on disk
+     * @param string $collection
+     * @return int
+     * @throws DatabaseException
+     */
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->getSizeOfCollection($collection);
+    }
+
+    /**
+     * Get Collection Size of raw data
      * @param string $collection
      * @return int
      * @throws DatabaseException
@@ -291,7 +322,7 @@ class Mongo extends Adapter
             } else {
                 throw new DatabaseException('No size found');
             }
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
     }
@@ -308,6 +339,17 @@ class Mongo extends Adapter
         $id = $this->getNamespace() . '_' . $this->filter($id);
 
         return (!!$this->getClient()->dropCollection($id));
+    }
+
+    /**
+     * Analyze a collection updating it's metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
     }
 
     /**
@@ -710,18 +752,28 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param int $batchSize
      *
      * @return array<Document>
      *
      * @throws Duplicate
      */
-    public function createDocuments(string $collection, array $documents, int $batchSize): array
+    public function createDocuments(string $collection, array $documents): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $records = [];
+        $hasInternalId = null;
+        $documents = array_map(fn ($doc) => clone $doc, $documents);
+
         foreach ($documents as $document) {
+            $internalId = $document->getInternalId();
+
+            if ($hasInternalId === null) {
+                $hasInternalId = !empty($internalId);
+            } elseif ($hasInternalId == empty($internalId)) {
+                throw new DatabaseException('All documents must have an internalId if one is set');
+            }
+
             $document->removeAttribute('$internalId');
 
             if ($this->sharedTables) {
@@ -730,6 +782,10 @@ class Mongo extends Adapter
 
             $record = $this->replaceChars('$', '_', (array)$document);
             $record = $this->timeToMongo($record);
+
+            if (!empty($internalId)) {
+                $record['_id'] = $internalId;
+            }
 
             $records[] = $this->removeNullKeys($record);
         }
@@ -761,6 +817,7 @@ class Mongo extends Adapter
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
+
             if ($this->sharedTables) {
                 $filters['_tenant'] = (string)$this->getTenant();
             }
@@ -781,12 +838,13 @@ class Mongo extends Adapter
      * Update Document
      *
      * @param string $collection
+     * @param string $id
      * @param Document $document
      *
      * @return Document
      * @throws Exception
      */
-    public function updateDocument(string $collection, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
@@ -795,7 +853,7 @@ class Mongo extends Adapter
         $record = $this->timeToMongo($record);
 
         $filters = [];
-        $filters['_uid'] = $document->getId();
+        $filters['_uid'] = $id;
         if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
         }
@@ -810,34 +868,56 @@ class Mongo extends Adapter
     }
 
     /**
-     * Update Documents in batches
+     * Update documents
+     *
+     * Updates all documents which match the given query.
      *
      * @param string $collection
+     * @param Document $updates
      * @param array<Document> $documents
-     * @param int $batchSize
      *
-     * @return array<Document>
+     * @return int
      *
-     * @throws Duplicate
+     * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, array $documents, int $batchSize): array
+    public function updateDocuments(string $collection, Document $updates, array $documents): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        foreach ($documents as $index => $document) {
-            $document = $document->getArrayCopy();
-            $document = $this->replaceChars('$', '_', $document);
-            $document = $this->timeToMongo($document);
+        $queries = [
+            Query::equal('$id', array_map(fn ($document) => $document->getId(), $documents))
+        ];
 
-            $filters = [];
-            $filters['_uid'] = $document['_uid'];
-            if ($this->sharedTables) {
-                $filters['_tenant'] = (string)$this->getTenant();
-            }
-
-            $this->client->update($name, $filters, $document);
+        $filters = $this->buildFilters($queries);
+        if ($this->sharedTables) {
+            $filters['_tenant'] = (string)$this->getTenant();
         }
 
+        $record = $updates->getArrayCopy();
+        $record = $this->replaceChars('$', '_', $record);
+        $record = $this->timeToMongo($record);
+
+        $updateQuery = [
+            '$set' => $record,
+        ];
+
+        try {
+            $this->client->update($name, $filters, $updateQuery, multi: true);
+        } catch (MongoException $e) {
+            throw new Duplicate($e->getMessage());
+        }
+
+        return 1;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $attribute
+     * @param array<Document> $documents
+     * @return array<Document>
+     */
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
+    {
         return $documents;
     }
 
@@ -910,6 +990,43 @@ class Mongo extends Adapter
     }
 
     /**
+     * Delete Documents
+     *
+     * @param string $collection
+     * @param array<string> $ids
+     *
+     * @return int
+     */
+    public function deleteDocuments(string $collection, array $ids): int
+    {
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_uid', $ids)]);
+
+        if ($this->sharedTables) {
+            $filters['_tenant'] = (string)$this->getTenant();
+        }
+
+        $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
+        $filters = $this->timeFilter($filters);
+
+        $options = [];
+
+        try {
+            $count = $this->client->delete(
+                collection: $name,
+                filters: $filters,
+                options: $options,
+                limit: 0
+            );
+        } catch (MongoException $e) {
+            $this->processException($e);
+        }
+
+        return $count ?? 0;
+    }
+
+    /**
      * Update Attribute.
      * @param string $collection
      * @param string $id
@@ -921,7 +1038,7 @@ class Mongo extends Adapter
      *
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
     {
         if (!empty($newKey) && $newKey !== $id) {
             return $this->renameAttribute($collection, $id, $newKey);
@@ -943,12 +1060,13 @@ class Mongo extends Adapter
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
+     * @param string $forPermission
      *
      * @return array<Document>
      * @throws Exception
      * @throws Timeout
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $queries = array_map(fn ($query) => clone $query, $queries);
@@ -960,9 +1078,9 @@ class Mongo extends Adapter
         }
 
         // permissions
-        if (Authorization::$status) { // skip if authorization is disabled
+        if (Authorization::$status) {
             $roles = \implode('|', Authorization::getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
         $options = [];
@@ -1075,7 +1193,7 @@ class Mongo extends Adapter
         try {
             $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
         } catch (MongoException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
 
         if (empty($results)) {
@@ -1153,8 +1271,13 @@ class Mongo extends Adapter
      */
     private function timeToMongo(array $record): array
     {
-        $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
-        $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
+        if (isset($record['_createdAt'])) {
+            $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
+        }
+
+        if (isset($record['_updatedAt'])) {
+            $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
+        }
 
         return $record;
     }
@@ -1368,7 +1491,7 @@ class Mongo extends Adapter
         $queries = Query::groupByType($queries)['filters'];
         foreach ($queries as $query) {
             /* @var $query Query */
-            if($query->isNested()) {
+            if ($query->isNested()) {
                 $operator = $this->getQueryOperator($query->getMethod());
                 $filters[$separator][] = $this->buildFilters($query->getValues(), $operator);
             } else {
@@ -1422,7 +1545,7 @@ class Mongo extends Adapter
         } elseif ($operator == '$ne' && \is_array($value)) {
             $filter[$attribute]['$nin'] = $value;
         } elseif ($operator == '$in') {
-            if($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
+            if ($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
                 $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
             } else {
                 $filter[$attribute]['$in'] = $query->getValues();
@@ -1575,6 +1698,11 @@ class Mongo extends Adapter
         return 64;
     }
 
+    public function getMinDateTime(): \DateTime
+    {
+        return new \DateTime('-9999-01-01 00:00:00');
+    }
+
     /**
      * Is schemas supported?
      *
@@ -1582,7 +1710,7 @@ class Mongo extends Adapter
      */
     public function getSupportForSchemas(): bool
     {
-        return true;
+        return false;
     }
 
     /**
@@ -1666,6 +1794,61 @@ class Mongo extends Adapter
     }
 
     public function getSupportForAttributeResizing(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Are batch operations supported?
+     *
+     * @return bool
+     */
+    public function getSupportForBatchOperations(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is get connection id supported?
+     *
+     * @return bool
+     */
+    public function getSupportForGetConnectionId(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is cache fallback supported?
+     *
+     * @return bool
+     */
+    public function getSupportForCacheSkipOnFailure(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is get schema attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSchemaAttributes(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForCastIndexArray(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForUpserts(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForReconnection(): bool
     {
         return false;
     }
@@ -1799,17 +1982,13 @@ class Mongo extends Adapter
         return [];
     }
 
-    /**
-     * @throws Timeout
-     * @throws Exception
-     */
-    protected function processException(Exception $e): void
+    protected function processException(Exception $e): \Exception
     {
         if ($e->getCode() === 50) {
-            throw new Timeout($e->getMessage());
+            return new Timeout('Query timed out', $e->getCode(), $e);
         }
 
-        throw $e;
+        return $e;
     }
 
     /**
@@ -1820,19 +1999,23 @@ class Mongo extends Adapter
         return 0;
     }
 
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    public function getConnectionId(): string
     {
-        if (!$this->getSupportForTimeouts()) {
-            return;
-        }
-
-        $this->timeout = $milliseconds;
+        return '0';
     }
 
-    public function clearTimeout(string $event): void
+    public function getInternalIndexesKeys(): array
     {
-        parent::clearTimeout($event);
+        return [];
+    }
 
-        $this->timeout = null;
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getTenantQuery(string $collection, string $parentAlias = ''): string
+    {
+        return (string)$this->getTenant();
     }
 }

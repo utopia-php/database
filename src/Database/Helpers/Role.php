@@ -56,7 +56,7 @@ class Role
      * Parse a role string into a Role object
      *
      * @param string $role
-     * @return Role
+     * @return self
      * @throws \Exception
      */
     public static function parse(string $role): self
@@ -110,7 +110,7 @@ class Role
      *
      * @param string $identifier
      * @param string $status
-     * @return Role
+     * @return self
      */
     public static function user(string $identifier, string $status = ''): Role
     {
@@ -121,7 +121,7 @@ class Role
      * Create a users role
      *
      * @param string $status
-     * @return Role
+     * @return self
      */
     public static function users(string $status = ''): self
     {
@@ -133,7 +133,7 @@ class Role
      *
      * @param string $identifier
      * @param string $dimension
-     * @return Role
+     * @return self
      */
     public static function team(string $identifier, string $dimension = ''): self
     {
@@ -144,7 +144,7 @@ class Role
      * Create a label role from the given ID
      *
      * @param string $identifier
-     * @return Role
+     * @return self
      */
     public static function label(string $identifier): self
     {
@@ -154,7 +154,7 @@ class Role
     /**
      * Create an any satisfy role
      *
-     * @return Role
+     * @return self
      */
     public static function any(): Role
     {
@@ -164,7 +164,7 @@ class Role
     /**
      * Create a guests role
      *
-     * @return Role
+     * @return self
      */
     public static function guests(): self
     {

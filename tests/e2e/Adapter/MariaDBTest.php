@@ -2,12 +2,12 @@
 
 namespace Tests\E2E\Adapter;
 
-use PDO;
 use Redis;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Database;
+use Utopia\Database\PDO;
 
 class MariaDBTest extends Base
 {

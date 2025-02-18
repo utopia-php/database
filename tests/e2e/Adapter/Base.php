@@ -151,14 +151,24 @@ abstract class Base extends TestCase
             return;
         }
 
-        static::getDatabase()->createCollection(__FUNCTION__);
+        static::getDatabase()->createCollection('join1');
+        static::getDatabase()->createCollection('join2');
+        static::getDatabase()->createCollection('join3');
 
         $documents = static::getDatabase()->find(
-            __FUNCTION__,
+            'join1',
             [
                 Query::join(
-                    'users',
-                    'u',
+                    'join2',
+                    'u1',
+                    [
+                        Query::relation('main', 'id', Query::TYPE_EQUAL, 'u', 'user_id'),
+                        Query::equal('id', ['usa'], 'u'),
+                    ]
+                ),
+                Query::join(
+                    'join3',
+                    'u1',
                     [
                         Query::relation('main', 'id', Query::TYPE_EQUAL, 'u', 'user_id'),
                         Query::equal('id', ['usa'], 'u'),
@@ -166,6 +176,9 @@ abstract class Base extends TestCase
                 )
             ]
         );
+
+        var_dump($documents);
+
 
         $this->assertEquals('shmuel', 'fogel');
     }

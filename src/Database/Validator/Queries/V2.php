@@ -2,10 +2,10 @@
 
 namespace Utopia\Database\Validator\Queries;
 
-use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
@@ -44,13 +44,11 @@ class V2 extends Validator
 
     /**
      * Expression constructor
-     *
-     * @param  array<Document>  $collections
-     *
-     * @throws Exception
      */
-    public function __construct(array $collections, int $length = 0, int $maxValuesCount = 100, int $maxLimit = PHP_INT_MAX, int $maxOffset = PHP_INT_MAX)
+    public function __construct(QueryContext $context, int $length = 0, int $maxValuesCount = 100, int $maxLimit = PHP_INT_MAX, int $maxOffset = PHP_INT_MAX)
     {
+        $collections = $context->getCollections();
+
         foreach ($collections as $i => $collection) {
             if ($i === 0) {
                 $this->aliases[''] = $collection->getId();
@@ -135,7 +133,7 @@ class V2 extends Validator
 
                 if ($query->getMethod() === Query::TYPE_JOIN) {
                     var_dump($query);
-                    $this->aliases[$query->getAlias()] = $query->getCollection();
+                    //$this->aliases[$query->getAlias()] = $query->getCollection();
                 }
 
                 $queries[] = $query;
@@ -211,9 +209,12 @@ class V2 extends Validator
                         break;
 
                     case Query::TYPE_RELATION:
-                        throw new \Exception('Hello TYPE_RELATION!!!!!');
+                        var_dump('=== Query::TYPE_RELATION ===');
 
-                        echo 'Hello TYPE_RELATION!!!!!';
+                        break;
+
+                    case Query::TYPE_JOIN:
+                        var_dump('=== Query::TYPE_JOIN ===');
 
                         break;
 
@@ -233,7 +234,8 @@ class V2 extends Validator
                         break;
 
                     default:
-                        throw new \Exception('Invalid query: Method not found ' . $method);
+                        throw new \Exception('Invalid query: Method not found '.$method); // Remove this line
+                        throw new \Exception('Invalid query: Method not found.');
                 }
             }
         } catch (\Throwable $e) {

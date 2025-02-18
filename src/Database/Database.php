@@ -5560,31 +5560,32 @@ class Database
         //            }
         //        }
 
-        if ($this->validate) {
-            $collections = [];
-            $collections[] = $collection;
-            $joins = Query::getByType($queries, [Query::TYPE_JOIN]);
+        $collections = [];
+        $collections[] = $collection;
+        $joins = Query::getByType($queries, [Query::TYPE_JOIN]);
 
-//            if(!empty($joins)){
-//                var_dump($joins);
-//            }
-
-            foreach ($joins as $join) {
-                $collections[] = $this->silent(fn () => $this->getCollection($join->getCollection()));
-            }
-
-            $validator = new DocumentsValidator($collections);
-            if (!$validator->isValid($queries)) {
-                throw new QueryException($validator->getDescription());
-            }
+        foreach ($joins as $join) {
+            $collections[] = $this->silent(fn () => $this->getCollection($join->getCollection()));
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
-        $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
 
-        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-            throw new AuthorizationException($authorization->getDescription());
+        foreach ($collections as $c){
+            $documentSecurity = $c->getAttribute('documentSecurity', false);
+            $skipAuth = $authorization->isValid($c->getPermissionsByType($forPermission));
+
+            if (!$skipAuth && !$documentSecurity && $c->getId() !== self::METADATA) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+        }
+
+        $context = new QueryContext($collections, $queries);
+
+        if ($this->validate) {
+            $validator = new DocumentsValidator($context);
+            if (!$validator->isValid($context->getQueries())) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $relationships = \array_filter(
@@ -5671,6 +5672,8 @@ class Database
             $cursorDirection ?? Database::CURSOR_AFTER,
             $forPermission
         );
+
+        $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 

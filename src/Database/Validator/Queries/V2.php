@@ -42,12 +42,17 @@ class V2 extends Validator
 
     private array $aliases = [];
 
+    protected QueryContext $context;
+
     /**
      * Expression constructor
      */
     public function __construct(QueryContext $context, int $length = 0, int $maxValuesCount = 100, int $maxLimit = PHP_INT_MAX, int $maxOffset = PHP_INT_MAX)
     {
-        $collections = $context->getCollections();
+        $this->context = $context;
+
+        $collections = $context->getCollections(); // Do we want or clone ?
+        $queries = $context->getCollections(); // Do we want or clone ?
 
         foreach ($collections as $i => $collection) {
             if ($i === 0) {
@@ -132,14 +137,17 @@ class V2 extends Validator
                 }
 
                 if ($query->getMethod() === Query::TYPE_JOIN) {
-                    var_dump($query);
-                    //$this->aliases[$query->getAlias()] = $query->getCollection();
+                    $this->aliases[$query->getAlias()] = $query->getCollection();
                 }
 
                 $queries[] = $query;
             }
 
             foreach ($queries as $query) {
+                var_dump($query->getMethod());
+                var_dump($query->getCollection());
+                var_dump($query->getAlias());
+
                 if ($query->isNested()) {
                     if (! self::isValid($query->getValues())) {
                         throw new \Exception($this->message);
@@ -316,10 +324,10 @@ class V2 extends Validator
         //        }
 
         $collectionId = $this->aliases[$alias];
+
         var_dump('=== attribute === '.$attributeId);
         var_dump('=== alias === '.$alias);
         var_dump('=== collectionId === '.$collectionId);
-
         var_dump($this->schema[$collectionId][$attributeId]);
 
         if (! isset($this->schema[$collectionId][$attributeId])) {

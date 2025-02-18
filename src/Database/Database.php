@@ -5560,17 +5560,20 @@ class Database
         //            }
         //        }
 
-        $collections = [];
-        $collections[] = $collection;
-        $joins = Query::getByType($queries, [Query::TYPE_JOIN]);
+        $context = new QueryContext($queries);
+        $context->add($collection, '');
 
+        $joins = Query::getByType($queries, [Query::TYPE_JOIN]);
         foreach ($joins as $join) {
-            $collections[] = $this->silent(fn () => $this->getCollection($join->getCollection()));
+            $context->add(
+                $this->silent(fn () => $this->getCollection($join->getCollection())),
+                $join->getAlias()
+            );
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
 
-        foreach ($collections as $c){
+        foreach ($context->getCollections() as $c){
             $documentSecurity = $c->getAttribute('documentSecurity', false);
             $skipAuth = $authorization->isValid($c->getPermissionsByType($forPermission));
 
@@ -5578,8 +5581,6 @@ class Database
                 throw new AuthorizationException($authorization->getDescription());
             }
         }
-
-        $context = new QueryContext($collections, $queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator($context);

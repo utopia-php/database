@@ -8,7 +8,7 @@ class QueryContext
 
     protected array $collections;
 
-    protected array $alias;
+    protected array $aliases;
 
     protected array $queries;
 
@@ -17,38 +17,11 @@ class QueryContext
      *
      * @throws \Exception
      */
-    public function __construct(array $collections, array $queries)
+    public function __construct(array $queries)
     {
-        $this->collections = $collections;
-
         foreach ($queries as $query) {
-            $q = clone $query;
-
-            if (! $q instanceof Query) {
-                try {
-                    $q = Query::parse($q);
-                } catch (\Throwable $e) {
-                    throw new \Exception('Invalid query: '.$e->getMessage());
-                }
-            }
-
-            $this->queries[] = $q;
+            $this->queries[] = clone $query;
         }
-
-        //        foreach ($collections as $i => $collection) {
-        //            if ($i === 0) {
-        //                $this->aliases[''] = $collection->getId();
-        //            }
-        //
-        //            // $this->collections[$collection->getId()] = $collection->getArrayCopy();
-        //
-        //            $attributes = $collection->getAttribute('attributes', []);
-        //            foreach ($attributes as $attribute) {
-        //                // todo: internal id's?
-        //                $this->schema[$collection->getId()][$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
-        //            }
-        //        }
-
     }
 
     public function __clone(): void
@@ -68,5 +41,16 @@ class QueryContext
     public function getQueries(): array
     {
         return $this->queries;
+    }
+
+    public function getCollectionByAlias(string $alias): array
+    {
+        return $this->collections[''];
+    }
+
+    public function add(Document $collection, string $alias): void
+    {
+        $this->collections[] = $collection;
+        $this->aliases[$alias] = $collection->getId();
     }
 }

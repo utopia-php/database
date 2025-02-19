@@ -44,6 +44,7 @@ class Query
     public const TYPE_INNER_JOIN = 'innerJoin';
     public const TYPE_LEFT_JOIN = 'leftJoin';
     public const TYPE_RIGHT_JOIN = 'rightJoin';
+    public const DEFAULT_ALIAS = 'BLA_BLA_BLA';
 
     public const TYPES = [
         self::TYPE_EQUAL,
@@ -404,7 +405,7 @@ class Query
      * @param array<string|int|float|bool> $values
      * @return Query
      */
-    public static function equal(string $attribute, array $values, string $alias = ''): self
+    public static function equal(string $attribute, array $values, string $alias = Query::DEFAULT_ALIAS): self
     {
         return new self(self::TYPE_EQUAL, $attribute, $values, alias: $alias);
     }
@@ -523,7 +524,7 @@ class Query
      * @param string $attribute
      * @return Query
      */
-    public static function orderDesc(string $attribute = '', string $alias = ''): self
+    public static function orderDesc(string $attribute = '', string $alias = Query::DEFAULT_ALIAS): self
     {
         return new self(self::TYPE_ORDER_DESC, $attribute, alias: $alias);
     }

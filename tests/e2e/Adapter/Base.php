@@ -144,6 +144,16 @@ abstract class Base extends TestCase
         $this->assertIsString(static::getDatabase()->getConnectionId());
     }
 
+    /**
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws TimeoutException
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws DatabaseException
+     * @throws QueryException
+     */
     public function testJoin()
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -151,26 +161,35 @@ abstract class Base extends TestCase
             return;
         }
 
-        static::getDatabase()->createCollection('join1');
-        static::getDatabase()->createCollection('join2');
-        static::getDatabase()->createCollection('join3');
+        static::getDatabase()->createCollection('users');
+        static::getDatabase()->createCollection('sessions');
+
+        static::getDatabase()->createAttribute('sessions', 'user_id', Database::VAR_STRING, 100, false);
+
+        $user = static::getDatabase()->createDocument('users', new Document());
+        $session = static::getDatabase()->createDocument('sessions', new Document(['user_id' => $user->getId()]));
+
+        try {
+            static::getDatabase()->find(
+                'sessions',
+                [
+                    Query::equal('user_id', ['bob'], 'alias-not-found')
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Unknown Alias context', $e->getMessage());
+        }
 
         $documents = static::getDatabase()->find(
-            'join1',
+            'users',
             [
                 Query::join(
-                    'join2',
-                    'u1',
+                    'sessions',
+                    'u',
                     [
-                        Query::relation('main', 'id', Query::TYPE_EQUAL, 'u', 'user_id'),
-                        Query::equal('id', ['usa'], 'u'),
-                    ]
-                ),
-                Query::join(
-                    'join3',
-                    'u1',
-                    [
-                        Query::relation('main', 'id', Query::TYPE_EQUAL, 'u', 'user_id'),
+                        Query::relation('', '$id', Query::TYPE_EQUAL, 'u', 'user_id'),
                         Query::equal('id', ['usa'], 'u'),
                     ]
                 )
@@ -178,7 +197,6 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-
 
         $this->assertEquals('shmuel', 'fogel');
     }

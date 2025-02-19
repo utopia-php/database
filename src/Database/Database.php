@@ -5561,9 +5561,9 @@ class Database
         //        }
 
         $context = new QueryContext($queries);
-        $context->add($collection, '');
+        $context->add($collection);
 
-        $joins = Query::getByType($queries, [Query::TYPE_JOIN]);
+        $joins = Query::getByType($queries, []);
         foreach ($joins as $join) {
             $context->add(
                 $this->silent(fn () => $this->getCollection($join->getCollection())),

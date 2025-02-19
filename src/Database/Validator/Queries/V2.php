@@ -26,10 +26,6 @@ class V2 extends Validator
 {
     protected string $message = 'Invalid queries';
 
-    // protected string $collectionId = '';
-
-    // protected array $collections = [];
-
     protected array $schema = [];
 
     protected int $length;
@@ -40,8 +36,6 @@ class V2 extends Validator
 
     protected int $maxOffset;
 
-    private array $aliases = [];
-
     protected QueryContext $context;
 
     /**
@@ -51,20 +45,14 @@ class V2 extends Validator
     {
         $this->context = $context;
 
-        $collections = $context->getCollections(); // Do we want or clone ?
-        $queries = $context->getCollections(); // Do we want or clone ?
-
-        foreach ($collections as $i => $collection) {
-            if ($i === 0) {
-                $this->aliases[''] = $collection->getId();
-            }
-
-            // $this->collections[$collection->getId()] = $collection->getArrayCopy();
-
+        /**
+         * Since $context includes Documents , clone if original data is changes.
+         */
+        foreach ($context->getCollections() as $collection) {
             $attributes = $collection->getAttribute('attributes', []);
             foreach ($attributes as $attribute) {
-                // todo: internal id's?
-                $this->schema[$collection->getId()][$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
+                $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
+                $this->schema[$collection->getId()][$key] = $attribute->getArrayCopy();
             }
         }
 
@@ -112,7 +100,7 @@ class V2 extends Validator
     /**
      * @param  array<Query|string>  $value
      *
-     * @throws \Utopia\Database\Exception\Query
+     * @throws \Utopia\Database\Exception\Query|\Throwable
      */
     public function isValid($value): bool
     {
@@ -125,28 +113,12 @@ class V2 extends Validator
                 throw new \Exception('Queries count is greater than '.$this->length);
             }
 
-            $queries = [];
-
             foreach ($value as $query) {
-                if (! $query instanceof Query) {
-                    try {
-                        $query = Query::parse($query);
-                    } catch (\Throwable $e) {
-                        throw new \Exception('Invalid query: '.$e->getMessage());
-                    }
-                }
-
-                if ($query->getMethod() === Query::TYPE_JOIN) {
-                    $this->aliases[$query->getAlias()] = $query->getCollection();
-                }
-
-                $queries[] = $query;
-            }
-
-            foreach ($queries as $query) {
-                var_dump($query->getMethod());
-                var_dump($query->getCollection());
-                var_dump($query->getAlias());
+                /**
+                 * Removing Query::parse since we can parse in context now
+                 */
+                echo PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL;
+                var_dump($query->getMethod(), $query->getCollection(), $query->getAlias());
 
                 if ($query->isNested()) {
                     if (! self::isValid($query->getValues())) {
@@ -219,6 +191,12 @@ class V2 extends Validator
                     case Query::TYPE_RELATION:
                         var_dump('=== Query::TYPE_RELATION ===');
 
+                        die();
+
+                        var_dump($query);
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+
                         break;
 
                     case Query::TYPE_JOIN:
@@ -248,7 +226,7 @@ class V2 extends Validator
             }
         } catch (\Throwable $e) {
             $this->message = $e->getMessage();
-            throw $e; // Remove this!
+            var_dump($e->getTraceAsString());  // Remove this line
 
             return false;
         }
@@ -302,6 +280,9 @@ class V2 extends Validator
         return false;
     }
 
+    /**
+     * @throws \Exception
+     */
     protected function validateAttributeExist(string $attributeId, string $alias): void
     {
         var_dump('=== validateAttributeExist');
@@ -323,27 +304,31 @@ class V2 extends Validator
         //            }
         //        }
 
-        $collectionId = $this->aliases[$alias];
+        $collection = $this->context->getCollectionByAlias($alias);
+        if ($collection->isEmpty()) {
+            throw new \Exception('Unknown Alias context');
+        }
 
-        var_dump('=== attribute === '.$attributeId);
-        var_dump('=== alias === '.$alias);
-        var_dump('=== collectionId === '.$collectionId);
-        var_dump($this->schema[$collectionId][$attributeId]);
-
-        if (! isset($this->schema[$collectionId][$attributeId])) {
+        if (! isset($this->schema[$collection->getId()][$attributeId])) {
             throw new \Exception('Attribute not found in schema: '.$attributeId);
         }
     }
 
+    /**
+     * @throws \Exception
+     */
     protected function validateValues(string $attributeId, string $alias, array $values, string $method): void
     {
         if (count($values) > $this->maxValuesCount) {
             throw new \Exception('Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attributeId);
         }
 
-        $collectionId = $this->aliases[$alias];
+        $collection = $this->context->getCollectionByAlias($alias);
+        if ($collection->isEmpty()) {
+            throw new \Exception('Unknown Alias context');
+        }
 
-        $attribute = $this->schema[$collectionId][$attributeId];
+        $attribute = $this->schema[$collection->getId()][$attributeId];
 
         foreach ($values as $value) {
 

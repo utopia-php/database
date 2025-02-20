@@ -144,6 +144,63 @@ abstract class Base extends TestCase
         $this->assertIsString(static::getDatabase()->getConnectionId());
     }
 
+    /**
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws TimeoutException
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws DatabaseException
+     * @throws QueryException
+     */
+    public function testJoin()
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('users');
+        static::getDatabase()->createCollection('sessions');
+
+        static::getDatabase()->createAttribute('sessions', 'user_id', Database::VAR_STRING, 100, false);
+
+        $user = static::getDatabase()->createDocument('users', new Document());
+        $session = static::getDatabase()->createDocument('sessions', new Document(['user_id' => $user->getId()]));
+
+        try {
+            static::getDatabase()->find(
+                'sessions',
+                [
+                    Query::equal('user_id', ['bob'], 'alias-not-found')
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Unknown Alias context', $e->getMessage());
+        }
+
+        $documents = static::getDatabase()->find(
+            'users',
+            [
+                Query::join(
+                    'sessions',
+                    'u',
+                    [
+                        Query::relationEqual('', '$id', 'u', 'user_id'),
+                        Query::equal('$id', ['usa']),
+                    ]
+                )
+            ]
+        );
+
+        var_dump($documents);
+
+        $this->assertEquals('shmuel', 'shmuel');
+    }
+
     public function testDeleteRelatedCollection(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -1074,6 +1131,7 @@ abstract class Base extends TestCase
             ]);
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
+            var_dump($e->getTraceAsString());
             static::getDatabase()->clearTimeout();
             static::getDatabase()->deleteCollection('global-timeouts');
             $this->assertInstanceOf(TimeoutException::class, $e);

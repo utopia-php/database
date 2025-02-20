@@ -21,6 +21,7 @@ class Query
     public const TYPE_BETWEEN = 'between';
     public const TYPE_STARTS_WITH = 'startsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
+    public const TYPE_RELATION_EQUAL = 'relationEqual';
 
     public const TYPE_SELECT = 'select';
 
@@ -37,6 +38,12 @@ class Query
     // Logical methods
     public const TYPE_AND = 'and';
     public const TYPE_OR = 'or';
+
+    // Join methods
+    public const TYPE_INNER_JOIN = 'innerJoin';
+    public const TYPE_LEFT_JOIN = 'leftJoin';
+    public const TYPE_RIGHT_JOIN = 'rightJoin';
+    public const DEFAULT_ALIAS = 'DA';
 
     public const TYPES = [
         self::TYPE_EQUAL,
@@ -69,7 +76,12 @@ class Query
     ];
 
     protected string $method = '';
+    protected string $collection = '';
+    protected string $alias = '';
     protected string $attribute = '';
+    protected string $aliasRight = '';
+    protected string $attributeRight = '';
+
     protected bool $onArray = false;
 
     /**
@@ -84,11 +96,22 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      */
-    public function __construct(string $method, string $attribute = '', array $values = [])
-    {
+    protected function __construct(
+        string $method,
+        string $attribute = '',
+        array $values = [],
+        string $alias = '',
+        string $attributeRight = '',
+        string $aliasRight = '',
+        string $collection = '',
+    ) {
         $this->method = $method;
+        $this->alias = $alias;
         $this->attribute = $attribute;
         $this->values = $values;
+        $this->aliasRight = $aliasRight;
+        $this->attributeRight = $attributeRight;
+        $this->collection = $collection;
     }
 
     public function __clone(): void
@@ -131,6 +154,26 @@ class Query
     public function getValue(mixed $default = null): mixed
     {
         return $this->values[0] ?? $default;
+    }
+
+    public function getAlias(): string
+    {
+        return $this->alias;
+    }
+
+    public function getRightAlias(): string
+    {
+        return $this->aliasRight;
+    }
+
+    public function getAttributeRight(): string
+    {
+        return $this->attributeRight;
+    }
+
+    public function getCollection(): string
+    {
+        return $this->collection;
     }
 
     /**
@@ -346,9 +389,9 @@ class Query
      * @param array<string|int|float|bool> $values
      * @return Query
      */
-    public static function equal(string $attribute, array $values): self
+    public static function equal(string $attribute, array $values, string $alias = Query::DEFAULT_ALIAS): self
     {
-        return new self(self::TYPE_EQUAL, $attribute, $values);
+        return new self(self::TYPE_EQUAL, $attribute, $values, alias: $alias);
     }
 
     /**
@@ -465,9 +508,9 @@ class Query
      * @param string $attribute
      * @return Query
      */
-    public static function orderDesc(string $attribute = ''): self
+    public static function orderDesc(string $attribute = '', string $alias = Query::DEFAULT_ALIAS): self
     {
-        return new self(self::TYPE_ORDER_DESC, $attribute);
+        return new self(self::TYPE_ORDER_DESC, $attribute, alias: $alias);
     }
 
     /**
@@ -576,6 +619,70 @@ class Query
     }
 
     /**
+     * @param string $collection
+     * @param string $alias
+     * @param array $queries
+     * @return Query
+     */
+    public static function join(string $collection, string $alias, array $queries = []): self
+    {
+        return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collection: $collection);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array $queries
+     * @return Query
+     */
+    public static function innerJoin(string $collection, string $alias, array $queries = []): self
+    {
+        return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collection: $collection);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $conditions
+     * @return Query
+     */
+    public static function leftJoin(string $collection, string $alias, array $queries = []): self
+    {
+        return new self(self::TYPE_LEFT_JOIN, values: $queries, alias: $alias, collection: $collection);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $conditions
+     * @return Query
+     */
+    public static function rightJoin(string $collection, string $alias, array $queries = []): self
+    {
+        return new self(self::TYPE_RIGHT_JOIN, values: $queries, alias: $alias, collection: $collection);
+    }
+
+    /**
+     * @param $leftAlias
+     * @param string $leftColumn
+     * @param string $rightAlias
+     * @param string $rightColumn
+     * @return Query
+     */
+    public static function relationEqual($leftAlias, string $leftColumn, string $rightAlias, string $rightColumn): self
+    {
+        if (empty($leftAlias)) {
+            $leftAlias = Query::DEFAULT_ALIAS;
+        }
+
+        if (empty($rightAlias)) {
+            $rightAlias = Query::DEFAULT_ALIAS;
+        }
+
+        return new self(self::TYPE_RELATION_EQUAL, $leftColumn, [], alias: $leftAlias, attributeRight: $rightColumn, aliasRight: $rightAlias);
+    }
+
+    /**
      * Filters $queries for $types
      *
      * @param array<Query> $queries
@@ -613,6 +720,7 @@ class Query
     public static function groupByType(array $queries): array
     {
         $filters = [];
+        $joins = [];
         $selections = [];
         $limit = null;
         $offset = null;
@@ -673,6 +781,12 @@ class Query
                     $selections[] = clone $query;
                     break;
 
+                case Query::TYPE_INNER_JOIN:
+                case Query::TYPE_LEFT_JOIN:
+                case Query::TYPE_RIGHT_JOIN:
+                    $joins[] = clone $query;
+                    break;
+
                 default:
                     $filters[] = clone $query;
                     break;
@@ -688,6 +802,7 @@ class Query
             'orderTypes' => $orderTypes,
             'cursor' => $cursor,
             'cursorDirection' => $cursorDirection,
+            'join' => $joins,
         ];
     }
 

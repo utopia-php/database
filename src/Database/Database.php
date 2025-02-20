@@ -27,7 +27,8 @@ use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
-use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
+use Utopia\Database\Validator\Queries\Documents as DocumentsValidatorOiginal;
+use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 use Utopia\Database\Validator\Structure;
 
 class Database
@@ -4056,7 +4057,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,
@@ -5363,7 +5364,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,
@@ -5543,28 +5544,50 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        $attributes = $collection->getAttribute('attributes', []);
-        $indexes = $collection->getAttribute('indexes', []);
+        //   $attributes = $collection->getAttribute('attributes', []);
+        //   $indexes = $collection->getAttribute('indexes', []);
 
-        if ($this->validate) {
-            $validator = new DocumentsValidator(
-                $attributes,
-                $indexes,
-                $this->maxQueryValues,
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
+        //        if ($this->validate) {
+        //            $validator = new DocumentsValidatorOiginal(
+        //                $attributes,
+        //                $indexes,
+        //                $this->maxQueryValues,
+        //                $this->adapter->getMinDateTime(),
+        //                $this->adapter->getMaxDateTime(),
+        //            );
+        //            if (!$validator->isValid($queries)) {
+        //                throw new QueryException($validator->getDescription());
+        //            }
+        //        }
+
+        $context = new QueryContext($queries);
+        $context->add($collection);
+
+        $joins = Query::getByType($queries, [Query::TYPE_INNER_JOIN]);
+
+        foreach ($joins as $join) {
+            $context->add(
+                $this->silent(fn () => $this->getCollection($join->getCollection())),
+                $join->getAlias()
             );
-            if (!$validator->isValid($queries)) {
-                throw new QueryException($validator->getDescription());
-            }
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
-        $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
 
-        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-            throw new AuthorizationException($authorization->getDescription());
+        foreach ($context->getCollections() as $c){
+            $documentSecurity = $c->getAttribute('documentSecurity', false);
+            $skipAuth = $authorization->isValid($c->getPermissionsByType($forPermission));
+
+            if (!$skipAuth && !$documentSecurity && $c->getId() !== self::METADATA) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+        }
+
+        if ($this->validate) {
+            $validator = new DocumentsValidator($context);
+            if (!$validator->isValid($context->getQueries())) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $relationships = \array_filter(
@@ -5651,6 +5674,8 @@ class Database
             $cursorDirection ?? Database::CURSOR_AFTER,
             $forPermission
         );
+
+        $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
@@ -5789,7 +5814,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,
@@ -5837,7 +5862,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,

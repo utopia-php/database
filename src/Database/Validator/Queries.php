@@ -101,14 +101,21 @@ class Queries extends Validator
                 Query::TYPE_ENDS_WITH,
                 Query::TYPE_AND,
                 Query::TYPE_OR => Base::METHOD_TYPE_FILTER,
+                Query::TYPE_JOIN => Base::METHOD_TYPE_JOIN,
                 default => '',
             };
-
+            var_dump('____________________________________');
             $methodIsValid = false;
             foreach ($this->validators as $validator) {
+                var_dump('---');
+                var_dump($method);
+                var_dump($methodType);
+                var_dump($validator->getMethodType());
+                var_dump('---');
                 if ($validator->getMethodType() !== $methodType) {
                     continue;
                 }
+
                 if (!$validator->isValid($query)) {
                     $this->message = 'Invalid query: ' . $validator->getDescription();
                     return false;

@@ -188,19 +188,28 @@ class V2 extends Validator
 
                         break;
 
-                    case Query::TYPE_RELATION:
-                        var_dump('=== Query::TYPE_RELATION ===');
-
-                        die();
-
+                    case Query::TYPE_INNER_JOIN:
+                        // Check we have a relation query
+                        var_dump('=== Query::TYPE_JOIN ===');
                         var_dump($query);
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+
+                       // validation force at least one relation
+                       // forcce equalt !!
+
+//                        if ($query->isNested()) {
+//                            if (! self::isValid($query->getValues())) {
+//                                throw new \Exception($this->message);
+//                            }
+//                        }
 
                         break;
 
-                    case Query::TYPE_JOIN:
-                        var_dump('=== Query::TYPE_JOIN ===');
+                    case Query::TYPE_RELATION_EQUAL:
+                        var_dump('=== Query::TYPE_RELATION ===');
+                        var_dump($query);
+
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateAttributeExist($query->getAttributeRight(), $query->getRightAlias());
 
                         break;
 

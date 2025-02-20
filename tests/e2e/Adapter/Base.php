@@ -189,7 +189,7 @@ abstract class Base extends TestCase
                     'sessions',
                     'u',
                     [
-                        Query::relation('', '$id', Query::TYPE_EQUAL, 'u', 'user_id'),
+                        Query::relationEqual('', '$id', 'u', 'user_id'),
                         Query::equal('id', ['usa'], 'u'),
                     ]
                 )

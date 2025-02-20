@@ -21,7 +21,7 @@ class Query
     public const TYPE_BETWEEN = 'between';
     public const TYPE_STARTS_WITH = 'startsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
-    public const TYPE_RELATION = 'relation';
+    public const TYPE_RELATION_EQUAL = 'relationEqual';
 
     public const TYPE_SELECT = 'select';
 
@@ -40,11 +40,10 @@ class Query
     public const TYPE_OR = 'or';
 
     // Join methods
-    public const TYPE_JOIN = 'join';
     public const TYPE_INNER_JOIN = 'innerJoin';
     public const TYPE_LEFT_JOIN = 'leftJoin';
     public const TYPE_RIGHT_JOIN = 'rightJoin';
-    public const DEFAULT_ALIAS = 'BLA_BLA_BLA';
+    public const DEFAULT_ALIAS = 'DA';
 
     public const TYPES = [
         self::TYPE_EQUAL,
@@ -77,17 +76,13 @@ class Query
     ];
 
     protected string $method = '';
-    protected string $as = '';
     protected string $collection = '';
-    protected string $type = '';
-    protected string $function = '';
     protected string $alias = '';
     protected string $attribute = '';
     protected string $aliasRight = '';
     protected string $attributeRight = '';
 
     protected bool $onArray = false;
-    protected bool $isRelation = false;
 
     /**
      * @var array<mixed>
@@ -108,21 +103,15 @@ class Query
         string $alias = '',
         string $attributeRight = '',
         string $aliasRight = '',
-        string $as = '',
         string $collection = '',
-        string $function = '',
-        string $type = ''
     ) {
         $this->method = $method;
         $this->alias = $alias;
         $this->attribute = $attribute;
         $this->values = $values;
-        $this->function = $function;
         $this->aliasRight = $aliasRight;
         $this->attributeRight = $attributeRight;
-        $this->as = $as;
         $this->collection = $collection;
-        $this->type = $type;
     }
 
     public function __clone(): void
@@ -642,10 +631,7 @@ class Query
      */
     public static function join(string $collection, string $alias, array $queries = []): self
     {
-        //$conditions = Query::groupByType($queries)['filters'];
-        //$conditions = Query::groupByType($queries)['relations'];
-
-        return new self(self::TYPE_JOIN, '', $queries, alias: $alias, collection: $collection, type: self::TYPE_INNER_JOIN);
+        return new self(self::TYPE_INNER_JOIN, '', $queries, alias: $alias, collection: $collection);
     }
 
     /**
@@ -654,13 +640,43 @@ class Query
      * @param array<Query> $conditions
      * @return Query
      */
-    public static function relation($leftAlias, string $leftColumn, string $method, string $rightAlias, string $rightColumn): self
+    public static function innerJoin(string $collection, string $alias, array $queries = []): self
     {
-        $value = [
-            'method' => $method,
-        ];
+        return new self(self::TYPE_INNER_JOIN, '', $queries, alias: $alias, collection: $collection);
+    }
 
-        return new self(self::TYPE_RELATION, $leftColumn, $value, alias: $leftAlias, attributeRight: $rightColumn, aliasRight: $rightAlias);
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $conditions
+     * @return Query
+     */
+    public static function leftJoin(string $collection, string $alias, array $queries = []): self
+    {
+        return new self(self::TYPE_LEFT_JOIN, '', $queries, alias: $alias, collection: $collection);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $conditions
+     * @return Query
+     */
+    public static function rightJoin(string $collection, string $alias, array $queries = []): self
+    {
+        return new self(self::TYPE_RIGHT_JOIN, '', $queries, alias: $alias, collection: $collection);
+    }
+
+    /**
+     * @param $leftAlias
+     * @param string $leftColumn
+     * @param string $rightAlias
+     * @param string $rightColumn
+     * @return Query
+     */
+    public static function relationEqual($leftAlias, string $leftColumn, string $rightAlias, string $rightColumn): self
+    {
+        return new self(self::TYPE_RELATION_EQUAL, $leftColumn, [], alias: $leftAlias, attributeRight: $rightColumn, aliasRight: $rightAlias);
     }
 
     /**

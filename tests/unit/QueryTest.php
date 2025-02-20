@@ -301,7 +301,7 @@ class QueryTest extends TestCase
                 'users',
                 'u',
                 [
-                    Query::relation('main', 'id', Query::TYPE_EQUAL, 'u', 'user_id'),
+                    Query::relationEqual('main', 'id','u', 'user_id'),
                     Query::equal('id', ['usa'], 'u'),
                 ]
             );
@@ -316,7 +316,7 @@ class QueryTest extends TestCase
          * @var $query0 Query
          */
         $query0 = $query->getValues()[0];
-        $this->assertEquals(Query::TYPE_RELATION, $query0->getMethod());
+        $this->assertEquals(Query::TYPE_RELATION_EQUAL, $query0->getMethod());
         $this->assertEquals('main', $query0->getAlias());
         $this->assertEquals('id', $query0->getAttribute());
         $this->assertEquals('u', $query0->getRightAlias());

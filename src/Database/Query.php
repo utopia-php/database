@@ -176,11 +176,6 @@ class Query
         return $this->collection;
     }
 
-    public function getType(): string
-    {
-        return $this->type;
-    }
-
     /**
      * Sets method
      *
@@ -626,23 +621,23 @@ class Query
     /**
      * @param string $collection
      * @param string $alias
-     * @param array<Query> $conditions
+     * @param array $queries
      * @return Query
      */
     public static function join(string $collection, string $alias, array $queries = []): self
     {
-        return new self(self::TYPE_INNER_JOIN, '', $queries, alias: $alias, collection: $collection);
+        return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collection: $collection);
     }
 
     /**
      * @param string $collection
      * @param string $alias
-     * @param array<Query> $conditions
+     * @param array $queries
      * @return Query
      */
     public static function innerJoin(string $collection, string $alias, array $queries = []): self
     {
-        return new self(self::TYPE_INNER_JOIN, '', $queries, alias: $alias, collection: $collection);
+        return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collection: $collection);
     }
 
     /**
@@ -653,7 +648,7 @@ class Query
      */
     public static function leftJoin(string $collection, string $alias, array $queries = []): self
     {
-        return new self(self::TYPE_LEFT_JOIN, '', $queries, alias: $alias, collection: $collection);
+        return new self(self::TYPE_LEFT_JOIN, values: $queries, alias: $alias, collection: $collection);
     }
 
     /**
@@ -664,7 +659,7 @@ class Query
      */
     public static function rightJoin(string $collection, string $alias, array $queries = []): self
     {
-        return new self(self::TYPE_RIGHT_JOIN, '', $queries, alias: $alias, collection: $collection);
+        return new self(self::TYPE_RIGHT_JOIN, values: $queries, alias: $alias, collection: $collection);
     }
 
     /**
@@ -676,6 +671,14 @@ class Query
      */
     public static function relationEqual($leftAlias, string $leftColumn, string $rightAlias, string $rightColumn): self
     {
+        if (empty($leftAlias)) {
+            $leftAlias = Query::DEFAULT_ALIAS;
+        }
+
+        if (empty($rightAlias)) {
+            $rightAlias = Query::DEFAULT_ALIAS;
+        }
+
         return new self(self::TYPE_RELATION_EQUAL, $leftColumn, [], alias: $leftAlias, attributeRight: $rightColumn, aliasRight: $rightAlias);
     }
 
@@ -778,7 +781,9 @@ class Query
                     $selections[] = clone $query;
                     break;
 
-                case Query::TYPE_JOIN:
+                case Query::TYPE_INNER_JOIN:
+                case Query::TYPE_LEFT_JOIN:
+                case Query::TYPE_RIGHT_JOIN:
                     $joins[] = clone $query;
                     break;
 

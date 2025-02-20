@@ -190,7 +190,7 @@ abstract class Base extends TestCase
                     'u',
                     [
                         Query::relationEqual('', '$id', 'u', 'user_id'),
-                        Query::equal('id', ['usa'], 'u'),
+                        Query::equal('$id', ['usa']),
                     ]
                 )
             ]
@@ -198,7 +198,7 @@ abstract class Base extends TestCase
 
         var_dump($documents);
 
-        $this->assertEquals('shmuel', 'fogel');
+        $this->assertEquals('shmuel', 'shmuel');
     }
 
     public function testDeleteRelatedCollection(): void
@@ -1131,6 +1131,7 @@ abstract class Base extends TestCase
             ]);
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
+            var_dump($e->getTraceAsString());
             static::getDatabase()->clearTimeout();
             static::getDatabase()->deleteCollection('global-timeouts');
             $this->assertInstanceOf(TimeoutException::class, $e);

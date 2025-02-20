@@ -4,6 +4,7 @@ namespace Utopia\Database\Validator\Queries;
 
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
@@ -39,7 +40,7 @@ class V2 extends Validator
     protected QueryContext $context;
 
     /**
-     * Expression constructor
+     * @throws Exception
      */
     public function __construct(QueryContext $context, int $length = 0, int $maxValuesCount = 100, int $maxLimit = PHP_INT_MAX, int $maxOffset = PHP_INT_MAX)
     {
@@ -49,7 +50,38 @@ class V2 extends Validator
          * Since $context includes Documents , clone if original data is changes.
          */
         foreach ($context->getCollections() as $collection) {
+            $collection = clone $collection;
+
             $attributes = $collection->getAttribute('attributes', []);
+
+            $attributes[] = new Document([
+                '$id' => '$id',
+                'key' => '$id',
+                'type' => Database::VAR_STRING,
+                'array' => false,
+            ]);
+
+            $attributes[] = new Document([
+                '$id' => '$internalId',
+                'key' => '$internalId',
+                'type' => Database::VAR_STRING,
+                'array' => false,
+            ]);
+
+            $attributes[] = new Document([
+                '$id' => '$createdAt',
+                'key' => '$createdAt',
+                'type' => Database::VAR_DATETIME,
+                'array' => false,
+            ]);
+
+            $attributes[] = new Document([
+                '$id' => '$updatedAt',
+                'key' => '$updatedAt',
+                'type' => Database::VAR_DATETIME,
+                'array' => false,
+            ]);
+
             foreach ($attributes as $attribute) {
                 $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
                 $this->schema[$collection->getId()][$key] = $attribute->getArrayCopy();
@@ -60,31 +92,6 @@ class V2 extends Validator
         $this->maxOffset = $maxOffset;
         $this->length = $length;
         $this->maxValuesCount = $maxValuesCount;
-
-        //        $attributes[] = new Document([
-        //            '$id' => '$id',
-        //            'key' => '$id',
-        //            'type' => Database::VAR_STRING,
-        //            'array' => false,
-        //        ]);
-        //        $attributes[] = new Document([
-        //            '$id' => '$internalId',
-        //            'key' => '$internalId',
-        //            'type' => Database::VAR_STRING,
-        //            'array' => false,
-        //        ]);
-        //        $attributes[] = new Document([
-        //            '$id' => '$createdAt',
-        //            'key' => '$createdAt',
-        //            'type' => Database::VAR_DATETIME,
-        //            'array' => false,
-        //        ]);
-        //        $attributes[] = new Document([
-        //            '$id' => '$updatedAt',
-        //            'key' => '$updatedAt',
-        //            'type' => Database::VAR_DATETIME,
-        //            'array' => false,
-        //        ]);
 
         //        $validators = [
         //            new Limit(),
@@ -189,18 +196,14 @@ class V2 extends Validator
                         break;
 
                     case Query::TYPE_INNER_JOIN:
-                        // Check we have a relation query
+                    case Query::TYPE_LEFT_JOIN:
+                    case Query::TYPE_RIGHT_JOIN:
                         var_dump('=== Query::TYPE_JOIN ===');
                         var_dump($query);
-
-                       // validation force at least one relation
-                       // forcce equalt !!
-
-//                        if ($query->isNested()) {
-//                            if (! self::isValid($query->getValues())) {
-//                                throw new \Exception($this->message);
-//                            }
-//                        }
+                        // validation force Query relation exist in query list!!
+                        if (! self::isValid($query->getValues())) {
+                            throw new \Exception($this->message);
+                        }
 
                         break;
 

@@ -199,6 +199,9 @@ abstract class Base extends TestCase
         var_dump($documents);
 
         $this->assertEquals('shmuel', 'shmuel');
+
+        static::getDatabase()->deleteCollection('users');
+        static::getDatabase()->deleteCollection('sessions');
     }
 
     public function testDeleteRelatedCollection(): void

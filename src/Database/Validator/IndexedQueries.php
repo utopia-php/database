@@ -103,7 +103,7 @@ class IndexedQueries extends Queries
                     }
                 }
 
-                if (!$matched) {
+                if (! $matched) {
                     $this->message = "Searching by attribute \"{$filter->getAttribute()}\" requires a fulltext index.";
                     return false;
                 }

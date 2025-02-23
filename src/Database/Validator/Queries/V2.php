@@ -15,8 +15,6 @@ use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
-use Utopia\Validator\Numeric;
-use Utopia\Validator\Range;
 use Utopia\Validator\Text;
 
 class V2 extends Validator
@@ -124,7 +122,7 @@ class V2 extends Validator
 
             foreach ($value as $query) {
                 /**
-                 * Removing Query::parse since we can parse in context now
+                 * Removing Query::parse since we can parse in context if needed
                  */
                 echo PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL;
                 var_dump($query->getMethod(), $query->getCollection(), $query->getAlias());
@@ -141,7 +139,7 @@ class V2 extends Validator
                     case Query::TYPE_EQUAL:
                     case Query::TYPE_CONTAINS:
                         if ($this->isEmpty($query->getValues())) {
-                            throw new \Exception(\ucfirst($method).' queries require at least one value.');
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least one value.');
                         }
 
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
@@ -158,17 +156,18 @@ class V2 extends Validator
                     case Query::TYPE_STARTS_WITH:
                     case Query::TYPE_ENDS_WITH:
                         if (count($query->getValues()) != 1) {
-                            throw new \Exception(\ucfirst($method).' queries require exactly one value.');
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require exactly one value.');
                         }
 
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
                         $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
+                        $this->validateFulltextIndex($query);
 
                         break;
 
                     case Query::TYPE_BETWEEN:
                         if (count($query->getValues()) != 2) {
-                            throw new \Exception(\ucfirst($method).' queries require exactly two values.');
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require exactly two values.');
                         }
 
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
@@ -188,11 +187,11 @@ class V2 extends Validator
                         $filters = Query::groupByType($query->getValues())['filters'];
 
                         if (count($query->getValues()) !== count($filters)) {
-                            throw new \Exception(\ucfirst($method).' queries can only contain filter queries');
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries can only contain filter queries');
                         }
 
                         if (count($filters) < 2) {
-                            throw new \Exception(\ucfirst($method).' queries require at least two queries');
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least two queries');
                         }
 
                         break;
@@ -212,7 +211,6 @@ class V2 extends Validator
                     case Query::TYPE_RELATION_EQUAL:
                         var_dump('=== Query::TYPE_RELATION ===');
                         var_dump($query);
-
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
                         $this->validateAttributeExist($query->getAttributeRight(), $query->getRightAlias());
 
@@ -401,7 +399,7 @@ class V2 extends Validator
             }
 
             if (! $validator->isValid($value)) {
-                throw new \Exception('Query value is invalid for attribute "'.$attributeId.'"');
+                throw new \Exception('Invalid query: Query value is invalid for attribute "'.$attributeId.'"');
             }
         }
 
@@ -492,5 +490,33 @@ class V2 extends Validator
 
             $this->validateAttributeExist($attribute, $alias);
         }
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function validateFulltextIndex(Query $query): void
+    {
+        if ($query->getMethod() !== Query::TYPE_SEARCH) {
+            return;
+        }
+
+        $collection = $this->context->getCollectionByAlias($query->getAlias());
+        if ($collection->isEmpty()) {
+            throw new \Exception('Unknown Alias context');
+        }
+
+        $indexes = $collection->getAttribute('indexes', []);
+
+        foreach ($indexes as $index) {
+            if (
+                $index->getAttribute('type') === Database::INDEX_FULLTEXT &&
+                $index->getAttribute('attributes') === [$query->getAttribute()]
+            ) {
+                return;
+            }
+        }
+
+        throw new \Exception('Searching by attribute "'.$query->getAttribute().'" requires a fulltext index.');
     }
 }

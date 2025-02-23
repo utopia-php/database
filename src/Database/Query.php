@@ -689,7 +689,7 @@ class Query
      * @param array<string> $types
      * @return array<Query>
      */
-    public static function getByType(array $queries, array $types): array
+    protected static function getByType(array $queries, array $types): array
     {
         $filtered = [];
 
@@ -700,6 +700,72 @@ class Query
         }
 
         return $filtered;
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return array<Query>
+     */
+    public static function getSelectionsQueries(array $queries): array
+    {
+        return self::getByType($queries, [
+            Query::TYPE_SELECT
+        ]);
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return array<Query>
+     */
+    public static function getJoinsQueries(array $queries): array
+    {
+        return self::getByType($queries, [
+            Query::TYPE_INNER_JOIN,
+            Query::TYPE_LEFT_JOIN,
+            Query::TYPE_RIGHT_JOIN,
+        ]);
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return int
+     */
+    public static function getLimitsQueries(array $queries, int $default): int
+    {
+        $queries = self::getByType($queries, [
+            Query::TYPE_LIMIT,
+        ]);
+
+        if (empty($queries)) {
+            return $default;
+        }
+
+        return $queries[0]->getValue();
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return array<Query>
+     */
+    public static function getFiltersQueries(array $queries): array
+    {
+        return self::getByType($queries, [
+            self::TYPE_EQUAL,
+            self::TYPE_NOT_EQUAL,
+            self::TYPE_LESSER,
+            self::TYPE_LESSER_EQUAL,
+            self::TYPE_GREATER,
+            self::TYPE_GREATER_EQUAL,
+            self::TYPE_CONTAINS,
+            self::TYPE_SEARCH,
+            self::TYPE_IS_NULL,
+            self::TYPE_IS_NOT_NULL,
+            self::TYPE_BETWEEN,
+            self::TYPE_STARTS_WITH,
+            self::TYPE_ENDS_WITH,
+            self::TYPE_AND,
+            self::TYPE_OR,
+        ]);
     }
 
     /**

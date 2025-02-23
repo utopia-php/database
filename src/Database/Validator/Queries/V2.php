@@ -184,7 +184,7 @@ class V2 extends Validator
 
                     case Query::TYPE_OR:
                     case Query::TYPE_AND:
-                        $filters = Query::groupByType($query->getValues())['filters'];
+                        $filters = Query::getFiltersQueries($query->getValues());
 
                         if (count($query->getValues()) !== count($filters)) {
                             throw new \Exception('Invalid query: '.\ucfirst($method).' queries can only contain filter queries');

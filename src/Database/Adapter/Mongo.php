@@ -1488,9 +1488,8 @@ class Mongo extends Adapter
     protected function buildFilters(array $queries, string $separator = '$and'): array
     {
         $filters = [];
-        $queries = Query::groupByType($queries)['filters'];
+        $queries = Query::getFiltersQueries($queries);
         foreach ($queries as $query) {
-            /* @var $query Query */
             if ($query->isNested()) {
                 $operator = $this->getQueryOperator($query->getMethod());
                 $filters[$separator][] = $this->buildFilters($query->getValues(), $operator);

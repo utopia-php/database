@@ -2960,7 +2960,7 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $selects = Query::groupByType($queries)['selections'];
+        $selects = Query::getSelectionsQueries($queries);
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
@@ -5544,26 +5544,10 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        //   $attributes = $collection->getAttribute('attributes', []);
-        //   $indexes = $collection->getAttribute('indexes', []);
-
-        //        if ($this->validate) {
-        //            $validator = new DocumentsValidatorOiginal(
-        //                $attributes,
-        //                $indexes,
-        //                $this->maxQueryValues,
-        //                $this->adapter->getMinDateTime(),
-        //                $this->adapter->getMaxDateTime(),
-        //            );
-        //            if (!$validator->isValid($queries)) {
-        //                throw new QueryException($validator->getDescription());
-        //            }
-        //        }
-
         $context = new QueryContext($queries);
         $context->add($collection);
 
-        $joins = Query::getByType($queries, [Query::TYPE_INNER_JOIN]);
+        $joins = Query::getJoinsQueries($queries);
 
         foreach ($joins as $join) {
             $context->add(
@@ -5603,8 +5587,14 @@ class Database
 
         $grouped = Query::groupByType($queries);
         $filters = $grouped['filters'];
+        $filters = Query::getFiltersQueries($queries);
+
         $selects = $grouped['selections'];
+        $selects = Query::getSelectionsQueries($queries);
+
         $limit = $grouped['limit'];
+        $limit = Query::getLimitsQueries($queries, 25);
+
         $offset = $grouped['offset'];
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
@@ -5837,7 +5827,7 @@ class Database
             $skipAuth = true;
         }
 
-        $queries = Query::groupByType($queries)['filters'];
+        $queries = Query::getFiltersQueries($queries);
         $queries = self::convertQueries($collection, $queries);
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);

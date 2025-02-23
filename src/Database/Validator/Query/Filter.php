@@ -256,7 +256,7 @@ class Filter extends Base
 
             case Query::TYPE_OR:
             case Query::TYPE_AND:
-                $filters = Query::groupByType($value->getValues())['filters'];
+                $filters = Query::getFiltersQueries($value->getValues());
 
                 if (count($value->getValues()) !== count($filters)) {
                     $this->message = \ucfirst($method) . ' queries can only contain filter queries';

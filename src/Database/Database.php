@@ -987,7 +987,7 @@ class Database
 
     public function getMaxQueryValues(): int
     {
-        return$this->maxQueryValues;
+        return $this->maxQueryValues;
     }
 
     /**
@@ -5584,7 +5584,13 @@ class Database
         }
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($context);
+            $validator = new DocumentsValidator(
+                $context,
+                maxValuesCount: $this->maxQueryValues,
+                minAllowedDate: $this->adapter->getMinDateTime(),
+                maxAllowedDate: $this->adapter->getMaxDateTime()
+            );
+
             if (!$validator->isValid($context->getQueries())) {
                 throw new QueryException($validator->getDescription());
             }

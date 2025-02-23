@@ -9,12 +9,8 @@ use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Query\Cursor;
-use Utopia\Database\Validator\Query\Filter;
-use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
-use Utopia\Database\Validator\Query\Order;
-use Utopia\Database\Validator\Query\Select;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
@@ -29,7 +25,7 @@ class V2 extends Validator
 
     protected array $schema = [];
 
-    protected int $length;
+    protected int $maxQueriesCount;
 
     private int $maxValuesCount;
 
@@ -42,9 +38,30 @@ class V2 extends Validator
     /**
      * @throws Exception
      */
-    public function __construct(QueryContext $context, int $length = 0, int $maxValuesCount = 100, int $maxLimit = PHP_INT_MAX, int $maxOffset = PHP_INT_MAX)
+    public function __construct(
+        QueryContext $context,
+        int $maxValuesCount = 100,
+        int $maxQueriesCount = 0,
+        \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
+        \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+        int $maxLimit = PHP_INT_MAX,
+        int $maxOffset = PHP_INT_MAX)
     {
         $this->context = $context;
+        $this->maxQueriesCount = $maxQueriesCount;
+        $this->maxValuesCount = $maxValuesCount;
+        $this->maxLimit = $maxLimit;
+        $this->maxOffset = $maxOffset;
+
+        //        $validators = [
+        //            new Limit(),
+        //            new Offset(),
+        //            new Cursor(),
+        //            new Filter($collections),
+        //            new Order($collections),
+        //            new Select($collections),
+        //            new Join($collections),
+        //        ];
 
         /**
          * Since $context includes Documents , clone if original data is changes.
@@ -87,21 +104,6 @@ class V2 extends Validator
                 $this->schema[$collection->getId()][$key] = $attribute->getArrayCopy();
             }
         }
-
-        $this->maxLimit = $maxLimit;
-        $this->maxOffset = $maxOffset;
-        $this->length = $length;
-        $this->maxValuesCount = $maxValuesCount;
-
-        //        $validators = [
-        //            new Limit(),
-        //            new Offset(),
-        //            new Cursor(),
-        //            new Filter($collections),
-        //            new Order($collections),
-        //            new Select($collections),
-        //            new Join($collections),
-        //        ];
     }
 
     /**
@@ -116,8 +118,8 @@ class V2 extends Validator
                 throw new \Exception('Queries must be an array');
             }
 
-            if ($this->length && \count($value) > $this->length) {
-                throw new \Exception('Queries count is greater than '.$this->length);
+            if ($this->maxQueriesCount > 0 && \count($value) > $this->maxQueriesCount) {
+                throw new \Exception('Queries count is greater than '.$this->maxQueriesCount);
             }
 
             foreach ($value as $query) {
@@ -217,17 +219,40 @@ class V2 extends Validator
                         break;
 
                     case Query::TYPE_LIMIT:
-                        $this->validateLimit($query);
+                        $validator = new Limit($this->maxLimit);
+                        if (! $validator->isValid($query)) {
+                            throw new \Exception($validator->getDescription());
+                        }
 
                         break;
 
                     case Query::TYPE_OFFSET:
-                        $this->validateOffset($query);
+                        $validator = new Offset($this->maxOffset);
+                        if (! $validator->isValid($query)) {
+                            throw new \Exception($validator->getDescription());
+                        }
 
                         break;
 
                     case Query::TYPE_SELECT:
                         $this->validateSelect($query);
+
+                        break;
+
+                    case Query::TYPE_ORDER_ASC:
+                    case Query::TYPE_ORDER_DESC:
+                        if (! empty($query->getAttribute())) {
+                            $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        }
+
+                        break;
+
+                    case Query::TYPE_CURSOR_AFTER:
+                    case Query::TYPE_CURSOR_BEFORE:
+                        $validator = new Cursor;
+                        if (! $validator->isValid($query)) {
+                            throw new \Exception($validator->getDescription());
+                        }
 
                         break;
 
@@ -332,7 +357,7 @@ class V2 extends Validator
     protected function validateValues(string $attributeId, string $alias, array $values, string $method): void
     {
         if (count($values) > $this->maxValuesCount) {
-            throw new \Exception('Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attributeId);
+            throw new \Exception( 'Invalid query: Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attributeId);
         }
 
         $collection = $this->context->getCollectionByAlias($alias);
@@ -411,47 +436,20 @@ class V2 extends Validator
             $method === Query::TYPE_CONTAINS &&
             $attribute['type'] !== Database::VAR_STRING
         ) {
-            throw new \Exception('Cannot query contains on attribute "'.$attributeId.'" because it is not an array or string.');
+            throw new \Exception('Invalid query: Cannot query contains on attribute "'.$attributeId.'" because it is not an array or string.');
         }
 
         if (
             $array &&
             ! in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
         ) {
-            throw new \Exception('Cannot query '.$method.' on attribute "'.$attributeId.'" because it is an array.');
+            throw new \Exception('Invalid query: Cannot query '.$method.' on attribute "'.$attributeId.'" because it is an array.');
         }
     }
 
-    public function validateLimit(Query $query): void
-    {
-        $limit = $query->getValue();
-
-        $validator = new Numeric;
-        if (! $validator->isValid($limit)) {
-            throw new \Exception('Invalid limit: '.$validator->getDescription());
-        }
-
-        $validator = new Range(1, $this->maxLimit);
-        if (! $validator->isValid($limit)) {
-            throw new \Exception('Invalid limit: '.$validator->getDescription());
-        }
-    }
-
-    public function validateOffset(Query $query): void
-    {
-        $offset = $query->getValue();
-
-        $validator = new Numeric;
-        if (! $validator->isValid($offset)) {
-            throw new \Exception('Invalid limit: '.$validator->getDescription());
-        }
-
-        $validator = new Range(0, $this->maxOffset);
-        if (! $validator->isValid($offset)) {
-            throw new \Exception('Invalid offset: '.$validator->getDescription());
-        }
-    }
-
+    /**
+     * @throws \Exception
+     */
     public function validateSelect(Query $query): void
     {
         $internalKeys = \array_map(
@@ -460,35 +458,39 @@ class V2 extends Validator
         );
 
         foreach ($query->getValues() as $attribute) {
+            $alias = Query::DEFAULT_ALIAS; // todo: Fix this
+            var_dump($attribute);
 
-            if (is_string()) {
+            /**
+             * Special symbols with `dots`
+             */
+            if (\str_contains($attribute, '.')) {
+                try {
+                    $this->validateAttributeExist($attribute, $alias);
 
-            } elseif ($this->isArray()) {
+                    continue;
 
+                } catch (\Throwable $e) {
+                    /**
+                     * For relationships, just validate the top level.
+                     * Will validate each nested level during the recursive calls.
+                     */
+                    $attribute = \explode('.', $attribute)[0];
+                }
             }
 
-            if ($this->validateAttributeExist()) {
-
-            }
-
-            //            if (\str_contains($attribute, '.')) {
-            //                //special symbols with `dots`
-            //                if (isset($this->schema[$attribute])) {
-            //                    continue;
-            //                }
-            //
-            //                // For relationships, just validate the top level.
-            //                // Will validate each nested level during the recursive calls.
-            //                $attribute = \explode('.', $attribute)[0];
-            //            }
-
+            /**
+             * Skip internal attributes
+             */
             if (\in_array($attribute, $internalKeys)) {
                 continue;
             }
 
-            if (! isset($this->schema[$attribute]) && $attribute !== '*') {
-                throw new \Exception('Attribute not found in schema: '.$attribute);
+            if ($attribute === '*') {
+                continue;
             }
+
+            $this->validateAttributeExist($attribute, $alias);
         }
     }
 }

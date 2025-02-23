@@ -105,6 +105,14 @@ class Query
         string $aliasRight = '',
         string $collection = '',
     ) {
+        if (empty($alias)) {
+            $alias = Query::DEFAULT_ALIAS;
+        }
+
+        if (empty($aliasRight)) {
+            $aliasRight = Query::DEFAULT_ALIAS;
+        }
+
         $this->method = $method;
         $this->alias = $alias;
         $this->attribute = $attribute;
@@ -671,14 +679,6 @@ class Query
      */
     public static function relationEqual($leftAlias, string $leftColumn, string $rightAlias, string $rightColumn): self
     {
-        if (empty($leftAlias)) {
-            $leftAlias = Query::DEFAULT_ALIAS;
-        }
-
-        if (empty($rightAlias)) {
-            $rightAlias = Query::DEFAULT_ALIAS;
-        }
-
         return new self(self::TYPE_RELATION_EQUAL, $leftColumn, [], alias: $leftAlias, attributeRight: $rightColumn, aliasRight: $rightAlias);
     }
 

@@ -4,13 +4,11 @@ namespace Utopia\Database;
 
 class QueryContext
 {
-    public const TYPE_EQUAL = 'equal';
+    protected array $collections = [];
 
-    protected array $collections;
+    protected array $aliases = [];
 
-    protected array $aliases;
-
-    protected array $queries;
+    protected array $queries = [];
 
     /**
      * @param  array<Document>  $collections
@@ -22,18 +20,6 @@ class QueryContext
         foreach ($queries as $query) {
             $this->queries[] = clone $query;
         }
-    }
-
-    public function __clone(): void
-    {
-
-        var_dump('__clone __clone __clone __clone __clone __clone __clone __clone __clone __clone __clone __clone __clone __clone');
-
-//        foreach ($this->values as $index => $value) {
-//            if ($value instanceof self) {
-//                $this->values[$index] = clone $value;
-//            }
-//        }
     }
 
     public function getCollections(): array

@@ -301,7 +301,7 @@ class QueryTest extends TestCase
                 'users',
                 'u',
                 [
-                    Query::relationEqual('main', 'id','u', 'user_id'),
+                    Query::relationEqual('main', 'id', 'u', 'user_id'),
                     Query::equal('id', ['usa'], 'u'),
                 ]
             );

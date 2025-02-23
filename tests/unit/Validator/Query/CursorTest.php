@@ -15,7 +15,7 @@ class CursorTest extends TestCase
      */
     public function test_value_success(): void
     {
-        $validator = new Cursor;
+        $validator = new Cursor();
 
         $this->assertTrue($validator->isValid(Query::cursorAfter(new Document(['$id' => 'asb']))));
         $this->assertTrue($validator->isValid(Query::cursorBefore(new Document(['$id' => 'asb']))));
@@ -23,7 +23,7 @@ class CursorTest extends TestCase
 
     public function test_value_failure(): void
     {
-        $validator = new Cursor;
+        $validator = new Cursor();
 
         $this->assertFalse($validator->isValid(Query::limit(-1)));
         $this->assertEquals('Invalid query', $validator->getDescription());

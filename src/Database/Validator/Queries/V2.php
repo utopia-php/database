@@ -43,8 +43,8 @@ class V2 extends Validator
         \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
         int $maxLimit = PHP_INT_MAX,
-        int $maxOffset = PHP_INT_MAX)
-    {
+        int $maxOffset = PHP_INT_MAX
+    ) {
         $this->context = $context;
         $this->maxQueriesCount = $maxQueriesCount;
         $this->maxValuesCount = $maxValuesCount;
@@ -247,7 +247,7 @@ class V2 extends Validator
 
                     case Query::TYPE_CURSOR_AFTER:
                     case Query::TYPE_CURSOR_BEFORE:
-                        $validator = new Cursor;
+                        $validator = new Cursor();
                         if (! $validator->isValid($query)) {
                             throw new \Exception($validator->getDescription());
                         }
@@ -355,7 +355,7 @@ class V2 extends Validator
     protected function validateValues(string $attributeId, string $alias, array $values, string $method): void
     {
         if (count($values) > $this->maxValuesCount) {
-            throw new \Exception( 'Invalid query: Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attributeId);
+            throw new \Exception('Invalid query: Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attributeId);
         }
 
         $collection = $this->context->getCollectionByAlias($alias);
@@ -375,19 +375,19 @@ class V2 extends Validator
                     break;
 
                 case Database::VAR_INTEGER:
-                    $validator = new Integer;
+                    $validator = new Integer();
                     break;
 
                 case Database::VAR_FLOAT:
-                    $validator = new FloatValidator;
+                    $validator = new FloatValidator();
                     break;
 
                 case Database::VAR_BOOLEAN:
-                    $validator = new Boolean;
+                    $validator = new Boolean();
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator;
+                    $validator = new DatetimeValidator();
                     break;
 
                 case Database::VAR_RELATIONSHIP:

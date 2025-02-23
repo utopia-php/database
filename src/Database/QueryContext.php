@@ -40,7 +40,7 @@ class QueryContext
         $collectionId = $this->aliases[$alias] ?? null;
 
         if (is_null($collectionId)) {
-            return new Document;
+            return new Document();
         }
 
         foreach ($this->collections as $collection) {
@@ -49,7 +49,7 @@ class QueryContext
             }
         }
 
-        return new Document;
+        return new Document();
     }
 
     public function add(Document $collection, string $alias = Query::DEFAULT_ALIAS): void

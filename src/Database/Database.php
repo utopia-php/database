@@ -5574,7 +5574,7 @@ class Database
 
         $authorization = new Authorization(self::PERMISSION_READ);
 
-        foreach ($context->getCollections() as $c){
+        foreach ($context->getCollections() as $c) {
             $documentSecurity = $c->getAttribute('documentSecurity', false);
             $skipAuth = $authorization->isValid($c->getPermissionsByType($forPermission));
 

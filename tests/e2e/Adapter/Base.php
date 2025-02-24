@@ -161,17 +161,17 @@ abstract class Base extends TestCase
             return;
         }
 
-        static::getDatabase()->createCollection('users');
-        static::getDatabase()->createCollection('sessions');
+        static::getDatabase()->createCollection('__users');
+        static::getDatabase()->createCollection('__sessions');
 
-        static::getDatabase()->createAttribute('sessions', 'user_id', Database::VAR_STRING, 100, false);
+        static::getDatabase()->createAttribute('__sessions', 'user_id', Database::VAR_STRING, 100, false);
 
-        $user = static::getDatabase()->createDocument('users', new Document());
-        $session = static::getDatabase()->createDocument('sessions', new Document(['user_id' => $user->getId()]));
+        $user = static::getDatabase()->createDocument('__users', new Document());
+        $session = static::getDatabase()->createDocument('__sessions', new Document(['user_id' => $user->getId()]));
 
         try {
             static::getDatabase()->find(
-                'sessions',
+                '__sessions',
                 [
                     Query::equal('user_id', ['bob'], 'alias-not-found')
                 ]
@@ -182,14 +182,29 @@ abstract class Base extends TestCase
             $this->assertEquals('Unknown Alias context', $e->getMessage());
         }
 
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::relationEqual('', '$id', '', '$internalId'),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Relations are only valid within the scope of joins.', $e->getMessage());
+        }
+
+        $this->assertEquals('shmuel1', 'shmuel2');
+
         $documents = static::getDatabase()->find(
-            'users',
+            '__users',
             [
-                Query::selection('*', 'A', 'count'),
+                Query::selection('*', 'A'),
                 Query::selection('$id', 'A'),
-                Query::selection('user_id', 'U'),
+                Query::selection('user_id', 'U', as: 'user_id'),
                 Query::join(
-                    'sessions',
+                    '__sessions',
                     'U',
                     [
                         Query::relationEqual('', '$id', 'U', 'user_id'),
@@ -200,11 +215,8 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-
         $this->assertEquals('shmuel', 'shmuel');
 
-        static::getDatabase()->deleteCollection('users');
-        static::getDatabase()->deleteCollection('sessions');
     }
 
     public function testDeleteRelatedCollection(): void

@@ -109,7 +109,7 @@ class V2 extends Validator
      *
      * @throws \Utopia\Database\Exception\Query|\Throwable
      */
-    public function isValid($value): bool
+    public function isValid($value, string $scope = ''): bool
     {
         try {
             if (! is_array($value)) {
@@ -128,7 +128,7 @@ class V2 extends Validator
                 var_dump($query->getMethod(), $query->getCollection(), $query->getAlias());
 
                 if ($query->isNested()) {
-                    if (! self::isValid($query->getValues())) {
+                    if (! self::isValid($query->getValues(), $scope)) {
                         throw new \Exception($this->message);
                     }
                 }
@@ -197,12 +197,16 @@ class V2 extends Validator
                         var_dump('=== Query::TYPE_JOIN ===');
                         var_dump($query);
                         // validation force Query relation exist in query list!!
-                        if (! self::isValid($query->getValues())) {
+                        if (! self::isValid($query->getValues(), 'joins')) {
                             throw new \Exception($this->message);
                         }
 
                         break;
                     case Query::TYPE_RELATION_EQUAL:
+                        if ($scope !== 'joins') {
+                            throw new \Exception('Invalid query: Relations are only valid within the scope of joins.');
+                        }
+
                         var_dump('=== Query::TYPE_RELATION ===');
                         var_dump($query);
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
@@ -253,7 +257,8 @@ class V2 extends Validator
             }
         } catch (\Throwable $e) {
             $this->message = $e->getMessage();
-            var_dump($e->getTraceAsString());  // Remove this line
+
+            var_dump($e->getTraceAsString());
 
             return false;
         }

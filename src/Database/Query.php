@@ -82,6 +82,7 @@ class Query
     protected string $attribute = '';
     protected string $aliasRight = '';
     protected string $attributeRight = '';
+    protected string $as = '';
 
     protected bool $onArray = false;
 
@@ -96,6 +97,11 @@ class Query
      * @param string $method
      * @param string $attribute
      * @param array<mixed> $values
+     * @param string $alias
+     * @param string $attributeRight
+     * @param string $aliasRight
+     * @param string $collection
+     * @param string $as
      */
     protected function __construct(
         string $method,
@@ -105,6 +111,7 @@ class Query
         string $attributeRight = '',
         string $aliasRight = '',
         string $collection = '',
+        string $as = '',
     ) {
         if (empty($alias)) {
             $alias = Query::DEFAULT_ALIAS;
@@ -121,6 +128,7 @@ class Query
         $this->aliasRight = $aliasRight;
         $this->attributeRight = $attributeRight;
         $this->collection = $collection;
+        $this->as = $as;
     }
 
     public function __clone(): void
@@ -517,9 +525,9 @@ class Query
      * @param string $function
      * @return Query
      */
-    public static function selection(string $attribute, string $alias = '', string $function = ''): self
+    public static function selection(string $attribute, string $alias = '', string $as = '', string $function = ''): self
     {
-        return new self(self::TYPE_SELECTION, $attribute, [], alias: $alias);
+        return new self(self::TYPE_SELECTION, $attribute, [], alias: $alias, as: $as);
     }
 
     /**

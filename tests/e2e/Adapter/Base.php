@@ -185,11 +185,14 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find(
             'users',
             [
+                Query::selection('*', 'A', 'count'),
+                Query::selection('$id', 'A'),
+                Query::selection('user_id', 'U'),
                 Query::join(
                     'sessions',
-                    'u',
+                    'U',
                     [
-                        Query::relationEqual('', '$id', 'u', 'user_id'),
+                        Query::relationEqual('', '$id', 'U', 'user_id'),
                         Query::equal('$id', ['usa']),
                     ]
                 )

@@ -5548,7 +5548,6 @@ class Database
         $context->add($collection);
 
         $joins = Query::getJoinsQueries($queries);
-
         foreach ($joins as $join) {
             $context->add(
                 $this->silent(fn () => $this->getCollection($join->getCollection())),
@@ -5586,6 +5585,7 @@ class Database
         );
 
         $grouped = Query::groupByType($queries);
+
         $filters = $grouped['filters'];
         $filters = Query::getFiltersQueries($queries);
 
@@ -5596,8 +5596,13 @@ class Database
         $limit = Query::getLimitsQueries($queries, 25);
 
         $offset = $grouped['offset'];
+        $offset = Query::getOffsetsQueries($queries, 0);
+
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
+
+        $orders = Query::getOrdersQueries($queries);
+
         $cursor = $grouped['cursor'];
         $cursorDirection = $grouped['cursorDirection'];
 

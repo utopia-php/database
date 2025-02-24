@@ -146,7 +146,6 @@ class V2 extends Validator
                         $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
 
                         break;
-
                     case Query::TYPE_NOT_EQUAL:
                     case Query::TYPE_LESSER:
                     case Query::TYPE_LESSER_EQUAL:
@@ -164,7 +163,6 @@ class V2 extends Validator
                         $this->validateFulltextIndex($query);
 
                         break;
-
                     case Query::TYPE_BETWEEN:
                         if (count($query->getValues()) != 2) {
                             throw new \Exception('Invalid query: '.\ucfirst($method).' queries require exactly two values.');
@@ -174,14 +172,12 @@ class V2 extends Validator
                         $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
 
                         break;
-
                     case Query::TYPE_IS_NULL:
                     case Query::TYPE_IS_NOT_NULL:
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
                         $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
 
                         break;
-
                     case Query::TYPE_OR:
                     case Query::TYPE_AND:
                         $filters = Query::getFiltersQueries($query->getValues());
@@ -195,7 +191,6 @@ class V2 extends Validator
                         }
 
                         break;
-
                     case Query::TYPE_INNER_JOIN:
                     case Query::TYPE_LEFT_JOIN:
                     case Query::TYPE_RIGHT_JOIN:
@@ -207,7 +202,6 @@ class V2 extends Validator
                         }
 
                         break;
-
                     case Query::TYPE_RELATION_EQUAL:
                         var_dump('=== Query::TYPE_RELATION ===');
                         var_dump($query);
@@ -215,7 +209,6 @@ class V2 extends Validator
                         $this->validateAttributeExist($query->getAttributeRight(), $query->getRightAlias());
 
                         break;
-
                     case Query::TYPE_LIMIT:
                         $validator = new Limit($this->maxLimit);
                         if (! $validator->isValid($query)) {
@@ -223,7 +216,6 @@ class V2 extends Validator
                         }
 
                         break;
-
                     case Query::TYPE_OFFSET:
                         $validator = new Offset($this->maxOffset);
                         if (! $validator->isValid($query)) {
@@ -231,12 +223,14 @@ class V2 extends Validator
                         }
 
                         break;
-
                     case Query::TYPE_SELECT:
                         $this->validateSelect($query);
 
                         break;
+                    case Query::TYPE_SELECTION:
+                        $this->validateSelections($query);
 
+                        break;
                     case Query::TYPE_ORDER_ASC:
                     case Query::TYPE_ORDER_DESC:
                         if (! empty($query->getAttribute())) {
@@ -244,7 +238,6 @@ class V2 extends Validator
                         }
 
                         break;
-
                     case Query::TYPE_CURSOR_AFTER:
                     case Query::TYPE_CURSOR_BEFORE:
                         $validator = new Cursor();
@@ -253,7 +246,6 @@ class V2 extends Validator
                         }
 
                         break;
-
                     default:
                         throw new \Exception('Invalid query: Method not found '.$method); // Remove this line
                         throw new \Exception('Invalid query: Method not found.');
@@ -490,6 +482,43 @@ class V2 extends Validator
 
             $this->validateAttributeExist($attribute, $alias);
         }
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function validateSelections(Query $query): void
+    {
+        $internalKeys = \array_map(fn ($attr) => $attr['$id'], Database::INTERNAL_ATTRIBUTES);
+
+        $alias = $query->getAlias();
+        $attribute = $query->getAttribute();
+
+        /**
+         * Special symbols with `dots`
+         */
+        if (\str_contains($attribute, '.')) {
+            try {
+                $this->validateAttributeExist($attribute, $alias);
+                return;
+            } catch (\Throwable $e) {
+                /**
+                 * For relationships, just validate the top level.
+                 * Will validate each nested level during the recursive calls.
+                 */
+                $attribute = \explode('.', $attribute)[0];
+            }
+        }
+
+        if (\in_array($attribute, $internalKeys)) {
+            return;
+        }
+
+        if ($attribute === '*') {
+            return;
+        }
+
+        $this->validateAttributeExist($attribute, $alias);
     }
 
     /**

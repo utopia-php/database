@@ -24,6 +24,7 @@ class Query
     public const TYPE_RELATION_EQUAL = 'relationEqual';
 
     public const TYPE_SELECT = 'select';
+    public const TYPE_SELECTION = 'selection';
 
     // Order methods
     public const TYPE_ORDER_DESC = 'orderDesc';
@@ -43,7 +44,7 @@ class Query
     public const TYPE_INNER_JOIN = 'innerJoin';
     public const TYPE_LEFT_JOIN = 'leftJoin';
     public const TYPE_RIGHT_JOIN = 'rightJoin';
-    public const DEFAULT_ALIAS = 'DA';
+    public const DEFAULT_ALIAS = 'A';
 
     public const TYPES = [
         self::TYPE_EQUAL,
@@ -511,9 +512,21 @@ class Query
     }
 
     /**
+     * @param string $attribute
+     * @param string $alias
+     * @param string $function
+     * @return Query
+     */
+    public static function selection(string $attribute, string $alias = '', string $function = ''): self
+    {
+        return new self(self::TYPE_SELECTION, $attribute, [], alias: $alias);
+    }
+
+    /**
      * Helper method to create Query with orderDesc method
      *
      * @param string $attribute
+     * @param string $alias
      * @return Query
      */
     public static function orderDesc(string $attribute = '', string $alias = Query::DEFAULT_ALIAS): self
@@ -728,9 +741,9 @@ class Query
 
     /**
      * @param array<Query> $queries
-     * @return int
+     * @return int|null
      */
-    public static function getLimitsQueries(array $queries, int $default): int
+    public static function getLimitsQueries(array $queries, ?int $default = null): int
     {
         $queries = self::getByType($queries, [
             Query::TYPE_LIMIT,
@@ -741,6 +754,35 @@ class Query
         }
 
         return $queries[0]->getValue();
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return int|null
+     */
+    public static function getOffsetsQueries(array $queries, ?int $default = null): int
+    {
+        $queries = self::getByType($queries, [
+            Query::TYPE_OFFSET,
+        ]);
+
+        if (empty($queries)) {
+            return $default;
+        }
+
+        return $queries[0]->getValue();
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return array<Query>
+     */
+    public static function getOrdersQueries(array $queries): array
+    {
+        return self::getByType($queries, [
+            Query::TYPE_ORDER_ASC,
+            Query::TYPE_ORDER_DESC,
+        ]);
     }
 
     /**

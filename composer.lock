@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b4d67913e48d1045314c24546a49da46",
+    "content-hash": "4d41b8991988a9c03d57f8038103e006",
     "packages": [
         {
             "name": "brick/math",
@@ -2002,23 +2002,24 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "0.11.0",
+            "version": "0.12.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "8ebcab5aac7606331cef69b0081f6c9eff2e58bc"
+                "reference": "646038f1d470b759c129348be8fc14da3c00bbd9"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/8ebcab5aac7606331cef69b0081f6c9eff2e58bc",
-                "reference": "8ebcab5aac7606331cef69b0081f6c9eff2e58bc",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/646038f1d470b759c129348be8fc14da3c00bbd9",
+                "reference": "646038f1d470b759c129348be8fc14da3c00bbd9",
                 "shasum": ""
             },
             "require": {
                 "ext-json": "*",
                 "ext-memcached": "*",
                 "ext-redis": "*",
-                "php": ">=8.0"
+                "php": ">=8.0",
+                "utopia-php/telemetry": "0.1.*"
             },
             "require-dev": {
                 "laravel/pint": "1.2.*",
@@ -2046,9 +2047,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/0.11.0"
+                "source": "https://github.com/utopia-php/cache/tree/0.12.0"
             },
-            "time": "2024-11-05T16:53:58+00:00"
+            "time": "2025-02-25T09:09:21+00:00"
         },
         {
             "name": "utopia-php/compression",
@@ -2098,16 +2099,16 @@
         },
         {
             "name": "utopia-php/framework",
-            "version": "0.33.16",
+            "version": "0.33.17",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/http.git",
-                "reference": "e91d4c560d1b809e25faa63d564fef034363b50f"
+                "reference": "73fac6fbce9f56282dba4e52a58cf836ec434644"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/http/zipball/e91d4c560d1b809e25faa63d564fef034363b50f",
-                "reference": "e91d4c560d1b809e25faa63d564fef034363b50f",
+                "url": "https://api.github.com/repos/utopia-php/http/zipball/73fac6fbce9f56282dba4e52a58cf836ec434644",
+                "reference": "73fac6fbce9f56282dba4e52a58cf836ec434644",
                 "shasum": ""
             },
             "require": {
@@ -2139,9 +2140,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/http/issues",
-                "source": "https://github.com/utopia-php/http/tree/0.33.16"
+                "source": "https://github.com/utopia-php/http/tree/0.33.17"
             },
-            "time": "2025-01-16T15:58:50+00:00"
+            "time": "2025-02-24T17:35:48+00:00"
         },
         {
             "name": "utopia-php/mongo",
@@ -2390,16 +2391,16 @@
         },
         {
             "name": "laravel/pint",
-            "version": "v1.20.0",
+            "version": "v1.21.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/laravel/pint.git",
-                "reference": "53072e8ea22213a7ed168a8a15b96fbb8b82d44b"
+                "reference": "531fa0871fbde719c51b12afa3a443b8f4e4b425"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/laravel/pint/zipball/53072e8ea22213a7ed168a8a15b96fbb8b82d44b",
-                "reference": "53072e8ea22213a7ed168a8a15b96fbb8b82d44b",
+                "url": "https://api.github.com/repos/laravel/pint/zipball/531fa0871fbde719c51b12afa3a443b8f4e4b425",
+                "reference": "531fa0871fbde719c51b12afa3a443b8f4e4b425",
                 "shasum": ""
             },
             "require": {
@@ -2407,15 +2408,15 @@
                 "ext-mbstring": "*",
                 "ext-tokenizer": "*",
                 "ext-xml": "*",
-                "php": "^8.1.0"
+                "php": "^8.2.0"
             },
             "require-dev": {
-                "friendsofphp/php-cs-fixer": "^3.66.0",
-                "illuminate/view": "^10.48.25",
-                "larastan/larastan": "^2.9.12",
-                "laravel-zero/framework": "^10.48.25",
+                "friendsofphp/php-cs-fixer": "^3.68.5",
+                "illuminate/view": "^11.42.0",
+                "larastan/larastan": "^3.0.4",
+                "laravel-zero/framework": "^11.36.1",
                 "mockery/mockery": "^1.6.12",
-                "nunomaduro/termwind": "^1.17.0",
+                "nunomaduro/termwind": "^2.3",
                 "pestphp/pest": "^2.36.0"
             },
             "bin": [
@@ -2452,7 +2453,7 @@
                 "issues": "https://github.com/laravel/pint/issues",
                 "source": "https://github.com/laravel/pint"
             },
-            "time": "2025-01-14T16:20:53+00:00"
+            "time": "2025-02-18T03:18:57+00:00"
         },
         {
             "name": "myclabs/deep-copy",
@@ -2724,16 +2725,16 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "1.12.18",
+            "version": "1.12.19",
             "source": {
                 "type": "git",
                 "url": "https://github.com/phpstan/phpstan.git",
-                "reference": "fef9f07814a573399229304bb0046affdf558812"
+                "reference": "c42ba9bab7a940ed00092ecb1c77bad98896d789"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/fef9f07814a573399229304bb0046affdf558812",
-                "reference": "fef9f07814a573399229304bb0046affdf558812",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/c42ba9bab7a940ed00092ecb1c77bad98896d789",
+                "reference": "c42ba9bab7a940ed00092ecb1c77bad98896d789",
                 "shasum": ""
             },
             "require": {
@@ -2778,7 +2779,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-02-13T12:44:44+00:00"
+            "time": "2025-02-19T15:42:21+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",

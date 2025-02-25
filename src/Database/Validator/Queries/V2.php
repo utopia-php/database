@@ -244,7 +244,7 @@ class V2 extends Validator
                         break;
                     case Query::TYPE_CURSOR_AFTER:
                     case Query::TYPE_CURSOR_BEFORE:
-                        $validator = new Cursor;
+                        $validator = new Cursor();
                         if (! $validator->isValid($query)) {
                             throw new \Exception($validator->getDescription());
                         }

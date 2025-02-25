@@ -5607,14 +5607,14 @@ class Database
 
         $orders = Query::getOrderQueries($queries);
 
-//        $cursor = $grouped['cursor'];
-//        $cursorDirection = $grouped['cursorDirection'];
+        //        $cursor = $grouped['cursor'];
+        //        $cursorDirection = $grouped['cursorDirection'];
 
         $cursor = [];
         $cursorDirection = Database::CURSOR_AFTER;
         $cursorQuery = Query::getCursorQueries($queries);
 
-        if(! is_null($cursorQuery)){
+        if (! is_null($cursorQuery)) {
             /**
              * @var $cursor Document
              */
@@ -5681,6 +5681,7 @@ class Database
         $queries = \array_values($queries);
 
         $getResults = fn () => $this->adapter->find(
+            $context,
             $collection->getId(),
             $queries,
             $limit ?? 25,

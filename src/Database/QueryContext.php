@@ -60,17 +60,16 @@ class QueryContext
 
     public function setLimit($limit): void
     {
+        // $this->aliases
 
-        $this->aliases
-
-//        $collection->getId(),
-//            $queries,
-//            $limit ?? 25,
-//            $offset ?? 0,
-//            $orderAttributes,
-//            $orderTypes,
-//            $cursor,
-//            $cursorDirection,
-//            $forPermission
+        //        $collection->getId(),
+        //            $queries,
+        //            $limit ?? 25,
+        //            $offset ?? 0,
+        //            $orderAttributes,
+        //            $orderTypes,
+        //            $cursor,
+        //            $cursorDirection,
+        //            $forPermission
     }
 }

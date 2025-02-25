@@ -228,8 +228,7 @@ class Query
     {
         if ($this->method === self::TYPE_CURSOR_AFTER) {
             return Database::CURSOR_AFTER;
-        }
-        elseif ($this->method === self::TYPE_CURSOR_BEFORE) {
+        } elseif ($this->method === self::TYPE_CURSOR_BEFORE) {
             return Database::CURSOR_BEFORE;
         }
 

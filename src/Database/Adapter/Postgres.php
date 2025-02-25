@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
 
 class Postgres extends SQL
@@ -1818,6 +1819,7 @@ class Postgres extends SQL
      *
      * Find data sets using chosen queries
      *
+     * @param QueryContext $context
      * @param string $collection
      * @param array<Query> $queries
      * @param int|null $limit
@@ -1830,11 +1832,8 @@ class Postgres extends SQL
      *
      * @return array<Document>
      * @throws DatabaseException
-     * @throws TimeoutException
-
-     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(QueryContext $context, string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();

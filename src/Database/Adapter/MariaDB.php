@@ -13,6 +13,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
 
 class MariaDB extends SQL
@@ -2042,6 +2043,7 @@ class MariaDB extends SQL
     /**
      * Find Documents
      *
+     * @param QueryContext $context
      * @param string $collection
      * @param array<Query> $queries
      * @param int|null $limit
@@ -2053,10 +2055,8 @@ class MariaDB extends SQL
      * @param string $forPermission
      * @return array<Document>
      * @throws DatabaseException
-     * @throws TimeoutException
-     * @throws Exception
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(QueryContext $context, string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();

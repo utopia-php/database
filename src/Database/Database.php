@@ -5609,11 +5609,15 @@ class Database
 
 //        $cursor = $grouped['cursor'];
 //        $cursorDirection = $grouped['cursorDirection'];
+
         $cursor = [];
         $cursorDirection = Database::CURSOR_AFTER;
-
         $cursorQuery = Query::getCursorQueries($queries);
+
         if(! is_null($cursorQuery)){
+            /**
+             * @var $cursor Document
+             */
             $cursor = $cursorQuery->getValue();
             $cursorDirection = $cursorQuery->getCursorDirection();
 

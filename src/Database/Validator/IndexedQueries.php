@@ -87,8 +87,7 @@ class IndexedQueries extends Queries
             $queries[] = $query;
         }
 
-        $grouped = Query::groupByType($queries);
-        $filters = $grouped['filters'];
+        $filters = Query::getFilterQueries($queries);
 
         foreach ($filters as $filter) {
             if ($filter->getMethod() === Query::TYPE_SEARCH) {

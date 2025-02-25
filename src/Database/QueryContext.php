@@ -57,4 +57,20 @@ class QueryContext
         $this->collections[] = $collection;
         $this->aliases[$alias] = $collection->getId();
     }
+
+    public function setLimit($limit): void
+    {
+
+        $this->aliases
+
+//        $collection->getId(),
+//            $queries,
+//            $limit ?? 25,
+//            $offset ?? 0,
+//            $orderAttributes,
+//            $orderTypes,
+//            $cursor,
+//            $cursorDirection,
+//            $forPermission
+    }
 }

@@ -192,10 +192,8 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: Relations are only valid within the scope of joins.', $e->getMessage());
+            $this->assertEquals('Invalid query: Relations are only valid within joins.', $e->getMessage());
         }
-
-        $this->assertEquals('shmuel1', 'shmuel2');
 
         $documents = static::getDatabase()->find(
             '__users',
@@ -210,7 +208,7 @@ abstract class Base extends TestCase
                         Query::relationEqual('', '$id', 'U', 'user_id'),
                         Query::equal('$id', ['usa']),
                     ]
-                )
+                ),
             ]
         );
 

@@ -2960,7 +2960,7 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $selects = Query::getSelectionsQueries($queries);
+        $selects = Query::getSelectQueries($queries);
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
@@ -5540,6 +5540,10 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        /**
+         * @var $collection Document
+         */
+
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
@@ -5547,7 +5551,7 @@ class Database
         $context = new QueryContext($queries);
         $context->add($collection);
 
-        $joins = Query::getJoinsQueries($queries);
+        $joins = Query::getJoinQueries($queries);
         foreach ($joins as $join) {
             $context->add(
                 $this->silent(fn () => $this->getCollection($join->getCollection())),
@@ -5587,30 +5591,38 @@ class Database
         $grouped = Query::groupByType($queries);
 
         $filters = $grouped['filters'];
-        $filters = Query::getFiltersQueries($queries);
+        $filters = Query::getFilterQueries($queries);
 
         $selects = $grouped['selections'];
-        $selects = Query::getSelectionsQueries($queries);
+        $selects = Query::getSelectQueries($queries);
 
         $limit = $grouped['limit'];
-        $limit = Query::getLimitsQueries($queries, 25);
+        $limit = Query::getLimitQueries($queries, 25);
 
         $offset = $grouped['offset'];
-        $offset = Query::getOffsetsQueries($queries, 0);
+        $offset = Query::getOffsetQueries($queries, 0);
 
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
 
-        $orders = Query::getOrdersQueries($queries);
+        $orders = Query::getOrderQueries($queries);
 
-        $cursor = $grouped['cursor'];
-        $cursorDirection = $grouped['cursorDirection'];
+//        $cursor = $grouped['cursor'];
+//        $cursorDirection = $grouped['cursorDirection'];
+        $cursor = [];
+        $cursorDirection = Database::CURSOR_AFTER;
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
+        $cursorQuery = Query::getCursorQueries($queries);
+        if(! is_null($cursorQuery)){
+            $cursor = $cursorQuery->getValue();
+            $cursorDirection = $cursorQuery->getCursorDirection();
+
+            if ($cursor->getCollection() !== $collection->getId()) {
+                throw new DatabaseException("cursor Document must be from the same Collection.");
+            }
+
+            $cursor = $this->encode($collection, $cursor)->getArrayCopy();
         }
-
-        $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
         /**  @var array<Query> $queries */
         $queries = \array_merge(
@@ -5672,7 +5684,7 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER,
+            $cursorDirection,
             $forPermission
         );
 
@@ -5832,7 +5844,7 @@ class Database
             $skipAuth = true;
         }
 
-        $queries = Query::getFiltersQueries($queries);
+        $queries = Query::getFilterQueries($queries);
         $queries = self::convertQueries($collection, $queries);
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);

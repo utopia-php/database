@@ -180,7 +180,7 @@ class V2 extends Validator
                         break;
                     case Query::TYPE_OR:
                     case Query::TYPE_AND:
-                        $filters = Query::getFiltersQueries($query->getValues());
+                        $filters = Query::getFilterQueries($query->getValues());
 
                         if (count($query->getValues()) !== count($filters)) {
                             throw new \Exception('Invalid query: '.\ucfirst($method).' queries can only contain filter queries');
@@ -204,7 +204,7 @@ class V2 extends Validator
                         break;
                     case Query::TYPE_RELATION_EQUAL:
                         if ($scope !== 'joins') {
-                            throw new \Exception('Invalid query: Relations are only valid within the scope of joins.');
+                            throw new \Exception('Invalid query: Relations are only valid within joins.');
                         }
 
                         var_dump('=== Query::TYPE_RELATION ===');
@@ -244,7 +244,7 @@ class V2 extends Validator
                         break;
                     case Query::TYPE_CURSOR_AFTER:
                     case Query::TYPE_CURSOR_BEFORE:
-                        $validator = new Cursor();
+                        $validator = new Cursor;
                         if (! $validator->isValid($query)) {
                             throw new \Exception($validator->getDescription());
                         }

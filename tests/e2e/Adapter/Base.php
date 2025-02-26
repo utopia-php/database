@@ -213,7 +213,7 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-        $this->assertEquals('shmuel', 'shmuel');
+        $this->assertEquals('shmuel1', 'shmuel2');
 
     }
 

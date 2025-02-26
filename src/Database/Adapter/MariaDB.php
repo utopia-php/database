@@ -2073,6 +2073,7 @@ class MariaDB extends SQL
     ): array
     {
         $queries = null;
+        $alias = Query::DEFAULT_ALIAS;
 
         $collection = $context->getCollections()[0]->getId();
 
@@ -2114,11 +2115,11 @@ class MariaDB extends SQL
                 }
 
                 $where[] = "(
-                        table_main.`{$attribute}` {$this->getSQLOperator($orderMethod)} :cursor 
+                        {$alias}.`{$attribute}` {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            table_main.`{$attribute}` = :cursor 
+                            {$alias}.`{$attribute}` = :cursor 
                             AND
-                            table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$alias}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -2142,7 +2143,7 @@ class MariaDB extends SQL
                     : Query::TYPE_LESSER;
             }
 
-            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
+            $where[] = "( {$alias}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -2153,10 +2154,18 @@ class MariaDB extends SQL
                     $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
 
-                $orders[] = 'table_main._id ' . $this->filter($order);
+                $orders[] = "{$alias}._id " . $this->filter($order);
             } else {
-                $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+                $orders[] = "{$alias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
+        }
+
+        $j = [];
+        foreach ($joins as $join){
+            /**
+             * @var $join Query
+             */
+            $j[] = "inner join {$this->getSQLTable($join->getCollection())} AS `{$join->getAlias()}` ON {$this->getSQLConditions($join->getValues())}";
         }
 
         $conditions = $this->getSQLConditions($filters);
@@ -2172,22 +2181,24 @@ class MariaDB extends SQL
             $orIsNull = '';
 
             if ($collection === Database::METADATA) {
-                $orIsNull = " OR table_main._tenant IS NULL";
+                $orIsNull = " OR {$alias}._tenant IS NULL";
             }
 
-            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
+            $where[] = "({$alias}._tenant = :_tenant {$orIsNull})";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
         $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
         $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
         $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
+        $sqlJoin = implode(' ', $j);
 
         $selections = $this->getAttributeSelections($selects);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, 'table_main')}
-            FROM {$this->getSQLTable($name)} AS table_main
+            SELECT {$this->getAttributeProjection($selections, $alias)}
+            FROM {$this->getSQLTable($name)} AS `{$alias}`
+            {$sqlJoin}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -2196,6 +2207,13 @@ class MariaDB extends SQL
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($joins as $join) {
+            $f = $join->getValues();
+            foreach ($f as $query) {
+                $this->bindConditionValue($stmt, $query);
+            }
+        }
 
         foreach ($filters as $query) {
             $this->bindConditionValue($stmt, $query);
@@ -2498,6 +2516,7 @@ var_dump($sql);
             default => $query->getAttribute()
         });
 
+        $alias = "`{$query->getAlias()}`";
         $attribute = "`{$query->getAttribute()}`";
         $placeholder = $this->getSQLPlaceholder($query);
 
@@ -2514,25 +2533,28 @@ var_dump($sql);
                 return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
 
             case Query::TYPE_SEARCH:
-                return "MATCH(`table_main`.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
+                return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_BETWEEN:
-                return "`table_main`.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+                return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            case Query::TYPE_RELATION_EQUAL:
+                return "`{$query->getAlias()}`.{$attribute}=`{$query->getRightAlias()}`.`{$query->getAttributeRight()}`";
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-                return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+                return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
                 if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
-                    return "JSON_OVERLAPS(`table_main`.{$attribute}, :{$placeholder}_0)";
+                    return "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
                 }
 
                 // no break
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = "{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
                 }
                 return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
         }

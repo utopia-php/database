@@ -1060,8 +1060,9 @@ abstract class SQL extends Adapter
         }
 
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
-
-        return "table_main._uid IN (
+        $alias = Query::DEFAULT_ALIAS;
+            
+        return "{$alias}._uid IN (
                     SELECT _document
                     FROM {$this->getSQLTable($collection . '_perms')}
                     WHERE _permission IN (" . implode(', ', $roles) . ")

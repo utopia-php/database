@@ -1833,8 +1833,23 @@ class Postgres extends SQL
      * @return array<Document>
      * @throws DatabaseException
      */
-    public function find(QueryContext $context, string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(
+        QueryContext $context,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $orderAttributes = [],
+        array $orderTypes = [],
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $orders = []
+        ): array
     {
+        $collection = $context->getCollections()[0]->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];

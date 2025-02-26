@@ -663,10 +663,11 @@ class Query
     }
 
     /**
-     * @param  array<Query>  $queries
+     * @param array<Query> $queries
+     * @param int|null $default
      * @return int|null
      */
-    public static function getLimitQueries(array $queries, ?int $default = null): int
+    public static function getLimitQueries(array $queries, ?int $default = null): ?int
     {
         $queries = self::getByType($queries, [
             Query::TYPE_LIMIT,
@@ -680,10 +681,11 @@ class Query
     }
 
     /**
-     * @param  array<Query>  $queries
+     * @param array<Query> $queries
+     * @param int|null $default
      * @return int|null
      */
-    public static function getOffsetQueries(array $queries, ?int $default = null): int
+    public static function getOffsetQueries(array $queries, ?int $default = null): ?int
     {
         $queries = self::getByType($queries, [
             Query::TYPE_OFFSET,

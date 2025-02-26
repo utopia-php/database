@@ -5548,10 +5548,20 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        $context = new QueryContext($queries);
+        $context = new QueryContext();
+
+//        if (is_null($context->getLimit())) {
+//            $context->setLimit(25);
+//        }
+//
+//        if (is_null($context->getOffset())) {
+//            $context->setOffset(0);
+//        }
+
         $context->add($collection);
 
         $joins = Query::getJoinQueries($queries);
+
         foreach ($joins as $join) {
             $context->add(
                 $this->silent(fn () => $this->getCollection($join->getCollection())),
@@ -5578,7 +5588,7 @@ class Database
                 maxAllowedDate: $this->adapter->getMaxDateTime()
             );
 
-            if (!$validator->isValid($context->getQueries())) {
+            if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
         }
@@ -5588,30 +5598,19 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $grouped = Query::groupByType($queries);
-
-        $filters = $grouped['filters'];
         $filters = Query::getFilterQueries($queries);
-
-        $selects = $grouped['selections'];
         $selects = Query::getSelectQueries($queries);
-
-        $limit = $grouped['limit'];
         $limit = Query::getLimitQueries($queries, 25);
-
-        $offset = $grouped['offset'];
         $offset = Query::getOffsetQueries($queries, 0);
 
+        $grouped = Query::groupByType($queries);
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
-
         $orders = Query::getOrderQueries($queries);
-
-        //        $cursor = $grouped['cursor'];
-        //        $cursorDirection = $grouped['cursorDirection'];
 
         $cursor = [];
         $cursorDirection = Database::CURSOR_AFTER;
+        //$cursorQuery = $context->getCursorQuery();
         $cursorQuery = Query::getCursorQueries($queries);
 
         if (! is_null($cursorQuery)) {
@@ -5682,15 +5681,18 @@ class Database
 
         $getResults = fn () => $this->adapter->find(
             $context,
-            $collection->getId(),
             $queries,
-            $limit ?? 25,
-            $offset ?? 0,
+            $limit,
+            $offset,
             $orderAttributes,
             $orderTypes,
             $cursor,
             $cursorDirection,
-            $forPermission
+            $forPermission,
+            selects: $selects,
+            filters: $filters,
+            joins: $joins,
+            orders: $orders
         );
 
         $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));

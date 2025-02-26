@@ -2056,14 +2056,33 @@ class MariaDB extends SQL
      * @return array<Document>
      * @throws DatabaseException
      */
-    public function find(QueryContext $context, string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(
+        QueryContext $context,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $orderAttributes = [],
+        array $orderTypes = [],
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $orders = []
+    ): array
     {
+        $queries = null;
+
+        $collection = $context->getCollections()[0]->getId();
+
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
+        //$queries = array_map(fn ($query) => clone $query, $queries);
+        $filters = array_map(fn ($query) => clone $query, $filters);
 
         $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
             '$id' => '_uid',
@@ -2140,7 +2159,7 @@ class MariaDB extends SQL
             }
         }
 
-        $conditions = $this->getSQLConditions($queries);
+        $conditions = $this->getSQLConditions($filters);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -2164,7 +2183,7 @@ class MariaDB extends SQL
         $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
         $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
 
-        $selections = $this->getAttributeSelections($queries);
+        $selections = $this->getAttributeSelections($selects);
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, 'table_main')}
@@ -2175,12 +2194,13 @@ class MariaDB extends SQL
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
-
+var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
 
-        foreach ($queries as $query) {
+        foreach ($filters as $query) {
             $this->bindConditionValue($stmt, $query);
         }
+
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }

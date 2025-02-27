@@ -7,6 +7,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
+use Utopia\Database\Validator\Alias as AliasValidator;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Limit;
@@ -126,6 +127,8 @@ class V2 extends Validator
                  */
                 echo PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL;
                 var_dump($query->getMethod(), $query->getCollection(), $query->getAlias());
+
+                $this->validateAlias($query);
 
                 if ($query->isNested()) {
                     if (! self::isValid($query->getValues(), $scope)) {
@@ -343,6 +346,22 @@ class V2 extends Validator
 
         if (! isset($this->schema[$collection->getId()][$attributeId])) {
             throw new \Exception('Attribute not found in schema: '.$attributeId);
+        }
+    }
+
+    /**
+     * @throws \Exception
+     */
+    protected function validateAlias(Query $query): void
+    {
+        $validator = new AliasValidator;
+
+        if (! $validator->isValid($query->getAlias())) {
+            throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$validator->getDescription());
+        }
+
+        if (! $validator->isValid($query->getRightAlias())) {
+            throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$validator->getDescription());
         }
     }
 

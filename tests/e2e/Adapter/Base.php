@@ -183,7 +183,7 @@ abstract class Base extends TestCase
             static::getDatabase()->find(
                 '__sessions',
                 [
-                    Query::equal('user_id', ['bob'], 'alias-not-found')
+                    Query::equal('user_id', ['bob'], 'alias_not_found')
                 ]
             );
             $this->fail('Failed to throw exception');
@@ -192,6 +192,9 @@ abstract class Base extends TestCase
             $this->assertEquals('Unknown Alias context', $e->getMessage());
         }
 
+        /**
+         * Test Ambiguous alias
+         */
         try {
             static::getDatabase()->find('__users', [
                     Query::join('__sessions', Query::DEFAULT_ALIAS, []),
@@ -203,6 +206,9 @@ abstract class Base extends TestCase
             $this->assertEquals('Ambiguous alias for collection "__sessions".', $e->getMessage());
         }
 
+        /**
+         * Test Relations are valid within joins
+         */
         try {
             static::getDatabase()->find(
                 '__users',
@@ -214,6 +220,26 @@ abstract class Base extends TestCase
         } catch (\Throwable $e) {
             $this->assertTrue($e instanceof QueryException);
             $this->assertEquals('Invalid query: Relations are only valid within joins.', $e->getMessage());
+        }
+
+        /**
+         * Test invalid alias name
+         */
+        try {
+            $alias = 'drop schema;';
+            static::getDatabase()->find('__users',
+                [
+                    Query::join('__sessions', $alias,
+                        [
+                            Query::relationEqual($alias, 'user_id', '', '$id'),
+                        ]
+                    ),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Query InnerJoin: Alias must contain at most 64 chars. Valid chars are a-z, A-Z, 0-9, and underscore.', $e->getMessage());
         }
 
         $documents = static::getDatabase()->find('__users',

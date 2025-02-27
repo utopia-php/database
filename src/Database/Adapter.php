@@ -1120,7 +1120,8 @@ abstract class Adapter
      *
      * @param string $collection   The collection being queried
      * @param string $parentAlias  The alias of the parent collection if in a subquery
+     * @param string $and Default and
      * @return string
      */
-    abstract public function getTenantQuery(string $collection, string $parentAlias = ''): string;
+    abstract public function getTenantQuery(string $collection, string $parentAlias = '', string $and = 'AND'): string;
 }

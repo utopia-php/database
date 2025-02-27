@@ -1188,7 +1188,7 @@ abstract class SQL extends Adapter
         return [];
     }
 
-    public function getTenantQuery(string $collection, string $parentAlias = ''): string
+    public function getTenantQuery(string $collection, string $parentAlias = '', $and = 'AND'): string
     {
         if (!$this->sharedTables) {
             return '';
@@ -1198,15 +1198,13 @@ abstract class SQL extends Adapter
             $parentAlias .= '.';
         }
 
-        $query = "AND ({$parentAlias}_tenant = :_tenant";
+        $orIsNull = '';
 
         if ($collection === Database::METADATA) {
-            $query .= " OR {$parentAlias}_tenant IS NULL";
+            $orIsNull = " OR {$parentAlias}_tenant IS NULL";
         }
 
-        $query .= ")";
-
-        return $query;
+        return "{$and} ({$parentAlias}_tenant = :_tenant {$orIsNull})";
     }
 
     protected function processException(PDOException $e): \Exception

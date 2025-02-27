@@ -2165,7 +2165,18 @@ class MariaDB extends SQL
             /**
              * @var $join Query
              */
-            $j[] = "inner join {$this->getSQLTable($join->getCollection())} AS `{$join->getAlias()}` ON {$this->getSQLConditions($join->getValues())}";
+
+            if ($this->sharedTables) {
+                $orIsNull = '';
+
+                if ($collection === Database::METADATA) {
+                    $orIsNull = " OR {$alias}._tenant IS NULL";
+                }
+
+                $where[] = "({$alias}._tenant = :_tenant {$orIsNull})";
+                //$where[] = "";
+            }
+            $j[] = "inner join {$this->getSQLTable($join->getCollection())} AS `{$join->getAlias()}` ON {$this->getSQLConditions($join->getValues())} {$this->getTenantQuery($collection, $join->getAlias())}" . PHP_EOL;
         }
 
         $conditions = $this->getSQLConditions($filters);
@@ -2185,6 +2196,7 @@ class MariaDB extends SQL
             }
 
             $where[] = "({$alias}._tenant = :_tenant {$orIsNull})";
+            //$where[] = "({$this->getTenantQuery($collection, and: '')})";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';

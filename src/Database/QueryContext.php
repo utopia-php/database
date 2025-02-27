@@ -2,6 +2,8 @@
 
 namespace Utopia\Database;
 
+use Utopia\Database\Exception\Query as QueryException;
+
 class QueryContext
 {
     protected array $collections = [];
@@ -114,8 +116,15 @@ class QueryContext
         return new Document();
     }
 
+    /**
+     * @throws QueryException
+     */
     public function add(Document $collection, string $alias = Query::DEFAULT_ALIAS): void
     {
+        if (! empty($this->aliases[$alias])) {
+            throw new QueryException('Ambiguous alias for collection "'.$collection->getId().'".');
+        }
+
         $this->collections[] = $collection;
         $this->aliases[$alias] = $collection->getId();
     }

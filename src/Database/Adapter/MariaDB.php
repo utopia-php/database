@@ -2074,6 +2074,7 @@ class MariaDB extends SQL
     {
         $queries = null;
         $alias = Query::DEFAULT_ALIAS;
+        $binds = [];
 
         $collection = $context->getCollections()[0]->getId();
 
@@ -2160,32 +2161,31 @@ class MariaDB extends SQL
             }
         }
 
-        $j = [];
+        $sqlJoin = '';
         foreach ($joins as $join){
             /**
              * @var $join Query
              */
-
-            if ($this->sharedTables) {
-                $orIsNull = '';
-
-                if ($collection === Database::METADATA) {
-                    $orIsNull = " OR {$alias}._tenant IS NULL";
-                }
-
-                $where[] = "({$alias}._tenant = :_tenant {$orIsNull})";
-                //$where[] = "";
+            $permissions = '';
+            if (Authorization::$status) {
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($name, $roles, $join->getAlias(), $forPermission);
             }
-            $j[] = "inner join {$this->getSQLTable($join->getCollection())} AS `{$join->getAlias()}` ON {$this->getSQLConditions($join->getValues())} {$this->getTenantQuery($collection, $join->getAlias())}" . PHP_EOL;
+
+            $sqlJoin .= "
+            INNER JOIN {$this->getSQLTable($join->getCollection())} AS `{$join->getAlias()}` 
+            ON {$this->getSQLConditions($join->getValues(), $binds)}
+            {$permissions}
+            {$this->getTenantQuery($join->getCollection(), $join->getAlias())}
+            ";
         }
 
-        $conditions = $this->getSQLConditions($filters);
+        $conditions = $this->getSQLConditions($filters, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         if ($this->sharedTables) {
@@ -2201,9 +2201,21 @@ class MariaDB extends SQL
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
         $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
-        $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
-        $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
-        $sqlJoin = implode(' ', $j);
+
+        $sqlLimit = '';
+        if (! \is_null($limit)) {
+            //$limit = \floatval($limit);
+            //$binds[':limit'] = (int) $limit;
+            //$sqlLimit = 'LIMIT :limit';
+            $sqlLimit = "LIMIT {$limit}";
+        }
+
+        if (! \is_null($offset)) {
+           // $offset = \floatval($offset);
+            //$binds[':offset'] = (int) $offset;
+            //$sqlLimit .= ' OFFSET :offset';
+            $sqlLimit .= " OFFSET {$offset}";
+        }
 
         $selections = $this->getAttributeSelections($selects);
 
@@ -2217,22 +2229,22 @@ class MariaDB extends SQL
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
-var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($joins as $join) {
             $f = $join->getValues();
             foreach ($f as $query) {
-                $this->bindConditionValue($stmt, $query);
+              //  $this->bindConditionValue($stmt, $query);
             }
         }
 
         foreach ($filters as $query) {
-            $this->bindConditionValue($stmt, $query);
+          //  $this->bindConditionValue($stmt, $query);
         }
 
         if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
+            $binds[':_tenant'] = $this->tenant;
+            //$stmt->bindValue(':_tenant', $this->tenant);
         }
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
@@ -2250,18 +2262,26 @@ var_dump($sql);
             if (\is_null($cursor[$attribute] ?? null)) {
                 throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
-            $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
+
+            $binds[':cursor'] = $cursor[$attribute];
+           // $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
         }
 
-        if (!\is_null($limit)) {
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        }
-        if (!\is_null($offset)) {
-            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+//        if (!\is_null($limit)) {
+//            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+//        }
+//        if (!\is_null($offset)) {
+//            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+//        }
+
+        foreach ($binds as $key => $value){
+            //$stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
         try {
-            $stmt->execute();
+            echo $stmt->queryString;
+            var_dump($binds);
+            $stmt->execute($binds);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -2319,28 +2339,30 @@ var_dump($sql);
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
+        $binds = [];
         $where = [];
+        $alias = Query::DEFAULT_ALIAS;
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $conditions = $this->getSQLConditions($queries);
+        $conditions = $this->getSQLConditions($queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         if ($this->sharedTables) {
             $orIsNull = '';
 
             if ($collection === Database::METADATA) {
-                $orIsNull = " OR table_main._tenant IS NULL";
+                $orIsNull = " OR {$alias}._tenant IS NULL";
             }
 
-            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
+            $where[] = "({$alias}._tenant = :_tenant {$orIsNull})";
         }
 
         $sqlWhere = !empty($where)
@@ -2350,7 +2372,7 @@ var_dump($sql);
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
-				FROM {$this->getSQLTable($name)} table_main
+				FROM {$this->getSQLTable($name)} AS `{$alias}`
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -2361,15 +2383,21 @@ var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
+            //$this->bindConditionValue($stmt, $query);
         }
 
         if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
+            $binds[':_tenant'] = $this->tenant;
+            //$stmt->bindValue(':_tenant', $this->tenant);
         }
 
         if (!\is_null($max)) {
-            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+            $binds[':max'] = $max;
+            //$stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        }
+
+        foreach ($binds as $key => $value){
+            $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
         $stmt->execute();
@@ -2399,26 +2427,29 @@ var_dump($sql);
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
+        $alias = Query::DEFAULT_ALIAS;
+        $binds = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries, $binds);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         if ($this->sharedTables) {
             $orIsNull = '';
 
             if ($collection === Database::METADATA) {
-                $orIsNull = " OR table_main._tenant IS NULL";
+                $orIsNull = " OR {$alias}._tenant IS NULL";
             }
 
-            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
+            $where[] = "({$alias}._tenant = :_tenant {$orIsNull})";
         }
 
         $sqlWhere = !empty($where)
@@ -2428,7 +2459,7 @@ var_dump($sql);
         $sql = "
 			SELECT SUM({$attribute}) as sum FROM (
 				SELECT {$attribute}
-				FROM {$this->getSQLTable($name)} table_main
+				FROM {$this->getSQLTable($name)} AS `{$alias}`
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -2439,15 +2470,21 @@ var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
+            //$this->bindConditionValue($stmt, $query);
         }
 
         if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
+            $binds[':_tenant'] = $this->tenant;
+            //$stmt->bindValue(':_tenant', $this->tenant);
         }
 
         if (!\is_null($max)) {
-            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+            $binds[':max'] = $max;
+            //$stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        }
+
+        foreach ($binds as $key => $value){
+            $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
         $stmt->execute();
@@ -2514,10 +2551,11 @@ var_dump($sql);
      * Get SQL Condition
      *
      * @param Query $query
+     * @param array $binds
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query): string
+    protected function getSQLCondition(Query $query, array &$binds): string
     {
         $query->setAttribute(match ($query->getAttribute()) {
             '$id' => '_uid',
@@ -2538,16 +2576,19 @@ var_dump($sql);
                 $conditions = [];
                 /* @var $q Query */
                 foreach ($query->getValue() as $q) {
-                    $conditions[] = $this->getSQLCondition($q);
+                    $conditions[] = $this->getSQLCondition($q, $binds);
                 }
 
                 $method = strtoupper($query->getMethod());
                 return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
 
             case Query::TYPE_SEARCH:
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
                 return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_BETWEEN:
+                $binds[":{$placeholder}_0"] = $query->getValues()[0];
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
                 return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
             case Query::TYPE_RELATION_EQUAL:
@@ -2559,15 +2600,27 @@ var_dump($sql);
 
             case Query::TYPE_CONTAINS:
                 if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
+                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
                     return "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
                 }
 
-                // no break
+                // No break! continue to default case
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
+                    $value = match ($query->getMethod()) {
+                        Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
+                        Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                        //Query::TYPE_SEARCH => $this->getFulltextValue($value),
+                        Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        default => $value
+                    };
+
+                    $binds[":{$placeholder}_{$key}"] = $value;
+
                     $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
                 }
+
                 return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
         }
     }

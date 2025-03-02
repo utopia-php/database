@@ -260,7 +260,7 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-        $this->assertEquals('shmuel1', 'shmuel2');
+       // $this->assertEquals('shmuel1', 'shmuel2');
 
         $documents = static::getDatabase()->find(
             '__users',
@@ -280,7 +280,7 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-        $this->assertEquals('shmuel1', 'shmuel2');
+       // $this->assertEquals('shmuel1', 'shmuel2');
     }
 
     public function testDeleteRelatedCollection(): void

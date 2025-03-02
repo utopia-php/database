@@ -1854,6 +1854,7 @@ class Postgres extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
+        $alias = Query::DEFAULT_ALIAS;
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
@@ -1942,7 +1943,7 @@ class Postgres extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -2057,6 +2058,7 @@ class Postgres extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+        $alias = Query::DEFAULT_ALIAS;
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
@@ -2076,7 +2078,7 @@ class Postgres extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -2129,6 +2131,7 @@ class Postgres extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+        $alias = Query::DEFAULT_ALIAS;
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
@@ -2147,7 +2150,7 @@ class Postgres extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         $sqlWhere = !empty($where)
@@ -2239,10 +2242,11 @@ class Postgres extends SQL
      * Get SQL Condition
      *
      * @param Query $query
+     * @param array $binds
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query): string
+    protected function getSQLCondition(Query $query, array &$binds): string
     {
         $query->setAttribute(match ($query->getAttribute()) {
             '$id' => '_uid',

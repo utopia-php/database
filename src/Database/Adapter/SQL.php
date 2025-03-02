@@ -1053,15 +1053,14 @@ abstract class SQL extends Adapter
      * @return string
      * @throws Exception
      */
-    protected function getSQLPermissionsCondition(string $collection, array $roles, string $type = Database::PERMISSION_READ): string
+    protected function getSQLPermissionsCondition(string $collection, array $roles, string $alias, string $type = Database::PERMISSION_READ): string
     {
         if (!in_array($type, Database::PERMISSIONS)) {
             throw new DatabaseException('Unknown permission type: ' . $type);
         }
 
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
-        $alias = Query::DEFAULT_ALIAS;
-            
+
         return "{$alias}._uid IN (
                     SELECT _document
                     FROM {$this->getSQLTable($collection . '_perms')}
@@ -1139,10 +1138,11 @@ abstract class SQL extends Adapter
 
     /**
      * @param Query $query
+     * @param array $binds
      * @return string
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query): string;
+    abstract protected function getSQLCondition(Query $query, array &$binds): string;
 
     /**
      * @param array<Query> $queries
@@ -1150,7 +1150,7 @@ abstract class SQL extends Adapter
      * @return string
      * @throws Exception
      */
-    public function getSQLConditions(array $queries = [], string $separator = 'AND'): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
     {
         $conditions = [];
         foreach ($queries as $query) {
@@ -1160,9 +1160,9 @@ abstract class SQL extends Adapter
             }
 
             if ($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValues(), $query->getMethod());
+                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
             } else {
-                $conditions[] = $this->getSQLCondition($query);
+                $conditions[] = $this->getSQLCondition($query, $binds);
             }
         }
 

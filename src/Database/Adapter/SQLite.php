@@ -1014,7 +1014,7 @@ class SQLite extends MariaDB
      * @return string
      * @throws Exception
      */
-    protected function getSQLPermissionsCondition(string $collection, array $roles, string $type = Database::PERMISSION_READ): string
+    protected function getSQLPermissionsCondition(string $collection, array $roles, string $alias, string $type = Database::PERMISSION_READ): string
     {
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
         return "table_main._uid IN (

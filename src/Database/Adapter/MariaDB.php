@@ -2189,14 +2189,14 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-            $orIsNull = '';
-
-            if ($collection === Database::METADATA) {
-                $orIsNull = " OR {$alias}._tenant IS NULL";
-            }
-
-            $where[] = "({$alias}._tenant = :_tenant {$orIsNull})";
-            //$where[] = "({$this->getTenantQuery($collection, and: '')})";
+//            $orIsNull = '';
+//
+//            if ($collection === Database::METADATA) {
+//                $orIsNull = " OR {$alias}._tenant IS NULL";
+//            }
+//
+//            $where[] = "({$alias}._tenant = :_tenant {$orIsNull})";
+            $where[] = "{$this->getTenantQuery($collection, $alias, and: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';

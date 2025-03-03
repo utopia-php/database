@@ -225,6 +225,18 @@ abstract class Base extends TestCase
         /**
          * Test invalid alias name
          */
+
+        static::getDatabase()->find('__users',
+            [
+                Query::join('__sessions', 'a000',
+                    [
+                        Query::relationEqual('a000', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+
+
         try {
             $alias = 'drop schema;';
             static::getDatabase()->find('__users',
@@ -260,7 +272,7 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-       // $this->assertEquals('shmuel1', 'shmuel2');
+        $this->assertEquals('shmuel1', 'shmuel2');
 
         $documents = static::getDatabase()->find(
             '__users',

@@ -2189,13 +2189,7 @@ class MariaDB extends SQL
         }
 
         if ($this->sharedTables) {
-//            $orIsNull = '';
-//
-//            if ($collection === Database::METADATA) {
-//                $orIsNull = " OR {$alias}._tenant IS NULL";
-//            }
-//
-//            $where[] = "({$alias}._tenant = :_tenant {$orIsNull})";
+            $binds[':_tenant'] = $this->tenant;
             $where[] = "{$this->getTenantQuery($collection, $alias, and: '')}";
         }
 
@@ -2204,17 +2198,15 @@ class MariaDB extends SQL
 
         $sqlLimit = '';
         if (! \is_null($limit)) {
-            //$limit = \floatval($limit);
-            //$binds[':limit'] = (int) $limit;
-            //$sqlLimit = 'LIMIT :limit';
-            $sqlLimit = "LIMIT {$limit}";
+            $binds[':limit'] = $limit;
+            $sqlLimit = 'LIMIT :limit';
+            //$sqlLimit = "LIMIT {$limit}";
         }
 
         if (! \is_null($offset)) {
-           // $offset = \floatval($offset);
-            //$binds[':offset'] = (int) $offset;
-            //$sqlLimit .= ' OFFSET :offset';
-            $sqlLimit .= " OFFSET {$offset}";
+            $binds[':offset'] = $offset;
+            $sqlLimit .= ' OFFSET :offset';
+            //$sqlLimit .= " OFFSET {$offset}";
         }
 
         $selections = $this->getAttributeSelections($selects);
@@ -2229,23 +2221,6 @@ class MariaDB extends SQL
         ";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
-        $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($joins as $join) {
-            $f = $join->getValues();
-            foreach ($f as $query) {
-              //  $this->bindConditionValue($stmt, $query);
-            }
-        }
-
-        foreach ($filters as $query) {
-          //  $this->bindConditionValue($stmt, $query);
-        }
-
-        if ($this->sharedTables) {
-            $binds[':_tenant'] = $this->tenant;
-            //$stmt->bindValue(':_tenant', $this->tenant);
-        }
 
         if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
             $attribute = $orderAttributes[0];
@@ -2264,30 +2239,24 @@ class MariaDB extends SQL
             }
 
             $binds[':cursor'] = $cursor[$attribute];
-           // $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
-        }
-
-//        if (!\is_null($limit)) {
-//            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-//        }
-//        if (!\is_null($offset)) {
-//            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-//        }
-
-        foreach ($binds as $key => $value){
-            //$stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
         try {
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($binds as $key => $value){
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+
             echo $stmt->queryString;
             var_dump($binds);
-            $stmt->execute($binds);
+            $stmt->execute();
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
+
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
-
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
 
         foreach ($results as $index => $document) {
             if (\array_key_exists('_uid', $document)) {
@@ -2557,14 +2526,8 @@ class MariaDB extends SQL
      */
     protected function getSQLCondition(Query $query, array &$binds): string
     {
-        $query->setAttribute(match ($query->getAttribute()) {
-            '$id' => '_uid',
-            '$internalId' => '_id',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $query->getAttribute()
-        });
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+        $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
         $alias = "`{$query->getAlias()}`";
         $attribute = "`{$query->getAttribute()}`";

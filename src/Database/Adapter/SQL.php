@@ -1220,4 +1220,16 @@ abstract class SQL extends Adapter
      * @return string
      */
     abstract protected function quote(string $string): string;
+
+    protected function getInternalKeyForAttribute(string $attribute): string
+    {
+        return match ($attribute) {
+            '$id' => '_uid',
+            '$internalId' => '_id',
+            '$tenant' => '_tenant',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $attribute
+        };
+    }
 }

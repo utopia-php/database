@@ -2248,14 +2248,8 @@ class Postgres extends SQL
      */
     protected function getSQLCondition(Query $query, array &$binds): string
     {
-        $query->setAttribute(match ($query->getAttribute()) {
-            '$id' => '_uid',
-            '$internalId' => '_id',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $query->getAttribute()
-        });
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+        $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
         $attribute = "\"{$query->getAttribute()}\"";
         $placeholder = $this->getSQLPlaceholder($query);

@@ -224,6 +224,16 @@ class Query
         return $this;
     }
 
+    /**
+     * Sets right attribute
+     */
+    public function setAttributeRight(string $attribute): self
+    {
+        $this->attributeRight = $attribute;
+
+        return $this;
+    }
+
     public function getCursorDirection(): string
     {
         if ($this->method === self::TYPE_CURSOR_AFTER) {

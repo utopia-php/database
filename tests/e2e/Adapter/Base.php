@@ -230,6 +230,44 @@ abstract class Base extends TestCase
         $this->assertEquals($user->getId(), $documents[0]->getId());
 
         /**
+         * Test relation query exist, but not on the join alias
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join(
+                        '__sessions',
+                        'B',
+                        [
+                            Query::relationEqual('', '$id', '', '$id'),
+                        ]
+                    ),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: At least one relation is required.', $e->getMessage());
+        }
+
+        /**
+         * Test relation query in join is required
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join('__sessions', 'B', []),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: At least one relation is required.', $e->getMessage());
+        }
+
+        /**
          * Test Relations are valid within joins
          */
         try {

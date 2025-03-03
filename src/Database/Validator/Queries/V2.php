@@ -199,9 +199,13 @@ class V2 extends Validator
                     case Query::TYPE_RIGHT_JOIN:
                         var_dump('=== Query::TYPE_JOIN ===');
                         var_dump($query);
-                        // validation force Query relation exist in query list!!
+
                         if (! self::isValid($query->getValues(), 'joins')) {
                             throw new \Exception($this->message);
+                        }
+
+                        if (! $this->isRelationExist($query->getValues(), $query->getAlias())) {
+                            throw new \Exception('Invalid query: At least one relation is required.');
                         }
 
                         break;
@@ -247,7 +251,7 @@ class V2 extends Validator
                         break;
                     case Query::TYPE_CURSOR_AFTER:
                     case Query::TYPE_CURSOR_BEFORE:
-                        $validator = new Cursor();
+                        $validator = new Cursor;
                         if (! $validator->isValid($query)) {
                             throw new \Exception($validator->getDescription());
                         }
@@ -354,7 +358,7 @@ class V2 extends Validator
      */
     protected function validateAlias(Query $query): void
     {
-        $validator = new AliasValidator();
+        $validator = new AliasValidator;
 
         if (! $validator->isValid($query->getAlias())) {
             throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$validator->getDescription());
@@ -391,19 +395,19 @@ class V2 extends Validator
                     break;
 
                 case Database::VAR_INTEGER:
-                    $validator = new Integer();
+                    $validator = new Integer;
                     break;
 
                 case Database::VAR_FLOAT:
-                    $validator = new FloatValidator();
+                    $validator = new FloatValidator;
                     break;
 
                 case Database::VAR_BOOLEAN:
-                    $validator = new Boolean();
+                    $validator = new Boolean;
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator();
+                    $validator = new DatetimeValidator;
                     break;
 
                 case Database::VAR_RELATIONSHIP:
@@ -524,6 +528,7 @@ class V2 extends Validator
         if (\str_contains($attribute, '.')) {
             try {
                 $this->validateAttributeExist($attribute, $alias);
+
                 return;
             } catch (\Throwable $e) {
                 /**
@@ -571,5 +576,34 @@ class V2 extends Validator
         }
 
         throw new \Exception('Searching by attribute "'.$query->getAttribute().'" requires a fulltext index.');
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function isRelationExist(array $queries, string $alias): bool
+    {
+        /**
+         * Do we want to validate only top lever or nesting as well?
+         */
+        foreach ($queries as $query) {
+            /**
+             * @var Query $query
+             */
+            if ($query->isNested()) {
+                if ($this->isRelationExist($query->getValues(), $alias)) {
+                    return true;
+                }
+            }
+
+            if ($query->getMethod() === Query::TYPE_RELATION_EQUAL) {
+                if ($query->getAlias() === $alias || $query->getRightAlias() === $alias) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+
     }
 }

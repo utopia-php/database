@@ -176,7 +176,10 @@ abstract class Base extends TestCase
         ]));
 
         $session = static::getDatabase()->createDocument('__sessions', new Document([
-            'user_id' => $user->getId()
+            'user_id' => $user->getId(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
         ]));
 
         try {
@@ -209,6 +212,24 @@ abstract class Base extends TestCase
         }
 
         /**
+         * Test right attribute is internal attribute
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertEquals(1, count($documents));
+        $this->assertEquals($user->getId(), $documents[0]->getId());
+
+        /**
          * Test Relations are valid within joins
          */
         try {
@@ -227,21 +248,6 @@ abstract class Base extends TestCase
         /**
          * Test invalid alias name
          */
-
-        static::getDatabase()->find(
-            '__users',
-            [
-                Query::join(
-                    '__sessions',
-                    'a000',
-                    [
-                        Query::relationEqual('a000', 'user_id', '', '$id'),
-                    ]
-                ),
-            ]
-        );
-
-
         try {
             $alias = 'drop schema;';
             static::getDatabase()->find(

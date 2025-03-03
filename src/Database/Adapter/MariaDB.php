@@ -2167,11 +2167,11 @@ class MariaDB extends SQL
              */
             $permissions = '';
             if (Authorization::$status) {
-                $permissions = 'AND '.$this->getSQLPermissionsCondition($name, $roles, $join->getAlias(), $forPermission);
+                $joinCollection = $context->getCollectionByAlias($join->getAlias());
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($joinCollection->getId() , $roles, $join->getAlias(), $forPermission);
             }
 
-            $sqlJoin .= "
-            INNER JOIN {$this->getSQLTable($join->getCollection())} AS `{$join->getAlias()}` 
+            $sqlJoin .= "INNER JOIN {$this->getSQLTable($join->getCollection())} AS `{$join->getAlias()}` 
             ON {$this->getSQLConditions($join->getValues(), $binds)}
             {$permissions}
             {$this->getTenantQuery($join->getCollection(), $join->getAlias())}

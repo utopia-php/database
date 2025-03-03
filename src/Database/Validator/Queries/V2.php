@@ -354,7 +354,7 @@ class V2 extends Validator
      */
     protected function validateAlias(Query $query): void
     {
-        $validator = new AliasValidator;
+        $validator = new AliasValidator();
 
         if (! $validator->isValid($query->getAlias())) {
             throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$validator->getDescription());

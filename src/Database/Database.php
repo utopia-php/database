@@ -5550,13 +5550,13 @@ class Database
 
         $context = new QueryContext();
 
-//        if (is_null($context->getLimit())) {
-//            $context->setLimit(25);
-//        }
-//
-//        if (is_null($context->getOffset())) {
-//            $context->setOffset(0);
-//        }
+        //        if (is_null($context->getLimit())) {
+        //            $context->setLimit(25);
+        //        }
+        //
+        //        if (is_null($context->getOffset())) {
+        //            $context->setOffset(0);
+        //        }
 
         $context->add($collection);
 

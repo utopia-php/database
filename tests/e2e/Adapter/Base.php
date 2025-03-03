@@ -196,7 +196,9 @@ abstract class Base extends TestCase
          * Test Ambiguous alias
          */
         try {
-            static::getDatabase()->find('__users', [
+            static::getDatabase()->find(
+                '__users',
+                [
                     Query::join('__sessions', Query::DEFAULT_ALIAS, []),
                 ]
             );
@@ -226,9 +228,12 @@ abstract class Base extends TestCase
          * Test invalid alias name
          */
 
-        static::getDatabase()->find('__users',
+        static::getDatabase()->find(
+            '__users',
             [
-                Query::join('__sessions', 'a000',
+                Query::join(
+                    '__sessions',
+                    'a000',
                     [
                         Query::relationEqual('a000', 'user_id', '', '$id'),
                     ]
@@ -239,9 +244,12 @@ abstract class Base extends TestCase
 
         try {
             $alias = 'drop schema;';
-            static::getDatabase()->find('__users',
+            static::getDatabase()->find(
+                '__users',
                 [
-                    Query::join('__sessions', $alias,
+                    Query::join(
+                        '__sessions',
+                        $alias,
                         [
                             Query::relationEqual($alias, 'user_id', '', '$id'),
                         ]
@@ -254,15 +262,20 @@ abstract class Base extends TestCase
             $this->assertEquals('Query InnerJoin: Alias must contain at most 64 chars. Valid chars are a-z, A-Z, 0-9, and underscore.', $e->getMessage());
         }
 
-        $documents = static::getDatabase()->find('__users',
+        $documents = static::getDatabase()->find(
+            '__users',
             [
-                Query::join('__sessions', 'U',
+                Query::join(
+                    '__sessions',
+                    'U',
                     [
                         Query::relationEqual('', '$id', 'U', 'user_id'),
                         Query::equal('$id', [$session->getId()], 'U'),
                     ]
                 ),
-                Query::join('__sessions', 'U2',
+                Query::join(
+                    '__sessions',
+                    'U2',
                     [
                         Query::relationEqual('', '$id', 'U2', 'user_id'),
                         Query::equal('$id', [$session->getId()], 'U'),
@@ -292,7 +305,7 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-       // $this->assertEquals('shmuel1', 'shmuel2');
+        // $this->assertEquals('shmuel1', 'shmuel2');
     }
 
     public function testDeleteRelatedCollection(): void

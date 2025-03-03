@@ -2070,8 +2070,7 @@ class MariaDB extends SQL
         array $filters = [],
         array $joins = [],
         array $orders = []
-    ): array
-    {
+    ): array {
         $queries = null;
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
@@ -2162,7 +2161,7 @@ class MariaDB extends SQL
         }
 
         $sqlJoin = '';
-        foreach ($joins as $join){
+        foreach ($joins as $join) {
             /**
              * @var $join Query
              */
@@ -2244,7 +2243,7 @@ class MariaDB extends SQL
         try {
             $stmt = $this->getPDO()->prepare($sql);
 
-            foreach ($binds as $key => $value){
+            foreach ($binds as $key => $value) {
                 $stmt->bindValue($key, $value, $this->getPDOType($value));
             }
 
@@ -2365,7 +2364,7 @@ class MariaDB extends SQL
             //$stmt->bindValue(':max', $max, PDO::PARAM_INT);
         }
 
-        foreach ($binds as $key => $value){
+        foreach ($binds as $key => $value) {
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
@@ -2452,7 +2451,7 @@ class MariaDB extends SQL
             //$stmt->bindValue(':max', $max, PDO::PARAM_INT);
         }
 
-        foreach ($binds as $key => $value){
+        foreach ($binds as $key => $value) {
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
@@ -2567,7 +2566,7 @@ class MariaDB extends SQL
                     return "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
                 }
 
-                // No break! continue to default case
+                // no break! continue to default case
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {

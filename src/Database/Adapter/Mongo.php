@@ -1082,8 +1082,7 @@ class Mongo extends Adapter
         array $filters = [],
         array $joins = [],
         array $orders = []
-    ): array
-    {
+    ): array {
         $collection = $context->getCollections()[0]->getId();
 
         $name = $this->getNamespace() . '_' . $this->filter($collection);

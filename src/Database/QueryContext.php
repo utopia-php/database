@@ -31,7 +31,7 @@ class QueryContext
 
     }
 
-    public function __construct__2(array $queries):void
+    public function __construct__2(array $queries): void
     {
         foreach ($queries as $query) {
             //$this->queries[] = clone $query;

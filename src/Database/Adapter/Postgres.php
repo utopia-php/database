@@ -1847,8 +1847,7 @@ class Postgres extends SQL
         array $filters = [],
         array $joins = [],
         array $orders = []
-        ): array
-    {
+    ): array {
         $collection = $context->getCollections()[0]->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();

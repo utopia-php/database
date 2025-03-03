@@ -2881,4 +2881,8 @@ class MariaDB extends SQL
         return true;
     }
 
+    protected function quote(string $string): string
+    {
+        return "`{$string}`";
+    }
 }

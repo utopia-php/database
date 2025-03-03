@@ -1061,7 +1061,7 @@ abstract class SQL extends Adapter
 
         $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
 
-        return "{$alias}._uid IN (
+        return "{$this->quote($alias)}.{$this->quote('_uid')} IN (
                     SELECT _document
                     FROM {$this->getSQLTable($collection . '_perms')}
                     WHERE _permission IN (" . implode(', ', $roles) . ")
@@ -1194,21 +1194,30 @@ abstract class SQL extends Adapter
             return '';
         }
 
-        if (!empty($parentAlias) || $parentAlias === '0') {
-            $parentAlias .= '.';
+        $dot = '';
+
+        if ($parentAlias !== '') {
+            $dot = '.';
+            $parentAlias = $this->quote($parentAlias);
         }
 
         $orIsNull = '';
 
         if ($collection === Database::METADATA) {
-            $orIsNull = " OR {$parentAlias}_tenant IS NULL";
+            $orIsNull = " OR {$parentAlias}{$dot}_tenant IS NULL";
         }
 
-        return "{$and} ({$parentAlias}_tenant = :_tenant {$orIsNull})";
+        return "{$and} ({$parentAlias}{$dot}_tenant = :_tenant {$orIsNull})";
     }
 
     protected function processException(PDOException $e): \Exception
     {
         return $e;
     }
+
+    /**
+     * @param string $string
+     * @return string
+     */
+    abstract protected function quote(string $string): string;
 }

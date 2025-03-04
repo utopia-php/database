@@ -2099,13 +2099,13 @@ class MariaDB extends SQL
             $attribute  = $order->getAttribute();
 
             if (empty($attribute)) {
-                $attribute = '$internalId'; // Query::orderAsc('') || Query::orderDesc('')
+                $attribute = '$internalId'; // Query::orderAsc('')
             }
 
             $originalAttribute = $attribute;
             $attribute = $this->getInternalKeyForAttribute($attribute);
             $attribute = $this->filter($attribute);
-            if ($attribute === '_uid') {
+            if ($attribute === '_uid' || $attribute === '_id') {
                 $hasIdAttribute = true;
             }
 
@@ -2155,18 +2155,16 @@ class MariaDB extends SQL
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
+        // Because if we have 2 movies with same year 2000 order by year, _id for pagination
+
         if (!$hasIdAttribute){
-            if (!empty($orderQueries) ) {
-                $order = $orderQueries[0]->getOrderDirection();
+            $order = Database::ORDER_ASC;
 
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $order = ($order === Database::ORDER_ASC) ? Database::ORDER_DESC : Database::ORDER_ASC;
-                }
-
-                $orders[] = "{$this->quote($defaultAlias)}._id ".$order;
-            } else {
-                $orders[] = "{$this->quote($defaultAlias)}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $order = Database::ORDER_DESC;
             }
+
+            $orders[] = "{$this->quote($defaultAlias)}._id ".$order;
         }
 
 //        // original code:

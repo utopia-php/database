@@ -526,7 +526,7 @@ class Query
      */
     public static function orderDesc(string $attribute = '', string $alias = Query::DEFAULT_ALIAS): self
     {
-        if($attribute === ''){
+        if ($attribute === '') {
             $attribute = '$internalId';
         }
 
@@ -538,7 +538,7 @@ class Query
      */
     public static function orderAsc(string $attribute = ''): self
     {
-        if($attribute === ''){
+        if ($attribute === '') {
             $attribute = '$internalId';
         }
 

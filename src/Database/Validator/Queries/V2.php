@@ -205,9 +205,12 @@ class V2 extends Validator
                         }
 
                         if (! $this->isRelationExist($query->getValues(), $query->getAlias())) {
-                            throw new \Exception('Invalid query: At least one relation is required.');
+                            throw new \Exception('Invalid query: At least one relation query is required on the joined collection.');
                         }
 
+                        /**
+                         * todo:to all queries which uses aliases check that it is available in context scope, not just exists
+                         */
                         break;
                     case Query::TYPE_RELATION_EQUAL:
                         if ($scope !== 'joins') {
@@ -264,8 +267,8 @@ class V2 extends Validator
             }
         } catch (\Throwable $e) {
             $this->message = $e->getMessage();
-
-            var_dump($e->getTraceAsString());
+            var_dump($this->message);
+            var_dump($e);
 
             return false;
         }
@@ -604,6 +607,5 @@ class V2 extends Validator
         }
 
         return false;
-
     }
 }

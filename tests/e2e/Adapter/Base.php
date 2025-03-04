@@ -175,13 +175,57 @@ abstract class Base extends TestCase
             ],
         ]));
 
-        $session = static::getDatabase()->createDocument('__sessions', new Document([
+        $session1 = static::getDatabase()->createDocument('__sessions', new Document([
+            'user_id' => $user->getId(),
+            '$permissions' => [],
+        ]));
+
+        /**
+         * Test $session1 does not have read permissions
+         * Test right attribute is internal attribute
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(0, $documents);
+
+        $session2 = static::getDatabase()->createDocument('__sessions', new Document([
             'user_id' => $user->getId(),
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
         ]));
 
+        /**
+         * Test $session2 has read permissions
+         * Test right attribute is internal attribute
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(1, $documents);
+
+        /**
+         * Test alias does not exist
+         */
         try {
             static::getDatabase()->find(
                 '__sessions',
@@ -212,24 +256,6 @@ abstract class Base extends TestCase
         }
 
         /**
-         * Test right attribute is internal attribute
-         */
-        $documents = static::getDatabase()->find(
-            '__users',
-            [
-                Query::join(
-                    '__sessions',
-                    'B',
-                    [
-                        Query::relationEqual('B', 'user_id', '', '$id'),
-                    ]
-                ),
-            ]
-        );
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($user->getId(), $documents[0]->getId());
-
-        /**
          * Test relation query exist, but not on the join alias
          */
         try {
@@ -248,11 +274,11 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: At least one relation is required.', $e->getMessage());
+            $this->assertEquals('Invalid query: At least one relation query is required on the joined collection.', $e->getMessage());
         }
 
         /**
-         * Test relation query in join is required
+         * Test if relation query exists in the join queries list
          */
         try {
             static::getDatabase()->find(
@@ -264,7 +290,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid query: At least one relation is required.', $e->getMessage());
+            $this->assertEquals('Invalid query: At least one relation query is required on the joined collection.', $e->getMessage());
         }
 
         /**
@@ -314,7 +340,7 @@ abstract class Base extends TestCase
                     'U',
                     [
                         Query::relationEqual('', '$id', 'U', 'user_id'),
-                        Query::equal('$id', [$session->getId()], 'U'),
+                        Query::equal('$id', [$session1->getId()], 'U'),
                     ]
                 ),
                 Query::join(
@@ -322,7 +348,7 @@ abstract class Base extends TestCase
                     'U2',
                     [
                         Query::relationEqual('', '$id', 'U2', 'user_id'),
-                        Query::equal('$id', [$session->getId()], 'U'),
+                        Query::equal('$id', [$session1->getId()], 'U'),
                     ]
                 ),
             ]
@@ -342,7 +368,7 @@ abstract class Base extends TestCase
                     'U',
                     [
                         Query::relationEqual('', '$id', 'U', 'user_id'),
-                        Query::equal('$id', [$session->getId()], 'U'),
+                        Query::equal('$id', [$session1->getId()], 'U'),
                     ]
                 ),
             ]

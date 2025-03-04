@@ -144,6 +144,242 @@ abstract class Base extends TestCase
         $this->assertIsString(static::getDatabase()->getConnectionId());
     }
 
+    /**
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws TimeoutException
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws DatabaseException
+     * @throws QueryException
+     */
+    public function testJoin()
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        Authorization::setRole('user:bob');
+
+        static::getDatabase()->createCollection('__users');
+        static::getDatabase()->createCollection('__sessions');
+
+        static::getDatabase()->createAttribute('__sessions', 'user_id', Database::VAR_STRING, 100, false);
+
+        $user = static::getDatabase()->createDocument('__users', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('bob')),
+            ],
+        ]));
+
+        $session1 = static::getDatabase()->createDocument('__sessions', new Document([
+            'user_id' => $user->getId(),
+            '$permissions' => [],
+        ]));
+
+        /**
+         * Test $session1 does not have read permissions
+         * Test right attribute is internal attribute
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(0, $documents);
+
+        $session2 = static::getDatabase()->createDocument('__sessions', new Document([
+            'user_id' => $user->getId(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+        ]));
+
+        /**
+         * Test $session2 has read permissions
+         * Test right attribute is internal attribute
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(1, $documents);
+
+        /**
+         * Test alias does not exist
+         */
+        try {
+            static::getDatabase()->find(
+                '__sessions',
+                [
+                    Query::equal('user_id', ['bob'], 'alias_not_found')
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Unknown Alias context', $e->getMessage());
+        }
+
+        /**
+         * Test Ambiguous alias
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join('__sessions', Query::DEFAULT_ALIAS, []),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Ambiguous alias for collection "__sessions".', $e->getMessage());
+        }
+
+        /**
+         * Test relation query exist, but not on the join alias
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join(
+                        '__sessions',
+                        'B',
+                        [
+                            Query::relationEqual('', '$id', '', '$id'),
+                        ]
+                    ),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: At least one relation query is required on the joined collection.', $e->getMessage());
+        }
+
+        /**
+         * Test if relation query exists in the join queries list
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join('__sessions', 'B', []),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: At least one relation query is required on the joined collection.', $e->getMessage());
+        }
+
+        /**
+         * Test Relations are valid within joins
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::relationEqual('', '$id', '', '$internalId'),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Relations are only valid within joins.', $e->getMessage());
+        }
+
+        /**
+         * Test invalid alias name
+         */
+        try {
+            $alias = 'drop schema;';
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join(
+                        '__sessions',
+                        $alias,
+                        [
+                            Query::relationEqual($alias, 'user_id', '', '$id'),
+                        ]
+                    ),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Query InnerJoin: Alias must contain at most 64 chars. Valid chars are a-z, A-Z, 0-9, and underscore.', $e->getMessage());
+        }
+
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'U',
+                    [
+                        Query::relationEqual('', '$id', 'U', 'user_id'),
+                        Query::relationEqual('', '$id', 'U', 'user_id'),
+                        Query::equal('$id', [$user->getId()], 'U'),
+                        Query::equal('$id', [$user->getId()], 'U'),
+                    ]
+                ),
+                Query::join(
+                    '__sessions',
+                    'U2',
+                    [
+                        Query::relationEqual('', '$id', 'U2', 'user_id'),
+                        Query::equal('$id', [$session1->getId()], 'U'),
+                    ]
+                ),
+            ]
+        );
+
+        var_dump($documents);
+       // $this->assertEquals('shmuel1', 'shmuel2');
+
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::selection('*', 'A'),
+                Query::selection('$id', 'A'),
+                Query::selection('user_id', 'U', as: 'user_id'),
+                Query::join(
+                    '__sessions',
+                    'U',
+                    [
+                        Query::relationEqual('', '$id', 'U', 'user_id'),
+                        Query::equal('$id', [$session1->getId()], 'U'),
+                    ]
+                ),
+            ]
+        );
+
+        var_dump($documents);
+        // $this->assertEquals('shmuel1', 'shmuel2');
+    }
+
     public function testDeleteRelatedCollection(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -1074,6 +1310,7 @@ abstract class Base extends TestCase
             ]);
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
+            var_dump($e->getTraceAsString());
             static::getDatabase()->clearTimeout();
             static::getDatabase()->deleteCollection('global-timeouts');
             $this->assertInstanceOf(TimeoutException::class, $e);

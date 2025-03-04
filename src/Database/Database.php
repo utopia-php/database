@@ -27,7 +27,8 @@ use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
-use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
+use Utopia\Database\Validator\Queries\Documents as DocumentsValidatorOiginal;
+use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 use Utopia\Database\Validator\Structure;
 
 class Database
@@ -986,7 +987,7 @@ class Database
 
     public function getMaxQueryValues(): int
     {
-        return$this->maxQueryValues;
+        return $this->maxQueryValues;
     }
 
     /**
@@ -2959,7 +2960,7 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $selects = Query::groupByType($queries)['selections'];
+        $selects = Query::getSelectQueries($queries);
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
@@ -4056,7 +4057,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,
@@ -5363,7 +5364,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,
@@ -5539,32 +5540,57 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        /**
+         * @var $collection Document
+         */
+
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
 
-        $attributes = $collection->getAttribute('attributes', []);
-        $indexes = $collection->getAttribute('indexes', []);
+        $context = new QueryContext();
 
-        if ($this->validate) {
-            $validator = new DocumentsValidator(
-                $attributes,
-                $indexes,
-                $this->maxQueryValues,
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
+        //        if (is_null($context->getLimit())) {
+        //            $context->setLimit(25);
+        //        }
+        //
+        //        if (is_null($context->getOffset())) {
+        //            $context->setOffset(0);
+        //        }
+
+        $context->add($collection);
+
+        $joins = Query::getJoinQueries($queries);
+
+        foreach ($joins as $join) {
+            $context->add(
+                $this->silent(fn () => $this->getCollection($join->getCollection())),
+                $join->getAlias()
             );
-            if (!$validator->isValid($queries)) {
-                throw new QueryException($validator->getDescription());
-            }
         }
 
         $authorization = new Authorization(self::PERMISSION_READ);
-        $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
 
-        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-            throw new AuthorizationException($authorization->getDescription());
+        foreach ($context->getCollections() as $c) {
+            $documentSecurity = $c->getAttribute('documentSecurity', false);
+            $skipAuth = $authorization->isValid($c->getPermissionsByType($forPermission));
+
+            if (!$skipAuth && !$documentSecurity && $c->getId() !== self::METADATA) {
+                throw new AuthorizationException($authorization->getDescription());
+            }
+        }
+
+        if ($this->validate) {
+            $validator = new DocumentsValidator(
+                $context,
+                maxValuesCount: $this->maxQueryValues,
+                minAllowedDate: $this->adapter->getMinDateTime(),
+                maxAllowedDate: $this->adapter->getMaxDateTime()
+            );
+
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
         }
 
         $relationships = \array_filter(
@@ -5572,21 +5598,35 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
+        $filters = Query::getFilterQueries($queries);
+        $selects = Query::getSelectQueries($queries);
+        $limit = Query::getLimitQueries($queries, 25);
+        $offset = Query::getOffsetQueries($queries, 0);
+
+        $orders = Query::getOrderQueries($queries);
+
         $grouped = Query::groupByType($queries);
-        $filters = $grouped['filters'];
-        $selects = $grouped['selections'];
-        $limit = $grouped['limit'];
-        $offset = $grouped['offset'];
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
-        $cursor = $grouped['cursor'];
-        $cursorDirection = $grouped['cursorDirection'];
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
+        $cursor = [];
+        $cursorDirection = Database::CURSOR_AFTER;
+        //$cursorQuery = $context->getCursorQuery();
+        $cursorQuery = Query::getCursorQueries($queries);
+
+        if (! is_null($cursorQuery)) {
+            /**
+             * @var $cursor Document
+             */
+            $cursor = $cursorQuery->getValue();
+            $cursorDirection = $cursorQuery->getCursorDirection();
+
+            if ($cursor->getCollection() !== $collection->getId()) {
+                throw new DatabaseException("cursor Document must be from the same Collection.");
+            }
+
+            $cursor = $this->encode($collection, $cursor)->getArrayCopy();
         }
-
-        $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
         /**  @var array<Query> $queries */
         $queries = \array_merge(
@@ -5641,16 +5681,22 @@ class Database
         $queries = \array_values($queries);
 
         $getResults = fn () => $this->adapter->find(
-            $collection->getId(),
+            $context,
             $queries,
-            $limit ?? 25,
-            $offset ?? 0,
+            $limit,
+            $offset,
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER,
-            $forPermission
+            $cursorDirection,
+            $forPermission,
+            selects: $selects,
+            filters: $filters,
+            joins: $joins,
+            orderQueries: $orders
         );
+
+        $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
@@ -5789,7 +5835,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,
@@ -5806,7 +5852,7 @@ class Database
             $skipAuth = true;
         }
 
-        $queries = Query::groupByType($queries)['filters'];
+        $queries = Query::getFilterQueries($queries);
         $queries = self::convertQueries($collection, $queries);
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
@@ -5837,7 +5883,7 @@ class Database
         $indexes = $collection->getAttribute('indexes', []);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator(
+            $validator = new DocumentsValidatorOiginal(
                 $attributes,
                 $indexes,
                 $this->maxQueryValues,

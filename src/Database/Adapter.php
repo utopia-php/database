@@ -691,10 +691,44 @@ abstract class Adapter
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<Query> $orderQueries
      *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
+    abstract public function find(
+        QueryContext $context,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $orderAttributes = [],
+        array $orderTypes = [],
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $orderQueries = []
+    ): array;
+
+    /**
+     * Find Documents
+     *
+     * Find data sets using chosen queries
+     *
+     * @param string $collection
+     * @param array<Query> $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
+     * @param string $cursorDirection
+     * @param string $forPermission
+     *
+     * @return array<Document>
+     */
+    // abstract public function find_org(QueryContext $context, string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
 
     /**
      * Sum an attribute
@@ -1087,7 +1121,8 @@ abstract class Adapter
      *
      * @param string $collection   The collection being queried
      * @param string $parentAlias  The alias of the parent collection if in a subquery
+     * @param string $and Default and
      * @return string
      */
-    abstract public function getTenantQuery(string $collection, string $parentAlias = ''): string;
+    abstract public function getTenantQuery(string $collection, string $parentAlias = '', string $and = 'AND'): string;
 }

@@ -12,7 +12,9 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
 
 class Postgres extends SQL
@@ -1818,6 +1820,7 @@ class Postgres extends SQL
      *
      * Find data sets using chosen queries
      *
+     * @param QueryContext $context
      * @param string $collection
      * @param array<Query> $queries
      * @param int|null $limit
@@ -1830,16 +1833,28 @@ class Postgres extends SQL
      *
      * @return array<Document>
      * @throws DatabaseException
-     * @throws TimeoutException
-
-     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-    {
+    public function find(
+        QueryContext $context,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $orderAttributes = [],
+        array $orderTypes = [],
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $orderQueries = []
+    ): array {
+        $collection = $context->getCollections()[0]->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
+        $alias = Query::DEFAULT_ALIAS;
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
@@ -1928,7 +1943,7 @@ class Postgres extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -2043,6 +2058,7 @@ class Postgres extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+        $alias = Query::DEFAULT_ALIAS;
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
@@ -2062,7 +2078,7 @@ class Postgres extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -2115,6 +2131,7 @@ class Postgres extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $limit = \is_null($max) ? '' : 'LIMIT :max';
+        $alias = Query::DEFAULT_ALIAS;
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
@@ -2133,7 +2150,7 @@ class Postgres extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         $sqlWhere = !empty($where)
@@ -2225,22 +2242,18 @@ class Postgres extends SQL
      * Get SQL Condition
      *
      * @param Query $query
+     * @param array $binds
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query): string
+    protected function getSQLCondition(Query $query, array &$binds): string
     {
-        $query->setAttribute(match ($query->getAttribute()) {
-            '$id' => '_uid',
-            '$internalId' => '_id',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $query->getAttribute()
-        });
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+        $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
         $attribute = "\"{$query->getAttribute()}\"";
-        $placeholder = $this->getSQLPlaceholder($query);
+        //$placeholder = $this->getSQLPlaceholder($query);
+        $placeholder = ID::unique();
         $operator = null;
 
         switch ($query->getMethod()) {
@@ -2515,5 +2528,10 @@ class Postgres extends SQL
     {
         $stmt = $this->getPDO()->query("SELECT pg_backend_pid();");
         return $stmt->fetchColumn();
+    }
+
+    protected function quote(string $string): string
+    {
+        return "\"{$string}\"";
     }
 }

@@ -5603,10 +5603,11 @@ class Database
         $limit = Query::getLimitQueries($queries, 25);
         $offset = Query::getOffsetQueries($queries, 0);
 
+        $orders = Query::getOrderQueries($queries);
+
         $grouped = Query::groupByType($queries);
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
-        $orders = Query::getOrderQueries($queries);
 
         $cursor = [];
         $cursorDirection = Database::CURSOR_AFTER;
@@ -5692,7 +5693,7 @@ class Database
             selects: $selects,
             filters: $filters,
             joins: $joins,
-            orders: $orders
+            orderQueries: $orders
         );
 
         $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));

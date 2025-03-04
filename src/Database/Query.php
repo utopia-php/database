@@ -238,13 +238,27 @@ class Query
     {
         if ($this->method === self::TYPE_CURSOR_AFTER) {
             return Database::CURSOR_AFTER;
-        } elseif ($this->method === self::TYPE_CURSOR_BEFORE) {
+        }
+
+        if ($this->method === self::TYPE_CURSOR_BEFORE) {
             return Database::CURSOR_BEFORE;
         }
 
-        return '';
+        throw new \Exception('Invalid method: Get cursor direction on "'.$this->method.'" Query');
     }
 
+    public function getOrderDirection(): string
+    {
+        if ($this->method === self::TYPE_ORDER_ASC) {
+            return Database::ORDER_ASC;
+        }
+
+        if ($this->method === self::TYPE_ORDER_DESC) {
+            return Database::ORDER_DESC;
+        }
+
+        throw new \Exception('Invalid method: Get order direction on "'.$this->method.'" Query');
+    }
     /**
      * Sets values
      *
@@ -512,6 +526,10 @@ class Query
      */
     public static function orderDesc(string $attribute = '', string $alias = Query::DEFAULT_ALIAS): self
     {
+        if($attribute === ''){
+            $attribute = '$internalId';
+        }
+
         return new self(self::TYPE_ORDER_DESC, $attribute, alias: $alias);
     }
 
@@ -520,6 +538,10 @@ class Query
      */
     public static function orderAsc(string $attribute = ''): self
     {
+        if($attribute === ''){
+            $attribute = '$internalId';
+        }
+
         return new self(self::TYPE_ORDER_ASC, $attribute);
     }
 

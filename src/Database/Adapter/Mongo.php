@@ -1081,7 +1081,7 @@ class Mongo extends Adapter
         array $selects = [],
         array $filters = [],
         array $joins = [],
-        array $orders = []
+        array $orderQueries = []
     ): array {
         $collection = $context->getCollections()[0]->getId();
 

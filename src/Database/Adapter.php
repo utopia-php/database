@@ -691,6 +691,7 @@ abstract class Adapter
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<Query> $orderQueries
      *
      * @return array<Document>
      */
@@ -707,7 +708,7 @@ abstract class Adapter
         array $selects = [],
         array $filters = [],
         array $joins = [],
-        array $orders = []
+        array $orderQueries = []
     ): array;
 
     /**

@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
@@ -2530,7 +2531,8 @@ class MariaDB extends SQL
 
         $alias = "`{$query->getAlias()}`";
         $attribute = "`{$query->getAttribute()}`";
-        $placeholder = $this->getSQLPlaceholder($query);
+        //$placeholder = $this->getSQLPlaceholder($query);
+        $placeholder = ID::unique();
 
         switch ($query->getMethod()) {
             case Query::TYPE_OR:

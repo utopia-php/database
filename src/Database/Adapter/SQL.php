@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -891,45 +892,45 @@ abstract class SQL extends Adapter
         return true;
     }
 
-    /**
-     * @param mixed $stmt
-     * @param Query $query
-     * @return void
-     * @throws Exception
-     */
-    protected function bindConditionValue(mixed $stmt, Query $query): void
-    {
-        if ($query->getMethod() == Query::TYPE_SELECT) {
-            return;
-        }
-
-        if ($query->isNested()) {
-            foreach ($query->getValues() as $value) {
-                $this->bindConditionValue($stmt, $value);
-            }
-            return;
-        }
-
-        if ($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
-            $placeholder = $this->getSQLPlaceholder($query) . '_0';
-            $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
-            return;
-        }
-
-        foreach ($query->getValues() as $key => $value) {
-            $value = match ($query->getMethod()) {
-                Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
-                Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                Query::TYPE_SEARCH => $this->getFulltextValue($value),
-                Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                default => $value
-            };
-
-            $placeholder = $this->getSQLPlaceholder($query) . '_' . $key;
-
-            $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
-        }
-    }
+//    /**
+//     * @param mixed $stmt
+//     * @param Query $query
+//     * @return void
+//     * @throws Exception
+//     */
+//    protected function bindConditionValue(mixed $stmt, Query $query): void
+//    {
+//        if ($query->getMethod() == Query::TYPE_SELECT) {
+//            return;
+//        }
+//
+//        if ($query->isNested()) {
+//            foreach ($query->getValues() as $value) {
+//                $this->bindConditionValue($stmt, $value);
+//            }
+//            return;
+//        }
+//
+//        if ($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
+//            $placeholder = $this->getSQLPlaceholder($query) . '_0';
+//            $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
+//            return;
+//        }
+//
+//        foreach ($query->getValues() as $key => $value) {
+//            $value = match ($query->getMethod()) {
+//                Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
+//                Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+//                Query::TYPE_SEARCH => $this->getFulltextValue($value),
+//                Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+//                default => $value
+//            };
+//
+//            $placeholder = $this->getSQLPlaceholder($query) . '_' . $key;
+//
+//            $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
+//        }
+//    }
 
     /**
      * @param string $value
@@ -994,21 +995,23 @@ abstract class SQL extends Adapter
         }
     }
 
-    /**
-     * @param Query $query
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLPlaceholder(Query $query): string
-    {
-        $json = \json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]);
-
-        if ($json === false) {
-            throw new DatabaseException('Failed to encode query');
-        }
-
-        return \md5($json);
-    }
+//    /**
+//     * @param Query $query
+//     * @return string
+//     * @throws Exception
+//     */
+//    protected function getSQLPlaceholder(Query $query): string
+//    {
+//        return ID::unique();
+//
+//        $json = \json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]);
+//
+//        if ($json === false) {
+//            throw new DatabaseException('Failed to encode query');
+//        }
+//
+//        return \md5($json);
+//    }
 
     public function escapeWildcards(string $value): string
     {

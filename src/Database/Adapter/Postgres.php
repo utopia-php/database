@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
@@ -2251,7 +2252,8 @@ class Postgres extends SQL
         $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
         $attribute = "\"{$query->getAttribute()}\"";
-        $placeholder = $this->getSQLPlaceholder($query);
+        //$placeholder = $this->getSQLPlaceholder($query);
+        $placeholder = ID::unique();
         $operator = null;
 
         switch ($query->getMethod()) {

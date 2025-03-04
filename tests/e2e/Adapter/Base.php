@@ -340,7 +340,9 @@ abstract class Base extends TestCase
                     'U',
                     [
                         Query::relationEqual('', '$id', 'U', 'user_id'),
-                        Query::equal('$id', [$session1->getId()], 'U'),
+                        Query::relationEqual('', '$id', 'U', 'user_id'),
+                        Query::equal('$id', [$user->getId()], 'U'),
+                        Query::equal('$id', [$user->getId()], 'U'),
                     ]
                 ),
                 Query::join(
@@ -355,7 +357,7 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-        $this->assertEquals('shmuel1', 'shmuel2');
+       // $this->assertEquals('shmuel1', 'shmuel2');
 
         $documents = static::getDatabase()->find(
             '__users',

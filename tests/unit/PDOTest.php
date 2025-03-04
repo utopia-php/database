@@ -8,7 +8,7 @@ use Utopia\Database\PDO;
 
 class PDOTest extends TestCase
 {
-    public function testMethodCallIsForwardedToPDO()
+    public function testMethodCallIsForwardedToPDO(): void
     {
         $dsn = 'sqlite::memory:';
         $pdoWrapper = new PDO($dsn, null, null);
@@ -41,7 +41,7 @@ class PDOTest extends TestCase
         $this->assertSame($pdoStatementMock, $result);
     }
 
-    public function testLostConnectionRetriesCall()
+    public function testLostConnectionRetriesCall(): void
     {
         $dsn = 'sqlite::memory:';
         $pdoWrapper = $this->getMockBuilder(PDO::class)
@@ -80,7 +80,7 @@ class PDOTest extends TestCase
         $this->assertSame($pdoStatementMock, $result);
     }
 
-    public function testNonLostConnectionExceptionIsRethrown()
+    public function testNonLostConnectionExceptionIsRethrown(): void
     {
         $dsn = 'sqlite::memory:';
         $pdoWrapper = new PDO($dsn, null, null);
@@ -106,7 +106,7 @@ class PDOTest extends TestCase
         $pdoWrapper->query('SELECT 1');
     }
 
-    public function testReconnectCreatesNewPDOInstance()
+    public function testReconnectCreatesNewPDOInstance(): void
     {
         $dsn = 'sqlite::memory:';
         $pdoWrapper = new PDO($dsn, null, null);
@@ -122,7 +122,7 @@ class PDOTest extends TestCase
         $this->assertNotSame($oldPDO, $newPDO, "Reconnect should create a new PDO instance");
     }
 
-    public function testMethodCallForPrepare()
+    public function testMethodCallForPrepare(): void
     {
         $dsn = 'sqlite::memory:';
         $pdoWrapper = new PDO($dsn, null, null);

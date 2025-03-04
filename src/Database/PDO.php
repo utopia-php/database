@@ -44,6 +44,7 @@ class PDO
         try {
             return $this->pdo->{$method}(...$args);
         } catch (\Throwable $e) {
+            /** @phpstan-ignore-next-line can't find static method */
             if (DetectsLostConnections::causedByLostConnection($e)) {
                 $this->reconnect();
                 return $this->pdo->{$method}(...$args);

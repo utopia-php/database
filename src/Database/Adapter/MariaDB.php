@@ -2515,8 +2515,9 @@ class MariaDB extends SQL
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
         $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
-        $alias = "`{$query->getAlias()}`";
-        $attribute = "`{$query->getAttribute()}`";
+        $attribute = $this->quote($this->filter($query->getAttribute()));
+        $alias = $this->quote($query->getAlias());
+
         //$placeholder = $this->getSQLPlaceholder($query);
         $placeholder = ID::unique();
 
@@ -2530,22 +2531,29 @@ class MariaDB extends SQL
                 }
 
                 $method = strtoupper($query->getMethod());
+
                 return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
 
             case Query::TYPE_SEARCH:
                 $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+
                 return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_BETWEEN:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
+
                 return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
             case Query::TYPE_RELATION_EQUAL:
-                return "{$alias}.{$attribute}={$this->quote($query->getRightAlias())}.{$this->quote($query->getAttributeRight())}";
+                $attributeRight = $this->quote($this->filter($query->getAttributeRight()));
+                $aliasRight = $this->quote($query->getRightAlias());
+
+                return "{$alias}.{$attribute}={$aliasRight}.{$attributeRight}";
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
+
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
@@ -2567,7 +2575,6 @@ class MariaDB extends SQL
                     };
 
                     $binds[":{$placeholder}_{$key}"] = $value;
-
                     $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
                 }
 

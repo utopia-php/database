@@ -441,8 +441,6 @@ abstract class Base extends TestCase
         $this->assertEquals('Abraham', $documents[0]['username']);
         $this->assertEquals('Donald', $documents[1]['username']);
 
-        //$this->assertEquals('shmuel1', 'shmuel2');
-
         /**
          * Select queries
          */

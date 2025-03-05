@@ -2294,8 +2294,9 @@ class Postgres extends SQL
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
         $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
-        $attribute = $this->quote($query->getAttribute());
+        $attribute = $this->quote($this->filter($query->getAttribute()));
         $alias = $this->quote($query->getAlias());
+
         //$placeholder = $this->getSQLPlaceholder($query);
         $placeholder = ID::unique();
         $operator = null;
@@ -2322,7 +2323,10 @@ class Postgres extends SQL
                 return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
             case Query::TYPE_RELATION_EQUAL:
-                return "{$alias}.{$attribute}={$this->quote($query->getRightAlias())}.{$this->quote($query->getAttributeRight())}";
+                $attributeRight = $this->quote($this->filter($query->getAttributeRight()));
+                $aliasRight = $this->quote($query->getRightAlias());
+
+                return "{$alias}.{$attribute}={$aliasRight}.{$attributeRight}";
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:

@@ -87,8 +87,7 @@ class IndexedQueries extends Queries
             $queries[] = $query;
         }
 
-        $grouped = Query::groupByType($queries);
-        $filters = $grouped['filters'];
+        $filters = Query::getFilterQueries($queries);
 
         foreach ($filters as $filter) {
             if ($filter->getMethod() === Query::TYPE_SEARCH) {
@@ -103,7 +102,7 @@ class IndexedQueries extends Queries
                     }
                 }
 
-                if (!$matched) {
+                if (! $matched) {
                     $this->message = "Searching by attribute \"{$filter->getAttribute()}\" requires a fulltext index.";
                     return false;
                 }

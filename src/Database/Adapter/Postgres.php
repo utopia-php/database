@@ -12,7 +12,9 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
 
 class Postgres extends SQL
@@ -1816,50 +1818,68 @@ class Postgres extends SQL
     /**
      * Find Documents
      *
-     * Find data sets using chosen queries
-     *
-     * @param string $collection
+     * @param QueryContext $context
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
-     *
+     * @param array $selects
+     * @param array $filters
+     * @param array $joins
+     * @param array<Query> $orderQueries
      * @return array<Document>
      * @throws DatabaseException
-     * @throws TimeoutException
-
-     * @throws TimeoutException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-    {
-        $name = $this->filter($collection);
+    public function find(
+        QueryContext $context,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $orderQueries = []
+    ): array {
+        unset($queries);
+        unset($orderAttributes);
+        unset($orderTypes);
+
+        $defaultAlias = Query::DEFAULT_ALIAS;
+        $binds = [];
+
+        $collection = $context->getCollections()[0]->getId();
+
+        $mainCollection = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
-
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
-        $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
-            '$id' => '_uid',
-            '$internalId' => '_id',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $orderAttribute
-        }, $orderAttributes);
-
         $hasIdAttribute = false;
-        foreach ($orderAttributes as $i => $attribute) {
-            if ($attribute === '_uid') {
+
+        //$queries = array_map(fn ($query) => clone $query, $queries);
+        $filters = array_map(fn ($query) => clone $query, $filters);
+        //$filters = Query::getFilterQueries($filters); // for cloning if needed
+
+        foreach ($orderQueries as $i => $order) {
+            $orderAlias = $order->getAlias();
+            $attribute  = $order->getAttribute();
+
+            if (empty($attribute)) {
+                $attribute = '$internalId'; // Query::orderAsc('')
+            }
+
+            $originalAttribute = $attribute;
+            $attribute = $this->getInternalKeyForAttribute($attribute);
+            $attribute = $this->filter($attribute);
+            if ($attribute === '_uid' || $attribute === '_id') {
                 $hasIdAttribute = true;
             }
 
-            $attribute = $this->filter($attribute);
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $orderType = $order->getOrderDirection();
 
             // Get most dominant/first order attribute
             if ($i === 0 && !empty($cursor)) {
@@ -1872,74 +1892,119 @@ class Postgres extends SQL
                     $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                 }
 
+                if (\is_null($cursor[$originalAttribute] ?? null)) {
+                    throw new DatabaseException("Order attribute '{$originalAttribute}' is empty");
+                }
+
+                $binds[':cursor'] = $cursor[$originalAttribute];
+
                 $where[] = "(
-                        table_main.\"{$attribute}\" {$this->getSQLOperator($orderMethod)} :cursor 
+                        {$this->quote($defaultAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            table_main.\"{$attribute}\" = :cursor 
+                            {$this->quote($defaultAlias)}.{$this->quote($attribute)} = :cursor 
                             AND
-                            table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$this->quote($defaultAlias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = '"' . $attribute . '" ' . $orderType;
+            $orders[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$orderType}";
         }
 
         // Allow after pagination without any order
-        if (empty($orderAttributes) && !empty($cursor)) {
-            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? (
-                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-            ) : (
-                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
-            );
-            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
+        if (empty($orderQueries) && !empty($cursor)) {
+            if ($cursorDirection === Database::CURSOR_AFTER) {
+                $orderMethod = Query::TYPE_GREATER;
+            } else {
+                $orderMethod = Query::TYPE_LESSER;
+            }
+
+            $where[] = "({$this->quote($defaultAlias)}.{$this->quote('_id')} {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
-        if (!$hasIdAttribute) {
-            if (empty($orderAttributes) && !empty($orderTypes)) {
-                $order = $orderTypes[0] ?? Database::ORDER_ASC;
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                }
+        // Because if we have 2 movies with same year 2000 order by year, _id for pagination
 
-                $orders[] = 'table_main._id ' . $this->filter($order);
-            } else {
-                $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+        if (!$hasIdAttribute){
+            $order = Database::ORDER_ASC;
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $order = Database::ORDER_DESC;
             }
+
+            $orders[] = "{$this->quote($defaultAlias)}.{$this->quote('_id')} ".$order;
         }
 
-        $conditions = $this->getSQLConditions($queries);
+//        // original code:
+//        if (!$hasIdAttribute) {
+//            if (empty($orderAttributes) && !empty($orderTypes)) {
+//                $order = $orderTypes[0] ?? Database::ORDER_ASC;
+//                if ($cursorDirection === Database::CURSOR_BEFORE) {
+//                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+//                }
+//
+//                $orders[] = "{$defaultAlias}._id " . $this->filter($order);
+//            } else {
+//                $orders[] = "{$defaultAlias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+//            }
+//        }
+
+        $sqlJoin = '';
+        foreach ($joins as $join) {
+            /**
+             * @var $join Query
+             */
+            $permissions = '';
+            $joinCollectionName = $this->filter($join->getCollection());
+
+            if (Authorization::$status) {
+                //$joinCollection = $context->getCollectionByAlias($join->getAlias());
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($joinCollectionName , $roles, $join->getAlias(), $forPermission);
+            }
+
+            $sqlJoin .= "INNER JOIN {$this->getSQLTable($joinCollectionName)} AS {$this->quote($join->getAlias())}
+            ON {$this->getSQLConditions($join->getValues(), $binds)}
+            {$permissions}
+            {$this->getTenantQuery($joinCollectionName, $join->getAlias())}
+            ";
+        }
+
+        $conditions = $this->getSQLConditions($filters, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if ($this->sharedTables) {
-            $orIsNull = '';
-
-            if ($collection === Database::METADATA) {
-                $orIsNull = " OR table_main._tenant IS NULL";
-            }
-
-            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($mainCollection, $roles, $defaultAlias, $forPermission);
         }
 
-        if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, and: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
         $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
-        $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
-        $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
-        $selections = $this->getAttributeSelections($queries);
+
+        $sqlLimit = '';
+        if (! \is_null($limit)) {
+            $binds[':limit'] = $limit;
+            $sqlLimit = 'LIMIT :limit';
+        }
+
+        if (! \is_null($offset)) {
+            $binds[':offset'] = $offset;
+            $sqlLimit .= ' OFFSET :offset';
+        }
+
+        $selections = $this->getAttributeSelections($selects);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, 'table_main')}
-            FROM {$this->getSQLTable($name)} as table_main
+            SELECT {$this->getAttributeProjection($selections, $defaultAlias)}
+            FROM {$this->getSQLTable($mainCollection)} AS {$this->quote($defaultAlias)}
+            {$sqlJoin}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -1947,48 +2012,41 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
-            $attribute = $orderAttributes[0];
-
-            $attribute = match ($attribute) {
-                '_uid' => '$id',
-                '_id' => '$internalId',
-                '_tenant' => '$tenant',
-                '_createdAt' => '$createdAt',
-                '_updatedAt' => '$updatedAt',
-                default => $attribute
-            };
-
-            if (\is_null($cursor[$attribute] ?? null)) {
-                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
-            }
-            $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
-        }
-
-        if (!\is_null($limit)) {
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        }
-        if (!\is_null($offset)) {
-            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        }
+//        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+//            $attribute = $orderAttributes[0];
+//
+//            $attribute = match ($attribute) {
+//                '_uid' => '$id',
+//                '_id' => '$internalId',
+//                '_tenant' => '$tenant',
+//                '_createdAt' => '$createdAt',
+//                '_updatedAt' => '$updatedAt',
+//                default => $attribute
+//            };
+//
+//            if (\is_null($cursor[$attribute] ?? null)) {
+//                throw new DatabaseException("Order attribute '{$attribute}' is empty");
+//            }
+//
+//            $binds[':cursor'] = $cursor[$attribute];
+//        }
 
         try {
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($binds as $key => $value) {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+
+            echo $stmt->queryString;
+            var_dump($binds);
             $stmt->execute();
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
+
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
-
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
 
         foreach ($results as $index => $document) {
             if (\array_key_exists('_uid', $document)) {
@@ -2020,7 +2078,7 @@ class Postgres extends SQL
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $results = array_reverse($results);
+            $results = \array_reverse($results);
         }
 
         return $results;
@@ -2041,35 +2099,40 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
+        $binds = [];
         $where = [];
-        $limit = \is_null($max) ? '' : 'LIMIT :max';
+        $defaultAlias = Query::DEFAULT_ALIAS;
+
+        $limit = '';
+        if (! \is_null($max)) {
+            $binds[':limit'] = $max;
+            $limit = 'LIMIT :limit';
+        }
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $conditions = $this->getSQLConditions($queries);
+        $conditions = $this->getSQLConditions($queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if ($this->sharedTables) {
-            $orIsNull = '';
-
-            if ($collection === Database::METADATA) {
-                $orIsNull = " OR table_main._tenant IS NULL";
-            }
-
-            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
-        }
-
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $defaultAlias);
         }
 
-        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, and: '')}";
+        }
+
+        $sqlWhere = !empty($where)
+            ? 'WHERE ' . \implode(' AND ', $where)
+            : '';
+
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
-				FROM {$this->getSQLTable($name)} table_main
+				FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -2079,20 +2142,17 @@ class Postgres extends SQL
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        if (!\is_null($max)) {
-            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
         $stmt->execute();
 
-        $result = $stmt->fetch();
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
+        }
 
         return $result['sum'] ?? 0;
     }
@@ -2114,26 +2174,29 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $limit = \is_null($max) ? '' : 'LIMIT :max';
+        $defaultAlias = Query::DEFAULT_ALIAS;
+        $binds = [];
+
+        $limit = '';
+        if (! \is_null($max)) {
+            $binds[':limit'] = $max;
+            $limit = 'LIMIT :limit';
+        }
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
-        }
-
-        if ($this->sharedTables) {
-            $orIsNull = '';
-
-            if ($collection === Database::METADATA) {
-                $orIsNull = " OR table_main._tenant IS NULL";
-            }
-
-            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
+        $conditions = $this->getSQLConditions($queries, $binds);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $defaultAlias);
+        }
+
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, and: '')}";
         }
 
         $sqlWhere = !empty($where)
@@ -2143,7 +2206,7 @@ class Postgres extends SQL
         $sql = "
 			SELECT SUM({$attribute}) as sum FROM (
 				SELECT {$attribute}
-				FROM {$this->getSQLTable($name)} table_main
+				FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -2153,20 +2216,17 @@ class Postgres extends SQL
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        if (!\is_null($max)) {
-            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
         $stmt->execute();
 
-        $result = $stmt->fetch();
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
+        }
 
         return $result['sum'] ?? 0;
     }
@@ -2225,34 +2285,52 @@ class Postgres extends SQL
      * Get SQL Condition
      *
      * @param Query $query
+     * @param array $binds
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query): string
+    protected function getSQLCondition(Query $query, array &$binds): string
     {
-        $query->setAttribute(match ($query->getAttribute()) {
-            '$id' => '_uid',
-            '$internalId' => '_id',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $query->getAttribute()
-        });
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+        $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
-        $attribute = "\"{$query->getAttribute()}\"";
-        $placeholder = $this->getSQLPlaceholder($query);
+        $attribute = $this->quote($this->filter($query->getAttribute()));
+        $alias = $this->quote($query->getAlias());
+
+        //$placeholder = $this->getSQLPlaceholder($query);
+        $placeholder = ID::unique();
         $operator = null;
 
         switch ($query->getMethod()) {
+            case Query::TYPE_OR:
+            case Query::TYPE_AND:
+                $conditions = [];
+                /* @var $q Query */
+                foreach ($query->getValue() as $q) {
+                    $conditions[] = $this->getSQLCondition($q, $binds);
+                }
+
+                $method = strtoupper($query->getMethod());
+                return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
+
             case Query::TYPE_SEARCH:
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
                 return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0)";
 
             case Query::TYPE_BETWEEN:
-                return "table_main.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+                $binds[":{$placeholder}_0"] = $query->getValues()[0];
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+                return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
+            case Query::TYPE_RELATION_EQUAL:
+                $attributeRight = $this->quote($this->filter($query->getAttributeRight()));
+                $aliasRight = $this->quote($query->getRightAlias());
+
+                return "{$alias}.{$attribute}={$aliasRight}.{$attributeRight}";
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-                return "table_main.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+                return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
                 $operator = $query->onArray() ? '@>' : null;
@@ -2261,11 +2339,22 @@ class Postgres extends SQL
             default:
                 $conditions = [];
                 $operator = $operator ?? $this->getSQLOperator($query->getMethod());
+
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = $attribute.' '.$operator.' :'.$placeholder.'_'.$key;
+                    $value = match ($query->getMethod()) {
+                        Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
+                        Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                        //Query::TYPE_SEARCH => $this->getFulltextValue($value),
+                        Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        default => $value
+                    };
+
+                    $binds[":{$placeholder}_{$key}"] = $value;
+
+                    $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";
                 }
-                $condition = implode(' OR ', $conditions);
-                return empty($condition) ? '' : '(' . $condition . ')';
+
+                return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
         }
     }
 
@@ -2351,16 +2440,16 @@ class Postgres extends SQL
         return "\"{$this->getDatabase()}\".";
     }
 
-    /**
-     * Get SQL table
-     *
-     * @param string $name
-     * @return string
-     */
-    protected function getSQLTable(string $name): string
-    {
-        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
-    }
+//    /**
+//     * Get SQL table
+//     *
+//     * @param string $name
+//     * @return string
+//     */
+//    protected function getSQLTable(string $name): string
+//    {
+//        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
+//    }
 
     /**
      * Get PDO Type
@@ -2515,5 +2604,10 @@ class Postgres extends SQL
     {
         $stmt = $this->getPDO()->query("SELECT pg_backend_pid();");
         return $stmt->fetchColumn();
+    }
+
+    protected function quote(string $string): string
+    {
+        return "\"{$string}\"";
     }
 }

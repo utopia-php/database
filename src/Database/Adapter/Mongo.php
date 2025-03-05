@@ -14,6 +14,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
@@ -1001,7 +1002,8 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_uid', $ids)]);
+        //$filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_uid', $ids)]);
+        $filters = $this->buildFilters([Query::equal('_uid', $ids)]);
 
         if ($this->sharedTables) {
             $filters['_tenant'] = (string)$this->getTenant();
@@ -1052,22 +1054,38 @@ class Mongo extends Adapter
      *
      * Find data sets using chosen queries
      *
+     * @param QueryContext $context
      * @param string $collection
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
      *
      * @return array<Document>
-     * @throws Exception
-     * @throws Timeout
+     * @throws DatabaseException
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-    {
+    public function find(
+        QueryContext $context,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $orderQueries = []
+    ): array {
+
+        // todo: build this 2 attributes to preserve original logic...
+        $orderAttributes  = [];
+        $orderTypes= [];
+
+        $collection = $context->getCollections()[0]->getId();
+
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $queries = array_map(fn ($query) => clone $query, $queries);
 
@@ -1488,9 +1506,8 @@ class Mongo extends Adapter
     protected function buildFilters(array $queries, string $separator = '$and'): array
     {
         $filters = [];
-        $queries = Query::groupByType($queries)['filters'];
+        $queries = Query::getFilterQueries($queries);
         foreach ($queries as $query) {
-            /* @var $query Query */
             if ($query->isNested()) {
                 $operator = $this->getQueryOperator($query->getMethod());
                 $filters[$separator][] = $this->buildFilters($query->getValues(), $operator);
@@ -2014,7 +2031,7 @@ class Mongo extends Adapter
         return [];
     }
 
-    public function getTenantQuery(string $collection, string $parentAlias = ''): string
+    public function getTenantQuery(string $collection, string $parentAlias = '', $and = 'AND'): string
     {
         return (string)$this->getTenant();
     }

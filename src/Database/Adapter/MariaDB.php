@@ -2041,278 +2041,274 @@ class MariaDB extends SQL
         return $stmt->rowCount();
     }
 
-//    /**
-//     * Find Documents
-//     *
-//     * @param QueryContext $context
-//     * @param array<Query> $queries
-//     * @param int|null $limit
-//     * @param int|null $offset
-//     * @param array<string> $orderAttributes
-//     * @param array<string> $orderTypes
-//     * @param array<string, mixed> $cursor
-//     * @param string $cursorDirection
-//     * @param string $forPermission
-//     * @param array $selects
-//     * @param array $filters
-//     * @param array $joins
-//     * @param array<Query> $orderQueries
-//     * @return array<Document>
-//     * @throws DatabaseException
-//     */
-//    public function find(
-//        QueryContext $context,
-//        array $queries = [],
-//        ?int $limit = 25,
-//        ?int $offset = null,
-//        array $orderAttributes = [],
-//        array $orderTypes = [],
-//        array $cursor = [],
-//        string $cursorDirection = Database::CURSOR_AFTER,
-//        string $forPermission = Database::PERMISSION_READ,
-//        array $selects = [],
-//        array $filters = [],
-//        array $joins = [],
-//        array $orderQueries = []
-//    ): array {
-//        unset($queries);
-//        unset($orderAttributes);
-//        unset($orderTypes);
-//
-//        $defaultAlias = Query::DEFAULT_ALIAS;
-//        $binds = [];
-//
-//        $collection = $context->getCollections()[0]->getId();
-//
-//        $mainCollection = $this->filter($collection);
-//        $roles = Authorization::getRoles();
-//        $where = [];
-//        $orders = [];
-//        $hasIdAttribute = false;
-//
-//        //$queries = array_map(fn ($query) => clone $query, $queries);
-//        $filters = array_map(fn ($query) => clone $query, $filters);
-//        //$filters = Query::getFilterQueries($filters); // for cloning if needed
-//
-//        foreach ($orderQueries as $i => $order) {
-//            $orderAlias = $order->getAlias();
-//            $attribute  = $order->getAttribute();
-//
-//            if (empty($attribute)) {
-//                $attribute = '$internalId'; // Query::orderAsc('')
-//            }
-//
-//            $originalAttribute = $attribute;
-//            $attribute = $this->getInternalKeyForAttribute($attribute);
-//            $attribute = $this->filter($attribute);
-//            if ($attribute === '_uid' || $attribute === '_id') {
-//                $hasIdAttribute = true;
-//            }
-//
-//            $orderType = $order->getOrderDirection();
-//
-//            // Get most dominant/first order attribute
-//            if ($i === 0 && !empty($cursor)) {
-//                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
-//                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-//
+    /**
+     * Find Documents
+     *
+     * @param QueryContext $context
+     * @param array<Query> $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array<string, mixed> $cursor
+     * @param string $cursorDirection
+     * @param string $forPermission
+     * @param array $selects
+     * @param array $filters
+     * @param array $joins
+     * @param array<Query> $orderQueries
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    public function find(
+        QueryContext $context,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $orderQueries = []
+    ): array {
+        unset($queries);
+        unset($orderAttributes);
+        unset($orderTypes);
+
+        $defaultAlias = Query::DEFAULT_ALIAS;
+        $binds = [];
+
+        $collection = $context->getCollections()[0]->getId();
+
+        $mainCollection = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = [];
+        $orders = [];
+        $hasIdAttribute = false;
+
+        //$queries = array_map(fn ($query) => clone $query, $queries);
+        $filters = array_map(fn ($query) => clone $query, $filters);
+        //$filters = Query::getFilterQueries($filters); // for cloning if needed
+
+        foreach ($orderQueries as $i => $order) {
+            $orderAlias = $order->getAlias();
+            $attribute  = $order->getAttribute();
+
+            if (empty($attribute)) {
+                $attribute = '$internalId'; // Query::orderAsc('')
+            }
+
+            $originalAttribute = $attribute;
+            $attribute = $this->getInternalKeyForAttribute($attribute);
+            $attribute = $this->filter($attribute);
+            if ($attribute === '_uid' || $attribute === '_id') {
+                $hasIdAttribute = true;
+            }
+
+            $orderType = $order->getOrderDirection();
+
+            // Get most dominant/first order attribute
+            if ($i === 0 && !empty($cursor)) {
+                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
+                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+
+                if ($cursorDirection === Database::CURSOR_BEFORE) {
+                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                    $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                }
+
+                if (\is_null($cursor[$originalAttribute] ?? null)) {
+                    throw new DatabaseException("Order attribute '{$originalAttribute}' is empty");
+                }
+
+                $binds[':cursor'] = $cursor[$originalAttribute];
+
+                $where[] = "(
+                        {$this->quote($defaultAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
+                        OR (
+                            {$this->quote($defaultAlias)}.{$this->quote($attribute)} = :cursor 
+                            AND
+                            {$this->quote($defaultAlias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                        )
+                    )";
+            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
+                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            }
+
+            $orders[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$orderType}";
+        }
+
+        // Allow after pagination without any order
+        if (empty($orderQueries) && !empty($cursor)) {
+            if ($cursorDirection === Database::CURSOR_AFTER) {
+                $orderMethod = Query::TYPE_GREATER;
+            } else {
+                $orderMethod = Query::TYPE_LESSER;
+            }
+
+            $where[] = "({$this->quote($defaultAlias)}.{$this->quote('_id')} {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
+        }
+
+        // Allow order type without any order attribute, fallback to the natural order (_id)
+        // Because if we have 2 movies with same year 2000 order by year, _id for pagination
+
+        if (!$hasIdAttribute){
+            $order = Database::ORDER_ASC;
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $order = Database::ORDER_DESC;
+            }
+
+            $orders[] = "{$this->quote($defaultAlias)}.{$this->quote('_id')} ".$order;
+        }
+
+//        // original code:
+//        if (!$hasIdAttribute) {
+//            if (empty($orderAttributes) && !empty($orderTypes)) {
+//                $order = $orderTypes[0] ?? Database::ORDER_ASC;
 //                if ($cursorDirection === Database::CURSOR_BEFORE) {
-//                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-//                    $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-//                    $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+//                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
 //                }
 //
-//                if (\is_null($cursor[$originalAttribute] ?? null)) {
-//                    throw new DatabaseException("Order attribute '{$originalAttribute}' is empty");
-//                }
-//
-//                $binds[':cursor'] = $cursor[$originalAttribute];
-//
-//                $where[] = "(
-//                        {$this->quote($defaultAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor
-//                        OR (
-//                            {$this->quote($defaultAlias)}.{$this->quote($attribute)} = :cursor
-//                            AND
-//                            {$this->quote($defaultAlias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
-//                        )
-//                    )";
-//            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
-//                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-//            }
-//
-//            $orders[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$orderType}";
-//        }
-//
-//        // Allow after pagination without any order
-//        if (empty($orderQueries) && !empty($cursor)) {
-//            if ($cursorDirection === Database::CURSOR_AFTER) {
-//                $orderMethod = Query::TYPE_GREATER;
+//                $orders[] = "{$defaultAlias}._id " . $this->filter($order);
 //            } else {
-//                $orderMethod = Query::TYPE_LESSER;
+//                $orders[] = "{$defaultAlias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+//            }
+//        }
+
+        $sqlJoin = '';
+        foreach ($joins as $join) {
+            /**
+             * @var $join Query
+             */
+            $permissions = '';
+            $joinCollectionName = $this->filter($join->getCollection());
+
+            if (Authorization::$status) {
+                //$joinCollection = $context->getCollectionByAlias($join->getAlias());
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($joinCollectionName , $roles, $join->getAlias(), $forPermission);
+            }
+
+            $sqlJoin .= "INNER JOIN {$this->getSQLTable($joinCollectionName)} AS {$this->quote($join->getAlias())}
+            ON {$this->getSQLConditions($join->getValues(), $binds)}
+            {$permissions}
+            {$this->getTenantQuery($joinCollectionName, $join->getAlias())}
+            ";
+        }
+
+        $conditions = $this->getSQLConditions($filters, $binds);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
+        }
+
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($mainCollection, $roles, $defaultAlias, $forPermission);
+        }
+
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, and: '')}";
+        }
+
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
+
+        $sqlLimit = '';
+        if (! \is_null($limit)) {
+            $binds[':limit'] = $limit;
+            $sqlLimit = 'LIMIT :limit';
+        }
+
+        if (! \is_null($offset)) {
+            $binds[':offset'] = $offset;
+            $sqlLimit .= ' OFFSET :offset';
+        }
+
+        $selections = $this->getAttributeSelections($selects);
+
+        $sql = "
+            SELECT {$this->getAttributeProjection($selections, $defaultAlias)}
+            FROM {$this->getSQLTable($mainCollection)} AS {$this->quote($defaultAlias)}
+            {$sqlJoin}
+            {$sqlWhere}
+            {$sqlOrder}
+            {$sqlLimit};
+        ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
+
+//        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+//            $attribute = $orderAttributes[0];
+//
+//            $attribute = match ($attribute) {
+//                '_uid' => '$id',
+//                '_id' => '$internalId',
+//                '_tenant' => '$tenant',
+//                '_createdAt' => '$createdAt',
+//                '_updatedAt' => '$updatedAt',
+//                default => $attribute
+//            };
+//
+//            if (\is_null($cursor[$attribute] ?? null)) {
+//                throw new DatabaseException("Order attribute '{$attribute}' is empty");
 //            }
 //
-//            $where[] = "( {$defaultAlias}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
+//            $binds[':cursor'] = $cursor[$attribute];
 //        }
-//
-//        // Allow order type without any order attribute, fallback to the natural order (_id)
-//        // Because if we have 2 movies with same year 2000 order by year, _id for pagination
-//
-//        if (!$hasIdAttribute){
-//            $order = Database::ORDER_ASC;
-//
-//            if ($cursorDirection === Database::CURSOR_BEFORE) {
-//                $order = Database::ORDER_DESC;
-//            }
-//
-//            $orders[] = "{$this->quote($defaultAlias)}._id ".$order;
-//        }
-//
-////        // original code:
-////        if (!$hasIdAttribute) {
-////            if (empty($orderAttributes) && !empty($orderTypes)) {
-////                $order = $orderTypes[0] ?? Database::ORDER_ASC;
-////                if ($cursorDirection === Database::CURSOR_BEFORE) {
-////                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-////                }
-////
-////                $orders[] = "{$defaultAlias}._id " . $this->filter($order);
-////            } else {
-////                $orders[] = "{$defaultAlias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
-////            }
-////        }
-//
-//        $sqlJoin = '';
-//        foreach ($joins as $join) {
-//            /**
-//             * @var $join Query
-//             */
-//            $permissions = '';
-//            $joinCollection = $this->filter($join->getCollection());
-//
-//            if (Authorization::$status) {
-//                $joinCollection = $context->getCollectionByAlias($join->getAlias());
-//                $permissions = 'AND '.$this->getSQLPermissionsCondition($joinCollection->getId() , $roles, $join->getAlias(), $forPermission);
-//            }
-//
-//            $sqlJoin .= "INNER JOIN {$this->getSQLTable($joinCollection)} AS `{$join->getAlias()}`
-//            ON {$this->getSQLConditions($join->getValues(), $binds)}
-//            {$permissions}
-//            {$this->getTenantQuery($joinCollection, $join->getAlias())}
-//            ";
-//        }
-//
-//        $conditions = $this->getSQLConditions($filters, $binds);
-//        if (!empty($conditions)) {
-//            $where[] = $conditions;
-//        }
-//
-//        if (Authorization::$status) {
-//            $where[] = $this->getSQLPermissionsCondition($mainCollection, $roles, $defaultAlias, $forPermission);
-//        }
-//
-//        if ($this->sharedTables) {
-//            $binds[':_tenant'] = $this->tenant;
-//            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, and: '')}";
-//        }
-//
-//        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-//        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
-//
-//        $sqlLimit = '';
-//        if (! \is_null($limit)) {
-//            $binds[':limit'] = $limit;
-//            $sqlLimit = 'LIMIT :limit';
-//        }
-//
-//        if (! \is_null($offset)) {
-//            $binds[':offset'] = $offset;
-//            $sqlLimit .= ' OFFSET :offset';
-//        }
-//
-//        $selections = $this->getAttributeSelections($selects);
-//
-//        $sql = "
-//            SELECT {$this->getAttributeProjection($selections, $defaultAlias)}
-//            FROM {$this->getSQLTable($mainCollection)} AS `{$defaultAlias}`
-//            {$sqlJoin}
-//            {$sqlWhere}
-//            {$sqlOrder}
-//            {$sqlLimit};
-//        ";
-//
-//        $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
-//
-////        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
-////            $attribute = $orderAttributes[0];
-////
-////            $attribute = match ($attribute) {
-////                '_uid' => '$id',
-////                '_id' => '$internalId',
-////                '_tenant' => '$tenant',
-////                '_createdAt' => '$createdAt',
-////                '_updatedAt' => '$updatedAt',
-////                default => $attribute
-////            };
-////
-////            if (\is_null($cursor[$attribute] ?? null)) {
-////                throw new DatabaseException("Order attribute '{$attribute}' is empty");
-////            }
-////
-////            $binds[':cursor'] = $cursor[$attribute];
-////        }
-//
-//        try {
-//            $stmt = $this->getPDO()->prepare($sql);
-//
-//            foreach ($binds as $key => $value) {
-//                $stmt->bindValue($key, $value, $this->getPDOType($value));
-//            }
-//
-//            echo $stmt->queryString;
-//            var_dump($binds);
-//            $stmt->execute();
-//            $results = $stmt->fetchAll();
-//            $stmt->closeCursor();
-//
-//        } catch (PDOException $e) {
-//            throw $this->processException($e);
-//        }
-//
-//        foreach ($results as $index => $document) {
-//            if (\array_key_exists('_uid', $document)) {
-//                $results[$index]['$id'] = $document['_uid'];
-//                unset($results[$index]['_uid']);
-//            }
-//            if (\array_key_exists('_id', $document)) {
-//                $results[$index]['$internalId'] = $document['_id'];
-//                unset($results[$index]['_id']);
-//            }
-//            if (\array_key_exists('_tenant', $document)) {
-//                $results[$index]['$tenant'] = $document['_tenant'];
-//                unset($results[$index]['_tenant']);
-//            }
-//            if (\array_key_exists('_createdAt', $document)) {
-//                $results[$index]['$createdAt'] = $document['_createdAt'];
-//                unset($results[$index]['_createdAt']);
-//            }
-//            if (\array_key_exists('_updatedAt', $document)) {
-//                $results[$index]['$updatedAt'] = $document['_updatedAt'];
-//                unset($results[$index]['_updatedAt']);
-//            }
-//            if (\array_key_exists('_permissions', $document)) {
-//                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
-//                unset($results[$index]['_permissions']);
-//            }
-//
-//            $results[$index] = new Document($results[$index]);
-//        }
-//
-//        if ($cursorDirection === Database::CURSOR_BEFORE) {
-//            $results = \array_reverse($results);
-//        }
-//
-//        return $results;
-//    }
+
+        try {
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($binds as $key => $value) {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+
+            echo $stmt->queryString;
+            var_dump($binds);
+            $stmt->execute();
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
+
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        foreach ($results as $index => $document) {
+            if (\array_key_exists('_uid', $document)) {
+                $results[$index]['$id'] = $document['_uid'];
+                unset($results[$index]['_uid']);
+            }
+            if (\array_key_exists('_id', $document)) {
+                $results[$index]['$internalId'] = $document['_id'];
+                unset($results[$index]['_id']);
+            }
+            if (\array_key_exists('_tenant', $document)) {
+                $results[$index]['$tenant'] = $document['_tenant'];
+                unset($results[$index]['_tenant']);
+            }
+            if (\array_key_exists('_createdAt', $document)) {
+                $results[$index]['$createdAt'] = $document['_createdAt'];
+                unset($results[$index]['_createdAt']);
+            }
+            if (\array_key_exists('_updatedAt', $document)) {
+                $results[$index]['$updatedAt'] = $document['_updatedAt'];
+                unset($results[$index]['_updatedAt']);
+            }
+            if (\array_key_exists('_permissions', $document)) {
+                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
+                unset($results[$index]['_permissions']);
+            }
+
+            $results[$index] = new Document($results[$index]);
+        }
+
+        if ($cursorDirection === Database::CURSOR_BEFORE) {
+            $results = \array_reverse($results);
+        }
+
+        return $results;
+    }
 
     /**
      * Count Documents
@@ -2361,7 +2357,7 @@ class MariaDB extends SQL
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
-				FROM {$this->getSQLTable($name)} AS `{$defaultAlias}`
+				FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -2548,7 +2544,7 @@ class MariaDB extends SQL
                 return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
             case Query::TYPE_RELATION_EQUAL:
-                return "`{$query->getAlias()}`.{$attribute}=`{$query->getRightAlias()}`.`{$query->getAttributeRight()}`";
+                return "{$alias}.{$attribute}={$this->quote($query->getRightAlias())}.{$this->quote($query->getAttributeRight())}";
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:

@@ -5606,8 +5606,8 @@ class Database
         $orders = Query::getOrderQueries($queries);
 
         $grouped = Query::groupByType($queries);
-        $orderAttributes = $grouped['orderAttributes'];
-        $orderTypes = $grouped['orderTypes'];
+        //$orderAttributes = $grouped['orderAttributes'];
+        //$orderTypes = $grouped['orderTypes'];
 
         $cursor = [];
         $cursorDirection = Database::CURSOR_AFTER;
@@ -5685,8 +5685,6 @@ class Database
             $queries,
             $limit,
             $offset,
-            $orderAttributes,
-            $orderTypes,
             $cursor,
             $cursorDirection,
             $forPermission,

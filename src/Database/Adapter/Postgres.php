@@ -1815,231 +1815,231 @@ class Postgres extends SQL
         return $stmt->rowCount();
     }
 
-    /**
-     * Find Documents
-     *
-     * Find data sets using chosen queries
-     *
-     * @param QueryContext $context
-     * @param string $collection
-     * @param array<Query> $queries
-     * @param int|null $limit
-     * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
-     * @param array<string, mixed> $cursor
-     * @param string $cursorDirection
-     * @param string $forPermission
-     *
-     * @return array<Document>
-     * @throws DatabaseException
-     */
-    public function find(
-        QueryContext $context,
-        array $queries = [],
-        ?int $limit = 25,
-        ?int $offset = null,
-        array $orderAttributes = [],
-        array $orderTypes = [],
-        array $cursor = [],
-        string $cursorDirection = Database::CURSOR_AFTER,
-        string $forPermission = Database::PERMISSION_READ,
-        array $selects = [],
-        array $filters = [],
-        array $joins = [],
-        array $orderQueries = []
-    ): array {
-        $collection = $context->getCollections()[0]->getId();
-        $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
-        $where = [];
-        $orders = [];
-        $alias = Query::DEFAULT_ALIAS;
-
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
-        $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
-            '$id' => '_uid',
-            '$internalId' => '_id',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $orderAttribute
-        }, $orderAttributes);
-
-        $hasIdAttribute = false;
-        foreach ($orderAttributes as $i => $attribute) {
-            if ($attribute === '_uid') {
-                $hasIdAttribute = true;
-            }
-
-            $attribute = $this->filter($attribute);
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-
-            // Get most dominant/first order attribute
-            if ($i === 0 && !empty($cursor)) {
-                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
-                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                    $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                    $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                }
-
-                $where[] = "(
-                        table_main.\"{$attribute}\" {$this->getSQLOperator($orderMethod)} :cursor 
-                        OR (
-                            table_main.\"{$attribute}\" = :cursor 
-                            AND
-                            table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
-                        )
-                    )";
-            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
-                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-            }
-
-            $orders[] = '"' . $attribute . '" ' . $orderType;
-        }
-
-        // Allow after pagination without any order
-        if (empty($orderAttributes) && !empty($cursor)) {
-            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? (
-                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
-            ) : (
-                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
-            );
-            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
-        }
-
-        // Allow order type without any order attribute, fallback to the natural order (_id)
-        if (!$hasIdAttribute) {
-            if (empty($orderAttributes) && !empty($orderTypes)) {
-                $order = $orderTypes[0] ?? Database::ORDER_ASC;
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                }
-
-                $orders[] = 'table_main._id ' . $this->filter($order);
-            } else {
-                $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
-            }
-        }
-
-        $conditions = $this->getSQLConditions($queries);
-        if (!empty($conditions)) {
-            $where[] = $conditions;
-        }
-
-        if ($this->sharedTables) {
-            $orIsNull = '';
-
-            if ($collection === Database::METADATA) {
-                $orIsNull = " OR table_main._tenant IS NULL";
-            }
-
-            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
-        }
-
-        if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
-        }
-
-        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
-        $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
-        $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
-        $selections = $this->getAttributeSelections($queries);
-
-        $sql = "
-            SELECT {$this->getAttributeProjection($selections, 'table_main')}
-            FROM {$this->getSQLTable($name)} as table_main
-            {$sqlWhere}
-            {$sqlOrder}
-            {$sqlLimit};
-        ";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
-            $attribute = $orderAttributes[0];
-
-            $attribute = match ($attribute) {
-                '_uid' => '$id',
-                '_id' => '$internalId',
-                '_tenant' => '$tenant',
-                '_createdAt' => '$createdAt',
-                '_updatedAt' => '$updatedAt',
-                default => $attribute
-            };
-
-            if (\is_null($cursor[$attribute] ?? null)) {
-                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
-            }
-            $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
-        }
-
-        if (!\is_null($limit)) {
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        }
-        if (!\is_null($offset)) {
-            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        }
-
-        try {
-            $stmt->execute();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
-
-        foreach ($results as $index => $document) {
-            if (\array_key_exists('_uid', $document)) {
-                $results[$index]['$id'] = $document['_uid'];
-                unset($results[$index]['_uid']);
-            }
-            if (\array_key_exists('_id', $document)) {
-                $results[$index]['$internalId'] = $document['_id'];
-                unset($results[$index]['_id']);
-            }
-            if (\array_key_exists('_tenant', $document)) {
-                $results[$index]['$tenant'] = $document['_tenant'];
-                unset($results[$index]['_tenant']);
-            }
-            if (\array_key_exists('_createdAt', $document)) {
-                $results[$index]['$createdAt'] = $document['_createdAt'];
-                unset($results[$index]['_createdAt']);
-            }
-            if (\array_key_exists('_updatedAt', $document)) {
-                $results[$index]['$updatedAt'] = $document['_updatedAt'];
-                unset($results[$index]['_updatedAt']);
-            }
-            if (\array_key_exists('_permissions', $document)) {
-                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
-                unset($results[$index]['_permissions']);
-            }
-
-            $results[$index] = new Document($results[$index]);
-        }
-
-        if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $results = array_reverse($results);
-        }
-
-        return $results;
-    }
+//    /**
+//     * Find Documents
+//     *
+//     * Find data sets using chosen queries
+//     *
+//     * @param QueryContext $context
+//     * @param string $collection
+//     * @param array<Query> $queries
+//     * @param int|null $limit
+//     * @param int|null $offset
+//     * @param array<string> $orderAttributes
+//     * @param array<string> $orderTypes
+//     * @param array<string, mixed> $cursor
+//     * @param string $cursorDirection
+//     * @param string $forPermission
+//     *
+//     * @return array<Document>
+//     * @throws DatabaseException
+//     */
+//    public function find(
+//        QueryContext $context,
+//        array $queries = [],
+//        ?int $limit = 25,
+//        ?int $offset = null,
+//        array $orderAttributes = [],
+//        array $orderTypes = [],
+//        array $cursor = [],
+//        string $cursorDirection = Database::CURSOR_AFTER,
+//        string $forPermission = Database::PERMISSION_READ,
+//        array $selects = [],
+//        array $filters = [],
+//        array $joins = [],
+//        array $orderQueries = []
+//    ): array {
+//        $collection = $context->getCollections()[0]->getId();
+//        $name = $this->filter($collection);
+//        $roles = Authorization::getRoles();
+//        $where = [];
+//        $orders = [];
+//        $alias = Query::DEFAULT_ALIAS;
+//
+//        $queries = array_map(fn ($query) => clone $query, $queries);
+//
+//        $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
+//            '$id' => '_uid',
+//            '$internalId' => '_id',
+//            '$tenant' => '_tenant',
+//            '$createdAt' => '_createdAt',
+//            '$updatedAt' => '_updatedAt',
+//            default => $orderAttribute
+//        }, $orderAttributes);
+//
+//        $hasIdAttribute = false;
+//        foreach ($orderAttributes as $i => $attribute) {
+//            if ($attribute === '_uid') {
+//                $hasIdAttribute = true;
+//            }
+//
+//            $attribute = $this->filter($attribute);
+//            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+//
+//            // Get most dominant/first order attribute
+//            if ($i === 0 && !empty($cursor)) {
+//                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
+//                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+//
+//                if ($cursorDirection === Database::CURSOR_BEFORE) {
+//                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+//                    $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+//                    $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+//                }
+//
+//                $where[] = "(
+//                        table_main.\"{$attribute}\" {$this->getSQLOperator($orderMethod)} :cursor
+//                        OR (
+//                            table_main.\"{$attribute}\" = :cursor
+//                            AND
+//                            table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+//                        )
+//                    )";
+//            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
+//                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+//            }
+//
+//            $orders[] = '"' . $attribute . '" ' . $orderType;
+//        }
+//
+//        // Allow after pagination without any order
+//        if (empty($orderAttributes) && !empty($cursor)) {
+//            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
+//            $orderMethod = $cursorDirection === Database::CURSOR_AFTER ? (
+//                $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER
+//            ) : (
+//                $orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER
+//            );
+//            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
+//        }
+//
+//        // Allow order type without any order attribute, fallback to the natural order (_id)
+//        if (!$hasIdAttribute) {
+//            if (empty($orderAttributes) && !empty($orderTypes)) {
+//                $order = $orderTypes[0] ?? Database::ORDER_ASC;
+//                if ($cursorDirection === Database::CURSOR_BEFORE) {
+//                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+//                }
+//
+//                $orders[] = 'table_main._id ' . $this->filter($order);
+//            } else {
+//                $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+//            }
+//        }
+//
+//        $conditions = $this->getSQLConditions($queries);
+//        if (!empty($conditions)) {
+//            $where[] = $conditions;
+//        }
+//
+//        if ($this->sharedTables) {
+//            $orIsNull = '';
+//
+//            if ($collection === Database::METADATA) {
+//                $orIsNull = " OR table_main._tenant IS NULL";
+//            }
+//
+//            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
+//        }
+//
+//        if (Authorization::$status) {
+//            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
+//        }
+//
+//        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+//        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
+//        $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
+//        $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
+//        $selections = $this->getAttributeSelections($queries);
+//
+//        $sql = "
+//            SELECT {$this->getAttributeProjection($selections, 'table_main')}
+//            FROM {$this->getSQLTable($name)} as table_main
+//            {$sqlWhere}
+//            {$sqlOrder}
+//            {$sqlLimit};
+//        ";
+//
+//        $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
+//
+//        $stmt = $this->getPDO()->prepare($sql);
+//
+//        foreach ($queries as $query) {
+//            $this->bindConditionValue($stmt, $query);
+//        }
+//        if ($this->sharedTables) {
+//            $stmt->bindValue(':_tenant', $this->tenant);
+//        }
+//
+//        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+//            $attribute = $orderAttributes[0];
+//
+//            $attribute = match ($attribute) {
+//                '_uid' => '$id',
+//                '_id' => '$internalId',
+//                '_tenant' => '$tenant',
+//                '_createdAt' => '$createdAt',
+//                '_updatedAt' => '$updatedAt',
+//                default => $attribute
+//            };
+//
+//            if (\is_null($cursor[$attribute] ?? null)) {
+//                throw new DatabaseException("Order attribute '{$attribute}' is empty.");
+//            }
+//            $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
+//        }
+//
+//        if (!\is_null($limit)) {
+//            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+//        }
+//        if (!\is_null($offset)) {
+//            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+//        }
+//
+//        try {
+//            $stmt->execute();
+//        } catch (PDOException $e) {
+//            throw $this->processException($e);
+//        }
+//
+//        $results = $stmt->fetchAll();
+//        $stmt->closeCursor();
+//
+//        foreach ($results as $index => $document) {
+//            if (\array_key_exists('_uid', $document)) {
+//                $results[$index]['$id'] = $document['_uid'];
+//                unset($results[$index]['_uid']);
+//            }
+//            if (\array_key_exists('_id', $document)) {
+//                $results[$index]['$internalId'] = $document['_id'];
+//                unset($results[$index]['_id']);
+//            }
+//            if (\array_key_exists('_tenant', $document)) {
+//                $results[$index]['$tenant'] = $document['_tenant'];
+//                unset($results[$index]['_tenant']);
+//            }
+//            if (\array_key_exists('_createdAt', $document)) {
+//                $results[$index]['$createdAt'] = $document['_createdAt'];
+//                unset($results[$index]['_createdAt']);
+//            }
+//            if (\array_key_exists('_updatedAt', $document)) {
+//                $results[$index]['$updatedAt'] = $document['_updatedAt'];
+//                unset($results[$index]['_updatedAt']);
+//            }
+//            if (\array_key_exists('_permissions', $document)) {
+//                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
+//                unset($results[$index]['_permissions']);
+//            }
+//
+//            $results[$index] = new Document($results[$index]);
+//        }
+//
+//        if ($cursorDirection === Database::CURSOR_BEFORE) {
+//            $results = array_reverse($results);
+//        }
+//
+//        return $results;
+//    }
 
     /**
      * Count Documents
@@ -2251,7 +2251,7 @@ class Postgres extends SQL
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
         $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
-        $attribute = "\"{$query->getAttribute()}\"";
+        $attribute = $this->quote($query->getAttribute());
         //$placeholder = $this->getSQLPlaceholder($query);
         $placeholder = ID::unique();
         $operator = null;
@@ -2364,16 +2364,16 @@ class Postgres extends SQL
         return "\"{$this->getDatabase()}\".";
     }
 
-    /**
-     * Get SQL table
-     *
-     * @param string $name
-     * @return string
-     */
-    protected function getSQLTable(string $name): string
-    {
-        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
-    }
+//    /**
+//     * Get SQL table
+//     *
+//     * @param string $name
+//     * @return string
+//     */
+//    protected function getSQLTable(string $name): string
+//    {
+//        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
+//    }
 
     /**
      * Get PDO Type

@@ -1059,8 +1059,6 @@ class Mongo extends Adapter
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
@@ -1073,8 +1071,6 @@ class Mongo extends Adapter
         array $queries = [],
         ?int $limit = 25,
         ?int $offset = null,
-        array $orderAttributes = [],
-        array $orderTypes = [],
         array $cursor = [],
         string $cursorDirection = Database::CURSOR_AFTER,
         string $forPermission = Database::PERMISSION_READ,
@@ -1083,6 +1079,11 @@ class Mongo extends Adapter
         array $joins = [],
         array $orderQueries = []
     ): array {
+
+        // todo: build this 2 attributes to preserve original logic...
+        $orderAttributes  = [];
+        $orderTypes= [];
+
         $collection = $context->getCollections()[0]->getId();
 
         $name = $this->getNamespace() . '_' . $this->filter($collection);

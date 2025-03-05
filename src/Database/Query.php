@@ -526,10 +526,6 @@ class Query
      */
     public static function orderDesc(string $attribute = '', string $alias = Query::DEFAULT_ALIAS): self
     {
-        if ($attribute === '') {
-            $attribute = '$internalId';
-        }
-
         return new self(self::TYPE_ORDER_DESC, $attribute, alias: $alias);
     }
 
@@ -538,10 +534,6 @@ class Query
      */
     public static function orderAsc(string $attribute = ''): self
     {
-        if ($attribute === '') {
-            $attribute = '$internalId';
-        }
-
         return new self(self::TYPE_ORDER_ASC, $attribute);
     }
 

@@ -332,6 +332,9 @@ abstract class Base extends TestCase
             $this->assertEquals('Query InnerJoin: Alias must contain at most 64 chars. Valid chars are a-z, A-Z, 0-9, and underscore.', $e->getMessage());
         }
 
+        /**
+         * Test join same collection
+         */
         $documents = static::getDatabase()->find(
             '__users',
             [
@@ -357,7 +360,7 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-       // $this->assertEquals('shmuel1', 'shmuel2');
+        //$this->assertEquals('shmuel1', 'shmuel2');
 
         $documents = static::getDatabase()->find(
             '__users',
@@ -377,7 +380,7 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-        // $this->assertEquals('shmuel1', 'shmuel2');
+        //$this->assertEquals('shmuel1', 'shmuel2');
     }
 
     public function testDeleteRelatedCollection(): void

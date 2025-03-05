@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Swoole\Database\DetectsLostConnections;
+use Utopia\CLI\Console;
 
 /**
  * A PDO wrapper that forwards method calls to the internal PDO instance.
@@ -46,6 +47,7 @@ class PDO
         } catch (\Throwable $e) {
             /** @phpstan-ignore-next-line can't find static method */
             if (DetectsLostConnections::causedByLostConnection($e)) {
+                Console::warning('[Database] Lost connection detected. Reconnecting...');
                 $this->reconnect();
                 return $this->pdo->{$method}(...$args);
             }

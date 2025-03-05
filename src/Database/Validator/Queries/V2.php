@@ -199,6 +199,7 @@ class V2 extends Validator
                     case Query::TYPE_RIGHT_JOIN:
                         var_dump('=== Query::TYPE_JOIN ===');
                         var_dump($query);
+                        $this->validateFilterQueries($query);
 
                         if (! self::isValid($query->getValues(), 'joins')) {
                             throw new \Exception($this->message);
@@ -247,9 +248,7 @@ class V2 extends Validator
                         break;
                     case Query::TYPE_ORDER_ASC:
                     case Query::TYPE_ORDER_DESC:
-                        if (! empty($query->getAttribute())) {
-                            $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
-                        }
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
 
                         break;
                     case Query::TYPE_CURSOR_AFTER:
@@ -369,6 +368,18 @@ class V2 extends Validator
 
         if (! $validator->isValid($query->getRightAlias())) {
             throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$validator->getDescription());
+        }
+    }
+
+    /**
+     * @throws \Exception
+     */
+    protected function validateFilterQueries(Query $query): void
+    {
+        $filters = Query::getFilterQueries($query->getValues());
+
+        if (count($query->getValues()) !== count($filters)) {
+            throw new \Exception('Invalid query: '.\ucfirst($query->getMethod()).' queries can only contain filter queries');
         }
     }
 

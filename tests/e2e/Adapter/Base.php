@@ -166,9 +166,11 @@ abstract class Base extends TestCase
         static::getDatabase()->createCollection('__users');
         static::getDatabase()->createCollection('__sessions');
 
+        static::getDatabase()->createAttribute('__users', 'username', Database::VAR_STRING, 100, false);
         static::getDatabase()->createAttribute('__sessions', 'user_id', Database::VAR_STRING, 100, false);
 
-        $user = static::getDatabase()->createDocument('__users', new Document([
+        $user1 = static::getDatabase()->createDocument('__users', new Document([
+            'username' => 'Donald',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user('bob')),
@@ -176,7 +178,7 @@ abstract class Base extends TestCase
         ]));
 
         $session1 = static::getDatabase()->createDocument('__sessions', new Document([
-            'user_id' => $user->getId(),
+            'user_id' => $user1->getId(),
             '$permissions' => [],
         ]));
 
@@ -199,7 +201,22 @@ abstract class Base extends TestCase
         $this->assertCount(0, $documents);
 
         $session2 = static::getDatabase()->createDocument('__sessions', new Document([
-            'user_id' => $user->getId(),
+            'user_id' => $user1->getId(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+        ]));
+
+        $user2 = static::getDatabase()->createDocument('__users', new Document([
+            'username' => 'Abraham',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('bob')),
+            ],
+        ]));
+
+        $session3 = static::getDatabase()->createDocument('__sessions', new Document([
+            'user_id' => $user2->getId(),
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
@@ -217,6 +234,21 @@ abstract class Base extends TestCase
                     'B',
                     [
                         Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(2, $documents);
+
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                        Query::equal('user_id', [$user1->getId()], 'B'),
                     ]
                 ),
             ]
@@ -294,6 +326,24 @@ abstract class Base extends TestCase
         }
 
         /**
+         * Test allow only filter queries in joins ON clause
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join('__sessions', 'B', [
+                        Query::orderAsc()
+                    ]),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: InnerJoin queries can only contain filter queries', $e->getMessage());
+        }
+
+        /**
          * Test Relations are valid within joins
          */
         try {
@@ -340,28 +390,62 @@ abstract class Base extends TestCase
             [
                 Query::join(
                     '__sessions',
-                    'U',
+                    'B',
                     [
-                        Query::relationEqual('', '$id', 'U', 'user_id'),
-                        Query::relationEqual('', '$id', 'U', 'user_id'),
-                        Query::equal('$id', [$user->getId()], 'U'),
-                        Query::equal('$id', [$user->getId()], 'U'),
+                        Query::relationEqual('B', 'user_id', '', '$id'),
                     ]
                 ),
                 Query::join(
                     '__sessions',
-                    'U2',
+                    'C',
                     [
-                        Query::relationEqual('', '$id', 'U2', 'user_id'),
-                        Query::equal('$id', [$session1->getId()], 'U'),
+                        Query::relationEqual('C', 'user_id', 'B', 'user_id'),
                     ]
                 ),
             ]
         );
+        $this->assertCount(2, $documents);
 
-        var_dump($documents);
+        /**
+         * Test order by related collection
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+                Query::orderAsc('$createdAt', 'B')
+            ]
+        );
+        $this->assertEquals('Donald', $documents[0]['username']);
+        $this->assertEquals('Abraham', $documents[1]['username']);
+
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+                Query::orderDesc('$createdAt', 'B')
+            ]
+        );
+        $this->assertEquals('Abraham', $documents[0]['username']);
+        $this->assertEquals('Donald', $documents[1]['username']);
+
         //$this->assertEquals('shmuel1', 'shmuel2');
 
+        /**
+         * Select queries
+         */
         $documents = static::getDatabase()->find(
             '__users',
             [
@@ -373,7 +457,7 @@ abstract class Base extends TestCase
                     'U',
                     [
                         Query::relationEqual('', '$id', 'U', 'user_id'),
-                        Query::equal('$id', [$session1->getId()], 'U'),
+                        //Query::equal('$id', [$session1->getId()], 'U'),
                     ]
                 ),
             ]

@@ -142,6 +142,10 @@ class Query
             $aliasRight = Query::DEFAULT_ALIAS;
         }
 
+        if (in_array($method, [Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC]) && $attribute === '') {
+            $attribute = '$internalId';
+        }
+
         $this->method = $method;
         $this->alias = $alias;
         $this->attribute = $attribute;
@@ -435,7 +439,7 @@ class Query
      *
      * @param  array<string|int|float|bool>  $values
      */
-    public static function equal(string $attribute, array $values, string $alias = Query::DEFAULT_ALIAS): self
+    public static function equal(string $attribute, array $values, string $alias = ''): self
     {
         return new self(self::TYPE_EQUAL, $attribute, $values, alias: $alias);
     }
@@ -524,7 +528,7 @@ class Query
     /**
      * Helper method to create Query with orderDesc method
      */
-    public static function orderDesc(string $attribute = '', string $alias = Query::DEFAULT_ALIAS): self
+    public static function orderDesc(string $attribute = '', string $alias = ''): self
     {
         return new self(self::TYPE_ORDER_DESC, $attribute, alias: $alias);
     }
@@ -532,9 +536,9 @@ class Query
     /**
      * Helper method to create Query with orderAsc method
      */
-    public static function orderAsc(string $attribute = ''): self
+    public static function orderAsc(string $attribute = '', string $alias = ''): self
     {
-        return new self(self::TYPE_ORDER_ASC, $attribute);
+        return new self(self::TYPE_ORDER_ASC, $attribute, alias: $alias);
     }
 
     /**
@@ -774,6 +778,7 @@ class Query
             self::TYPE_ENDS_WITH,
             self::TYPE_AND,
             self::TYPE_OR,
+            self::TYPE_RELATION_EQUAL,
         ]);
     }
 

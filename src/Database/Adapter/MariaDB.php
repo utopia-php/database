@@ -2072,8 +2072,6 @@ class MariaDB extends SQL
         array $orderQueries = []
     ): array {
         unset($queries);
-        unset($orderAttributes);
-        unset($orderTypes);
 
         $defaultAlias = Query::DEFAULT_ALIAS;
         $binds = [];

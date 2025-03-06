@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-use Swoole\Database\DetectsLostConnections;
 use Utopia\CLI\Console;
 
 /**
@@ -45,8 +44,7 @@ class PDO
         try {
             return $this->pdo->{$method}(...$args);
         } catch (\Throwable $e) {
-            /** @phpstan-ignore-next-line can't find static method */
-            if (DetectsLostConnections::causedByLostConnection($e)) {
+            if (Connection::hasError($e)) {
                 Console::warning('[Database] Lost connection detected. Reconnecting...');
                 $this->reconnect();
                 return $this->pdo->{$method}(...$args);

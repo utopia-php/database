@@ -122,9 +122,14 @@ class V2 extends Validator
             }
 
             foreach ($value as $query) {
-                /**
-                 * Removing Query::parse since we can parse in context if needed
-                 */
+                if (!$query instanceof Query) {
+                    try {
+                        $query = Query::parse($query);
+                    } catch (\Throwable $e) {
+                        throw new \Exception('Invalid query: ' . $e->getMessage());
+                    }
+                }
+
                 echo PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL;
                 var_dump($query->getMethod(), $query->getCollection(), $query->getAlias());
 
@@ -183,11 +188,9 @@ class V2 extends Validator
                         break;
                     case Query::TYPE_OR:
                     case Query::TYPE_AND:
-                        $filters = Query::getFilterQueries($query->getValues());
+                        $this->validateFilterQueries($query);
 
-                        if (count($query->getValues()) !== count($filters)) {
-                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries can only contain filter queries');
-                        }
+                        $filters = Query::getFilterQueries($query->getValues());
 
                         if (count($filters) < 2) {
                             throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least two queries');

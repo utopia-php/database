@@ -2294,7 +2294,8 @@ class Postgres extends SQL
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
         $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
-        $attribute = $this->quote($this->filter($query->getAttribute()));
+        $attribute = $this->filter($query->getAttribute());
+        $attribute = $this->quote($attribute);
         $alias = $this->quote($query->getAlias());
 
         //$placeholder = $this->getSQLPlaceholder($query);

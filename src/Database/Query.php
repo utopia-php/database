@@ -98,6 +98,12 @@ class Query
         self::TYPE_OR,
     ];
 
+//    protected const JOIN_TYPES = [
+//        self::TYPE_INNER_JOIN,
+//        self::TYPE_LEFT_JOIN,
+//        self::TYPE_RIGHT_JOIN,
+//    ];
+
     protected string $method = '';
 
     protected string $collection = '';
@@ -114,15 +120,10 @@ class Query
 
     protected bool $onArray = false;
 
-    /**
-     * @var array<mixed>
-     */
     protected array $values = [];
 
     /**
      * Construct a new query object
-     *
-     * @param  array<mixed>  $values
      */
     protected function __construct(
         string $method,
@@ -134,6 +135,9 @@ class Query
         string $collection = '',
         string $as = '',
     ) {
+        /**
+         * We can not make the fallback in the Query::static() calls , because parse method skips it
+         */
         if (empty($alias)) {
             $alias = Query::DEFAULT_ALIAS;
         }
@@ -894,6 +898,10 @@ class Query
         if (in_array($this->getMethod(), self::LOGICAL_TYPES)) {
             return true;
         }
+
+//        if (in_array($this->getMethod(), self::JOIN_TYPES)) {
+//            return true;
+//        }
 
         return false;
     }

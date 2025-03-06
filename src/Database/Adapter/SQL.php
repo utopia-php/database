@@ -1157,13 +1157,10 @@ abstract class SQL extends Adapter
      */
     public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
     {
+        $queries = Query::getFilterQueries($queries);
+
         $conditions = [];
         foreach ($queries as $query) {
-
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                continue;
-            }
-
             if ($query->isNested()) {
                 $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
             } else {

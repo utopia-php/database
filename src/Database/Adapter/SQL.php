@@ -894,46 +894,6 @@ abstract class SQL extends Adapter
         return true;
     }
 
-//    /**
-//     * @param mixed $stmt
-//     * @param Query $query
-//     * @return void
-//     * @throws Exception
-//     */
-//    protected function bindConditionValue(mixed $stmt, Query $query): void
-//    {
-//        if ($query->getMethod() == Query::TYPE_SELECT) {
-//            return;
-//        }
-//
-//        if ($query->isNested()) {
-//            foreach ($query->getValues() as $value) {
-//                $this->bindConditionValue($stmt, $value);
-//            }
-//            return;
-//        }
-//
-//        if ($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
-//            $placeholder = $this->getSQLPlaceholder($query) . '_0';
-//            $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
-//            return;
-//        }
-//
-//        foreach ($query->getValues() as $key => $value) {
-//            $value = match ($query->getMethod()) {
-//                Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
-//                Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
-//                Query::TYPE_SEARCH => $this->getFulltextValue($value),
-//                Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-//                default => $value
-//            };
-//
-//            $placeholder = $this->getSQLPlaceholder($query) . '_' . $key;
-//
-//            $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
-//        }
-//    }
-
     /**
      * @param string $value
      * @return string

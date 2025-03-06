@@ -19,7 +19,7 @@ class Connection
      * @param \Throwable $e
      * @return bool
      */
-    public static function hasDatabaseError(\Throwable $e): bool
+    public static function hasError(\Throwable $e): bool
     {
         /** @phpstan-ignore-next-line can't find static method */
         if (DetectsLostConnections::causedByLostConnection($e)) {

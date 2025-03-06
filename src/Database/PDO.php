@@ -44,7 +44,7 @@ class PDO
         try {
             return $this->pdo->{$method}(...$args);
         } catch (\Throwable $e) {
-            if (Connection::hasDatabaseError($e)) {
+            if (Connection::hasError($e)) {
                 Console::warning('[Database] Lost connection detected. Reconnecting...');
                 $this->reconnect();
                 return $this->pdo->{$method}(...$args);

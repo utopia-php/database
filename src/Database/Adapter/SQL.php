@@ -957,24 +957,6 @@ abstract class SQL extends Adapter
         }
     }
 
-//    /**
-//     * @param Query $query
-//     * @return string
-//     * @throws Exception
-//     */
-//    protected function getSQLPlaceholder(Query $query): string
-//    {
-//        return ID::unique();
-//
-//        $json = \json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]);
-//
-//        if ($json === false) {
-//            throw new DatabaseException('Failed to encode query');
-//        }
-//
-//        return \md5($json);
-//    }
-
     public function escapeWildcards(string $value): string
     {
         $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];

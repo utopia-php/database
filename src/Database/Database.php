@@ -5770,7 +5770,6 @@ class Database
             if ($latestDocument !== null) {
                 //reset offset and cursor as groupByType ignores same type query after first one is encountered
                 if ($offset !== null) {
-                    // todo use Query::removeByType($newQueries, [Query::TYPE_OFFSET])
                     array_unshift($newQueries, Query::offset(0));
                 }
 

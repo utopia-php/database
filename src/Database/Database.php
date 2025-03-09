@@ -5748,10 +5748,7 @@ class Database
     {
         $cursorQuery = Query::getCursorQueries($queries);
         if (! is_null($cursorQuery)) {
-            $cursor = $cursorQuery->getCursorDocument($cursorQuery);
-            $cursorDirection = $cursorQuery->getCursorDirection();
-
-            if ($cursorDirection === Database::CURSOR_BEFORE) {
+            if ($cursorQuery->getCursorDirection() === Database::CURSOR_BEFORE) {
                 throw new DatabaseException('Cursor ' . Database::CURSOR_BEFORE . ' not supported in this method.');
             }
         }
@@ -5773,6 +5770,7 @@ class Database
             if ($latestDocument !== null) {
                 //reset offset and cursor as groupByType ignores same type query after first one is encountered
                 if ($offset !== null) {
+                    // todo use Query::removeByType($newQueries, [Query::TYPE_OFFSET])
                     array_unshift($newQueries, Query::offset(0));
                 }
 

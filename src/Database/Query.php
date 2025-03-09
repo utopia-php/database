@@ -671,6 +671,26 @@ class Query
     }
 
     /**
+     * Filters $queries for $types
+     *
+     * @param  array<Query>  $queries
+     * @param  array<string>  $types
+     * @return array<Query>
+     */
+    public static function removeByType(array $queries, array $types): array
+    {
+        $filtered = [];
+
+        foreach ($queries as $query) {
+            if (! \in_array($query->getMethod(), $types, true)) {
+                $filtered[] = clone $query;
+            }
+        }
+
+        return $filtered;
+    }
+
+    /**
      * @param  array<Query>  $queries
      * @return array<Query>
      */

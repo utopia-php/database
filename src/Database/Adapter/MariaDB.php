@@ -2236,25 +2236,6 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
-//        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
-//            $attribute = $orderAttributes[0];
-//
-//            $attribute = match ($attribute) {
-//                '_uid' => '$id',
-//                '_id' => '$internalId',
-//                '_tenant' => '$tenant',
-//                '_createdAt' => '$createdAt',
-//                '_updatedAt' => '$updatedAt',
-//                default => $attribute
-//            };
-//
-//            if (\is_null($cursor[$attribute] ?? null)) {
-//                throw new DatabaseException("Order attribute '{$attribute}' is empty");
-//            }
-//
-//            $binds[':cursor'] = $cursor[$attribute];
-//        }
-
         try {
             $stmt = $this->getPDO()->prepare($sql);
 

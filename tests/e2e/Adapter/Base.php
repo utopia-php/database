@@ -448,6 +448,7 @@ abstract class Base extends TestCase
             '__users',
             [
                 Query::selection('*', 'A'),
+                Query::selection('*', 'U'),
                 Query::selection('$id', 'A'),
                 Query::selection('user_id', 'U', as: 'user_id'),
                 Query::join(
@@ -462,7 +463,7 @@ abstract class Base extends TestCase
         );
 
         var_dump($documents);
-        $this->assertEquals('shmuel1', 'shmuel2');
+        //$this->assertEquals('shmuel1', 'shmuel2');
     }
 
     public function testDeleteRelatedCollection(): void

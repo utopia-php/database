@@ -4070,12 +4070,15 @@ class Database
             }
         }
 
-        $grouped = Query::groupByType($queries);
-        $limit = $grouped['limit'];
-        $cursor = $grouped['cursor'];
+        $limit = Query::getLimitQueries($queries);
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
+        $cursor = new Document();
+        $cursorQuery = Query::getCursorQueries($queries);
+        if(! is_null($cursorQuery)){
+            $cursor = $cursorQuery->getCursorDocument($cursorQuery);
+            if($cursor->getCollection() !== $collection->getId()){
+                throw new DatabaseException("cursor Document must be from the same Collection.");
+            }
         }
 
         unset($updates['$id']);
@@ -4116,15 +4119,15 @@ class Database
 
             // Resolve and update relationships
             while (true) {
-                if ($limit && $limit < $batchSize) {
+                if (! empty($limit) && $limit < $batchSize && $limit > 0) {
                     $batchSize = $limit;
-                } elseif (!empty($limit)) {
+                } elseif (! empty($limit)) {
                     $limit -= $batchSize;
                 }
 
                 $affectedDocuments = $this->silent(fn () => $this->find($collection->getId(), array_merge(
                     $queries,
-                    empty($lastDocument) ? [
+                    $lastDocument->isEmpty() ? [
                         Query::limit($batchSize),
                     ] : [
                         Query::limit($batchSize),
@@ -4165,7 +4168,7 @@ class Database
 
                 if (count($affectedDocuments) < $batchSize) {
                     break;
-                } elseif ($originalLimit && count($documents) == $originalLimit) {
+                } elseif (! empty($originalLimit) && count($documents) == $originalLimit) {
                     break;
                 }
 
@@ -5377,12 +5380,15 @@ class Database
             }
         }
 
-        $grouped = Query::groupByType($queries);
-        $limit = $grouped['limit'];
-        $cursor = $grouped['cursor'];
+        $limit = Query::getLimitQueries($queries);
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("Cursor document must be from the same Collection.");
+        $cursor = new Document();
+        $cursorQuery = Query::getCursorQueries($queries);
+        if(! is_null($cursorQuery)){
+            $cursor = $cursorQuery->getCursorDocument($cursorQuery);
+            if($cursor->getCollection() !== $collection->getId()){
+                throw new DatabaseException("cursor Document must be from the same Collection.");
+            }
         }
 
         $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $limit, $cursor) {
@@ -5399,15 +5405,15 @@ class Database
             $lastDocument = $cursor;
 
             while (true) {
-                if ($limit && $limit < $batchSize && $limit > 0) {
+                if (! empty($limit) && $limit < $batchSize && $limit > 0) {
                     $batchSize = $limit;
-                } elseif (!empty($limit)) {
+                } elseif (! empty($limit)) {
                     $limit -= $batchSize;
                 }
 
                 $affectedDocuments = $this->silent(fn () => $this->find($collection->getId(), array_merge(
                     $queries,
-                    empty($lastDocument) ? [
+                    $lastDocument->isEmpty() ? [
                         Query::limit($batchSize),
                     ] : [
                         Query::limit($batchSize),
@@ -5602,10 +5608,9 @@ class Database
         $selects = Query::getSelectQueries($queries);
         $limit = Query::getLimitQueries($queries, 25);
         $offset = Query::getOffsetQueries($queries, 0);
-
         $orders = Query::getOrderQueries($queries);
 
-        $grouped = Query::groupByType($queries);
+        //$grouped = Query::groupByType($queries);
         //$orderAttributes = $grouped['orderAttributes'];
         //$orderTypes = $grouped['orderTypes'];
 
@@ -5613,12 +5618,8 @@ class Database
         $cursorDirection = Database::CURSOR_AFTER;
         //$cursorQuery = $context->getCursorQuery();
         $cursorQuery = Query::getCursorQueries($queries);
-
         if (! is_null($cursorQuery)) {
-            /**
-             * @var $cursor Document
-             */
-            $cursor = $cursorQuery->getValue();
+            $cursor = $cursorQuery->getCursorDocument($cursorQuery);
             $cursorDirection = $cursorQuery->getCursorDirection();
 
             if ($cursor->getCollection() !== $collection->getId()) {
@@ -5739,25 +5740,31 @@ class Database
      * @param callable $callback
      * @param array<Query> $queries
      * @param string $forPermission
-     * @throws \Utopia\Database\Exception
      * @return void
+     * @throws Exception
+     * @throws \Utopia\Database\Exception
      */
     public function foreach(string $collection, callable $callback, array $queries = [], string $forPermission = Database::PERMISSION_READ): void
     {
-        $grouped = Query::groupByType($queries);
-        $limitExists = $grouped['limit'] !== null;
-        $limit = $grouped['limit'] ?? 25;
-        $offset = $grouped['offset'];
+        $cursorQuery = Query::getCursorQueries($queries);
+        if (! is_null($cursorQuery)) {
+            $cursor = $cursorQuery->getCursorDocument($cursorQuery);
+            $cursorDirection = $cursorQuery->getCursorDirection();
 
-        $cursor = $grouped['cursor'];
-        $cursorDirection = $grouped['cursorDirection'];
-
-        // Cursor before is not supported
-        if ($cursor !== null && $cursorDirection === Database::CURSOR_BEFORE) {
-            throw new DatabaseException('Cursor ' . Database::CURSOR_BEFORE . ' not supported in this method.');
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                throw new DatabaseException('Cursor ' . Database::CURSOR_BEFORE . ' not supported in this method.');
+            }
         }
 
-        $results = [];
+        $offset = Query::getOffsetQueries($queries);
+
+        $limitExists = true;
+        $limit = Query::getLimitQueries($queries);
+        if (is_null($limit)) {
+            $limit = 25;
+            $limitExists = false;
+        }
+
         $sum = $limit;
         $latestDocument = null;
 
@@ -5771,9 +5778,11 @@ class Database
 
                 array_unshift($newQueries, Query::cursorAfter($latestDocument));
             }
+
             if (!$limitExists) {
                 $newQueries[] = Query::limit($limit);
             }
+
             $results = $this->find($collection, $newQueries, $forPermission);
 
             if (empty($results)) {

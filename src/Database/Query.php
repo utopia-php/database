@@ -814,7 +814,7 @@ class Query
      *     cursorDirection: string|null
      * }
      */
-    public static function groupByType__old(array $queries): array
+    public static function groupByType(array $queries): array
     {
         $filters = [];
         $joins = [];

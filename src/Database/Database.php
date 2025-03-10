@@ -5555,15 +5555,6 @@ class Database
         }
 
         $context = new QueryContext();
-
-        //        if (is_null($context->getLimit())) {
-        //            $context->setLimit(25);
-        //        }
-        //
-        //        if (is_null($context->getOffset())) {
-        //            $context->setOffset(0);
-        //        }
-
         $context->add($collection);
 
         $joins = Query::getJoinQueries($queries);
@@ -5599,6 +5590,11 @@ class Database
             }
         }
 
+        /**
+         * Convert Queries
+         */
+        $queries = self::convertQueries($context, $queries);
+
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
@@ -5629,10 +5625,12 @@ class Database
             $cursor = $this->encode($collection, $cursor)->getArrayCopy();
         }
 
+        //$filters = self::convertQueries($collection, $filters);
+
         /**  @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
-            self::convertQueries($collection, $filters)
+            $filters
         );
 
         $selections = $this->validateSelections($collection, $selects);
@@ -5831,33 +5829,50 @@ class Database
      *
      * @return int
      * @throws DatabaseException
+     * @throws Exception|\Throwable
      */
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        $attributes = $collection->getAttribute('attributes', []);
-        $indexes = $collection->getAttribute('indexes', []);
 
-        if ($this->validate) {
-            $validator = new DocumentsValidatorOiginal(
-                $attributes,
-                $indexes,
-                $this->maxQueryValues,
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-            );
-            if (!$validator->isValid($queries)) {
-                throw new QueryException($validator->getDescription());
-            }
+        /**
+         * @var $collection Document
+         */
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
         }
+
+        $context = new QueryContext();
+        $context->add($collection);
 
         $authorization = new Authorization(self::PERMISSION_READ);
         if ($authorization->isValid($collection->getRead())) {
             $skipAuth = true;
         }
 
+        if ($this->validate) {
+            $validator = new DocumentsValidator(
+                $context,
+                maxValuesCount: $this->maxQueryValues,
+                minAllowedDate: $this->adapter->getMinDateTime(),
+                maxAllowedDate: $this->adapter->getMaxDateTime()
+            );
+
+            if (!$validator->isValid($queries)) {
+                throw new QueryException($validator->getDescription());
+            }
+        }
+
+        /**
+         * We allow only filters
+         */
         $queries = Query::getFilterQueries($queries);
-        $queries = self::convertQueries($collection, $queries);
+
+        /**
+         * Convert Queries
+         */
+        $queries = self::convertQueries($context, $queries);
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
@@ -5879,29 +5894,53 @@ class Database
      *
      * @return int|float
      * @throws DatabaseException
+     * @throws Exception
      */
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        $attributes = $collection->getAttribute('attributes', []);
-        $indexes = $collection->getAttribute('indexes', []);
+
+        /**
+         * @var $collection Document
+         */
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $context = new QueryContext();
+        $context->add($collection);
+
+        $authorization = new Authorization(self::PERMISSION_READ);
+        if ($authorization->isValid($collection->getRead())) {
+            $skipAuth = true;
+        }
 
         if ($this->validate) {
-            $validator = new DocumentsValidatorOiginal(
-                $attributes,
-                $indexes,
-                $this->maxQueryValues,
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
+            $validator = new DocumentsValidator(
+                $context,
+                maxValuesCount: $this->maxQueryValues,
+                minAllowedDate: $this->adapter->getMinDateTime(),
+                maxAllowedDate: $this->adapter->getMaxDateTime()
             );
+
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
         }
 
-        $queries = self::convertQueries($collection, $queries);
+        /**
+         * We allow only filters
+         */
+        $queries = Query::getFilterQueries($queries);
 
-        $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
+        /**
+         * Convert Queries
+         */
+        $queries = self::convertQueries($context, $queries);
+
+        $getCount = fn () => $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
+        $sum = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);
 
@@ -6269,47 +6308,114 @@ class Database
         return $this->adapter->getLimitForIndexes() - $this->adapter->getCountOfDefaultIndexes();
     }
 
+//    /**
+//     * @param Document $collection
+//     * @param array<Query> $queries
+//     * @return array<Query>
+//     * @throws QueryException
+//     * @throws Exception
+//     */
+//    public static function convertQueries(Document $collection, array $queries): array
+//    {
+//        $attributes = $collection->getAttribute('attributes', []);
+//
+//        foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+//            $attributes[] = new Document($attribute);
+//        }
+//
+//        foreach ($attributes as $attribute) {
+//            foreach ($queries as $query) {
+//                if ($query->getAttribute() === $attribute->getId()) {
+//                    $query->setOnArray($attribute->getAttribute('array', false));
+//                }
+//            }
+//
+//            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
+//                foreach ($queries as $index => $query) {
+//                    if ($query->getAttribute() === $attribute->getId()) {
+//                        $values = $query->getValues();
+//                        foreach ($values as $valueIndex => $value) {
+//                            try {
+//                                $values[$valueIndex] = DateTime::setTimezone($value);
+//                            } catch (\Throwable $e) {
+//                                throw new QueryException($e->getMessage(), $e->getCode(), $e);
+//                            }
+//                        }
+//                        $query->setValues($values);
+//                        $queries[$index] = $query;
+//                    }
+//                }
+//            }
+//        }
+//
+//        return $queries;
+//    }
+
     /**
-     * @param Document $collection
      * @param array<Query> $queries
      * @return array<Query>
-     * @throws QueryException
      * @throws Exception
      */
-    public static function convertQueries(Document $collection, array $queries): array
+    public static function convertQueries(QueryContext $context, array $queries): array
     {
+        foreach ($queries as &$query){
+            if ($query->isNested() || $query->isJoin()){
+                $values = self::convertQueries($context, $query->getValues());
+                $query->setValues($values);
+            }
+
+            $query = self::convertQuery($context, $query);
+        }
+
+        return $queries;
+    }
+
+    /**
+     * @throws Exception
+     */
+    public static function convertQuery(QueryContext $context, Query $query):Query
+    {
+        var_dump('convertQuery convertQuery convertQuery convertQuery convertQuery convertQuery');
+        $collection = clone $context->getCollectionByAlias($query->getAlias());
+
+        if ($collection->isEmpty()) {
+            throw new \Exception('Unknown Alias context');
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
             $attributes[] = new Document($attribute);
         }
 
+        $schema = [];
         foreach ($attributes as $attribute) {
-            foreach ($queries as $query) {
-                if ($query->getAttribute() === $attribute->getId()) {
-                    $query->setOnArray($attribute->getAttribute('array', false));
-                }
-            }
+            $key = $attribute->getAttribute('key', $attribute->getId());
+            $schema[$key] = $attribute;
+        }
+
+        /**
+         * @var $attribute Document
+         */
+        $attribute = $schema[$query->getAttribute()] ?? new Document();
+
+        if(! $attribute->isEmpty()){
+            $query->setOnArray($attribute->getAttribute('array', false));
 
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
-                foreach ($queries as $index => $query) {
-                    if ($query->getAttribute() === $attribute->getId()) {
-                        $values = $query->getValues();
-                        foreach ($values as $valueIndex => $value) {
-                            try {
-                                $values[$valueIndex] = DateTime::setTimezone($value);
-                            } catch (\Throwable $e) {
-                                throw new QueryException($e->getMessage(), $e->getCode(), $e);
-                            }
-                        }
-                        $query->setValues($values);
-                        $queries[$index] = $query;
+                $values = $query->getValues();
+                foreach ($values as $valueIndex => $value) {
+                    try {
+                        $values[$valueIndex] = DateTime::setTimezone($value);
+                    } catch (\Throwable $e) {
+                        throw new QueryException($e->getMessage(), $e->getCode(), $e);
                     }
                 }
+                $query->setValues($values);
             }
         }
 
-        return $queries;
+        return $query;
     }
 
     /**

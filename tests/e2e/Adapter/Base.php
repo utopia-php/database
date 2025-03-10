@@ -7322,6 +7322,9 @@ abstract class Base extends TestCase
             'Tue Dec 31 2024',
         ];
 
+        /**
+         * ConvertQueries method will fix the dates
+         */
         foreach ($validDates as $date) {
             $docs = static::getDatabase()->find('datetime', [
                 Query::equal('$createdAt', [$date])

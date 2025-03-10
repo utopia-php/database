@@ -98,12 +98,6 @@ class Query
         self::TYPE_OR,
     ];
 
-//    protected const JOIN_TYPES = [
-//        self::TYPE_INNER_JOIN,
-//        self::TYPE_LEFT_JOIN,
-//        self::TYPE_RIGHT_JOIN,
-//    ];
-
     protected string $method = '';
 
     protected string $collection = '';
@@ -912,12 +906,24 @@ class Query
             return true;
         }
 
-//        if (in_array($this->getMethod(), self::JOIN_TYPES)) {
-//            return true;
-//        }
+        return false;
+    }
+
+    /**
+     * Is this query able to contain other queries
+     */
+    public function isJoin(): bool
+    {
+        $types = [self::TYPE_INNER_JOIN, self::TYPE_LEFT_JOIN, self::TYPE_RIGHT_JOIN];
+
+        if (in_array($this->getMethod(), $types)) {
+            return true;
+        }
 
         return false;
     }
+
+
 
     public function onArray(): bool
     {

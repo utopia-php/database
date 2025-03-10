@@ -2151,7 +2151,7 @@ class MariaDB extends SQL
         // Allow order type without any order attribute, fallback to the natural order (_id)
         // Because if we have 2 movies with same year 2000 order by year, _id for pagination
 
-        if (!$hasIdAttribute){
+        if (!$hasIdAttribute) {
             $order = Database::ORDER_ASC;
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -2161,19 +2161,19 @@ class MariaDB extends SQL
             $orders[] = "{$this->quote($defaultAlias)}.{$this->quote('_id')} ".$order;
         }
 
-//        // original code:
-//        if (!$hasIdAttribute) {
-//            if (empty($orderAttributes) && !empty($orderTypes)) {
-//                $order = $orderTypes[0] ?? Database::ORDER_ASC;
-//                if ($cursorDirection === Database::CURSOR_BEFORE) {
-//                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-//                }
-//
-//                $orders[] = "{$defaultAlias}._id " . $this->filter($order);
-//            } else {
-//                $orders[] = "{$defaultAlias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
-//            }
-//        }
+        //        // original code:
+        //        if (!$hasIdAttribute) {
+        //            if (empty($orderAttributes) && !empty($orderTypes)) {
+        //                $order = $orderTypes[0] ?? Database::ORDER_ASC;
+        //                if ($cursorDirection === Database::CURSOR_BEFORE) {
+        //                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+        //                }
+        //
+        //                $orders[] = "{$defaultAlias}._id " . $this->filter($order);
+        //            } else {
+        //                $orders[] = "{$defaultAlias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+        //            }
+        //        }
 
         $sqlJoin = '';
         foreach ($joins as $join) {
@@ -2185,7 +2185,7 @@ class MariaDB extends SQL
 
             if (Authorization::$status) {
                 //$joinCollection = $context->getCollectionByAlias($join->getAlias());
-                $permissions = 'AND '.$this->getSQLPermissionsCondition($joinCollectionName , $roles, $join->getAlias(), $forPermission);
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($joinCollectionName, $roles, $join->getAlias(), $forPermission);
             }
 
             $sqlJoin .= "INNER JOIN {$this->getSQLTable($joinCollectionName)} AS {$this->quote($join->getAlias())}

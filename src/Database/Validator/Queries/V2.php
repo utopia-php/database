@@ -256,7 +256,7 @@ class V2 extends Validator
                         break;
                     case Query::TYPE_CURSOR_AFTER:
                     case Query::TYPE_CURSOR_BEFORE:
-                        $validator = new Cursor;
+                        $validator = new Cursor();
                         if (! $validator->isValid($query)) {
                             throw new \Exception($validator->getDescription());
                         }
@@ -363,7 +363,7 @@ class V2 extends Validator
      */
     protected function validateAlias(Query $query): void
     {
-        $validator = new AliasValidator;
+        $validator = new AliasValidator();
 
         if (! $validator->isValid($query->getAlias())) {
             throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$validator->getDescription());
@@ -412,19 +412,19 @@ class V2 extends Validator
                     break;
 
                 case Database::VAR_INTEGER:
-                    $validator = new Integer;
+                    $validator = new Integer();
                     break;
 
                 case Database::VAR_FLOAT:
-                    $validator = new FloatValidator;
+                    $validator = new FloatValidator();
                     break;
 
                 case Database::VAR_BOOLEAN:
-                    $validator = new Boolean;
+                    $validator = new Boolean();
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator;
+                    $validator = new DatetimeValidator();
                     break;
 
                 case Database::VAR_RELATIONSHIP:

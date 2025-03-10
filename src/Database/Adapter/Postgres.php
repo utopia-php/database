@@ -1927,7 +1927,7 @@ class Postgres extends SQL
         // Allow order type without any order attribute, fallback to the natural order (_id)
         // Because if we have 2 movies with same year 2000 order by year, _id for pagination
 
-        if (!$hasIdAttribute){
+        if (!$hasIdAttribute) {
             $order = Database::ORDER_ASC;
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1937,19 +1937,19 @@ class Postgres extends SQL
             $orders[] = "{$this->quote($defaultAlias)}.{$this->quote('_id')} ".$order;
         }
 
-//        // original code:
-//        if (!$hasIdAttribute) {
-//            if (empty($orderAttributes) && !empty($orderTypes)) {
-//                $order = $orderTypes[0] ?? Database::ORDER_ASC;
-//                if ($cursorDirection === Database::CURSOR_BEFORE) {
-//                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-//                }
-//
-//                $orders[] = "{$defaultAlias}._id " . $this->filter($order);
-//            } else {
-//                $orders[] = "{$defaultAlias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
-//            }
-//        }
+        //        // original code:
+        //        if (!$hasIdAttribute) {
+        //            if (empty($orderAttributes) && !empty($orderTypes)) {
+        //                $order = $orderTypes[0] ?? Database::ORDER_ASC;
+        //                if ($cursorDirection === Database::CURSOR_BEFORE) {
+        //                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+        //                }
+        //
+        //                $orders[] = "{$defaultAlias}._id " . $this->filter($order);
+        //            } else {
+        //                $orders[] = "{$defaultAlias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+        //            }
+        //        }
 
         $sqlJoin = '';
         foreach ($joins as $join) {
@@ -1961,7 +1961,7 @@ class Postgres extends SQL
 
             if (Authorization::$status) {
                 //$joinCollection = $context->getCollectionByAlias($join->getAlias());
-                $permissions = 'AND '.$this->getSQLPermissionsCondition($joinCollectionName , $roles, $join->getAlias(), $forPermission);
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($joinCollectionName, $roles, $join->getAlias(), $forPermission);
             }
 
             $sqlJoin .= "INNER JOIN {$this->getSQLTable($joinCollectionName)} AS {$this->quote($join->getAlias())}
@@ -2012,24 +2012,24 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
-//        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
-//            $attribute = $orderAttributes[0];
-//
-//            $attribute = match ($attribute) {
-//                '_uid' => '$id',
-//                '_id' => '$internalId',
-//                '_tenant' => '$tenant',
-//                '_createdAt' => '$createdAt',
-//                '_updatedAt' => '$updatedAt',
-//                default => $attribute
-//            };
-//
-//            if (\is_null($cursor[$attribute] ?? null)) {
-//                throw new DatabaseException("Order attribute '{$attribute}' is empty");
-//            }
-//
-//            $binds[':cursor'] = $cursor[$attribute];
-//        }
+        //        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+        //            $attribute = $orderAttributes[0];
+        //
+        //            $attribute = match ($attribute) {
+        //                '_uid' => '$id',
+        //                '_id' => '$internalId',
+        //                '_tenant' => '$tenant',
+        //                '_createdAt' => '$createdAt',
+        //                '_updatedAt' => '$updatedAt',
+        //                default => $attribute
+        //            };
+        //
+        //            if (\is_null($cursor[$attribute] ?? null)) {
+        //                throw new DatabaseException("Order attribute '{$attribute}' is empty");
+        //            }
+        //
+        //            $binds[':cursor'] = $cursor[$attribute];
+        //        }
 
         try {
             $stmt = $this->getPDO()->prepare($sql);
@@ -2441,16 +2441,16 @@ class Postgres extends SQL
         return "\"{$this->getDatabase()}\".";
     }
 
-//    /**
-//     * Get SQL table
-//     *
-//     * @param string $name
-//     * @return string
-//     */
-//    protected function getSQLTable(string $name): string
-//    {
-//        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
-//    }
+    //    /**
+    //     * Get SQL table
+    //     *
+    //     * @param string $name
+    //     * @return string
+    //     */
+    //    protected function getSQLTable(string $name): string
+    //    {
+    //        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
+    //    }
 
     /**
      * Get PDO Type

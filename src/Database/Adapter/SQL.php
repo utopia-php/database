@@ -13,8 +13,6 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
-use Utopia\Database\QueryContext;
-use Utopia\Database\Validator\Authorization;
 
 abstract class SQL extends Adapter
 {

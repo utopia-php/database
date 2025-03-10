@@ -1082,7 +1082,7 @@ class Mongo extends Adapter
 
         // todo: build this 2 attributes to preserve original logic...
         $orderAttributes  = [];
-        $orderTypes= [];
+        $orderTypes = [];
 
         $collection = $context->getCollections()[0]->getId();
 

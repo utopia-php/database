@@ -8,9 +8,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
-use Utopia\Database\Validator\Query\Cursor;
-use Utopia\Database\Validator\Query\Limit;
-use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 
 class IndexedQueriesTest extends TestCase

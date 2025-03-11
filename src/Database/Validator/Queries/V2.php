@@ -20,7 +20,7 @@ use Utopia\Validator\Text;
 
 class V2 extends Validator
 {
-    protected string $message = 'Invalid queries';
+    protected string $message = 'Invalid query';
 
     protected array $schema = [];
 
@@ -267,8 +267,7 @@ class V2 extends Validator
 
                         break;
                     default:
-                        throw new \Exception('Invalid query: Method not found '.$method); // Remove this line
-                        throw new \Exception('Invalid query: Method not found.');
+                        throw new \Exception('Invalid query: Method not found ');
                 }
             }
         } catch (\Throwable $e) {
@@ -498,6 +497,7 @@ class V2 extends Validator
 
         foreach ($query->getValues() as $attribute) {
             $alias = Query::DEFAULT_ALIAS; // todo: Fix this
+
             var_dump($attribute);
 
             /**

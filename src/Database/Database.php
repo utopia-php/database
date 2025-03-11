@@ -4120,14 +4120,17 @@ class Database
                     $limit -= $batchSize;
                 }
 
-                $array = empty($lastDocument) ?
-                    [Query::limit($batchSize)] :
-                    [Query::limit($batchSize), Query::cursorAfter($lastDocument)]
-                ;
+                $new = [
+                    Query::limit($batchSize)
+                ];
+
+                if(! empty($lastDocument)){
+                    $new[] = Query::cursorAfter($lastDocument);
+                }
 
                 $affectedDocuments = $this->silent(fn () => $this->find(
                     $collection->getId(),
-                    array_merge($array, $queries),
+                    array_merge($new, $queries),
                     forPermission: Database::PERMISSION_UPDATE
                 ));
 
@@ -5404,14 +5407,17 @@ class Database
                     $limit -= $batchSize;
                 }
 
-                $array = empty($lastDocument) ?
-                    [Query::limit($batchSize)] :
-                    [Query::limit($batchSize), Query::cursorAfter($lastDocument)]
-                ;
+                $new = [
+                    Query::limit($batchSize)
+                ];
+
+                if (! empty($lastDocument)) {
+                    $new[] = Query::cursorAfter($lastDocument);
+                }
 
                 $affectedDocuments = $this->silent(fn () => $this->find(
                     $collection->getId(),
-                    array_merge($array, $queries),
+                    array_merge($new, $queries),
                     forPermission: Database::PERMISSION_DELETE
                 ));
 
@@ -5455,7 +5461,7 @@ class Database
             }
 
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
-                $this->adapter->deleteDocuments(
+                $this->adapter->deleteDocuments( // Do we need to check $skipAuth like in updateDocuments?
                     $collection->getId(),
                     array_map(fn ($document) => $document->getId(), $chunk)
                 );

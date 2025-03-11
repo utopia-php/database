@@ -4052,6 +4052,15 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+
+        $authorization = new Authorization(self::PERMISSION_UPDATE);
+        $skipAuth = $authorization->isValid($collection->getUpdate());
+
+        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+            throw new AuthorizationException($authorization->getDescription());
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -4098,18 +4107,8 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
-        $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates, $limit, $cursor) {
+        $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates, $limit, $cursor, $authorization, $skipAuth) {
             $documents = [];
-
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
-
-            $authorization = new Authorization(self::PERMISSION_UPDATE);
-            $skipAuth = $authorization->isValid($collection->getUpdate());
-
-            if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-                throw new AuthorizationException($authorization->getDescription());
-            }
-
             $originalLimit = $limit;
             $lastDocument = $cursor;
 
@@ -4121,15 +4120,16 @@ class Database
                     $limit -= $batchSize;
                 }
 
-                $affectedDocuments = $this->silent(fn () => $this->find($collection->getId(), array_merge(
-                    $queries,
-                    empty($lastDocument) ? [
-                        Query::limit($batchSize),
-                    ] : [
-                        Query::limit($batchSize),
-                        Query::cursorAfter($lastDocument),
-                    ]
-                ), forPermission: Database::PERMISSION_UPDATE));
+                $array = empty($lastDocument) ?
+                    [Query::limit($batchSize)] :
+                    [Query::limit($batchSize), Query::cursorAfter($lastDocument)]
+                ;
+
+                $affectedDocuments = $this->silent(fn () => $this->find(
+                    $collection->getId(),
+                    array_merge($array, $queries),
+                    forPermission: Database::PERMISSION_UPDATE
+                ));
 
                 if (empty($affectedDocuments)) {
                     break;
@@ -5359,6 +5359,14 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $authorization = new Authorization(self::PERMISSION_DELETE);
+        $skipAuth = $authorization->isValid($collection->getDelete());
+
+        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+            throw new AuthorizationException($authorization->getDescription());
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -5385,15 +5393,7 @@ class Database
         }
 
         $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $limit, $cursor) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            $authorization = new Authorization(self::PERMISSION_DELETE);
-            $skipAuth = $authorization->isValid($collection->getDelete());
             $documents = [];
-
-            if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-                throw new AuthorizationException($authorization->getDescription());
-            }
-
             $originalLimit = $limit;
             $lastDocument = $cursor;
 
@@ -5404,15 +5404,16 @@ class Database
                     $limit -= $batchSize;
                 }
 
-                $affectedDocuments = $this->silent(fn () => $this->find($collection->getId(), array_merge(
-                    $queries,
-                    empty($lastDocument) ? [
-                        Query::limit($batchSize),
-                    ] : [
-                        Query::limit($batchSize),
-                        Query::cursorAfter($lastDocument),
-                    ]
-                ), forPermission: Database::PERMISSION_DELETE));
+                $array = empty($lastDocument) ?
+                    [Query::limit($batchSize)] :
+                    [Query::limit($batchSize), Query::cursorAfter($lastDocument)]
+                ;
+
+                $affectedDocuments = $this->silent(fn () => $this->find(
+                    $collection->getId(),
+                    array_merge($array, $queries),
+                    forPermission: Database::PERMISSION_DELETE
+                ));
 
                 if (empty($affectedDocuments)) {
                     break;

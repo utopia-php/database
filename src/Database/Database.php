@@ -4124,7 +4124,7 @@ class Database
                     Query::limit($batchSize)
                 ];
 
-                if(! empty($lastDocument)){
+                if (! empty($lastDocument)) {
                     $new[] = Query::cursorAfter($lastDocument);
                 }
 

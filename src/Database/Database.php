@@ -5362,16 +5362,15 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        $attributes = $collection->getAttribute('attributes', []);
-        $indexes = $collection->getAttribute('indexes', []);
+        $context = new QueryContext();
+        $context->add($collection);
 
         if ($this->validate) {
-            $validator = new DocumentsValidatorOiginal(
-                $attributes,
-                $indexes,
-                $this->maxQueryValues,
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime()
+            $validator = new DocumentsValidator(
+                $context,
+                maxValuesCount: $this->maxQueryValues,
+                minAllowedDate: $this->adapter->getMinDateTime(),
+                maxAllowedDate: $this->adapter->getMaxDateTime()
             );
 
             if (!$validator->isValid($queries)) {

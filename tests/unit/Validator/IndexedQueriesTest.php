@@ -7,17 +7,31 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Query\Cursor;
-use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
-use Utopia\Database\Validator\Query\Order;
+use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 
 class IndexedQueriesTest extends TestCase
 {
+    protected Document $collection;
+
+    /**
+     * @throws Exception
+     * @throws Exception\Query
+     */
     public function setUp(): void
     {
+        $collection = new Document([
+            '$id' => Database::METADATA,
+            '$collection' => Database::METADATA,
+            'name' => 'movies',
+            'attributes' => [],
+            'indexes' => [],
+        ]);
+
+        $this->collection = $collection;
     }
 
     public function tearDown(): void
@@ -26,45 +40,58 @@ class IndexedQueriesTest extends TestCase
 
     public function testEmptyQueries(): void
     {
-        $validator = new IndexedQueries();
+        $context = new QueryContext();
+        $context->add($this->collection);
+
+        $validator = new DocumentsValidator($context);
 
         $this->assertEquals(true, $validator->isValid([]));
     }
 
     public function testInvalidQuery(): void
     {
-        $validator = new IndexedQueries();
+        $context = new QueryContext();
+        $context->add($this->collection);
+
+        $validator = new DocumentsValidator($context);
 
         $this->assertEquals(false, $validator->isValid(["this.is.invalid"]));
     }
 
     public function testInvalidMethod(): void
     {
-        $validator = new IndexedQueries();
-        $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
+        $context = new QueryContext();
+        $context->add($this->collection);
 
-        $validator = new IndexedQueries([], [], [new Limit()]);
+        $validator = new DocumentsValidator($context);
+
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
     }
 
     public function testInvalidValue(): void
     {
-        $validator = new IndexedQueries([], [], [new Limit()]);
+        $context = new QueryContext();
+        $context->add($this->collection);
+
+        $validator = new DocumentsValidator($context);
+
         $this->assertEquals(false, $validator->isValid(['limit(-1)']));
     }
 
     public function testValid(): void
     {
-        $attributes = [
+        $collection = $this->collection;
+
+        $collection->setAttribute('attributes', [
             new Document([
                 '$id' => 'name',
                 'key' => 'name',
                 'type' => Database::VAR_STRING,
                 'array' => false,
             ]),
-        ];
+        ]);
 
-        $indexes = [
+        $collection->setAttribute('indexes', [
             new Document([
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['name'],
@@ -73,19 +100,13 @@ class IndexedQueriesTest extends TestCase
                 'type' => Database::INDEX_FULLTEXT,
                 'attributes' => ['name'],
             ]),
-        ];
+        ]);
 
-        $validator = new IndexedQueries(
-            $attributes,
-            $indexes,
-            [
-                new Cursor(),
-                new Filter($attributes),
-                new Limit(),
-                new Offset(),
-                new Order($attributes)
-            ]
-        );
+        $context = new QueryContext();
+
+        $context->add($this->collection);
+
+        $validator = new DocumentsValidator($context);
 
         $query = Query::cursorAfter(new Document(['$id' => 'abc']));
         $this->assertEquals(true, $validator->isValid([$query]));
@@ -123,32 +144,28 @@ class IndexedQueriesTest extends TestCase
 
     public function testMissingIndex(): void
     {
-        $attributes = [
+        $collection = $this->collection;
+
+        $collection->setAttribute('attributes', [
             new Document([
                 'key' => 'name',
                 'type' => Database::VAR_STRING,
                 'array' => false,
             ]),
-        ];
+        ]);
 
-        $indexes = [
+        $collection->setAttribute('indexes', [
             new Document([
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['name'],
             ]),
-        ];
+        ]);
 
-        $validator = new IndexedQueries(
-            $attributes,
-            $indexes,
-            [
-                new Cursor(),
-                new Filter($attributes),
-                new Limit(),
-                new Offset(),
-                new Order($attributes)
-            ]
-        );
+        $context = new QueryContext();
+
+        $context->add($this->collection);
+
+        $validator = new DocumentsValidator($context);
 
         $query = Query::equal('dne', ['value']);
         $this->assertEquals(false, $validator->isValid([$query]));
@@ -169,7 +186,9 @@ class IndexedQueriesTest extends TestCase
 
     public function testTwoAttributesFulltext(): void
     {
-        $attributes = [
+        $collection = $this->collection;
+
+        $collection->setAttribute('attributes', [
             new Document([
                 '$id' => 'ft1',
                 'key' => 'ft1',
@@ -182,26 +201,20 @@ class IndexedQueriesTest extends TestCase
                 'type' => Database::VAR_STRING,
                 'array' => false,
             ]),
-        ];
+        ]);
 
-        $indexes = [
+        $collection->setAttribute('indexes', [
             new Document([
                 'type' => Database::INDEX_FULLTEXT,
                 'attributes' => ['ft1','ft2'],
             ]),
-        ];
+        ]);
 
-        $validator = new IndexedQueries(
-            $attributes,
-            $indexes,
-            [
-                new Cursor(),
-                new Filter($attributes),
-                new Limit(),
-                new Offset(),
-                new Order($attributes)
-            ]
-        );
+        $context = new QueryContext();
+
+        $context->add($this->collection);
+
+        $validator = new DocumentsValidator($context);
 
         $this->assertEquals(false, $validator->isValid([Query::search('ft1', 'value')]));
     }

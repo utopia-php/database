@@ -6,15 +6,14 @@ use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries\Documents;
+use Utopia\Database\QueryContext;
+use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 
 class QueryTest extends TestCase
 {
-    /**
-     * @var array<Document>
-     */
-    protected array $attributes;
+    protected QueryContext $context;
 
     /**
      * @throws Exception
@@ -94,9 +93,28 @@ class QueryTest extends TestCase
             ],
         ];
 
+        $collection = new Document([
+            '$id' => Database::METADATA,
+            '$collection' => Database::METADATA,
+            'name' => 'movies',
+            'attributes' => [],
+            'indexes' => [],
+        ]);
+
         foreach ($attributes as $attribute) {
-            $this->attributes[] = new Document($attribute);
+            $collection->setAttribute(
+                'attributes',
+                new Document($attribute),
+                Document::SET_TYPE_APPEND
+            );
         }
+
+        $collection->setAttribute('attributes', $attributes);
+
+        $context = new QueryContext();
+        $context->add($collection);
+
+        $this->context = $context;
     }
 
     public function tearDown(): void
@@ -108,7 +126,7 @@ class QueryTest extends TestCase
      */
     public function testQuery(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man', 'Ant Man'])]));
         $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man'])]));

@@ -79,8 +79,8 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::equal('', ['v'])));
         $this->assertFalse($this->validator->isValid(Query::orderAsc('string')));
         $this->assertFalse($this->validator->isValid(Query::orderDesc('string')));
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSOR_AFTER, values: ['asdf'])));
-        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_CURSOR_BEFORE, values: ['asdf'])));
+        $this->assertFalse($this->validator->isValid(Query::cursorAfter(new Document(['asdf']))));
+        $this->assertFalse($this->validator->isValid(Query::cursorBefore(new Document(['asdf']))));
         $this->assertFalse($this->validator->isValid(Query::contains('integer', ['super'])));
         $this->assertFalse($this->validator->isValid(Query::equal('integer_array', [100,-1])));
         $this->assertFalse($this->validator->isValid(Query::contains('integer_array', [10.6])));

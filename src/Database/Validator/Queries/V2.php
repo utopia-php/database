@@ -354,11 +354,11 @@ class V2 extends Validator
 
         $collection = $this->context->getCollectionByAlias($alias);
         if ($collection->isEmpty()) {
-            throw new \Exception('Unknown Alias context');
+            throw new \Exception('Invalid query: Unknown Alias context');
         }
 
         if (! isset($this->schema[$collection->getId()][$attributeId])) {
-            throw new \Exception('Attribute not found in schema: '.$attributeId);
+            throw new \Exception('Invalid query: Attribute not found in schema: '.$attributeId);
         }
     }
 

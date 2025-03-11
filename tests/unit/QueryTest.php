@@ -325,7 +325,6 @@ class QueryTest extends TestCase
          * @var $query0 Query
          */
         $query1 = $query->getValues()[1];
-        var_dump($query1);
         $this->assertEquals(Query::TYPE_EQUAL, $query1->getMethod());
         $this->assertEquals('u', $query1->getAlias());
         $this->assertEquals('id', $query1->getAttribute());

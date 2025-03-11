@@ -4053,16 +4053,15 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
-        $attributes = $collection->getAttribute('attributes', []);
-        $indexes = $collection->getAttribute('indexes', []);
+        $context = new QueryContext();
+        $context->add($collection);
 
         if ($this->validate) {
-            $validator = new DocumentsValidatorOiginal(
-                $attributes,
-                $indexes,
-                $this->maxQueryValues,
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
+            $validator = new DocumentsValidator(
+                $context,
+                maxValuesCount: $this->maxQueryValues,
+                minAllowedDate: $this->adapter->getMinDateTime(),
+                maxAllowedDate: $this->adapter->getMaxDateTime()
             );
 
             if (!$validator->isValid($queries)) {
@@ -5568,11 +5567,11 @@ class Database
 
         $authorization = new Authorization(self::PERMISSION_READ);
 
-        foreach ($context->getCollections() as $c) {
-            $documentSecurity = $c->getAttribute('documentSecurity', false);
-            $skipAuth = $authorization->isValid($c->getPermissionsByType($forPermission));
+        foreach ($context->getCollections() as $_collection) {
+            $documentSecurity = $_collection->getAttribute('documentSecurity', false);
+            $skipAuth = $authorization->isValid($_collection->getPermissionsByType($forPermission));
 
-            if (!$skipAuth && !$documentSecurity && $c->getId() !== self::METADATA) {
+            if (!$skipAuth && !$documentSecurity && $_collection->getId() !== self::METADATA) {
                 throw new AuthorizationException($authorization->getDescription());
             }
         }
@@ -5708,7 +5707,7 @@ class Database
             }
         }
 
-        // unset($query);
+        unset($query);
 
         // Remove internal attributes which are not queried
         foreach ($queries as $query) {
@@ -6357,13 +6356,15 @@ class Database
      */
     public static function convertQueries(QueryContext $context, array $queries): array
     {
-        foreach ($queries as &$query) {
+        foreach ($queries as $i => $query) {
             if ($query->isNested() || $query->isJoin()) {
                 $values = self::convertQueries($context, $query->getValues());
                 $query->setValues($values);
             }
 
             $query = self::convertQuery($context, $query);
+
+            $queries[$i] = $query;
         }
 
         return $queries;
@@ -6392,15 +6393,10 @@ class Database
         $attribute = new Document();
 
         foreach ($attributes as $attr) {
-            if($attr->getId() === $query->getAttribute()){
+            if ($attr->getId() === $query->getAttribute()) {
                 $attribute = $attr;
             }
         }
-
-//        /**
-//         * @var $attribute Document
-//         */
-       // $attribute = $schema[$query->getAttribute()] ?? new Document();
 
         if (! $attribute->isEmpty()) {
             $query->setOnArray($attribute->getAttribute('array', false));

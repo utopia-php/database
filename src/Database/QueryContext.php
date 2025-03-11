@@ -10,25 +10,8 @@ class QueryContext
 
     protected array $aliases = [];
 
-    //protected array $queries = [];
-
-    protected array $orders = [];
-
-    protected array $selects = [];
-
-    protected array $filters = [];
-
-    protected array $joins = [];
-
-    protected ?int $limit = null;
-
-    protected ?int $offset = null;
-
-    protected ?Query $cursor = null;
-
     public function __construct()
     {
-
     }
 
     /**

@@ -117,6 +117,10 @@ class V2 extends Validator
                 throw new \Exception('Queries must be an array');
             }
 
+            if (! array_is_list($value)) {
+                throw new \Exception('Queries must be an array list');
+            }
+
             if ($this->maxQueriesCount > 0 && \count($value) > $this->maxQueriesCount) {
                 throw new \Exception('Queries count is greater than '.$this->maxQueriesCount);
             }

@@ -5395,7 +5395,7 @@ class Database
             throw new DatabaseException("Cursor document must be from the same Collection.");
         }
 
-        $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $limit, $cursor) {
+        $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $limit, $cursor, $skipAuth, $authorization) {
             $documents = [];
             $originalLimit = $limit;
             $lastDocument = $cursor;
@@ -5461,10 +5461,12 @@ class Database
             }
 
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
-                $this->adapter->deleteDocuments( // Do we need to check $skipAuth like in updateDocuments?
+                $callback = fn () => $this->adapter->deleteDocuments(
                     $collection->getId(),
                     array_map(fn ($document) => $document->getId(), $chunk)
                 );
+
+                $skipAuth ? $authorization->skip($callback) : $callback();
             }
 
             return $documents;

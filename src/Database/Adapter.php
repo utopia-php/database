@@ -391,6 +391,11 @@ abstract class Adapter
     abstract public function ping(): bool;
 
     /**
+     * Reconnect Database
+     */
+    abstract public function reconnect(): void;
+
+    /**
      * Create Database
      *
      * @param string $name
@@ -604,13 +609,12 @@ abstract class Adapter
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param int $batchSize
      *
      * @return array<Document>
      *
      * @throws DatabaseException
      */
-    abstract public function createDocuments(string $collection, array $documents, int $batchSize): array;
+    abstract public function createDocuments(string $collection, array $documents): array;
 
     /**
      * Update Document
@@ -645,14 +649,12 @@ abstract class Adapter
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
-     * @param int $batchSize
      * @return array<Document>
      */
     abstract public function createOrUpdateDocuments(
         string $collection,
         string $attribute,
-        array $documents,
-        int $batchSize
+        array $documents
     ): array;
 
     /**
@@ -906,6 +908,8 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForCacheSkipOnFailure(): bool;
+
+    abstract public function getSupportForReconnection(): bool;
 
     /**
      * Get current attribute count from collection document

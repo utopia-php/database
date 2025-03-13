@@ -100,6 +100,11 @@ class Mongo extends Adapter
         return $this->getClient()->query(['ping' => 1])->ok ?? false;
     }
 
+    public function reconnect(): void
+    {
+        $this->client->connect();
+    }
+
     /**
      * Create Database
      *
@@ -747,18 +752,28 @@ class Mongo extends Adapter
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param int $batchSize
      *
      * @return array<Document>
      *
      * @throws Duplicate
      */
-    public function createDocuments(string $collection, array $documents, int $batchSize): array
+    public function createDocuments(string $collection, array $documents): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $records = [];
+        $hasInternalId = null;
+        $documents = array_map(fn ($doc) => clone $doc, $documents);
+
         foreach ($documents as $document) {
+            $internalId = $document->getInternalId();
+
+            if ($hasInternalId === null) {
+                $hasInternalId = !empty($internalId);
+            } elseif ($hasInternalId == empty($internalId)) {
+                throw new DatabaseException('All documents must have an internalId if one is set');
+            }
+
             $document->removeAttribute('$internalId');
 
             if ($this->sharedTables) {
@@ -767,6 +782,10 @@ class Mongo extends Adapter
 
             $record = $this->replaceChars('$', '_', (array)$document);
             $record = $this->timeToMongo($record);
+
+            if (!empty($internalId)) {
+                $record['_id'] = $internalId;
+            }
 
             $records[] = $this->removeNullKeys($record);
         }
@@ -895,10 +914,9 @@ class Mongo extends Adapter
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
-     * @param int $batchSize
      * @return array<Document>
      */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents, int $batchSize): array
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
     {
         return $documents;
     }
@@ -1826,6 +1844,11 @@ class Mongo extends Adapter
     }
 
     public function getSupportForUpserts(): bool
+    {
+        return false;
+    }
+
+    public function getSupportForReconnection(): bool
     {
         return false;
     }

@@ -1025,13 +1025,12 @@ class Postgres extends SQL
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param int $batchSize
      *
      * @return array<Document>
      *
      * @throws DuplicateException
      */
-    public function createDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE): array
+    public function createDocuments(string $collection, array $documents): array
     {
         if (empty($documents)) {
             return $documents;
@@ -1039,81 +1038,98 @@ class Postgres extends SQL
 
         try {
             $name = $this->filter($collection);
-            $batches = \array_chunk($documents, max(1, $batchSize));
+            $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
+
+            $hasInternalId = null;
+            foreach ($documents as $document) {
+                $attributes = $document->getAttributes();
+                $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
+
+                if ($hasInternalId === null) {
+                    $hasInternalId = !empty($document->getInternalId());
+                } elseif ($hasInternalId == empty($document->getInternalId())) {
+                    throw new DatabaseException('All documents must have an internalId if one is set');
+                }
+            }
+            $attributeKeys = array_unique($attributeKeys);
+
+            if ($this->sharedTables) {
+                $attributeKeys[] = '_tenant';
+            }
+
+            $columns = [];
+            foreach ($attributeKeys as $key => $attribute) {
+                $columns[$key] = "\"{$this->filter($attribute)}\"";
+            }
+            $columns = '(' . \implode(', ', $columns) . ')';
+
             $internalIds = [];
 
-            foreach ($batches as $batch) {
-                $bindIndex = 0;
-                $batchKeys = [];
-                $bindValues = [];
-                $permissions = [];
+            $bindIndex = 0;
+            $batchKeys = [];
+            $bindValues = [];
+            $permissions = [];
 
-                foreach ($batch as $document) {
-                    $attributes = $document->getAttributes();
-                    $attributes['_uid'] = $document->getId();
-                    $attributes['_createdAt'] = $document->getCreatedAt();
-                    $attributes['_updatedAt'] = $document->getUpdatedAt();
-                    $attributes['_permissions'] = \json_encode($document->getPermissions());
+            foreach ($documents as $document) {
+                $attributes = $document->getAttributes();
+                $attributes['_uid'] = $document->getId();
+                $attributes['_createdAt'] = $document->getCreatedAt();
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                    if (!empty($document->getInternalId())) {
-                        $internalIds[$document->getId()] = true;
-                        $attributes['_id'] = $document->getInternalId();
-                    }
-
-                    if ($this->sharedTables) {
-                        $attributes['_tenant'] = $this->tenant;
-                    }
-
-                    $columns = [];
-                    foreach (\array_keys($attributes) as $key => $attribute) {
-                        $columns[$key] = "\"{$this->filter($attribute)}\"";
-                    }
-
-                    $columns = '(' . \implode(', ', $columns) . ')';
-
-                    $bindKeys = [];
-
-                    foreach ($attributes as $value) {
-                        if (\is_array($value)) {
-                            $value = \json_encode($value);
-                        }
-                        $value = (\is_bool($value)) ? (int)$value : $value;
-                        $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = ':' . $bindKey;
-                        $bindValues[$bindKey] = $value;
-                        $bindIndex++;
-                    }
-
-                    $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
-                    foreach (Database::PERMISSIONS as $type) {
-                        foreach ($document->getPermissionsByType($type) as $permission) {
-                            $permission = \str_replace('"', '', $permission);
-                            $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', :_tenant)";
-                        }
-                    }
+                if (!empty($document->getInternalId())) {
+                    $internalIds[$document->getId()] = true;
+                    $attributes['_id'] = $document->getInternalId();
+                    $attributeKeys[] = '_id';
                 }
 
-                $stmt = $this->getPDO()->prepare(
+                if ($this->sharedTables) {
+                    $attributes['_tenant'] = $this->tenant;
+                }
+
+                $bindKeys = [];
+
+                foreach ($attributeKeys as $key) {
+                    $value = $attributes[$key] ?? null;
+                    if (\is_array($value)) {
+                        $value = \json_encode($value);
+                    }
+                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $bindKey = 'key_' . $bindIndex;
+                    $bindKeys[] = ':' . $bindKey;
+                    $bindValues[$bindKey] = $value;
+                    $bindIndex++;
+                }
+
+                $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+                foreach (Database::PERMISSIONS as $type) {
+                    foreach ($document->getPermissionsByType($type) as $permission) {
+                        $permission = \str_replace('"', '', $permission);
+                        $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', :_tenant)";
+                    }
+                }
+            }
+
+            $stmt = $this->getPDO()->prepare(
+                "
+                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                VALUES " . \implode(', ', $batchKeys)
+            );
+
+            foreach ($bindValues as $key => $value) {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+
+            $stmt->execute();
+
+            if (!empty($permissions)) {
+                $stmtPermissions = $this->getPDO()->prepare(
                     "
-                    INSERT INTO {$this->getSQLTable($name)} {$columns}
-                    VALUES " . \implode(', ', $batchKeys)
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _tenant) 
+                    VALUES " . \implode(', ', $permissions)
                 );
-
-                foreach ($bindValues as $key => $value) {
-                    $stmt->bindValue($key, $value, $this->getPDOType($value));
-                }
-
-                $stmt->execute();
-
-                if (!empty($permissions)) {
-                    $stmtPermissions = $this->getPDO()->prepare(
-                        "
-                        INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _tenant) 
-                        VALUES " . \implode(', ', $permissions)
-                    );
-                    $stmtPermissions->bindValue(':_tenant', $this->tenant);
-                    $stmtPermissions?->execute();
-                }
+                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+                $stmtPermissions?->execute();
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -1609,10 +1625,9 @@ class Postgres extends SQL
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
-     * @param int $batchSize
      * @return array<Document>
      */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents, int $batchSize): array
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
     {
         return $documents;
     }
@@ -1735,6 +1750,10 @@ class Postgres extends SQL
      */
     public function deleteDocuments(string $collection, array $ids): int
     {
+        if (empty($ids)) {
+            return 0;
+        }
+
         try {
             $name = $this->filter($collection);
             $where = [];

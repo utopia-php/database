@@ -5431,7 +5431,8 @@ class Database
                 }
 
                 $new = [
-                    Query::limit($batchSize)
+                    Query::limit($batchSize),
+                    Query::select(['$id', '$internalId', '$permissions']),
                 ];
 
                 if (! empty($lastDocument)) {

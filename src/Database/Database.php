@@ -3477,7 +3477,7 @@ class Database
             $stack = [];
 
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
-                $stack = array_merge($stack, $this->adapter->createDocuments($collection->getId(), $chunk));
+                \array_push($stack, ...$this->adapter->createDocuments($collection->getId(), $chunk));
             }
 
             return $stack;
@@ -4592,6 +4592,7 @@ class Database
      * @param int $batchSize
      * @return array<Document>
      * @throws StructureException
+     * @throws \Throwable
      */
     public function createOrUpdateDocuments(
         string $collection,
@@ -4629,23 +4630,37 @@ class Database
         }
 
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $time = DateTime::now();
 
         foreach ($documents as $key => $document) {
-            $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $document->getId())));
+            $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
+                $collection->getId(),
+                $document->getId(),
+                [Query::select(['$internalId'])],
+                forUpdate: true
+            )));
 
-            if (!$old->isEmpty()) {
-                $validator = new Authorization(self::PERMISSION_UPDATE);
+            // If old is empty, check if user has create permission on the collection
+            // If old is not empty, check if user has update permission on the collection
+            // If old is not empty AND documentSecurity is enabled, we need to check if user has update permission on the collection or document
 
-                if (!$validator->isValid([
-                    ...$collection->getUpdate(),
-                    ...($collection->getAttribute('documentSecurity') ? $old->getUpdate() : [])
-                ])) {
+            $validator = new Authorization(
+                $old->isEmpty() ?
+                self::PERMISSION_CREATE :
+                self::PERMISSION_UPDATE
+            );
+
+            if ($old->isEmpty()) {
+                if (!$validator->isValid($collection->getCreate())) {
                     throw new AuthorizationException($validator->getDescription());
                 }
+            } elseif (!$validator->isValid([
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $old->getUpdate() : [])
+            ])) {
+                throw new AuthorizationException($validator->getDescription());
             }
 
             $createdAt = $document->getCreatedAt();
@@ -4680,7 +4695,14 @@ class Database
             $stack = [];
 
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
-                $stack = array_merge($stack, $this->adapter->createOrUpdateDocuments($collection->getId(), $attribute, $chunk));
+                \array_push(
+                    $stack,
+                    ...Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
+                        $collection->getId(),
+                        $attribute,
+                        $chunk
+                    ))
+                );
             }
 
             return $stack;
@@ -5347,6 +5369,7 @@ class Database
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws RestrictedException
+     * @throws \Throwable
      */
     public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): array
     {
@@ -5461,12 +5484,12 @@ class Database
             }
 
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
-                $callback = fn () => $this->adapter->deleteDocuments(
+                $getResults = fn () => $this->adapter->deleteDocuments(
                     $collection->getId(),
                     array_map(fn ($document) => $document->getId(), $chunk)
                 );
 
-                $skipAuth ? $authorization->skip($callback) : $callback();
+                $skipAuth ? $authorization->skip($getResults) : $getResults();
             }
 
             return $documents;
@@ -5568,7 +5591,7 @@ class Database
             }
         }
 
-        $authorization = new Authorization(self::PERMISSION_READ);
+        $authorization = new Authorization($forPermission);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
 

@@ -4638,7 +4638,7 @@ class Database
             $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
                 $collection->getId(),
                 $document->getId(),
-                [Query::select(['$internalId'])],
+                [Query::select(['$internalId', '$permissions'])],
                 forUpdate: true
             )));
 

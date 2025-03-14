@@ -10,6 +10,8 @@ class QueryContext
 
     protected array $aliases = [];
 
+    protected array $skipAuthCollections = [];
+
     public function __construct()
     {
     }
@@ -54,4 +56,24 @@ class QueryContext
         $this->collections[] = $collection;
         $this->aliases[$alias] = $collection->getId();
     }
+
+    public function addSkipAuth(string $collection, string $permission, bool $skipAuth): void
+    {
+        $this->skipAuthCollections[$permission][$collection] = $skipAuth;
+
+        var_dump($this->skipAuthCollections);
+    }
+
+    public function skipAuth(string $collection, string $permission): bool
+    {
+        $this->skipAuthCollections[$permission][$collection] = false;
+
+        if (empty($this->skipAuthCollections[$permission][$collection])) {
+            return false;
+        }
+
+        return true;
+    }
+
+
 }

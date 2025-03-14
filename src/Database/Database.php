@@ -26,8 +26,6 @@ use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
-use Utopia\Database\Validator\Queries\Document as DocumentValidator;
-use Utopia\Database\Validator\Queries\Documents as DocumentsValidatorOiginal;
 use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 use Utopia\Database\Validator\Structure;
 
@@ -2946,10 +2944,13 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        $attributes = $collection->getAttribute('attributes', []);
+        $queries = Query::getSelectQueries($queries);
+
+        $context = new QueryContext();
+        $context->add($collection);
 
         if ($this->validate) {
-            $validator = new DocumentValidator($attributes);
+            $validator = new DocumentsValidator($context);
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5573,6 +5574,8 @@ class Database
             if (!$skipAuth && !$documentSecurity && $_collection->getId() !== self::METADATA) {
                 throw new AuthorizationException($authorization->getDescription());
             }
+
+            $context->addSkipAuth($_collection->getId(), $forPermission, $skipAuth);
         }
 
         if ($this->validate) {
@@ -5676,7 +5679,7 @@ class Database
 
         $queries = \array_values($queries);
 
-        $getResults = fn () => $this->adapter->find(
+        $results = $this->adapter->find(
             $context,
             $queries,
             $limit,
@@ -5690,9 +5693,9 @@ class Database
             orderQueries: $orders
         );
 
-        $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
+        //$skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
 
-        $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
+        //$results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         foreach ($results as &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {

@@ -268,7 +268,7 @@ abstract class Base extends TestCase
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Unknown Alias context', $e->getMessage());
+            $this->assertEquals('Invalid query: Unknown Alias context', $e->getMessage());
         }
 
         /**

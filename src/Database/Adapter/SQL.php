@@ -1050,24 +1050,29 @@ abstract class SQL extends Adapter
      *
      * @param string $collection
      * @param array<string> $roles
+     * @param string $type
      * @return string
-     * @throws Exception
+     * @throws DatabaseException
      */
-    protected function getSQLPermissionsCondition(string $collection, array $roles, string $type = Database::PERMISSION_READ): string
-    {
-        if (!in_array($type, Database::PERMISSIONS)) {
+    protected function getSQLPermissionsCondition(
+        string $collection,
+        array $roles,
+        string $type = Database::PERMISSION_READ
+    ): string {
+        if (!\in_array($type, Database::PERMISSIONS)) {
             throw new DatabaseException('Unknown permission type: ' . $type);
         }
 
-        $roles = array_map(fn (string $role) => $this->getPDO()->quote($role), $roles);
+        $roles = \array_map(fn ($role) => $this->getPDO()->quote($role), $roles);
+        $roles = \implode(', ', $roles);
 
         return "table_main._uid IN (
-                    SELECT _document
-                    FROM {$this->getSQLTable($collection . '_perms')}
-                    WHERE _permission IN (" . implode(', ', $roles) . ")
-                      AND _type = '{$type}'
-                      {$this->getTenantQuery($collection)}
-                )";
+            SELECT _document
+            FROM {$this->getSQLTable($collection . '_perms')}
+            WHERE _permission IN ({$roles})
+              AND _type = '{$type}'
+              {$this->getTenantQuery($collection)}
+        )";
     }
 
     /**

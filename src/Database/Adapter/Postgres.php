@@ -1854,7 +1854,7 @@ class Postgres extends SQL
 
         $hasIdAttribute = false;
         foreach ($orderAttributes as $i => $attribute) {
-            if ($attribute === '_uid') {
+            if (\in_array($attribute, ['_uid', '_id'])) {
                 $hasIdAttribute = true;
             }
 

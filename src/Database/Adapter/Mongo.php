@@ -1102,7 +1102,12 @@ class Mongo extends Adapter
         }
 
         // orders
+        $hasIdAttribute = false;
         foreach ($orderAttributes as $i => $attribute) {
+            if (\in_array($attribute, ['_uid', '_id'])) {
+                $hasIdAttribute = true;
+            }
+
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
 
@@ -1118,7 +1123,9 @@ class Mongo extends Adapter
             $options['sort'][$attribute] = $this->getOrder($orderType);
         }
 
-        $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
+        if (!$hasIdAttribute) {
+            $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
+        }
 
         // queries
 

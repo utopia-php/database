@@ -1102,10 +1102,7 @@ class Mongo extends Adapter
         }
 
         // orders
-        $hasIdAttribute = false;
         foreach ($orderAttributes as $i => $attribute) {
-            var_dump($attribute);
-
             $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
 
@@ -1118,16 +1115,10 @@ class Mongo extends Adapter
             $attribute = $attribute == 'createdAt' ? '_createdAt' : $attribute;
             $attribute = $attribute == 'updatedAt' ? '_updatedAt' : $attribute;
 
-            if (\in_array($attribute, ['_uid', '_id'])) {
-                $hasIdAttribute = true;
-            }
-
             $options['sort'][$attribute] = $this->getOrder($orderType);
         }
 
-        if (!$hasIdAttribute) {
-            $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
-        }
+        $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
 
         // queries
 

@@ -86,7 +86,7 @@ class Query
      */
     public function __construct(string $method, string $attribute = '', array $values = [])
     {
-        if (in_array($method, [Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC]) && $attribute === '') {
+        if ($attribute === '' && \in_array($method, [Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC])) {
             $attribute = '$internalId';
         }
 

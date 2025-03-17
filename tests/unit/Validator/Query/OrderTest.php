@@ -27,6 +27,12 @@ class OrderTest extends TestCase
                     'type' => Database::VAR_STRING,
                     'array' => false,
                 ]),
+                new Document([
+                    '$id' => '$internalId',
+                    'key' => '$internalId',
+                    'type' => Database::VAR_STRING,
+                    'array' => false,
+                ]),
             ],
         );
     }

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4d41b8991988a9c03d57f8038103e006",
+    "content-hash": "d1e1cb1921161014c22372feccc945f9",
     "packages": [
         {
             "name": "brick/math",
@@ -149,16 +149,16 @@
         },
         {
             "name": "google/protobuf",
-            "version": "v4.30.0",
+            "version": "v4.30.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/protocolbuffers/protobuf-php.git",
-                "reference": "e1d66682f6836aa87820400f0aa07d9eb566feb6"
+                "reference": "f29ba8a30dfd940efb3a8a75dc44446539101f24"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/protocolbuffers/protobuf-php/zipball/e1d66682f6836aa87820400f0aa07d9eb566feb6",
-                "reference": "e1d66682f6836aa87820400f0aa07d9eb566feb6",
+                "url": "https://api.github.com/repos/protocolbuffers/protobuf-php/zipball/f29ba8a30dfd940efb3a8a75dc44446539101f24",
+                "reference": "f29ba8a30dfd940efb3a8a75dc44446539101f24",
                 "shasum": ""
             },
             "require": {
@@ -187,137 +187,9 @@
                 "proto"
             ],
             "support": {
-                "source": "https://github.com/protocolbuffers/protobuf-php/tree/v4.30.0"
+                "source": "https://github.com/protocolbuffers/protobuf-php/tree/v4.30.1"
             },
-            "time": "2025-03-04T22:54:49+00:00"
-        },
-        {
-            "name": "jean85/pretty-package-versions",
-            "version": "2.1.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/Jean85/pretty-package-versions.git",
-                "reference": "3c4e5f62ba8d7de1734312e4fff32f67a8daaf10"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/Jean85/pretty-package-versions/zipball/3c4e5f62ba8d7de1734312e4fff32f67a8daaf10",
-                "reference": "3c4e5f62ba8d7de1734312e4fff32f67a8daaf10",
-                "shasum": ""
-            },
-            "require": {
-                "composer-runtime-api": "^2.1.0",
-                "php": "^7.4|^8.0"
-            },
-            "require-dev": {
-                "friendsofphp/php-cs-fixer": "^3.2",
-                "jean85/composer-provided-replaced-stub-package": "^1.0",
-                "phpstan/phpstan": "^1.4",
-                "phpunit/phpunit": "^7.5|^8.5|^9.6",
-                "vimeo/psalm": "^4.3 || ^5.0"
-            },
-            "type": "library",
-            "extra": {
-                "branch-alias": {
-                    "dev-master": "1.x-dev"
-                }
-            },
-            "autoload": {
-                "psr-4": {
-                    "Jean85\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Alessandro Lai",
-                    "email": "alessandro.lai85@gmail.com"
-                }
-            ],
-            "description": "A library to get pretty versions strings of installed dependencies",
-            "keywords": [
-                "composer",
-                "package",
-                "release",
-                "versions"
-            ],
-            "support": {
-                "issues": "https://github.com/Jean85/pretty-package-versions/issues",
-                "source": "https://github.com/Jean85/pretty-package-versions/tree/2.1.0"
-            },
-            "time": "2024-11-18T16:19:46+00:00"
-        },
-        {
-            "name": "mongodb/mongodb",
-            "version": "1.10.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/mongodb/mongo-php-library.git",
-                "reference": "b0bbd657f84219212487d01a8ffe93a789e1e488"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/mongodb/mongo-php-library/zipball/b0bbd657f84219212487d01a8ffe93a789e1e488",
-                "reference": "b0bbd657f84219212487d01a8ffe93a789e1e488",
-                "shasum": ""
-            },
-            "require": {
-                "ext-hash": "*",
-                "ext-json": "*",
-                "ext-mongodb": "^1.11.0",
-                "jean85/pretty-package-versions": "^1.2 || ^2.0.1",
-                "php": "^7.1 || ^8.0",
-                "symfony/polyfill-php80": "^1.19"
-            },
-            "require-dev": {
-                "doctrine/coding-standard": "^9.0",
-                "squizlabs/php_codesniffer": "^3.6",
-                "symfony/phpunit-bridge": "^5.2"
-            },
-            "type": "library",
-            "extra": {
-                "branch-alias": {
-                    "dev-master": "1.10.x-dev"
-                }
-            },
-            "autoload": {
-                "files": [
-                    "src/functions.php"
-                ],
-                "psr-4": {
-                    "MongoDB\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "Apache-2.0"
-            ],
-            "authors": [
-                {
-                    "name": "Andreas Braun",
-                    "email": "andreas.braun@mongodb.com"
-                },
-                {
-                    "name": "Jeremy Mikola",
-                    "email": "jmikola@gmail.com"
-                }
-            ],
-            "description": "MongoDB driver library",
-            "homepage": "https://jira.mongodb.org/browse/PHPLIB",
-            "keywords": [
-                "database",
-                "driver",
-                "mongodb",
-                "persistence"
-            ],
-            "support": {
-                "issues": "https://github.com/mongodb/mongo-php-library/issues",
-                "source": "https://github.com/mongodb/mongo-php-library/tree/1.10.0"
-            },
-            "time": "2021-10-20T22:22:37+00:00"
+            "time": "2025-03-13T21:08:17+00:00"
         },
         {
             "name": "nyholm/psr7",
@@ -1697,86 +1569,6 @@
             "time": "2024-09-09T11:45:10+00:00"
         },
         {
-            "name": "symfony/polyfill-php80",
-            "version": "v1.31.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/symfony/polyfill-php80.git",
-                "reference": "60328e362d4c2c802a54fcbf04f9d3fb892b4cf8"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/symfony/polyfill-php80/zipball/60328e362d4c2c802a54fcbf04f9d3fb892b4cf8",
-                "reference": "60328e362d4c2c802a54fcbf04f9d3fb892b4cf8",
-                "shasum": ""
-            },
-            "require": {
-                "php": ">=7.2"
-            },
-            "type": "library",
-            "extra": {
-                "thanks": {
-                    "url": "https://github.com/symfony/polyfill",
-                    "name": "symfony/polyfill"
-                }
-            },
-            "autoload": {
-                "files": [
-                    "bootstrap.php"
-                ],
-                "psr-4": {
-                    "Symfony\\Polyfill\\Php80\\": ""
-                },
-                "classmap": [
-                    "Resources/stubs"
-                ]
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Ion Bazan",
-                    "email": "ion.bazan@gmail.com"
-                },
-                {
-                    "name": "Nicolas Grekas",
-                    "email": "p@tchwork.com"
-                },
-                {
-                    "name": "Symfony Community",
-                    "homepage": "https://symfony.com/contributors"
-                }
-            ],
-            "description": "Symfony polyfill backporting some PHP 8.0+ features to lower PHP versions",
-            "homepage": "https://symfony.com",
-            "keywords": [
-                "compatibility",
-                "polyfill",
-                "portable",
-                "shim"
-            ],
-            "support": {
-                "source": "https://github.com/symfony/polyfill-php80/tree/v1.31.0"
-            },
-            "funding": [
-                {
-                    "url": "https://symfony.com/sponsor",
-                    "type": "custom"
-                },
-                {
-                    "url": "https://github.com/fabpot",
-                    "type": "github"
-                },
-                {
-                    "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
-                    "type": "tidelift"
-                }
-            ],
-            "time": "2024-09-09T11:45:10+00:00"
-        },
-        {
             "name": "symfony/polyfill-php82",
             "version": "v1.31.0",
             "source": {
@@ -2132,66 +1924,6 @@
             "time": "2025-03-06T11:37:49+00:00"
         },
         {
-            "name": "utopia-php/mongo",
-            "version": "0.3.1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "52326a9a43e2d27ff0c15c48ba746dacbe9a7aee"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/52326a9a43e2d27ff0c15c48ba746dacbe9a7aee",
-                "reference": "52326a9a43e2d27ff0c15c48ba746dacbe9a7aee",
-                "shasum": ""
-            },
-            "require": {
-                "ext-mongodb": "*",
-                "mongodb/mongodb": "1.10.0",
-                "php": ">=8.0"
-            },
-            "require-dev": {
-                "fakerphp/faker": "^1.14",
-                "laravel/pint": "1.2.*",
-                "phpstan/phpstan": "1.8.*",
-                "phpunit/phpunit": "^9.4",
-                "swoole/ide-helper": "4.8.0"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "Utopia\\Mongo\\": "src"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Eldad Fux",
-                    "email": "eldad@appwrite.io"
-                },
-                {
-                    "name": "Wess",
-                    "email": "wess@appwrite.io"
-                }
-            ],
-            "description": "A simple library to manage Mongo database",
-            "keywords": [
-                "database",
-                "mongo",
-                "php",
-                "upf",
-                "utopia"
-            ],
-            "support": {
-                "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/0.3.1"
-            },
-            "time": "2023-09-01T17:25:28+00:00"
-        },
-        {
             "name": "utopia-php/telemetry",
             "version": "0.1.0",
             "source": {
@@ -2378,16 +2110,16 @@
         },
         {
             "name": "laravel/pint",
-            "version": "v1.21.1",
+            "version": "v1.21.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/laravel/pint.git",
-                "reference": "c44bffbb2334e90fba560933c45948fa4a3f3e86"
+                "reference": "370772e7d9e9da087678a0edf2b11b6960e40558"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/laravel/pint/zipball/c44bffbb2334e90fba560933c45948fa4a3f3e86",
-                "reference": "c44bffbb2334e90fba560933c45948fa4a3f3e86",
+                "url": "https://api.github.com/repos/laravel/pint/zipball/370772e7d9e9da087678a0edf2b11b6960e40558",
+                "reference": "370772e7d9e9da087678a0edf2b11b6960e40558",
                 "shasum": ""
             },
             "require": {
@@ -2398,9 +2130,9 @@
                 "php": "^8.2.0"
             },
             "require-dev": {
-                "friendsofphp/php-cs-fixer": "^3.70.2",
-                "illuminate/view": "^11.44.1",
-                "larastan/larastan": "^3.1.0",
+                "friendsofphp/php-cs-fixer": "^3.72.0",
+                "illuminate/view": "^11.44.2",
+                "larastan/larastan": "^3.2.0",
                 "laravel-zero/framework": "^11.36.1",
                 "mockery/mockery": "^1.6.12",
                 "nunomaduro/termwind": "^2.3",
@@ -2440,7 +2172,7 @@
                 "issues": "https://github.com/laravel/pint/issues",
                 "source": "https://github.com/laravel/pint"
             },
-            "time": "2025-03-11T03:22:21+00:00"
+            "time": "2025-03-14T22:31:42+00:00"
         },
         {
             "name": "myclabs/deep-copy",
@@ -4337,7 +4069,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -4345,6 +4077,6 @@
         "ext-pdo": "*",
         "ext-mbstring": "*"
     },
-    "platform-dev": {},
+    "platform-dev": [],
     "plugin-api-version": "2.6.0"
 }

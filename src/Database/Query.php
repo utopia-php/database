@@ -86,6 +86,10 @@ class Query
      */
     public function __construct(string $method, string $attribute = '', array $values = [])
     {
+        if ($attribute === '' && \in_array($method, [Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC])) {
+            $attribute = '$internalId';
+        }
+
         $this->method = $method;
         $this->attribute = $attribute;
         $this->values = $values;

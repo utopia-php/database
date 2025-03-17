@@ -57,9 +57,6 @@ class Order extends Base
         $attribute = $value->getAttribute();
 
         if ($method === Query::TYPE_ORDER_ASC || $method === Query::TYPE_ORDER_DESC) {
-            if ($attribute === '') {
-                return true;
-            }
             return $this->isValidAttribute($attribute);
         }
 

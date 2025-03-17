@@ -4098,17 +4098,6 @@ abstract class Base extends TestCase
             Query::offset(0),
         ]);
 
-        $movies = static::getDatabase()->find('movies', [
-            Query::limit(25),
-            Query::offset(0),
-            Query::cursorAfter($movies[1]),
-            Query::orderDesc('$createdAt'),
-            Query::orderDesc(''),
-        ]);
-
-        $this->assertEquals('shmuel', 'fogel');
-
-
         $documents = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),

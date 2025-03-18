@@ -5418,71 +5418,71 @@ class Database
             throw new DatabaseException("Cursor document must be from the same Collection.");
         }
 
-        $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $limit, $cursor, $skipAuth, $authorization) {
-            $documents = [];
-            $originalLimit = $limit;
-            $lastDocument = $cursor;
+        $documents = [];
+        $originalLimit = $limit;
+        $lastDocument = $cursor;
 
-            while (true) {
-                if ($limit && $limit < $batchSize && $limit > 0) {
-                    $batchSize = $limit;
-                } elseif (!empty($limit)) {
-                    $limit -= $batchSize;
-                }
-
-                $new = [
-                    Query::limit($batchSize)
-                ];
-
-                if (! empty($lastDocument)) {
-                    $new[] = Query::cursorAfter($lastDocument);
-                }
-
-                $affectedDocuments = $this->silent(fn () => $this->find(
-                    $collection->getId(),
-                    array_merge($new, $queries),
-                    forPermission: Database::PERMISSION_DELETE
-                ));
-
-                if (empty($affectedDocuments)) {
-                    break;
-                }
-
-                $documents = \array_merge($affectedDocuments, $documents);
-
-                foreach ($affectedDocuments as $document) {
-                    if ($this->resolveRelationships) {
-                        $document = $this->silent(fn () => $this->deleteDocumentRelationships(
-                            $collection,
-                            $document
-                        ));
-                    }
-
-                    // Check if document was updated after the request timestamp
-                    try {
-                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-                    } catch (Exception $e) {
-                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                    }
-
-                    if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                        throw new ConflictException('Document was updated after the request timestamp');
-                    }
-                }
-
-                if (count($affectedDocuments) < $batchSize) {
-                    break;
-                } elseif ($originalLimit && count($documents) == $originalLimit) {
-                    break;
-                }
-
-                $lastDocument = end($affectedDocuments);
+        while (true) {
+            if ($limit && $limit < $batchSize && $limit > 0) {
+                $batchSize = $limit;
+            } elseif (!empty($limit)) {
+                $limit -= $batchSize;
             }
 
-            if (empty($documents)) {
-                return [];
+            $new = [
+                Query::limit($batchSize)
+            ];
+
+            if (! empty($lastDocument)) {
+                $new[] = Query::cursorAfter($lastDocument);
             }
 
+            $affectedDocuments = $this->silent(fn () => $this->find(
+                $collection->getId(),
+                array_merge($new, $queries),
+                forPermission: Database::PERMISSION_DELETE
+            ));
+
+            if (empty($affectedDocuments)) {
+                break;
+            }
+
+            $documents = \array_merge($affectedDocuments, $documents);
+
+            foreach ($affectedDocuments as $document) {
+                if ($this->resolveRelationships) {
+                    $document = $this->silent(fn () => $this->deleteDocumentRelationships(
+                        $collection,
+                        $document
+                    ));
+                }
+
+                // Check if document was updated after the request timestamp
+                try {
+                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                } catch (Exception $e) {
+                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                }
+
+                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    throw new ConflictException('Document was updated after the request timestamp');
+                }
+            }
+
+            if (count($affectedDocuments) < $batchSize) {
+                break;
+            } elseif ($originalLimit && count($documents) == $originalLimit) {
+                break;
+            }
+
+            $lastDocument = end($affectedDocuments);
+        }
+
+        if (empty($documents)) {
+            return [];
+        }
+
+        $documents = $this->withTransaction(function () use ($documents, $collection, $batchSize, $skipAuth, $authorization) {
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
                 $getResults = fn () => $this->adapter->deleteDocuments(
                     $collection->getId(),

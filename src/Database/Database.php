@@ -5482,7 +5482,7 @@ class Database
             return [];
         }
 
-        $documents = $this->withTransaction(function () use ($documents, $collection, $batchSize, $skipAuth, $authorization) {
+        $this->withTransaction(function () use ($documents, $collection, $batchSize, $skipAuth, $authorization) {
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
                 $getResults = fn () => $this->adapter->deleteDocuments(
                     $collection->getId(),
@@ -5491,8 +5491,6 @@ class Database
 
                 $skipAuth ? $authorization->skip($getResults) : $getResults();
             }
-
-            return $documents;
         });
 
         foreach ($documents as $document) {

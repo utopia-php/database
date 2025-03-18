@@ -16521,7 +16521,7 @@ abstract class Base extends TestCase
         $this->assertCount(10, static::getDatabase()->deleteDocuments(
             'bulk_delete',
             [
-                Query::select(['$internalId', '$uid', '$permissions', '$updatedAt'])
+                Query::select(['$internalId', '$id', '$permissions', '$updatedAt'])
             ]
         ));
 

@@ -5447,7 +5447,7 @@ class Database
                 break;
             }
 
-            $documents = \array_merge($affectedDocuments, $documents);
+            \array_push($documents, ...$affectedDocuments);
 
             foreach ($affectedDocuments as $document) {
                 if ($this->resolveRelationships) {
@@ -5457,16 +5457,16 @@ class Database
                     ));
                 }
 
-                // Check if document was updated after the request timestamp
-                try {
-                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-                } catch (Exception $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                }
-
-                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                    throw new ConflictException('Document was updated after the request timestamp');
-                }
+//                // Check if document was updated after the request timestamp
+//                try {
+//                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+//                } catch (Exception $e) {
+//                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+//                }
+//
+//                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+//                    throw new ConflictException('Document was updated after the request timestamp');
+//                }
             }
 
             if (count($affectedDocuments) < $batchSize) {

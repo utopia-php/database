@@ -16517,8 +16517,19 @@ abstract class Base extends TestCase
         $docs = static::getDatabase()->find('bulk_delete');
         $this->assertCount(10, $docs);
 
+        /**
+         * Test Short select query
+         */
+        $this->assertCount(2, static::getDatabase()->deleteDocuments(
+            'bulk_delete',
+            [
+                Query::select(['$internalId', '$id', '$permissions', '$updatedAt']),
+                Query::limit(2)
+            ]
+        ));
+
         // TEST: Bulk Delete All Documents
-        $this->assertCount(10, static::getDatabase()->deleteDocuments('bulk_delete'));
+        $this->assertCount(8, static::getDatabase()->deleteDocuments('bulk_delete'));
 
         $docs = static::getDatabase()->find('bulk_delete');
         $this->assertCount(0, $docs);

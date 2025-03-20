@@ -1034,7 +1034,7 @@ class Database
      */
     public function commitTransaction(): bool
     {
-        return $this->adapter->startTransaction();
+        return $this->adapter->commitTransaction();
     }
 
     /**

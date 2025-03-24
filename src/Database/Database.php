@@ -3369,9 +3369,17 @@ class Database
         if (
             $collection !== self::METADATA
             && $this->adapter->getSharedTables()
+            && !$this->adapter->getTenantPerDocument()
             && empty($this->adapter->getTenant())
         ) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
+        }
+
+        if (
+            !$this->adapter->getSharedTables()
+            && $this->adapter->getTenantPerDocument()
+        ) {
+            throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -3395,7 +3403,16 @@ class Database
             ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
         if ($this->adapter->getSharedTables()) {
-            $document['$tenant'] = (string)$this->adapter->getTenant();
+            if ($this->adapter->getTenantPerDocument()) {
+                if (
+                    $collection->getId() !== static::METADATA
+                    && $document->getTenant() === null
+                ) {
+                    throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
+                }
+            } else {
+                $document->setAttribute('$tenant', (string)$this->adapter->getTenant());
+            }
         }
 
         $document = $this->encode($collection, $document);
@@ -3442,12 +3459,20 @@ class Database
      * @param array<Document> $documents
      * @param int $batchSize
      * @return array<Document>
+     * @throws AuthorizationException
+     * @throws StructureException
+     * @throws NotFoundException
+     * @throws \Throwable
      */
     public function createDocuments(
         string $collection,
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
     ): array {
+        if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
+            throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
+        }
+
         if (empty($documents)) {
             return [];
         }
@@ -3477,6 +3502,16 @@ class Database
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
+            if ($this->adapter->getSharedTables()) {
+                if ($this->adapter->getTenantPerDocument()) {
+                    if ($document->getTenant() === null) {
+                        throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
+                    }
+                } else {
+                    $document->setAttribute('$tenant', (string)$this->adapter->getTenant());
+                }
+            }
 
             $document = $this->encode($collection, $document);
 

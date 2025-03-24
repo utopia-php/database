@@ -16477,10 +16477,10 @@ abstract class Base extends TestCase
             ->setTenant(null)
             ->setTenantPerDocument(true)
             ->createDocument(__FUNCTION__, new Document([
-            '$id' => $doc1Id,
-            '$tenant' => 1,
-            'name' => 'Spiderman',
-        ]));
+                '$id' => $doc1Id,
+                '$tenant' => 1,
+                'name' => 'Spiderman',
+            ]));
 
         // Set to tenant 1 and read
         $doc = $database
@@ -16497,10 +16497,10 @@ abstract class Base extends TestCase
             ->setTenant(null)
             ->setTenantPerDocument(true)
             ->createDocument(__FUNCTION__, new Document([
-            '$id' => $doc2Id,
-            '$tenant' => 2,
-            'name' => 'Batman',
-        ]));
+                '$id' => $doc2Id,
+                '$tenant' => 2,
+                'name' => 'Batman',
+            ]));
 
         // Set to tenant 2 and read
         $doc = $database

@@ -163,6 +163,18 @@ class Document extends ArrayObject
     }
 
     /**
+     * @return int|null
+     */
+    public function getTenant(): ?int
+    {
+        $tenant = $this->getAttribute('$tenant');
+        if ($tenant !== null) {
+            return (int)$tenant;
+        }
+        return null;
+    }
+
+    /**
      * Get Document Attributes
      *
      * @return array<string, mixed>

@@ -947,7 +947,7 @@ class MariaDB extends SQL
 
             $stmt->execute();
 
-            $document['$internalId'] = $this->getDocument($collection, $document->getId(), [Query::select(['$internalId'])])->getInternalId();
+            $document['$internalId'] = $this->pdo->lastInsertId();
 
             if (empty($document['$internalId'])) {
                 throw new DatabaseException('Error creating document empty "$internalId"');

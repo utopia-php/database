@@ -941,6 +941,29 @@ class Database
         }
     }
 
+    /**
+     * Set whether to allow creating documents with tenant set per document.
+     *
+     * @param bool $enabled
+     * @return static
+     */
+    public function setTenantPerDocument(bool $enabled): static
+    {
+        $this->adapter->setTenantPerDocument($enabled);
+
+        return $this;
+    }
+
+    /**
+     * Get whether to allow creating documents with tenant set per document.
+     *
+     * @return bool
+     */
+    public function getTenantPerDocument(): bool
+    {
+        return $this->adapter->getTenantPerDocument();
+    }
+
     public function getPreserveDates(): bool
     {
         return $this->preserveDates;

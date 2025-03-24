@@ -3411,7 +3411,7 @@ class Database
                     throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                 }
             } else {
-                $document->setAttribute('$tenant', (string)$this->adapter->getTenant());
+                $document->setAttribute('$tenant', $this->adapter->getTenant());
             }
         }
 
@@ -3509,7 +3509,7 @@ class Database
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
                 } else {
-                    $document->setAttribute('$tenant', (string)$this->adapter->getTenant());
+                    $document->setAttribute('$tenant', $this->adapter->getTenant());
                 }
             }
 

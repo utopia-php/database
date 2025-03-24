@@ -255,7 +255,7 @@ abstract class SQL extends Adapter
             unset($document['_uid']);
         }
         if (\array_key_exists('_tenant', $document)) {
-            $document['$tenant'] = $document['_tenant'];
+            $document['$tenant'] = (int)$document['_tenant'];
             unset($document['_tenant']);
         }
         if (\array_key_exists('_createdAt', $document)) {

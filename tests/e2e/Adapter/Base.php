@@ -17883,7 +17883,7 @@ abstract class Base extends TestCase
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
         $this->assertFalse(($database->getDocument('testRedisFallback', 'doc1'))->isEmpty());
 
-        // Check we can modify data
+        // Check we cannot modify data
         try {
             $database->updateDocument('testRedisFallback', 'doc1', new Document([
                 'string' => 'text📝 updated',
@@ -17905,7 +17905,6 @@ abstract class Base extends TestCase
         sleep(5);
 
         // Should return empty results after the delete operation
-        $this->assertCount(0, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
 }
-s

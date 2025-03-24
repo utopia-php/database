@@ -4007,10 +4007,11 @@ class Database
             }
 
             $this->adapter->updateDocument($collection->getId(), $id, $document);
-            $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
         });
+
+        $this->purgeCachedDocument($collection->getId(), $id);
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
@@ -4961,13 +4962,12 @@ class Database
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
             }
-
-            $result = $this->adapter->deleteDocument($collection->getId(), $id);
-
-            $this->purgeCachedDocument($collection->getId(), $id);
-
-            return $result;
+            return $this->adapter->deleteDocument($collection->getId(), $id);
         });
+
+        if ($deleted) {
+            $this->purgeCachedDocument($collection->getId(), $id);
+        }
 
         $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 

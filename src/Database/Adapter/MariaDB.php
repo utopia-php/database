@@ -853,7 +853,7 @@ class MariaDB extends SQL
             $attributes['_permissions'] = \json_encode($document->getPermissions());
 
             if ($this->sharedTables) {
-                $attributes['_tenant'] = $this->tenant;
+                $attributes['_tenant'] = $document->getTenant();
             }
 
             $name = $this->filter($collection);
@@ -896,13 +896,13 @@ class MariaDB extends SQL
 
             $attributeIndex = 0;
             foreach ($attributes as $value) {
-                if (is_array($value)) {
-                    $value = json_encode($value);
+                if (\is_array($value)) {
+                    $value = \json_encode($value);
                 }
 
                 $bindKey = 'key_' . $attributeIndex;
                 $attribute = $this->filter($attribute);
-                $value = (is_bool($value)) ? (int)$value : $value;
+                $value = (\is_bool($value)) ? (int)$value : $value;
                 $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
                 $attributeIndex++;
             }
@@ -941,7 +941,7 @@ class MariaDB extends SQL
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
 
                 if ($this->sharedTables) {
-                    $stmtPermissions->bindValue(':_tenant', $this->tenant);
+                    $stmtPermissions->bindValue(':_tenant', $document->getTenant());
                 }
             }
 
@@ -1015,9 +1015,6 @@ class MariaDB extends SQL
             $documentIds = [];
 
             foreach ($documents as $document) {
-                /**
-                 * @var Document $document
-                 */
                 $attributes = $document->getAttributes();
                 $attributes['_uid'] = $document->getId();
                 $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1032,7 +1029,7 @@ class MariaDB extends SQL
                 }
 
                 if ($this->sharedTables) {
-                    $attributes['_tenant'] = $this->tenant;
+                    $attributes['_tenant'] = $document->getTenant();
                 }
 
                 $bindKeys = [];

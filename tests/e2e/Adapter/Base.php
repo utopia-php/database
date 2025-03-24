@@ -17883,9 +17883,7 @@ abstract class Base extends TestCase
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
         $this->assertFalse(($database->getDocument('testRedisFallback', 'doc1'))->isEmpty());
 
-        // With our changes, the transaction should now succeed but cache operations will fail afterward
-        // Let's verify the database operations work but log exceptions from cache operations
-
+        // Check we can modify data
         try {
             $database->updateDocument('testRedisFallback', 'doc1', new Document([
                 'string' => 'text📝 updated',
@@ -17910,3 +17908,4 @@ abstract class Base extends TestCase
         $this->assertCount(0, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
 }
+s

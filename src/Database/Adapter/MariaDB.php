@@ -1014,7 +1014,7 @@ class MariaDB extends SQL
             $permissions = [];
             $documentIds = [];
 
-            foreach ($documents as $document) {
+            foreach ($documents as $index => $document) {
                 $attributes = $document->getAttributes();
                 $attributes['_uid'] = $document->getId();
                 $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1049,25 +1049,20 @@ class MariaDB extends SQL
                 $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
                 foreach (Database::PERMISSIONS as $type) {
                     foreach ($document->getPermissionsByType($type) as $permission) {
+                        $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';
                         $permission = \str_replace('"', '', $permission);
-                        $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
-
-                        if ($this->sharedTables) {
-                            $permission .= ", :_tenant)";
-                        } else {
-                            $permission .= ")";
-                        }
-
+                        $permission = "('{$type}', '{$permission}', :_uid_{$index} {$tenantBind})";
                         $permissions[] = $permission;
                     }
                 }
             }
 
-            $stmt = $this->getPDO()->prepare(
-                "
+            $batchKeys = \implode(', ', $batchKeys);
+
+            $stmt = $this->getPDO()->prepare("
                 INSERT INTO {$this->getSQLTable($name)} {$columns}
-                VALUES " . \implode(', ', $batchKeys)
-            );
+                VALUES {$batchKeys}
+            ");
 
             foreach ($bindValues as $key => $value) {
                 $stmt->bindValue($key, $value, $this->getPDOType($value));
@@ -1076,22 +1071,21 @@ class MariaDB extends SQL
             $stmt->execute();
 
             if (!empty($permissions)) {
+                $tenantColumn = $this->sharedTables ? ', _tenant' : '';
+                $permissions = \implode(', ', $permissions);
+
                 $sqlPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions};
                 ";
-
-                if ($this->sharedTables) {
-                    $sqlPermissions .= ', _tenant)';
-                } else {
-                    $sqlPermissions .= ")";
-                }
-
-                $sqlPermissions .= " VALUES " . \implode(', ', $permissions);
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
 
-                if ($this->sharedTables) {
-                    $stmtPermissions->bindValue(':_tenant', $this->tenant);
+                foreach ($documents as $index => $document) {
+                    $stmtPermissions->bindValue(":_uid_{$index}", $document->getId());
+                    if ($this->sharedTables) {
+                        $stmtPermissions->bindValue(":_tenant_{$index}", $document->getTenant());
+                    }
                 }
 
                 $stmtPermissions?->execute();

@@ -797,8 +797,7 @@ class MariaDB extends SQL
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
-            $this->processException($e);
-            return false;
+            throw $this->processException($e);
         }
     }
 

@@ -910,36 +910,24 @@ class MariaDB extends SQL
             $permissions = [];
             foreach (Database::PERMISSIONS as $type) {
                 foreach ($document->getPermissionsByType($type) as $permission) {
+                    $tenantBind = $this->sharedTables ? ", :_tenant" : '';
                     $permission = \str_replace('"', '', $permission);
-                    $permission = "('{$type}', '{$permission}', '{$document->getId()}'";
-
-                    if ($this->sharedTables) {
-                        $permission .= ", :_tenant)";
-                    } else {
-                        $permission .= ")";
-                    }
-
+                    $permission = "('{$type}', '{$permission}', :_uid {$tenantBind})";
                     $permissions[] = $permission;
                 }
             }
 
             if (!empty($permissions)) {
+                $tenantColumn = $this->sharedTables ? ', _tenant' : '';
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document
-			    ";
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions};
+                ";
 
-                if ($this->sharedTables) {
-                    $sqlPermissions .= ', _tenant)';
-                } else {
-                    $sqlPermissions .= ")";
-                }
-
-                $sqlPermissions .=	" VALUES {$permissions}";
-                $sqlPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sqlPermissions);
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
-
+                $stmtPermissions->bindValue(':_uid', $document->getId());
                 if ($this->sharedTables) {
                     $stmtPermissions->bindValue(':_tenant', $document->getTenant());
                 }

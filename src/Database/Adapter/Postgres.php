@@ -1767,15 +1767,12 @@ class Postgres extends SQL
 
         try {
             $name = $this->filter($collection);
-            $where = [];
 
-            if ($this->sharedTables) {
-                $where[] = "_tenant = :_tenant";
-            }
-
-            $where[] = "_id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")";
-
-            $sql = "DELETE FROM {$this->getSQLTable($name)} WHERE " . \implode(' AND ', $where);
+            $sql = "
+            DELETE FROM {$this->getSQLTable($name)} 
+            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")
+            {$this->getTenantQuery($collection)}
+            ";
 
             $sql = $this->trigger(Database::EVENT_DOCUMENTS_DELETE, $sql);
 
@@ -1797,11 +1794,8 @@ class Postgres extends SQL
                 $sql = "
                 DELETE FROM {$this->getSQLTable($name . '_perms')} 
                 WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($permissionIds))) . ")
-            ";
-
-                if ($this->sharedTables) {
-                    $sql .= ' AND _tenant = :_tenant';
-                }
+                {$this->getTenantQuery($collection)}
+                ";
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 

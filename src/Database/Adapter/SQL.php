@@ -1502,11 +1502,11 @@ abstract class SQL extends Adapter
 
             if (!empty($addQuery)) {
                 $sqlAddPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (`_document`, `_type`, `_permission`
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission
                 ";
 
                 if ($this->sharedTables) {
-                    $sqlAddPermissions .= ', `_tenant`)';
+                    $sqlAddPermissions .= ', _tenant)';
                 } else {
                     $sqlAddPermissions .= ')';
                 }

@@ -1743,13 +1743,14 @@ class Postgres extends SQL
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $ids
+     * @param array<string> $internalIds
+     * @param array<string> $permissionIds
      *
      * @return int
      */
-    public function deleteDocuments(string $collection, array $ids): int
+    public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int
     {
-        if (empty($ids)) {
+        if (empty($internalIds)) {
             return 0;
         }
 
@@ -1761,7 +1762,7 @@ class Postgres extends SQL
                 $where[] = "_tenant = :_tenant";
             }
 
-            $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($ids))) . ")";
+            $where[] = "_id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")";
 
             $sql = "DELETE FROM {$this->getSQLTable($name)} WHERE " . \implode(' AND ', $where);
 
@@ -1769,7 +1770,7 @@ class Postgres extends SQL
 
             $stmt = $this->getPDO()->prepare($sql);
 
-            foreach ($ids as $id => $value) {
+            foreach ($internalIds as $id => $value) {
                 $stmt->bindValue(":_id_{$id}", $value);
             }
 
@@ -1777,33 +1778,35 @@ class Postgres extends SQL
                 $stmt->bindValue(':_tenant', $this->tenant);
             }
 
-            $sql = "
-                DELETE FROM {$this->getSQLTable($name . '_perms')} 
-                WHERE _document IN (" . \implode(', ', \array_map(fn ($id) => ":_id_{$id}", \array_keys($ids))) . ")
-            ";
-
-            if ($this->sharedTables) {
-                $sql .= ' AND _tenant = :_tenant';
-            }
-
-            $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
-
-            $stmtPermissions = $this->getPDO()->prepare($sql);
-
-            foreach ($ids as $id => $value) {
-                $stmtPermissions->bindValue(":_id_{$id}", $value);
-            }
-
-            if ($this->sharedTables) {
-                $stmtPermissions->bindValue(':_tenant', $this->tenant);
-            }
-
             if (!$stmt->execute()) {
                 throw new DatabaseException('Failed to delete documents');
             }
 
-            if (!$stmtPermissions->execute()) {
-                throw new DatabaseException('Failed to delete permissions');
+            if(!empty($permissionIds)){
+                $sql = "
+                DELETE FROM {$this->getSQLTable($name . '_perms')} 
+                WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($permissionIds))) . ")
+            ";
+
+                if ($this->sharedTables) {
+                    $sql .= ' AND _tenant = :_tenant';
+                }
+
+                $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
+
+                $stmtPermissions = $this->getPDO()->prepare($sql);
+
+                foreach ($permissionIds as $id => $value) {
+                    $stmtPermissions->bindValue(":_id_{$id}", $value);
+                }
+
+                if ($this->sharedTables) {
+                    $stmtPermissions->bindValue(':_tenant', $this->tenant);
+                }
+
+                if (!$stmtPermissions->execute()) {
+                    throw new DatabaseException('Failed to delete permissions');
+                }
             }
         } catch (\Throwable $e) {
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);

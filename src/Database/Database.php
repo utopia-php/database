@@ -5437,6 +5437,9 @@ class Database
                 $new[] = Query::cursorAfter($lastDocument);
             }
 
+            /**
+             * @var array<Document> $affectedDocuments
+             */
             $affectedDocuments = $this->silent(fn () => $this->find(
                 $collection->getId(),
                 array_merge($new, $queries),
@@ -5447,9 +5450,15 @@ class Database
                 break;
             }
 
-            $documents = \array_merge($affectedDocuments, $documents);
-
+            $internalId = [];
+            $permIds = [];
             foreach ($affectedDocuments as $document) {
+                $documents[] = $document;
+                $internalId[] = $document->getInternalId();
+                if(!empty($document->getPermissions())){
+                    $permIds[] = $document->getId();
+                }
+
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->deleteDocumentRelationships(
                         $collection,
@@ -5469,6 +5478,16 @@ class Database
                 }
             }
 
+            $this->withTransaction(function () use ($affectedDocuments, $collection, $batchSize, $skipAuth, $authorization, $internalId, $permIds) {
+                $getResults = fn () => $this->adapter->deleteDocuments(
+                    $collection->getId(),
+                    $internalId,
+                    $permIds
+                );
+
+                $skipAuth ? $authorization->skip($getResults) : $getResults();
+            });
+
             if (count($affectedDocuments) < $batchSize) {
                 break;
             } elseif ($originalLimit && count($documents) == $originalLimit) {
@@ -5481,17 +5500,6 @@ class Database
         if (empty($documents)) {
             return [];
         }
-
-        $this->withTransaction(function () use ($documents, $collection, $batchSize, $skipAuth, $authorization) {
-            foreach (\array_chunk($documents, $batchSize) as $chunk) {
-                $getResults = fn () => $this->adapter->deleteDocuments(
-                    $collection->getId(),
-                    array_map(fn ($document) => $document->getId(), $chunk)
-                );
-
-                $skipAuth ? $authorization->skip($getResults) : $getResults();
-            }
-        });
 
         foreach ($documents as $document) {
             $this->purgeCachedDocument($collection->getId(), $document->getId());

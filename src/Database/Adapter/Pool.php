@@ -32,10 +32,9 @@ class Pool extends Adapter
      *
      * Required because __call() can't be used to implement abstract methods.
      *
-     * @template T
      * @param string $method
-     * @param array $args
-     * @return T
+     * @param array<mixed> $args
+     * @return mixed
      */
     public function delegate(string $method, array $args): mixed
     {

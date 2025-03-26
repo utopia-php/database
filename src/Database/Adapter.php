@@ -246,7 +246,7 @@ abstract class Adapter
      *
      * @param int $milliseconds The timeout value in milliseconds for database queries.
      * @param string $event     The event the timeout should fire for
-     * @return $this
+     * @return void
      *
      * @throws Exception The provided timeout value must be greater than or equal to 0.
      */

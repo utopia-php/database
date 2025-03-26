@@ -923,16 +923,12 @@ class Postgres extends SQL
         $attributes['_permissions'] = \json_encode($document->getPermissions());
 
         if ($this->sharedTables) {
-            $attributes['_tenant'] = $this->tenant;
+            $attributes['_tenant'] = $document->getTenant();
         }
 
         $name = $this->filter($collection);
         $columns = '';
         $columnNames = '';
-
-        /**
-         * Insert Attributes
-         */
 
         // Insert internal id if set
         if (!empty($document->getInternalId())) {
@@ -968,12 +964,12 @@ class Postgres extends SQL
 
         $attributeIndex = 0;
         foreach ($attributes as $value) {
-            if (is_array($value)) {
+            if (\is_array($value)) {
                 $value = \json_encode($value);
             }
 
             $bindKey = 'key_' . $attributeIndex;
-            $value = (is_bool($value)) ? ($value ? "true" : "false") : $value;
+            $value = (\is_bool($value)) ? ($value ? "true" : "false") : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }
@@ -983,7 +979,7 @@ class Postgres extends SQL
             foreach ($document->getPermissionsByType($type) as $permission) {
                 $permission = \str_replace('"', '', $permission);
                 $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}' {$sqlTenant})";
+                $permissions[] = "('{$type}', '{$permission}', :_uid {$sqlTenant})";
             }
         }
 
@@ -999,8 +995,9 @@ class Postgres extends SQL
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
+            $stmtPermissions->bindValue(':_uid', $document->getId());
             if ($sqlTenant) {
-                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+                $stmtPermissions->bindValue(':_tenant', $document->getTenant());
             }
         }
 
@@ -1069,7 +1066,7 @@ class Postgres extends SQL
             $bindValues = [];
             $permissions = [];
 
-            foreach ($documents as $document) {
+            foreach ($documents as $index => $document) {
                 $attributes = $document->getAttributes();
                 $attributes['_uid'] = $document->getId();
                 $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1083,7 +1080,7 @@ class Postgres extends SQL
                 }
 
                 if ($this->sharedTables) {
-                    $attributes['_tenant'] = $this->tenant;
+                    $attributes['_tenant'] = $document->getTenant();
                 }
 
                 $bindKeys = [];
@@ -1103,17 +1100,20 @@ class Postgres extends SQL
                 $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
                 foreach (Database::PERMISSIONS as $type) {
                     foreach ($document->getPermissionsByType($type) as $permission) {
+                        $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';
                         $permission = \str_replace('"', '', $permission);
-                        $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}', :_tenant)";
+                        $permission = "('{$type}', '{$permission}', :_uid_{$index} {$tenantBind})";
+                        $permissions[] = $permission;
                     }
                 }
             }
 
-            $stmt = $this->getPDO()->prepare(
-                "
+            $batchKeys = \implode(', ', $batchKeys);
+
+            $stmt = $this->getPDO()->prepare("
                 INSERT INTO {$this->getSQLTable($name)} {$columns}
-                VALUES " . \implode(', ', $batchKeys)
-            );
+                VALUES {$batchKeys}
+            ");
 
             foreach ($bindValues as $key => $value) {
                 $stmt->bindValue($key, $value, $this->getPDOType($value));
@@ -1122,12 +1122,23 @@ class Postgres extends SQL
             $stmt->execute();
 
             if (!empty($permissions)) {
-                $stmtPermissions = $this->getPDO()->prepare(
-                    "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document, _tenant) 
-                    VALUES " . \implode(', ', $permissions)
-                );
-                $stmtPermissions->bindValue(':_tenant', $this->tenant);
+                $tenantColumn = $this->sharedTables ? ', _tenant' : '';
+                $permissions = \implode(', ', $permissions);
+
+                $sqlPermissions = "
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions};
+                ";
+
+                $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
+
+                foreach ($documents as $index => $document) {
+                    $stmtPermissions->bindValue(":_uid_{$index}", $document->getId());
+                    if ($this->sharedTables) {
+                        $stmtPermissions->bindValue(":_tenant_{$index}", $document->getTenant());
+                    }
+                }
+
                 $stmtPermissions?->execute();
             }
         } catch (PDOException $e) {
@@ -1999,7 +2010,7 @@ class Postgres extends SQL
                 unset($results[$index]['_id']);
             }
             if (\array_key_exists('_tenant', $document)) {
-                $results[$index]['$tenant'] = $document['_tenant'];
+                $results[$index]['$tenant'] = $document['_tenant'] === null ? null : (int)$document['_tenant'];
                 unset($results[$index]['_tenant']);
             }
             if (\array_key_exists('_createdAt', $document)) {

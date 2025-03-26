@@ -16438,6 +16438,95 @@ abstract class Base extends TestCase
         $database->setDatabase($this->testDatabase);
     }
 
+    public function testSharedTablesTenantPerDocument(): void
+    {
+        $database = static::getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForSchemas()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if ($database->exists(__FUNCTION__)) {
+            $database->delete(__FUNCTION__);
+        }
+
+        $database
+            ->setDatabase(__FUNCTION__)
+            ->setNamespace('')
+            ->setSharedTables(true)
+            ->setTenant(null)
+            ->create();
+
+        // Create collection
+        $database->createCollection(__FUNCTION__, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false);
+
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 10, false);
+        $database->createIndex(__FUNCTION__, 'nameIndex', Database::INDEX_KEY, ['name']);
+
+        $doc1Id = ID::unique();
+
+        // Create doc for tenant 1
+        $database
+            ->setTenant(null)
+            ->setTenantPerDocument(true)
+            ->createDocument(__FUNCTION__, new Document([
+                '$id' => $doc1Id,
+                '$tenant' => 1,
+                'name' => 'Spiderman',
+            ]));
+
+        // Set to tenant 1 and read
+        $doc = $database
+            ->setTenantPerDocument(false)
+            ->setTenant(1)
+            ->getDocument(__FUNCTION__, $doc1Id);
+
+        $this->assertEquals('Spiderman', $doc['name']);
+
+        $doc2Id = ID::unique();
+
+        // Create doc for tenant 2
+        $database
+            ->setTenant(null)
+            ->setTenantPerDocument(true)
+            ->createDocument(__FUNCTION__, new Document([
+                '$id' => $doc2Id,
+                '$tenant' => 2,
+                'name' => 'Batman',
+            ]));
+
+        // Set to tenant 2 and read
+        $doc = $database
+            ->setTenantPerDocument(false)
+            ->setTenant(2)
+            ->getDocument(__FUNCTION__, $doc2Id);
+
+        $this->assertEquals('Batman', $doc['name']);
+        $this->assertEquals(2, $doc->getAttribute('$tenant'));
+
+        // Ensure no read cross-tenant
+        $docs = $database
+            ->setTenantPerDocument(false)
+            ->setTenant(1)
+            ->find(__FUNCTION__);
+
+        $this->assertEquals(1, \count($docs));
+        $this->assertEquals($doc1Id, $docs[0]->getId());
+
+        // Reset instance
+        $database
+            ->setSharedTables($sharedTables)
+            ->setNamespace($namespace)
+            ->setDatabase($schema);
+    }
+
     public function testTransformations(): void
     {
         static::getDatabase()->createCollection('docs', attributes: [

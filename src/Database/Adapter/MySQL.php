@@ -25,6 +25,9 @@ class MySQL extends MariaDB
         if ($milliseconds <= 0) {
             throw new DatabaseException('Timeout must be greater than 0');
         }
+
+        $this->timeout = $milliseconds;
+
         $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
             return \preg_replace(
                 pattern: '/SELECT/',

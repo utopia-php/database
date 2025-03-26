@@ -35,10 +35,26 @@ class Pool extends Adapter
      * @param string $method
      * @param array<mixed> $args
      * @return mixed
+     * @throws DatabaseException
      */
     public function delegate(string $method, array $args): mixed
     {
         return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
+            $adapter->setDatabase($this->getDatabase());
+            $adapter->setNamespace($this->getNamespace());
+            $adapter->setSharedTables($this->getSharedTables());
+            $adapter->setTenant($this->getTenant());
+
+            if ($this->getTimeout() > 0) {
+                $adapter->setTimeout($this->getTimeout());
+            }
+            foreach ($this->getDebug() as $key => $value) {
+                $adapter->setDebug($key, $value);
+            }
+            foreach($this->getMetadata() as $key => $value) {
+                $adapter->setMetadata($key, $value);
+            }
+
             return $adapter->{$method}(...$args);
         });
     }

@@ -5508,13 +5508,13 @@ class Database
                 break;
             }
 
-            $internalId = [];
-            $permIds = [];
+            $internalIds = [];
+            $permissionIds = [];
             foreach ($affectedDocuments as $document) {
                 $documents[] = $document;
-                $internalId[] = $document->getInternalId();
+                $internalIds[] = $document->getInternalId();
                 if (!empty($document->getPermissions())) {
-                    $permIds[] = $document->getId();
+                    $permissionIds[] = $document->getId();
                 }
 
                 if ($this->resolveRelationships) {
@@ -5536,11 +5536,11 @@ class Database
                 }
             }
 
-            $this->withTransaction(function () use ($collection, $skipAuth, $authorization, $internalId, $permIds) {
+            $this->withTransaction(function () use ($collection, $skipAuth, $authorization, $internalIds, $permissionIds) {
                 $getResults = fn () => $this->adapter->deleteDocuments(
                     $collection->getId(),
-                    $internalId,
-                    $permIds
+                    $internalIds,
+                    $permissionIds
                 );
 
                 $skipAuth ? $authorization->skip($getResults) : $getResults();

@@ -1960,15 +1960,12 @@ class MariaDB extends SQL
 
         try {
             $name = $this->filter($collection);
-            $where = [];
 
-            if ($this->sharedTables) {
-                $where[] = "_tenant = :_tenant";
-            }
-
-            $where[] = "_id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")";
-
-            $sql = "DELETE FROM {$this->getSQLTable($name)} WHERE " . \implode(' AND ', $where);
+            $sql = "
+            DELETE FROM {$this->getSQLTable($name)} 
+            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")
+            {$this->getTenantQuery($collection)}
+            ";
 
             $sql = $this->trigger(Database::EVENT_DOCUMENTS_DELETE, $sql);
 
@@ -1989,19 +1986,16 @@ class MariaDB extends SQL
             if (!empty($permissionIds)) {
                 $sql = "
                 DELETE FROM {$this->getSQLTable($name . '_perms')} 
-                WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_pid_{$index}", \array_keys($permissionIds))) . ")
-            ";
-
-                if ($this->sharedTables) {
-                    $sql .= ' AND _tenant = :_tenant';
-                }
+                WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($permissionIds))) . ")
+                {$this->getTenantQuery($collection)}
+                ";
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_DELETE, $sql);
 
                 $stmtPermissions = $this->getPDO()->prepare($sql);
 
                 foreach ($permissionIds as $id => $value) {
-                    $stmtPermissions->bindValue(":_pid_{$id}", $value);
+                    $stmtPermissions->bindValue(":_id_{$id}", $value);
                 }
 
                 if ($this->sharedTables) {

@@ -51,7 +51,7 @@ class Pool extends Adapter
             foreach ($this->getDebug() as $key => $value) {
                 $adapter->setDebug($key, $value);
             }
-            foreach($this->getMetadata() as $key => $value) {
+            foreach ($this->getMetadata() as $key => $value) {
                 $adapter->setMetadata($key, $value);
             }
 

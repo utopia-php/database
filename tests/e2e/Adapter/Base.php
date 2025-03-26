@@ -5802,7 +5802,7 @@ abstract class Base extends TestCase
 
     public function testWidthLimit(): void
     {
-        if (static::getDatabase()->getAdapter()::getDocumentSizeLimit() === 0) {
+        if (static::getDatabase()->getAdapter()->getDocumentSizeLimit() === 0) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -5885,7 +5885,7 @@ abstract class Base extends TestCase
             return;
         }
 
-        $limit = static::getDatabase()->getAdapter()->getLimitForAttributes() - static::getDatabase()->getAdapter()::getCountOfDefaultAttributes();
+        $limit = static::getDatabase()->getAdapter()->getLimitForAttributes() - static::getDatabase()->getAdapter()->getCountOfDefaultAttributes();
 
         $attributes = [];
 
@@ -16504,12 +16504,12 @@ abstract class Base extends TestCase
                     'required' => true,
                 ])
             ],
-            documentSecurity: false,
             permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::delete(Role::any())
-            ]
+            ],
+            documentSecurity: false
         );
 
         $this->propagateBulkDocuments('bulk_delete');

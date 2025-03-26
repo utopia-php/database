@@ -59,6 +59,18 @@ class Pool extends Adapter
         });
     }
 
+    public function before(string $event, string $name = '', ?callable $callback = null): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        return $this;
+    }
+
+    protected function trigger(string $event, mixed $query): mixed
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
         $this->delegate(__FUNCTION__, \func_get_args());

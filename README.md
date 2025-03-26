@@ -49,11 +49,10 @@ The database document interface only supports primitives types (`strings`, `inte
 Below is a list of supported databases, and their compatibly tested versions alongside a list of supported features and relevant limits.
 
 | Adapter  | Status | Version |
-| -------- | ------ | ------- |
+|----------|--------|---------|
 | MariaDB  | ✅      | 10.5    |
 | MySQL    | ✅      | 8.0     |
 | Postgres | ✅      | 13.0    |
-| MongoDB  | ✅      | 5.0     |
 | SQLite   | ✅      | 3.38    |
 
 ` ✅  - supported `

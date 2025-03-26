@@ -70,17 +70,6 @@ services:
       - "8704:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
-  
-  mongo:
-    image: mongo:5.0
-    container_name: utopia-mongo
-    networks:
-      - database
-    ports:
-      - "8705:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: example
 
   mysql:
     image: mysql:8.0.33

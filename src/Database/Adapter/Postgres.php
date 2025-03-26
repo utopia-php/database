@@ -1793,7 +1793,7 @@ class Postgres extends SQL
                 throw new DatabaseException('Failed to delete documents');
             }
 
-            if(!empty($permissionIds)){
+            if (!empty($permissionIds)) {
                 $sql = "
                 DELETE FROM {$this->getSQLTable($name . '_perms')} 
                 WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($permissionIds))) . ")

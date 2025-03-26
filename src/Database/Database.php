@@ -5513,7 +5513,7 @@ class Database
             foreach ($affectedDocuments as $document) {
                 $documents[] = $document;
                 $internalId[] = $document->getInternalId();
-                if(!empty($document->getPermissions())){
+                if (!empty($document->getPermissions())) {
                     $permIds[] = $document->getId();
                 }
 
@@ -5536,7 +5536,7 @@ class Database
                 }
             }
 
-            $this->withTransaction(function () use ($affectedDocuments, $collection, $batchSize, $skipAuth, $authorization, $internalId, $permIds) {
+            $this->withTransaction(function () use ($collection, $skipAuth, $authorization, $internalId, $permIds) {
                 $getResults = fn () => $this->adapter->deleteDocuments(
                     $collection->getId(),
                     $internalId,
@@ -5548,7 +5548,7 @@ class Database
 
             if (count($affectedDocuments) < $batchSize) {
                 break;
-            } elseif ($originalLimit && count($documents) == $originalLimit) {
+            } elseif ($originalLimit && count($documents) >= $originalLimit) {
                 break;
             }
 

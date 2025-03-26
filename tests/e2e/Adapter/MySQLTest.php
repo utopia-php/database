@@ -7,6 +7,9 @@ use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Database;
+use Utopia\Database\Exception;
+use Utopia\Database\Exception\Duplicate;
+use Utopia\Database\Exception\Limit;
 use Utopia\Database\PDO;
 
 class MySQLTest extends Base
@@ -15,19 +18,11 @@ class MySQLTest extends Base
     protected static ?PDO $pdo = null;
     protected static string $namespace;
 
-    // Remove once all methods are implemented
-    /**
-     * Return name of adapter
-     *
-     * @return string
-     */
-    public static function getAdapterName(): string
-    {
-        return "mysql";
-    }
-
     /**
      * @return Database
+     * @throws Duplicate
+     * @throws Exception
+     * @throws Limit
      */
     public static function getDatabase(): Database
     {

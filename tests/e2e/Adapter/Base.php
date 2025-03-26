@@ -32,7 +32,7 @@ use Utopia\Database\Validator\Index;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 
-ini_set('memory_limit', '2048M');
+\ini_set('memory_limit', '2048M');
 
 abstract class Base extends TestCase
 {
@@ -58,11 +58,6 @@ abstract class Base extends TestCase
      * @return bool
      */
     abstract protected static function deleteIndex(string $collection, string $index): bool;
-
-    /**
-     * @return string
-     */
-    abstract protected static function getAdapterName(): string;
 
     public function setUp(): void
     {

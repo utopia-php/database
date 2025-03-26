@@ -18,6 +18,8 @@ abstract class Adapter
 
     protected ?int $tenant = null;
 
+    protected bool $tenantPerDocument = false;
+
     protected int $timeout = 0;
 
     protected int $inTransaction = 0;
@@ -193,6 +195,34 @@ abstract class Adapter
     }
 
     /**
+     * Set Tenant Per Document.
+     *
+     * Set whether to use a different tenant for each document
+     *
+     * @param bool $tenantPerDocument
+     *
+     * @return bool
+     */
+    public function setTenantPerDocument(bool $tenantPerDocument): bool
+    {
+        $this->tenantPerDocument = $tenantPerDocument;
+
+        return true;
+    }
+
+    /**
+     * Get Tenant Per Document.
+     *
+     * Get whether to use a different tenant for each document
+     *
+     * @return bool
+     */
+    public function getTenantPerDocument(): bool
+    {
+        return $this->tenantPerDocument;
+    }
+
+    /**
      * Set metadata for query comments
      *
      * @param string $key
@@ -268,7 +298,7 @@ abstract class Adapter
     public function clearTimeout(string $event): void
     {
         // Clear existing callback
-        $this->before($event, 'timeout', null);
+        $this->before($event, 'timeout');
     }
 
     /**
@@ -488,7 +518,7 @@ abstract class Adapter
      * @param int $size
      * @param bool $signed
      * @param bool $array
-     * @param string $newKey
+     * @param string|null $newKey
      *
      * @return bool
      */
@@ -626,6 +656,7 @@ abstract class Adapter
      * Update Document
      *
      * @param string $collection
+     * @param string $id
      * @param Document $document
      *
      * @return Document

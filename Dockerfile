@@ -1,4 +1,4 @@
-FROM composer:2.0 AS composer
+FROM composer:2.8 AS composer
 
 WORKDIR /usr/local/src/
 
@@ -11,11 +11,11 @@ RUN composer install \
     --no-plugins \
     --no-scripts \
     --prefer-dist
-    
+
 FROM php:8.3.19-cli-alpine3.21 AS compile
 
 ENV PHP_REDIS_VERSION="6.0.2" \
-    PHP_SWOOLE_VERSION="v5.1.3" \
+    PHP_SWOOLE_VERSION="v5.1.7" \
     PHP_XDEBUG_VERSION="3.4.2"
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -60,7 +60,7 @@ RUN \
 ## PCOV Extension
 FROM compile AS pcov
 RUN \
-   git clone https://github.com/krakjoe/pcov.git \
+   git clone --depth 1 https://github.com/krakjoe/pcov.git \
    && cd pcov \
    && phpize \
    && ./configure --enable-pcov \

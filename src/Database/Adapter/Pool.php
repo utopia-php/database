@@ -44,9 +44,9 @@ class Pool extends Adapter
         });
     }
 
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): static
+    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function startTransaction(): bool

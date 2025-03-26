@@ -250,7 +250,7 @@ abstract class Adapter
      *
      * @throws Exception The provided timeout value must be greater than or equal to 0.
      */
-    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): static;
+    abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
 
     /**
      * Clears a global timeout for database queries.

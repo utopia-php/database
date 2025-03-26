@@ -12,12 +12,11 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
     
-FROM php:8.3.10-cli-alpine3.20 AS compile
+FROM php:8.3.19-cli-alpine3.21 AS compile
 
 ENV PHP_REDIS_VERSION="6.0.2" \
     PHP_SWOOLE_VERSION="v5.1.3" \
-    PHP_MONGO_VERSION="1.16.1" \
-    PHP_XDEBUG_VERSION="3.3.2"
+    PHP_XDEBUG_VERSION="3.4.2"
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 

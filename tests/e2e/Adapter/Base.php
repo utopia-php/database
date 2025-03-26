@@ -16523,7 +16523,7 @@ abstract class Base extends TestCase
         $this->assertCount(2, static::getDatabase()->deleteDocuments(
             'bulk_delete',
             [
-                Query::select(['$internalId', '$id', '$collection', '$updatedAt']),
+                Query::select(['$internalId', '$id', '$collection', '$permissions', '$updatedAt']),
                 Query::cursorAfter($docs[6]),
                 Query::limit(2),
             ],

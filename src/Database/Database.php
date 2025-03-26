@@ -5546,6 +5546,10 @@ class Database
                 $skipAuth ? $authorization->skip($getResults) : $getResults();
             });
 
+            foreach ($affectedDocuments as $affectedDocument) {
+                $this->purgeCachedDocument($collection->getId(), $affectedDocument->getId());
+            }
+
             if (count($affectedDocuments) < $batchSize) {
                 break;
             } elseif ($originalLimit && count($documents) >= $originalLimit) {
@@ -5557,10 +5561,6 @@ class Database
 
         if (empty($documents)) {
             return [];
-        }
-
-        foreach ($documents as $document) {
-            $this->purgeCachedDocument($collection->getId(), $document->getId());
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([

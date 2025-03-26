@@ -1989,7 +1989,7 @@ class MariaDB extends SQL
             if (!empty($permissionIds)) {
                 $sql = "
                 DELETE FROM {$this->getSQLTable($name . '_perms')} 
-                WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($permissionIds))) . ")
+                WHERE _document IN (" . \implode(', ', \array_map(fn ($index) => ":_pid_{$index}", \array_keys($permissionIds))) . ")
             ";
 
                 if ($this->sharedTables) {
@@ -2001,7 +2001,7 @@ class MariaDB extends SQL
                 $stmtPermissions = $this->getPDO()->prepare($sql);
 
                 foreach ($permissionIds as $id => $value) {
-                    $stmtPermissions->bindValue(":_id_{$id}", $value);
+                    $stmtPermissions->bindValue(":_pid_{$id}", $value);
                 }
 
                 if ($this->sharedTables) {

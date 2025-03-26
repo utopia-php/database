@@ -4165,56 +4165,56 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
-        $documents = $this->withTransaction(function () use ($collection, $queries, $batchSize, $updates, $limit, $cursor, $authorization, $skipAuth) {
-            $documents = [];
-            $originalLimit = $limit;
-            $lastDocument = $cursor;
+        $documents = [];
+        $originalLimit = $limit;
+        $lastDocument = $cursor;
 
-            // Resolve and update relationships
-            while (true) {
-                if ($limit && $limit < $batchSize) {
-                    $batchSize = $limit;
-                } elseif (!empty($limit)) {
-                    $limit -= $batchSize;
+        // Resolve and update relationships
+        while (true) {
+            if ($limit && $limit < $batchSize) {
+                $batchSize = $limit;
+            } elseif (!empty($limit)) {
+                $limit -= $batchSize;
+            }
+
+            $new = [
+                Query::limit($batchSize)
+            ];
+
+            if (! empty($lastDocument)) {
+                $new[] = Query::cursorAfter($lastDocument);
+            }
+
+            $affectedDocuments = $this->silent(fn () => $this->find(
+                $collection->getId(),
+                array_merge($new, $queries),
+                forPermission: Database::PERMISSION_UPDATE
+            ));
+
+            if (empty($affectedDocuments)) {
+                break;
+            }
+
+            foreach ($affectedDocuments as $document) {
+                if ($this->resolveRelationships) {
+                    $newDocument = new Document(array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
+                    $documents[] = $newDocument;
                 }
 
-                $new = [
-                    Query::limit($batchSize)
-                ];
-
-                if (! empty($lastDocument)) {
-                    $new[] = Query::cursorAfter($lastDocument);
+                // Check if document was updated after the request timestamp
+                try {
+                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                } catch (Exception $e) {
+                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
 
-                $affectedDocuments = $this->silent(fn () => $this->find(
-                    $collection->getId(),
-                    array_merge($new, $queries),
-                    forPermission: Database::PERMISSION_UPDATE
-                ));
-
-                if (empty($affectedDocuments)) {
-                    break;
+                if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    throw new ConflictException('Document was updated after the request timestamp');
                 }
+            }
 
-                foreach ($affectedDocuments as $document) {
-                    if ($this->resolveRelationships) {
-                        $newDocument = new Document(array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
-                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
-                        $documents[] = $newDocument;
-                    }
-
-                    // Check if document was updated after the request timestamp
-                    try {
-                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-                    } catch (Exception $e) {
-                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                    }
-
-                    if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                        throw new ConflictException('Document was updated after the request timestamp');
-                    }
-                }
-
+            $this->withTransaction(function () use ($collection, $updates, $authorization, $skipAuth, $affectedDocuments) {
                 $getResults = fn () => $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
@@ -4222,21 +4222,19 @@ class Database
                 );
 
                 $skipAuth ? $authorization->skip($getResults) : $getResults();
+            });
 
-                if (count($affectedDocuments) < $batchSize) {
-                    break;
-                } elseif ($originalLimit && count($documents) == $originalLimit) {
-                    break;
-                }
-
-                $lastDocument = end($affectedDocuments);
+            foreach ($documents as $document) {
+                $this->purgeCachedDocument($collection->getId(), $document->getId());
             }
 
-            return $documents;
-        });
+            if (count($affectedDocuments) < $batchSize) {
+                break;
+            } elseif ($originalLimit && count($documents) == $originalLimit) {
+                break;
+            }
 
-        foreach ($documents as $document) {
-            $this->purgeCachedDocument($collection->getId(), $document->getId());
+            $lastDocument = end($affectedDocuments);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([

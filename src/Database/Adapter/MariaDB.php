@@ -1380,6 +1380,10 @@ class MariaDB extends SQL
      */
     public function updateDocuments(string $collection, Document $updates, array $documents): int
     {
+        if (empty($documents)) {
+            return 0;
+        }
+
         $attributes = $updates->getAttributes();
 
         if (!empty($updates->getUpdatedAt())) {
@@ -1396,24 +1400,13 @@ class MariaDB extends SQL
 
         $name = $this->filter($collection);
 
-        $columns = '';
-
-        $where = [];
-
-        $ids = \array_map(fn ($document) => $document->getId(), $documents);
-        $where[] = "_uid IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($ids))) . ")";
-
-        if ($this->sharedTables) {
-            $where[] = "_tenant = :_tenant";
-        }
-
-        $sqlWhere = 'WHERE ' . implode(' AND ', $where);
+        $internalIds = \array_map(fn ($document) => $document->getInternalId(), $documents);
 
         $bindIndex = 0;
+        $columns = '';
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`" . '=:' . $bindKey;
+            $columns .= "{$this->quote($column)} = :key_{$bindIndex}";
 
             if ($attribute !== \array_key_last($attributes)) {
                 $columns .= ',';
@@ -1425,9 +1418,11 @@ class MariaDB extends SQL
         $sql = "
             UPDATE {$this->getSQLTable($name)}
             SET {$columns}
-            {$sqlWhere}
+            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")
+            {$this->getTenantQuery($collection)}
         ";
-
+        var_dump($this->sharedTables);
+        var_dump($sql);
         $sql = $this->trigger(Database::EVENT_DOCUMENTS_UPDATE, $sql);
         $stmt = $this->getPDO()->prepare($sql);
 
@@ -1435,12 +1430,12 @@ class MariaDB extends SQL
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        foreach ($ids as $id => $value) {
+        foreach ($internalIds as $id => $value) {
             $stmt->bindValue(":_id_{$id}", $value);
         }
 
         $attributeIndex = 0;
-        foreach ($attributes as $attribute => $value) {
+        foreach ($attributes as $value) {
             if (is_array($value)) {
                 $value = json_encode($value);
             }
@@ -2676,6 +2671,11 @@ class MariaDB extends SQL
     public function getSupportForSchemaAttributes(): bool
     {
         return true;
+    }
+
+    protected function quote(string $string): string
+    {
+        return "`{$string}`";
     }
 
 }

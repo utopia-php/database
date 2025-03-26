@@ -2452,4 +2452,9 @@ class Postgres extends SQL
         $stmt = $this->getPDO()->query("SELECT pg_backend_pid();");
         return $stmt->fetchColumn();
     }
+
+    protected function quote(string $string): string
+    {
+        return "\"{$string}\"";
+    }
 }

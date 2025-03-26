@@ -1287,4 +1287,10 @@ abstract class SQL extends Adapter
 
         return $stmt->rowCount();
     }
+
+    /**
+     * @param string $string
+     * @return string
+     */
+    abstract protected function quote(string $string): string;
 }

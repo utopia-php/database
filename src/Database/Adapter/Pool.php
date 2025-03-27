@@ -221,7 +221,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function deleteDocuments(string $collection, array $ids): int
+    public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

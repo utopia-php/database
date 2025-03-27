@@ -16206,6 +16206,9 @@ abstract class Base extends TestCase
          * Default mode already tested, we'll test 'schema' and 'table' isolation here
          */
         $database = static::getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
 
         if (!$database->getAdapter()->getSupportForSchemas()) {
             $this->expectNotToPerformAssertions();
@@ -16373,14 +16376,18 @@ abstract class Base extends TestCase
         }
 
         // Reset state
-        $database->setSharedTables(false);
-        $database->setNamespace(static::$namespace);
-        $database->setDatabase($this->testDatabase);
+        $database
+            ->setSharedTables($sharedTables)
+            ->setNamespace($namespace)
+            ->setDatabase($schema);
     }
 
     public function testSharedTablesDuplicates(): void
     {
         $database = static::getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
 
         if (!$database->getAdapter()->getSupportForSchemas()) {
             $this->expectNotToPerformAssertions();
@@ -16433,9 +16440,10 @@ abstract class Base extends TestCase
         $this->assertEquals(1, \count($collection->getAttribute('attributes')));
         $this->assertEquals(1, \count($collection->getAttribute('indexes')));
 
-        $database->setSharedTables(false);
-        $database->setNamespace(static::$namespace);
-        $database->setDatabase($this->testDatabase);
+        $database
+            ->setSharedTables($sharedTables)
+            ->setNamespace($namespace)
+            ->setDatabase($schema);
     }
 
     public function testSharedTablesTenantPerDocument(): void

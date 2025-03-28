@@ -16620,9 +16620,9 @@ abstract class Base extends TestCase
                 Query::select([...$selects, '$createdAt']),
                 Query::cursorAfter($docs[6]),
                 Query::greaterThan('$createdAt', '2000-01-01'),
-                Query::limit(2),
                 Query::orderAsc('$createdAt'),
                 Query::orderAsc(),
+                Query::limit(2),
             ],
             1
         ));

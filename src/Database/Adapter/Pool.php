@@ -24,6 +24,17 @@ class Pool extends Adapter
             if (!($resource instanceof Adapter)) {
                 throw new DatabaseException('Pool must contain instances of Utopia\Database\Adapter');
             }
+            $this->setDatabase($resource->getDatabase());
+            $this->setNamespace($resource->getNamespace());
+            $this->setSharedTables($resource->getSharedTables());
+            $this->setTenant($resource->getTenant());
+            $this->setTimeout($resource->getTimeout());
+            foreach ($resource->getDebug() as $key => $value) {
+                $this->setDebug($key, $value);
+            }
+            foreach ($resource->getMetadata() as $key => $value) {
+                $this->setMetadata($key, $value);
+            }
         });
     }
 

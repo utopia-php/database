@@ -17998,6 +17998,7 @@ abstract class Base extends TestCase
         Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
         sleep(5);
 
+        // Should return empty results after the delete operation
         $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
     }
 }

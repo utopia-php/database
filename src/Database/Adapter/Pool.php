@@ -28,7 +28,9 @@ class Pool extends Adapter
             $this->setNamespace($resource->getNamespace());
             $this->setSharedTables($resource->getSharedTables());
             $this->setTenant($resource->getTenant());
-            $this->setTimeout($resource->getTimeout());
+            if ($resource->getTimeout() > 0) {
+                $this->setTimeout($resource->getTimeout());
+            }
             foreach ($resource->getDebug() as $key => $value) {
                 $this->setDebug($key, $value);
             }

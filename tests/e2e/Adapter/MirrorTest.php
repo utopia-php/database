@@ -104,11 +104,6 @@ class MirrorTest extends Base
         return self::$database = $database;
     }
 
-    protected static function getAdapterName(): string
-    {
-        return "Mirror";
-    }
-
     /**
      * @throws Exception
      * @throws \RedisException

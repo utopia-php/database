@@ -3,25 +3,29 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
+use ReflectionClass;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Database;
 use Utopia\Database\Exception;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\PDO;
+use Utopia\Pools\Pool as UtopiaPool;
 
-class MySQLTest extends Base
+class PoolTest extends Base
 {
     public static ?Database $database = null;
-    protected static ?PDO $pdo = null;
+    protected static ?UtopiaPool $pool = null;
     protected static string $namespace;
 
     /**
      * @return Database
-     * @throws Duplicate
      * @throws Exception
+     * @throws Duplicate
      * @throws Limit
      */
     public static function getDatabase(): Database
@@ -30,19 +34,27 @@ class MySQLTest extends Base
             return self::$database;
         }
 
-        $dbHost = 'mysql';
-        $dbPort = '3307';
-        $dbUser = 'root';
-        $dbPass = 'password';
-
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
-
         $redis = new Redis();
         $redis->connect('redis', 6379);
         $redis->flushAll();
         $cache = new Cache(new RedisAdapter($redis));
 
-        $database = new Database(new MySQL($pdo), $cache);
+        $pool = new UtopiaPool('mysql', 10, function () {
+            $dbHost = 'mysql';
+            $dbPort = '3307';
+            $dbUser = 'root';
+            $dbPass = 'password';
+
+            return new MySQL(new PDO(
+                dsn: "mysql:host={$dbHost};port={$dbPort};charset=utf8mb4",
+                username: $dbUser,
+                password: $dbPass,
+                config: MySQL::getPDOAttributes(),
+            ));
+        });
+
+        $database = new Database(new Pool($pool), $cache);
+
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
@@ -53,7 +65,8 @@ class MySQLTest extends Base
 
         $database->create();
 
-        self::$pdo = $pdo;
+        self::$pool = $pool;
+
         return self::$database = $database;
     }
 
@@ -62,7 +75,14 @@ class MySQLTest extends Base
         $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
-        self::$pdo->exec($sql);
+        self::$pool->use(function (Adapter $adapter) use ($sql) {
+            // Hack to get adapter PDO
+            $class = new ReflectionClass($adapter);
+            $property = $class->getProperty('pdo');
+            $property->setAccessible(true);
+            $pdo = $property->getValue($adapter);
+            $pdo->exec($sql);
+        });
 
         return true;
     }
@@ -72,7 +92,14 @@ class MySQLTest extends Base
         $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
-        self::$pdo->exec($sql);
+        self::$pool->use(function (Adapter $adapter) use ($sql) {
+            // Hack to get adapter PDO
+            $class = new ReflectionClass($adapter);
+            $property = $class->getProperty('pdo');
+            $property->setAccessible(true);
+            $pdo = $property->getValue($adapter);
+            $pdo->exec($sql);
+        });
 
         return true;
     }

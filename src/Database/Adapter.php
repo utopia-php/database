@@ -20,6 +20,8 @@ abstract class Adapter
 
     protected bool $tenantPerDocument = false;
 
+    protected int $timeout = 0;
+
     protected int $inTransaction = 0;
 
     /**
@@ -275,12 +277,17 @@ abstract class Adapter
      * and an appropriate error or exception will be raised to handle the timeout condition.
      *
      * @param int $milliseconds The timeout value in milliseconds for database queries.
-     * @param string $event     The event the timeout should fire fore
+     * @param string $event     The event the timeout should fire for
      * @return void
      *
      * @throws Exception The provided timeout value must be greater than or equal to 0.
      */
     abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+
+    public function getTimeout(): int
+    {
+        return $this->timeout;
+    }
 
     /**
      * Clears a global timeout for database queries.
@@ -963,14 +970,14 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public static function getCountOfDefaultAttributes(): int;
+    abstract public function getCountOfDefaultAttributes(): int;
 
     /**
      * Returns number of indexes used by default.
      *
      * @return int
      */
-    abstract public static function getCountOfDefaultIndexes(): int;
+    abstract public function getCountOfDefaultIndexes(): int;
 
     /**
      * Get maximum width, in bytes, allowed for a SQL row
@@ -978,7 +985,7 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public static function getDocumentSizeLimit(): int;
+    abstract public function getDocumentSizeLimit(): int;
 
     /**
      * Estimate maximum number of bytes required to store a document in $collection.

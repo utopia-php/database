@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d1e1cb1921161014c22372feccc945f9",
+    "content-hash": "5d1e7adf0910bdd2df5324f9cc531a01",
     "packages": [
         {
             "name": "brick/math",
@@ -149,16 +149,16 @@
         },
         {
             "name": "google/protobuf",
-            "version": "v4.30.1",
+            "version": "v4.30.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/protocolbuffers/protobuf-php.git",
-                "reference": "f29ba8a30dfd940efb3a8a75dc44446539101f24"
+                "reference": "a4c4d8565b40b9f76debc9dfeb221412eacb8ced"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/protocolbuffers/protobuf-php/zipball/f29ba8a30dfd940efb3a8a75dc44446539101f24",
-                "reference": "f29ba8a30dfd940efb3a8a75dc44446539101f24",
+                "url": "https://api.github.com/repos/protocolbuffers/protobuf-php/zipball/a4c4d8565b40b9f76debc9dfeb221412eacb8ced",
+                "reference": "a4c4d8565b40b9f76debc9dfeb221412eacb8ced",
                 "shasum": ""
             },
             "require": {
@@ -187,9 +187,9 @@
                 "proto"
             ],
             "support": {
-                "source": "https://github.com/protocolbuffers/protobuf-php/tree/v4.30.1"
+                "source": "https://github.com/protocolbuffers/protobuf-php/tree/v4.30.2"
             },
-            "time": "2025-03-13T21:08:17+00:00"
+            "time": "2025-03-26T18:01:50+00:00"
         },
         {
             "name": "nyholm/psr7",
@@ -1082,16 +1082,16 @@
         },
         {
             "name": "ramsey/collection",
-            "version": "2.1.0",
+            "version": "2.1.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ramsey/collection.git",
-                "reference": "3c5990b8a5e0b79cd1cf11c2dc1229e58e93f109"
+                "reference": "344572933ad0181accbf4ba763e85a0306a8c5e2"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ramsey/collection/zipball/3c5990b8a5e0b79cd1cf11c2dc1229e58e93f109",
-                "reference": "3c5990b8a5e0b79cd1cf11c2dc1229e58e93f109",
+                "url": "https://api.github.com/repos/ramsey/collection/zipball/344572933ad0181accbf4ba763e85a0306a8c5e2",
+                "reference": "344572933ad0181accbf4ba763e85a0306a8c5e2",
                 "shasum": ""
             },
             "require": {
@@ -1152,9 +1152,9 @@
             ],
             "support": {
                 "issues": "https://github.com/ramsey/collection/issues",
-                "source": "https://github.com/ramsey/collection/tree/2.1.0"
+                "source": "https://github.com/ramsey/collection/tree/2.1.1"
             },
-            "time": "2025-03-02T04:48:29+00:00"
+            "time": "2025-03-22T05:38:12+00:00"
         },
         {
             "name": "ramsey/uuid",
@@ -1924,17 +1924,69 @@
             "time": "2025-03-06T11:37:49+00:00"
         },
         {
-            "name": "utopia-php/telemetry",
-            "version": "0.1.0",
+            "name": "utopia-php/pools",
+            "version": "0.8.0",
             "source": {
                 "type": "git",
-                "url": "https://github.com/utopia-php/telemetry.git",
-                "reference": "d35f2f0632f4ee0be63fb7ace6a94a6adda71a80"
+                "url": "https://github.com/utopia-php/pools.git",
+                "reference": "60733929dc328e7ea47e800579c8bbf0d49df5ba"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/telemetry/zipball/d35f2f0632f4ee0be63fb7ace6a94a6adda71a80",
-                "reference": "d35f2f0632f4ee0be63fb7ace6a94a6adda71a80",
+                "url": "https://api.github.com/repos/utopia-php/pools/zipball/60733929dc328e7ea47e800579c8bbf0d49df5ba",
+                "reference": "60733929dc328e7ea47e800579c8bbf0d49df5ba",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.3",
+                "utopia-php/telemetry": "0.1.*"
+            },
+            "require-dev": {
+                "laravel/pint": "1.*",
+                "phpstan/phpstan": "1.*",
+                "phpunit/phpunit": "11.*"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Utopia\\Pools\\": "src/Pools"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Team Appwrite",
+                    "email": "team@appwrite.io"
+                }
+            ],
+            "description": "A simple library to manage connection pools",
+            "keywords": [
+                "framework",
+                "php",
+                "pools",
+                "utopia"
+            ],
+            "support": {
+                "issues": "https://github.com/utopia-php/pools/issues",
+                "source": "https://github.com/utopia-php/pools/tree/0.8.0"
+            },
+            "time": "2025-03-19T10:22:03+00:00"
+        },
+        {
+            "name": "utopia-php/telemetry",
+            "version": "0.1.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/telemetry.git",
+                "reference": "437f0021777f0e575dfb9e8a1a081b3aed75e33f"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/utopia-php/telemetry/zipball/437f0021777f0e575dfb9e8a1a081b3aed75e33f",
+                "reference": "437f0021777f0e575dfb9e8a1a081b3aed75e33f",
                 "shasum": ""
             },
             "require": {
@@ -1955,7 +2007,7 @@
             "type": "library",
             "autoload": {
                 "psr-4": {
-                    "Utopia\\": "src/"
+                    "Utopia\\Telemetry\\": "src/Telemetry"
                 }
             },
             "notification-url": "https://packagist.org/downloads/",
@@ -1969,9 +2021,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/telemetry/issues",
-                "source": "https://github.com/utopia-php/telemetry/tree/0.1.0"
+                "source": "https://github.com/utopia-php/telemetry/tree/0.1.1"
             },
-            "time": "2024-11-13T10:29:53+00:00"
+            "time": "2025-03-17T11:57:52+00:00"
         }
     ],
     "packages-dev": [
@@ -2444,16 +2496,16 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "1.12.21",
+            "version": "1.12.23",
             "source": {
                 "type": "git",
                 "url": "https://github.com/phpstan/phpstan.git",
-                "reference": "14276fdef70575106a3392a4ed553c06a984df28"
+                "reference": "29201e7a743a6ab36f91394eab51889a82631428"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/14276fdef70575106a3392a4ed553c06a984df28",
-                "reference": "14276fdef70575106a3392a4ed553c06a984df28",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/29201e7a743a6ab36f91394eab51889a82631428",
+                "reference": "29201e7a743a6ab36f91394eab51889a82631428",
                 "shasum": ""
             },
             "require": {
@@ -2498,7 +2550,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-03-09T09:24:50+00:00"
+            "time": "2025-03-23T14:57:32+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
@@ -4069,7 +4121,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -4077,6 +4129,6 @@
         "ext-pdo": "*",
         "ext-mbstring": "*"
     },
-    "platform-dev": [],
+    "platform-dev": {},
     "plugin-api-version": "2.6.0"
 }

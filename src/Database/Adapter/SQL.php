@@ -427,7 +427,7 @@ abstract class SQL extends Adapter
     {
         $attributes = \count($collection->getAttribute('attributes') ?? []);
 
-        return $attributes + static::getCountOfDefaultAttributes();
+        return $attributes + $this->getCountOfDefaultAttributes();
     }
 
     /**
@@ -439,7 +439,7 @@ abstract class SQL extends Adapter
     public function getCountOfIndexes(Document $collection): int
     {
         $indexes = \count($collection->getAttribute('indexes') ?? []);
-        return $indexes + static::getCountOfDefaultIndexes();
+        return $indexes + $this->getCountOfDefaultIndexes();
     }
 
     /**
@@ -447,7 +447,7 @@ abstract class SQL extends Adapter
      *
      * @return int
      */
-    public static function getCountOfDefaultAttributes(): int
+    public function getCountOfDefaultAttributes(): int
     {
         return \count(Database::INTERNAL_ATTRIBUTES);
     }
@@ -457,7 +457,7 @@ abstract class SQL extends Adapter
      *
      * @return int
      */
-    public static function getCountOfDefaultIndexes(): int
+    public function getCountOfDefaultIndexes(): int
     {
         return \count(Database::INTERNAL_INDEXES);
     }
@@ -468,7 +468,7 @@ abstract class SQL extends Adapter
      *
      * @return int
      */
-    public static function getDocumentSizeLimit(): int
+    public function getDocumentSizeLimit(): int
     {
         return 65535;
     }

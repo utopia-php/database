@@ -2312,6 +2312,8 @@ class MariaDB extends SQL
             throw new DatabaseException('Timeout must be greater than 0');
         }
 
+        $this->timeout = $milliseconds;
+
         $seconds = $milliseconds / 1000;
 
         $this->before($event, 'timeout', function ($sql) use ($seconds) {

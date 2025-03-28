@@ -16617,8 +16617,7 @@ abstract class Base extends TestCase
         $this->assertCount(2, static::getDatabase()->deleteDocuments(
             'bulk_delete',
             [
-                //Query::select([...$selects, '$createdAt']),
-                Query::select($selects),
+                Query::select([...$selects, '$createdAt']),
                 Query::cursorAfter($docs[6]),
                 Query::greaterThan('$createdAt', '2000-01-01'),
                 Query::orderAsc('$createdAt'),

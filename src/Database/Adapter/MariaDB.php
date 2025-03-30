@@ -1782,7 +1782,7 @@ class MariaDB extends SQL
                     : Query::TYPE_LESSER;
             }
 
-            $where[] = "({$defaultAlias}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
+            $where[] = "({$this->quote($defaultAlias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1793,9 +1793,9 @@ class MariaDB extends SQL
                     $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
 
-                $orders[] = "{$defaultAlias}._id ".$this->filter($order);
+                $orders[] = "{$this->quote($defaultAlias)}._id ".$this->filter($order);
             } else {
-                $orders[] = "{$defaultAlias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+                $orders[] = "{$this->quote($defaultAlias)}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
         }
 
@@ -1831,7 +1831,7 @@ class MariaDB extends SQL
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, $defaultAlias)}
-            FROM {$this->getSQLTable($name)} AS {$defaultAlias}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};

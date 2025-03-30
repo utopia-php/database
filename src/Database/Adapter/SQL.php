@@ -892,46 +892,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * @param mixed $stmt
-     * @param Query $query
-     * @return void
-     * @throws Exception
-     */
-    protected function bindConditionValue(mixed $stmt, Query $query): void
-    {
-        if ($query->getMethod() == Query::TYPE_SELECT) {
-            return;
-        }
-
-        if ($query->isNested()) {
-            foreach ($query->getValues() as $value) {
-                $this->bindConditionValue($stmt, $value);
-            }
-            return;
-        }
-
-        if ($this->getSupportForJSONOverlaps() && $query->onArray() && $query->getMethod() == Query::TYPE_CONTAINS) {
-            $placeholder = $this->getSQLPlaceholder($query) . '_0';
-            $stmt->bindValue($placeholder, json_encode($query->getValues()), PDO::PARAM_STR);
-            return;
-        }
-
-        foreach ($query->getValues() as $key => $value) {
-            $value = match ($query->getMethod()) {
-                Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
-                Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                Query::TYPE_SEARCH => $this->getFulltextValue($value),
-                Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                default => $value
-            };
-
-            $placeholder = $this->getSQLPlaceholder($query) . '_' . $key;
-
-            $stmt->bindValue($placeholder, $value, $this->getPDOType($value));
-        }
-    }
-
-    /**
      * @param string $value
      * @return string
      */
@@ -994,22 +954,6 @@ abstract class SQL extends Adapter
         }
     }
 
-    /**
-     * @param Query $query
-     * @return string
-     * @throws Exception
-     */
-    protected function getSQLPlaceholder(Query $query): string
-    {
-        $json = \json_encode([$query->getAttribute(), $query->getMethod(), $query->getValues()]);
-
-        if ($json === false) {
-            throw new DatabaseException('Failed to encode query');
-        }
-
-        return \md5($json);
-    }
-
     public function escapeWildcards(string $value): string
     {
         $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
@@ -1057,6 +1001,7 @@ abstract class SQL extends Adapter
     protected function getSQLPermissionsCondition(
         string $collection,
         array $roles,
+        string $alias,
         string $type = Database::PERMISSION_READ
     ): string {
         if (!\in_array($type, Database::PERMISSIONS)) {
@@ -1066,7 +1011,7 @@ abstract class SQL extends Adapter
         $roles = \array_map(fn ($role) => $this->getPDO()->quote($role), $roles);
         $roles = \implode(', ', $roles);
 
-        return "table_main._uid IN (
+        return "{$this->quote($alias)}.{$this->quote('_uid')} IN (
             SELECT _document
             FROM {$this->getSQLTable($collection . '_perms')}
             WHERE _permission IN ({$roles})
@@ -1084,7 +1029,7 @@ abstract class SQL extends Adapter
      */
     protected function getSQLTable(string $name): string
     {
-        return "`{$this->getDatabase()}`.`{$this->getNamespace()}_{$this->filter($name)}`";
+        return "{$this->quote($this->getDatabase())}.{$this->quote($this->getNamespace().'_'.$this->filter($name))}";
     }
 
     /**
@@ -1143,18 +1088,20 @@ abstract class SQL extends Adapter
 
     /**
      * @param Query $query
+     * @param array $binds
      * @return string
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query): string;
+    abstract protected function getSQLCondition(Query $query, array &$binds): string;
 
     /**
      * @param array<Query> $queries
+     * @param array $binds
      * @param string $separator
      * @return string
      * @throws Exception
      */
-    public function getSQLConditions(array $queries = [], string $separator = 'AND'): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
     {
         $conditions = [];
         foreach ($queries as $query) {
@@ -1164,9 +1111,9 @@ abstract class SQL extends Adapter
             }
 
             if ($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValues(), $query->getMethod());
+                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
             } else {
-                $conditions[] = $this->getSQLCondition($query);
+                $conditions[] = $this->getSQLCondition($query, $binds);
             }
         }
 
@@ -1192,25 +1139,26 @@ abstract class SQL extends Adapter
         return [];
     }
 
-    public function getTenantQuery(string $collection, string $parentAlias = ''): string
+    public function getTenantQuery(string $collection, string $parentAlias = '', $and = 'AND'): string
     {
         if (!$this->sharedTables) {
             return '';
         }
 
-        if (!empty($parentAlias) || $parentAlias === '0') {
-            $parentAlias .= '.';
+        $dot = '';
+
+        if ($parentAlias !== '') {
+            $dot = '.';
+            $parentAlias = $this->quote($parentAlias);
         }
 
-        $query = "AND ({$parentAlias}_tenant = :_tenant";
+        $orIsNull = '';
 
         if ($collection === Database::METADATA) {
-            $query .= " OR {$parentAlias}_tenant IS NULL";
+            $orIsNull = " OR {$parentAlias}{$dot}_tenant IS NULL";
         }
 
-        $query .= ")";
-
-        return $query;
+        return "{$and} ({$parentAlias}{$dot}_tenant = :_tenant {$orIsNull})";
     }
 
     protected function processException(PDOException $e): \Exception
@@ -1535,4 +1483,16 @@ abstract class SQL extends Adapter
      * @return string
      */
     abstract protected function quote(string $string): string;
+
+    protected function getInternalKeyForAttribute(string $attribute): string
+    {
+        return match ($attribute) {
+            '$id' => '_uid',
+            '$internalId' => '_id',
+            '$tenant' => '_tenant',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            default => $attribute
+        };
+    }
 }

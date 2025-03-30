@@ -2052,7 +2052,6 @@ class MariaDB extends SQL
         $attribute = $this->filter($attribute);
         $attribute = $this->quote($attribute);
         $alias = $this->quote(Query::DEFAULT_ALIAS);
-
         $placeholder = ID::unique();
 
         switch ($query->getMethod()) {
@@ -2097,7 +2096,6 @@ class MariaDB extends SQL
                     $value = match ($query->getMethod()) {
                         Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        //Query::TYPE_SEARCH => $this->getFulltextValue($value),
                         Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };

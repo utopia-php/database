@@ -1850,8 +1850,6 @@ class Postgres extends SQL
         $attribute = $this->filter($query->getAttribute());
         $attribute = $this->quote($attribute);
         $alias = $this->quote(Query::DEFAULT_ALIAS);
-
-        //$placeholder = $this->getSQLPlaceholder($query);
         $placeholder = ID::unique();
         $operator = null;
 
@@ -1892,7 +1890,6 @@ class Postgres extends SQL
                     $value = match ($query->getMethod()) {
                         Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        //Query::TYPE_SEARCH => $this->getFulltextValue($value),
                         Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };

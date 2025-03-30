@@ -1564,7 +1564,7 @@ class Postgres extends SQL
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "`{$attribute}` {$orderType}";
+            $orders[] = "{$this->quote($attribute)} {$orderType}";
         }
 
         // Allow after pagination without any order
@@ -1594,7 +1594,7 @@ class Postgres extends SQL
 
                 $orders[] = "{$defaultAlias}._id ".$this->filter($order);
             } else {
-                $orders[] = "$defaultAlias._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+                $orders[] = "{$defaultAlias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
         }
 

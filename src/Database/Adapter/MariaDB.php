@@ -1724,15 +1724,6 @@ class MariaDB extends SQL
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-//        $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
-//            '$id' => '_uid',
-//            '$internalId' => '_id',
-//            '$tenant' => '_tenant',
-//            '$createdAt' => '_createdAt',
-//            '$updatedAt' => '_updatedAt',
-//            default => $orderAttribute
-//        }, $orderAttributes);
-
         $hasIdAttribute = false;
         foreach ($orderAttributes as $i => $attribute) {
             $originalAttribute = $attribute;
@@ -1763,11 +1754,11 @@ class MariaDB extends SQL
                 $binds[':cursor'] = $cursor[$originalAttribute];
 
                 $where[] = "(
-                        {$this->quote($defaultAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
+                        {$defaultAlias}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            {$this->quote($defaultAlias)}.{$this->quote($attribute)} = :cursor 
+                            {$defaultAlias}.{$this->quote($attribute)} = :cursor 
                             AND
-                            {$this->quote($defaultAlias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$defaultAlias}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1791,7 +1782,7 @@ class MariaDB extends SQL
                     : Query::TYPE_LESSER;
             }
 
-            $where[] = "({$this->quote($defaultAlias)}.{$this->quote('_id')} {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
+            $where[] = "({$defaultAlias}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1802,9 +1793,9 @@ class MariaDB extends SQL
                     $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
 
-                $orders[] = "{$this->quote($defaultAlias)}.{$this->quote('_id')} ".$this->filter($order);
+                $orders[] = "{$defaultAlias}._id ".$this->filter($order);
             } else {
-                $orders[] = "{$this->quote($defaultAlias)}.{$this->quote('_id')} " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+                $orders[] = "$defaultAlias._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
         }
 
@@ -2018,8 +2009,8 @@ class MariaDB extends SQL
             : '';
 
         $sql = "
-			SELECT SUM({$attribute}) as sum FROM (
-				SELECT {$attribute}
+			SELECT SUM({$this->quote($attribute)}) as sum FROM (
+				SELECT {$this->quote($attribute)}
 				FROM {$this->getSQLTable($name)} AS {$defaultAlias}
 				{$sqlWhere}
 				{$limit}
@@ -2043,55 +2034,6 @@ class MariaDB extends SQL
         }
 
         return $result['sum'] ?? 0;
-    }
-
-    /**
-     * Get the SQL projection given the selected attributes
-     *
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
-     * @throws Exception
-     */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
-    {
-        if (empty($selections) || \in_array('*', $selections)) {
-            if (!empty($prefix)) {
-                return "`{$prefix}`.*";
-            }
-            return '*';
-        }
-
-        // Remove $id, $permissions and $collection if present since it is always selected by default
-        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
-
-        $selections[] = '_uid';
-        $selections[] = '_permissions';
-
-        if (\in_array('$internalId', $selections)) {
-            $selections[] = '_id';
-            $selections = \array_diff($selections, ['$internalId']);
-        }
-        if (\in_array('$createdAt', $selections)) {
-            $selections[] = '_createdAt';
-            $selections = \array_diff($selections, ['$createdAt']);
-        }
-        if (\in_array('$updatedAt', $selections)) {
-            $selections[] = '_updatedAt';
-            $selections = \array_diff($selections, ['$updatedAt']);
-        }
-
-        if (!empty($prefix)) {
-            foreach ($selections as &$selection) {
-                $selection = "`{$prefix}`.`{$this->filter($selection)}`";
-            }
-        } else {
-            foreach ($selections as &$selection) {
-                $selection = "`{$this->filter($selection)}`";
-            }
-        }
-
-        return \implode(', ', $selections);
     }
 
     /**

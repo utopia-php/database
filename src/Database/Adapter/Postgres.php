@@ -1844,56 +1844,6 @@ class Postgres extends SQL
     }
 
     /**
-     * Get the SQL projection given the selected attributes
-     *
-     * @param string[] $selections
-     * @param string $prefix
-     * @return string
-     * @throws Exception
-     */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): string
-    {
-        if (empty($selections) || \in_array('*', $selections)) {
-            if (!empty($prefix)) {
-                return "\"{$prefix}\".*";
-            }
-            return '*';
-        }
-
-        // Remove $id ,$permissions and $collection from selections if present since they are always selected
-        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
-
-        $selections[] = '_uid';
-        $selections[] = '_permissions';
-
-        if (\in_array('$internalId', $selections)) {
-            $selections[] = '_id';
-            $selections = \array_diff($selections, ['$internalId']);
-        }
-        if (\in_array('$createdAt', $selections)) {
-            $selections[] = '_createdAt';
-            $selections = \array_diff($selections, ['$createdAt']);
-        }
-        if (\in_array('$updatedAt', $selections)) {
-            $selections[] = '_updatedAt';
-            $selections = \array_diff($selections, ['$updatedAt']);
-        }
-
-        if (!empty($prefix)) {
-            foreach ($selections as &$selection) {
-                $selection = "\"{$prefix}\".\"{$this->filter($selection)}\"";
-            }
-        } else {
-            foreach ($selections as &$selection) {
-                $selection = "\"{$this->filter($selection)}\"";
-            }
-        }
-
-        return \implode(', ', $selections);
-    }
-
-
-    /**
      * Get SQL Condition
      *
      * @param Query $query

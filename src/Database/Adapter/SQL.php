@@ -1484,6 +1484,55 @@ abstract class SQL extends Adapter
      */
     abstract protected function quote(string $string): string;
 
+    /**
+     * Get the SQL projection given the selected attributes
+     *
+     * @param array<string> $selections
+     * @param string $prefix
+     * @return mixed
+     * @throws Exception
+     */
+    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    {
+        if (empty($selections) || \in_array('*', $selections)) {
+            if (!empty($prefix)) {
+                return "{$this->quote($prefix)}.*";
+            }
+            return '*';
+        }
+
+        // Remove $id, $permissions and $collection if present since it is always selected by default
+        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
+
+        $selections[] = '_uid';
+        $selections[] = '_permissions';
+
+        if (\in_array('$internalId', $selections)) {
+            $selections[] = '_id';
+            $selections = \array_diff($selections, ['$internalId']);
+        }
+        if (\in_array('$createdAt', $selections)) {
+            $selections[] = '_createdAt';
+            $selections = \array_diff($selections, ['$createdAt']);
+        }
+        if (\in_array('$updatedAt', $selections)) {
+            $selections[] = '_updatedAt';
+            $selections = \array_diff($selections, ['$updatedAt']);
+        }
+
+        if (!empty($prefix)) {
+            foreach ($selections as &$selection) {
+                $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
+            }
+        } else {
+            foreach ($selections as &$selection) {
+                $selection = "{$this->quote($this->filter($selection))}";
+            }
+        }
+
+        return \implode(', ', $selections);
+    }
+
     protected function getInternalKeyForAttribute(string $attribute): string
     {
         return match ($attribute) {

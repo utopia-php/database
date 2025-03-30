@@ -1088,7 +1088,7 @@ abstract class SQL extends Adapter
 
     /**
      * @param Query $query
-     * @param array $binds
+     * @param array<string, mixed> $binds
      * @return string
      * @throws Exception
      */
@@ -1096,7 +1096,7 @@ abstract class SQL extends Adapter
 
     /**
      * @param array<Query> $queries
-     * @param array $binds
+     * @param array<string, mixed> $binds
      * @param string $separator
      * @return string
      * @throws Exception
@@ -1139,7 +1139,7 @@ abstract class SQL extends Adapter
         return [];
     }
 
-    public function getTenantQuery(string $collection, string $parentAlias = '', $and = 'AND'): string
+    public function getTenantQuery(string $collection, string $parentAlias = '', string $and = 'AND'): string
     {
         if (!$this->sharedTables) {
             return '';

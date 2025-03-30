@@ -2040,7 +2040,7 @@ class MariaDB extends SQL
      * Get SQL Condition
      *
      * @param Query $query
-     * @param array $binds
+     * @param array<string, mixed> $binds
      * @return string
      * @throws Exception
      */

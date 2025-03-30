@@ -1523,15 +1523,6 @@ class Postgres extends SQL
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-//        $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
-//            '$id' => '_uid',
-//            '$internalId' => '_id',
-//            '$tenant' => '_tenant',
-//            '$createdAt' => '_createdAt',
-//            '$updatedAt' => '_updatedAt',
-//            default => $orderAttribute
-//        }, $orderAttributes);
-
         $hasIdAttribute = false;
         foreach ($orderAttributes as $i => $attribute) {
             $originalAttribute = $attribute;
@@ -1562,11 +1553,11 @@ class Postgres extends SQL
                 $binds[':cursor'] = $cursor[$originalAttribute];
 
                 $where[] = "(
-                        {$this->quote($defaultAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
+                        {$defaultAlias}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            {$this->quote($defaultAlias)}.{$this->quote($attribute)} = :cursor 
+                            {$defaultAlias}.{$this->quote($attribute)} = :cursor 
                             AND
-                            {$this->quote($defaultAlias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$defaultAlias}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1590,7 +1581,7 @@ class Postgres extends SQL
                     : Query::TYPE_LESSER;
             }
 
-            $where[] = "({$this->quote($defaultAlias)}.{$this->quote('_id')} {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
+            $where[] = "({$defaultAlias}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1601,9 +1592,9 @@ class Postgres extends SQL
                     $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
 
-                $orders[] = "{$this->quote($defaultAlias)}.{$this->quote('_id')} ".$this->filter($order);
+                $orders[] = "{$defaultAlias}._id ".$this->filter($order);
             } else {
-                $orders[] = "{$this->quote($defaultAlias)}.{$this->quote('_id')} " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+                $orders[] = "$defaultAlias._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
         }
 
@@ -1613,7 +1604,7 @@ class Postgres extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $defaultAlias, $forPermission);
         }
 
         if ($this->sharedTables) {
@@ -1639,7 +1630,7 @@ class Postgres extends SQL
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, $defaultAlias)}
-            FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
+            FROM {$this->getSQLTable($name)} AS {$defaultAlias}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -1745,11 +1736,12 @@ class Postgres extends SQL
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
-				FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
+				FROM {$this->getSQLTable($name)} AS {$defaultAlias}
 				{$sqlWhere}
 				{$limit}
 			) table_count
         ";
+
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
@@ -1816,9 +1808,9 @@ class Postgres extends SQL
             : '';
 
         $sql = "
-			SELECT SUM({$attribute}) as sum FROM (
-				SELECT {$attribute}
-				FROM {$this->getSQLTable($name)} AS `{$defaultAlias}`
+			SELECT SUM({$this->quote($attribute)}) as sum FROM (
+				SELECT {$this->quote($attribute)}
+				FROM {$this->getSQLTable($name)} AS {$defaultAlias}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -1847,7 +1839,7 @@ class Postgres extends SQL
      * Get SQL Condition
      *
      * @param Query $query
-     * @param array $binds
+     * @param array<string, mixed> $binds
      * @return string
      * @throws Exception
      */
@@ -1891,7 +1883,7 @@ class Postgres extends SQL
             case Query::TYPE_CONTAINS:
                 $operator = $query->onArray() ? '@>' : null;
 
-            // no break
+                // no break
             default:
                 $conditions = [];
                 $operator = $operator ?? $this->getSQLOperator($query->getMethod());

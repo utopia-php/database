@@ -1754,11 +1754,11 @@ class MariaDB extends SQL
                 $binds[':cursor'] = $cursor[$originalAttribute];
 
                 $where[] = "(
-                        {$defaultAlias}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
+                        {$this->quote($defaultAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            {$defaultAlias}.{$this->quote($attribute)} = :cursor 
+                            {$this->quote($defaultAlias)}.{$this->quote($attribute)} = :cursor 
                             AND
-                            {$defaultAlias}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$this->quote($defaultAlias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1937,7 +1937,7 @@ class MariaDB extends SQL
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
-				FROM {$this->getSQLTable($name)} AS {$defaultAlias}
+				FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -2011,7 +2011,7 @@ class MariaDB extends SQL
         $sql = "
 			SELECT SUM({$this->quote($attribute)}) as sum FROM (
 				SELECT {$this->quote($attribute)}
-				FROM {$this->getSQLTable($name)} AS {$defaultAlias}
+				FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
 				{$sqlWhere}
 				{$limit}
 			) table_count

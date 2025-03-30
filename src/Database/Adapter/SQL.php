@@ -1199,18 +1199,10 @@ abstract class SQL extends Adapter
         }
 
         if (!empty($parentAlias) || $parentAlias === '0') {
-            $parentAlias .= '.';
+            $parentAlias = "`{$parentAlias}`.";
         }
 
-        $query = "AND ({$parentAlias}_tenant = :_tenant";
-
-        if ($collection === Database::METADATA) {
-            $query .= " OR {$parentAlias}_tenant IS NULL";
-        }
-
-        $query .= ")";
-
-        return $query;
+        return "AND {$parentAlias}_tenant IN (:_tenant, 0)";
     }
 
     protected function processException(PDOException $e): \Exception

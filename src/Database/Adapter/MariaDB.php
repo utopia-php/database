@@ -1840,7 +1840,7 @@ class MariaDB extends SQL
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, $defaultAlias)}
-            FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
+            FROM {$this->getSQLTable($name)} AS {$defaultAlias}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -1946,7 +1946,7 @@ class MariaDB extends SQL
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
-				FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
+				FROM {$this->getSQLTable($name)} AS {$defaultAlias}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -2020,7 +2020,7 @@ class MariaDB extends SQL
         $sql = "
 			SELECT SUM({$attribute}) as sum FROM (
 				SELECT {$attribute}
-				FROM {$this->getSQLTable($name)} AS `{$defaultAlias}`
+				FROM {$this->getSQLTable($name)} AS {$defaultAlias}
 				{$sqlWhere}
 				{$limit}
 			) table_count

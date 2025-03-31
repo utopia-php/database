@@ -3913,7 +3913,7 @@ class Database
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getAttribute('$tenant');       // Make sure user doesn't switch tenant
+                $document['$tenant'] = $old->getTenant();       // Make sure user doesn't switch tenant
             }
 
             $document = new Document($document);

@@ -1260,7 +1260,7 @@ class Database
 
         if (
             $this->adapter->getSharedTables()
-            && $collection->getAttribute('$tenant') != $this->adapter->getTenant()
+            && $collection->getTenant() !== $this->adapter->getTenant()
         ) {
             throw new NotFoundException('Collection not found');
         }
@@ -1288,13 +1288,11 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
-        $tenant = $collection->getAttribute('$tenant');
-
         if (
             $id !== self::METADATA
             && $this->adapter->getSharedTables()
-            && $tenant !== null
-            && $tenant != $this->adapter->getTenant()
+            && $collection->getTenant() !== null
+            && $collection->getTenant() !== $this->adapter->getTenant()
         ) {
             return new Document();
         }
@@ -1341,7 +1339,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1367,7 +1365,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1390,7 +1388,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getAttribute('$tenant') != $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -3873,7 +3871,7 @@ class Database
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getAttribute('$tenant');       // Make sure user doesn't switch tenant
+                $document['$tenant'] = $old->getTenant();       // Make sure user doesn't switch tenant
             }
 
             $document = new Document($document);

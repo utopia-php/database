@@ -16302,7 +16302,7 @@ abstract class Base extends TestCase
 
         $doc = $database->getDocument('people', $docId);
         $this->assertEquals('Spiderman', $doc['name']);
-        $this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
+        $this->assertEquals($tenant1, $doc->getTenant());
 
         /**
          * Remove Permissions
@@ -16315,7 +16315,7 @@ abstract class Base extends TestCase
 
         $doc = $database->getDocument('people', $docId);
         $this->assertEquals([Permission::read(Role::any())], $doc['$permissions']);
-        $this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
+        $this->assertEquals($tenant1, $doc->getTenant());
 
         /**
          * Add Permissions
@@ -16512,7 +16512,7 @@ abstract class Base extends TestCase
             ->getDocument(__FUNCTION__, $doc2Id);
 
         $this->assertEquals('Batman', $doc['name']);
-        $this->assertEquals(2, $doc->getAttribute('$tenant'));
+        $this->assertEquals(2, $doc->getTenant());
 
         // Ensure no read cross-tenant
         $docs = $database

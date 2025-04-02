@@ -16302,7 +16302,7 @@ abstract class Base extends TestCase
 
         $doc = $database->getDocument('people', $docId);
         $this->assertEquals('Spiderman', $doc['name']);
-        $this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
+        $this->assertEquals($tenant1, $doc->getTenant());
 
         /**
          * Remove Permissions
@@ -16315,7 +16315,7 @@ abstract class Base extends TestCase
 
         $doc = $database->getDocument('people', $docId);
         $this->assertEquals([Permission::read(Role::any())], $doc['$permissions']);
-        $this->assertEquals($tenant1, $doc->getAttribute('$tenant'));
+        $this->assertEquals($tenant1, $doc->getTenant());
 
         /**
          * Add Permissions
@@ -16512,7 +16512,7 @@ abstract class Base extends TestCase
             ->getDocument(__FUNCTION__, $doc2Id);
 
         $this->assertEquals('Batman', $doc['name']);
-        $this->assertEquals(2, $doc->getAttribute('$tenant'));
+        $this->assertEquals(2, $doc->getTenant());
 
         // Ensure no read cross-tenant
         $docs = $database
@@ -16610,13 +16610,18 @@ abstract class Base extends TestCase
         $this->assertCount(10, $docs);
 
         /**
-         * Test Short select query, test pagination as well
+         * Test Short select query, test pagination as well, Add order to select
          */
+        $selects = ['$internalId', '$id', '$collection', '$permissions', '$updatedAt'];
+
         $this->assertCount(2, static::getDatabase()->deleteDocuments(
             'bulk_delete',
             [
-                Query::select(['$internalId', '$id', '$collection', '$permissions', '$updatedAt']),
+                Query::select([...$selects, '$createdAt']),
                 Query::cursorAfter($docs[6]),
+                Query::greaterThan('$createdAt', '2000-01-01'),
+                Query::orderAsc('$createdAt'),
+                Query::orderAsc(),
                 Query::limit(2),
             ],
             1

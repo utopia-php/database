@@ -554,7 +554,7 @@ class Mirror extends Database
         string $collection,
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): array {
+    ): \Generator {
         $documents = $this->source->createDocuments($collection, $documents, $batchSize);
 
         if (
@@ -662,7 +662,7 @@ class Mirror extends Database
         Document $updates,
         array $queries = [],
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): array {
+    ): \Generator {
         $documents = $this->source->updateDocuments($collection, $updates, $queries, $batchSize);
 
         if (
@@ -753,8 +753,11 @@ class Mirror extends Database
         return $result;
     }
 
-    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): array
-    {
+    public function deleteDocuments(
+        string $collection,
+        array $queries = [],
+        int $batchSize = self::DELETE_BATCH_SIZE
+    ): \Generator {
         $documents = $this->source->deleteDocuments($collection, $queries, $batchSize);
 
         if (

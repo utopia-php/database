@@ -1943,7 +1943,6 @@ class MariaDB extends SQL
 			) table_count
         ";
 
-
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
         $stmt = $this->getPDO()->prepare($sql);

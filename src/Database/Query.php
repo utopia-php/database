@@ -38,7 +38,7 @@ class Query
     public const TYPE_AND = 'and';
     public const TYPE_OR = 'or';
 
-    public const DEFAULT_ALIAS = 'A';
+    public const DEFAULT_ALIAS = 'main';
 
     public const TYPES = [
         self::TYPE_EQUAL,

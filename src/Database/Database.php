@@ -3493,7 +3493,7 @@ class Database
             yield from $this->withTransaction(function () use ($collection, $chunk) {
                 $batch = $this->adapter->createDocuments($collection->getId(), $chunk);
 
-                foreach ($batch as $key => $document) {
+                foreach ($batch as $document) {
                     if ($this->resolveRelationships) {
                         $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                     }
@@ -4047,6 +4047,7 @@ class Database
      *
      * @throws AuthorizationException
      * @throws DatabaseException
+     * @throws \Throwable
      */
     public function updateDocuments(
         string $collection,
@@ -4066,7 +4067,6 @@ class Database
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-
         $authorization = new Authorization(self::PERMISSION_UPDATE);
         $skipAuth = $authorization->isValid($collection->getUpdate());
 
@@ -4124,7 +4124,6 @@ class Database
         $originalLimit = $limit;
         $lastDocument = $cursor;
 
-        // Resolve and update relationships
         while (true) {
             if ($limit && $limit < $batchSize) {
                 $batchSize = $limit;
@@ -4136,7 +4135,7 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (! empty($lastDocument)) {
+            if (!empty($lastDocument)) {
                 $new[] = Query::cursorAfter($lastDocument);
             }
 
@@ -4151,11 +4150,11 @@ class Database
             }
 
             $this->withTransaction(function () use ($collection, $updates, $affectedDocuments) {
-                foreach ($affectedDocuments as $document) {
-                    $newDocument = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+                foreach ($affectedDocuments as &$old) {
+                    $document = new Document(\array_merge($old->getArrayCopy(), $updates->getArrayCopy()));
 
                     if ($this->resolveRelationships) {
-                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
+                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
                     }
 
                     // Check if document was updated after the request timestamp
@@ -4165,9 +4164,11 @@ class Database
                         throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                     }
 
-                    if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
+
+                    $old = $document;
                 }
             });
 
@@ -4178,21 +4179,17 @@ class Database
                     $affectedDocuments
                 );
 
-                /**
-                 * @var array<Document> $batch
-                 */
-                $batch = $skipAuth
+                $skipAuth
                     ? $authorization->skip($getResults)
                     : $getResults();
 
-                foreach ($batch as $document) {
+                foreach ($affectedDocuments as $document) {
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
 
                     yield $document;
                 }
 
-
-                $modified += \count($batch);
+                $modified += \count($affectedDocuments);
             });
 
             if (\count($affectedDocuments) < $batchSize) {
@@ -5471,11 +5468,11 @@ class Database
             $internalIds = [];
             $permissionIds = [];
 
-            $this->withTransaction(function () use ($collection, $affectedDocuments) {
+            $this->withTransaction(function () use ($collection, $affectedDocuments, &$internalIds, &$permissionIds) {
                 foreach ($affectedDocuments as $document) {
                     $internalIds[] = $document->getInternalId();
 
-                    if (!empty($document->getPermissions())) {
+                    if(!empty($document->getPermissions())) {
                         $permissionIds[] = $document->getId();
                     }
 
@@ -5499,27 +5496,24 @@ class Database
                 }
             });
 
-            yield from $this->withTransaction(function () use ($collection, $skipAuth, $authorization, $internalIds, $permissionIds, &$modified): \Generator {
+            yield from $this->withTransaction(function () use ($collection, $affectedDocuments, $skipAuth, $authorization, $internalIds, $permissionIds, &$modified): \Generator {
                 $getResults = fn () => $this->adapter->deleteDocuments(
                     $collection->getId(),
                     $internalIds,
                     $permissionIds
                 );
 
-                /**
-                 * @var array<Document> $batch
-                 */
-                $batch = $skipAuth
+                $skipAuth
                     ? $authorization->skip($getResults)
                     : $getResults();
 
-                foreach ($batch as $document) {
+                foreach ($affectedDocuments as $document) {
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
 
                     yield $document;
                 }
 
-                $modified += \count($batch);
+                $modified += \count($affectedDocuments);
             });
 
             if (\count($affectedDocuments) < $batchSize) {

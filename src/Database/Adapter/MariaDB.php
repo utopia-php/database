@@ -1130,8 +1130,8 @@ class MariaDB extends SQL
             }
 
             if ($this->sharedTables) {
-                foreach ($documentTenants as $index => $tenant) {
-                    $stmt->bindValue(":_tenant_{$index}", $tenant);
+                foreach ($documentIdsChunk as $index => $id) {
+                    $stmt->bindValue(":_tenant_{$index}", \array_shift($documentTenants));
                 }
             }
 

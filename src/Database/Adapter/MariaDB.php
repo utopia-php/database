@@ -1414,14 +1414,12 @@ class MariaDB extends SQL
                     $attributes['_id'] = $document->getInternalId();
                 } else {
                     $documentIds[] = $document->getId();
-
-                    if ($this->sharedTables) {
-                        $documentTenants[] = $document->getTenant();
-                    }
                 }
 
                 if ($this->sharedTables) {
-                    $attributes['_tenant'] = $document->getTenant();
+                    $attributes['_tenant']
+                        = $documentTenants[]
+                        = $document->getTenant();
                 }
 
                 $columns = [];

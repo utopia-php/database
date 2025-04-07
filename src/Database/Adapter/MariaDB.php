@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -1752,25 +1753,21 @@ class MariaDB extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
+        $alias = Query::DEFAULT_ALIAS;
+        $binds = [];
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $orderAttributes = \array_map(fn ($orderAttribute) => match ($orderAttribute) {
-            '$id' => '_uid',
-            '$internalId' => '_id',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $orderAttribute
-        }, $orderAttributes);
-
         $hasIdAttribute = false;
         foreach ($orderAttributes as $i => $attribute) {
+            $originalAttribute = $attribute;
+
+            $attribute = $this->getInternalKeyForAttribute($attribute);
+            $attribute = $this->filter($attribute);
             if (\in_array($attribute, ['_uid', '_id'])) {
                 $hasIdAttribute = true;
             }
 
-            $attribute = $this->filter($attribute);
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
 
             // Get most dominant/first order attribute
@@ -1784,19 +1781,25 @@ class MariaDB extends SQL
                     $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                 }
 
+                if (\is_null($cursor[$originalAttribute] ?? null)) {
+                    throw new DatabaseException("Order attribute '{$originalAttribute}' is empty");
+                }
+
+                $binds[':cursor'] = $cursor[$originalAttribute];
+
                 $where[] = "(
-                        table_main.`{$attribute}` {$this->getSQLOperator($orderMethod)} :cursor 
+                        {$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            table_main.`{$attribute}` = :cursor 
+                            {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
                             AND
-                            table_main._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "`{$attribute}` {$orderType}";
+            $orders[] = "{$this->quote($attribute)} {$orderType}";
         }
 
         // Allow after pagination without any order
@@ -1813,7 +1816,7 @@ class MariaDB extends SQL
                     : Query::TYPE_LESSER;
             }
 
-            $where[] = "( table_main._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']} )";
+            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1824,41 +1827,45 @@ class MariaDB extends SQL
                     $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
 
-                $orders[] = 'table_main._id ' . $this->filter($order);
+                $orders[] = "{$this->quote($alias)}._id ".$this->filter($order);
             } else {
-                $orders[] = 'table_main._id ' . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+                $orders[] = "{$this->quote($alias)}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
         }
 
-        $conditions = $this->getSQLConditions($queries);
+        $conditions = $this->getSQLConditions($queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $forPermission);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         if ($this->sharedTables) {
-            $orIsNull = '';
-
-            if ($collection === Database::METADATA) {
-                $orIsNull = " OR table_main._tenant IS NULL";
-            }
-
-            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
         $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
-        $sqlLimit = \is_null($limit) ? '' : 'LIMIT :limit';
-        $sqlLimit .= \is_null($offset) ? '' : ' OFFSET :offset';
+
+        $sqlLimit = '';
+        if (! \is_null($limit)) {
+            $binds[':limit'] = $limit;
+            $sqlLimit = 'LIMIT :limit';
+        }
+
+        if (! \is_null($offset)) {
+            $binds[':offset'] = $offset;
+            $sqlLimit .= ' OFFSET :offset';
+        }
 
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, 'table_main')}
-            FROM {$this->getSQLTable($name)} AS table_main
+            SELECT {$this->getAttributeProjection($selections, $alias)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -1866,41 +1873,13 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
-            $attribute = $orderAttributes[0];
-
-            $attribute = match ($attribute) {
-                '_uid' => '$id',
-                '_id' => '$internalId',
-                '_tenant' => '$tenant',
-                '_createdAt' => '$createdAt',
-                '_updatedAt' => '$updatedAt',
-                default => $attribute
-            };
-
-            if (\is_null($cursor[$attribute] ?? null)) {
-                throw new DatabaseException("Order attribute '{$attribute}' is empty");
-            }
-            $stmt->bindValue(':cursor', $cursor[$attribute], $this->getPDOType($cursor[$attribute]));
-        }
-
-        if (!\is_null($limit)) {
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        }
-        if (!\is_null($offset)) {
-            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        }
-
         try {
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($binds as $key => $value) {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+
             $stmt->execute();
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -1959,28 +1938,30 @@ class MariaDB extends SQL
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
+        $binds = [];
         $where = [];
-        $limit = \is_null($max) ? '' : 'LIMIT :max';
+        $alias = Query::DEFAULT_ALIAS;
+
+        $limit = '';
+        if (! \is_null($max)) {
+            $binds[':limit'] = $max;
+            $limit = 'LIMIT :limit';
+        }
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $conditions = $this->getSQLConditions($queries);
+        $conditions = $this->getSQLConditions($queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         if ($this->sharedTables) {
-            $orIsNull = '';
-
-            if ($collection === Database::METADATA) {
-                $orIsNull = " OR table_main._tenant IS NULL";
-            }
-
-            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where)
@@ -1990,7 +1971,7 @@ class MariaDB extends SQL
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
-				FROM {$this->getSQLTable($name)} table_main
+				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -2000,16 +1981,8 @@ class MariaDB extends SQL
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
-
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        if (!\is_null($max)) {
-            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
         $stmt->execute();
@@ -2039,26 +2012,29 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $limit = \is_null($max) ? '' : 'LIMIT :max';
+        $alias = Query::DEFAULT_ALIAS;
+        $binds = [];
+
+        $limit = '';
+        if (! \is_null($max)) {
+            $binds[':limit'] = $max;
+            $limit = 'LIMIT :limit';
+        }
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        foreach ($queries as $query) {
-            $where[] = $this->getSQLCondition($query);
+        $conditions = $this->getSQLConditions($queries, $binds);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         if ($this->sharedTables) {
-            $orIsNull = '';
-
-            if ($collection === Database::METADATA) {
-                $orIsNull = " OR table_main._tenant IS NULL";
-            }
-
-            $where[] = "(table_main._tenant = :_tenant {$orIsNull})";
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where)
@@ -2066,9 +2042,9 @@ class MariaDB extends SQL
             : '';
 
         $sql = "
-			SELECT SUM({$attribute}) as sum FROM (
-				SELECT {$attribute}
-				FROM {$this->getSQLTable($name)} table_main
+			SELECT SUM({$this->quote($attribute)}) as sum FROM (
+				SELECT {$this->quote($attribute)}
+				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -2078,16 +2054,8 @@ class MariaDB extends SQL
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        foreach ($queries as $query) {
-            $this->bindConditionValue($stmt, $query);
-        }
-
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        if (!\is_null($max)) {
-            $stmt->bindValue(':max', $max, PDO::PARAM_INT);
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
         $stmt->execute();
@@ -2102,74 +2070,22 @@ class MariaDB extends SQL
     }
 
     /**
-     * Get the SQL projection given the selected attributes
-     *
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
-     * @throws Exception
-     */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
-    {
-        if (empty($selections) || \in_array('*', $selections)) {
-            if (!empty($prefix)) {
-                return "`{$prefix}`.*";
-            }
-            return '*';
-        }
-
-        // Remove $id, $permissions and $collection if present since it is always selected by default
-        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
-
-        $selections[] = '_uid';
-        $selections[] = '_permissions';
-
-        if (\in_array('$internalId', $selections)) {
-            $selections[] = '_id';
-            $selections = \array_diff($selections, ['$internalId']);
-        }
-        if (\in_array('$createdAt', $selections)) {
-            $selections[] = '_createdAt';
-            $selections = \array_diff($selections, ['$createdAt']);
-        }
-        if (\in_array('$updatedAt', $selections)) {
-            $selections[] = '_updatedAt';
-            $selections = \array_diff($selections, ['$updatedAt']);
-        }
-
-        if (!empty($prefix)) {
-            foreach ($selections as &$selection) {
-                $selection = "`{$prefix}`.`{$this->filter($selection)}`";
-            }
-        } else {
-            foreach ($selections as &$selection) {
-                $selection = "`{$this->filter($selection)}`";
-            }
-        }
-
-        return \implode(', ', $selections);
-    }
-
-    /**
      * Get SQL Condition
      *
      * @param Query $query
+     * @param array<string, mixed> $binds
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query): string
+    protected function getSQLCondition(Query $query, array &$binds): string
     {
-        $query->setAttribute(match ($query->getAttribute()) {
-            '$id' => '_uid',
-            '$internalId' => '_id',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $query->getAttribute()
-        });
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
 
-        $attribute = "`{$query->getAttribute()}`";
-        $placeholder = $this->getSQLPlaceholder($query);
+        $attribute = $query->getAttribute();
+        $attribute = $this->filter($attribute);
+        $attribute = $this->quote($attribute);
+        $alias = $this->quote(Query::DEFAULT_ALIAS);
+        $placeholder = ID::unique();
 
         switch ($query->getMethod()) {
             case Query::TYPE_OR:
@@ -2177,33 +2093,50 @@ class MariaDB extends SQL
                 $conditions = [];
                 /* @var $q Query */
                 foreach ($query->getValue() as $q) {
-                    $conditions[] = $this->getSQLCondition($q);
+                    $conditions[] = $this->getSQLCondition($q, $binds);
                 }
 
                 $method = strtoupper($query->getMethod());
+
                 return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
 
             case Query::TYPE_SEARCH:
-                return "MATCH(`table_main`.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+
+                return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Query::TYPE_BETWEEN:
-                return "`table_main`.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+                $binds[":{$placeholder}_0"] = $query->getValues()[0];
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+
+                return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
-                return "`table_main`.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+
+                return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
                 if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
-                    return "JSON_OVERLAPS(`table_main`.{$attribute}, :{$placeholder}_0)";
+                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+                    return "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
                 }
 
-                // no break
+                // no break! continue to default case
             default:
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    $conditions[] = "{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    $value = match ($query->getMethod()) {
+                        Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
+                        Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                        Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        default => $value
+                    };
+
+                    $binds[":{$placeholder}_{$key}"] = $value;
+                    $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
                 }
+
                 return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
         }
     }

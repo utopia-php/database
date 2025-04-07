@@ -1120,8 +1120,9 @@ class MariaDB extends SQL
                 SELECT _uid, _id
                 FROM {$this->getSQLTable($collection)}
                 WHERE _uid IN (" . implode(',', array_map(fn ($index) => ":_key_{$index}", array_keys($documentIdsChunk))) . ")
-                {$this->getTenantQuery($collection)}
+                {$this->getTenantQuery($collection, tenantCount: \count($documentIdsChunk))}
             ";
+
             $stmt = $this->getPDO()->prepare($sql);
 
             foreach ($documentIdsChunk as $index => $id) {
@@ -1492,7 +1493,7 @@ class MariaDB extends SQL
                 SELECT _document, _type, _permission
                 FROM {$this->getSQLTable($name . '_perms')}
                 WHERE _document IN (" . \implode(',', \array_map(fn ($index) => ":_key_{$index}", \array_keys($documents))) . ")
-                {$this->getTenantQuery($collection)}
+                {$this->getTenantQuery($collection, tenantCount: \count($documentTenants))}
             ";
 
             $stmt = $this->getPDO()->prepare($sql);
@@ -1537,7 +1538,7 @@ class MariaDB extends SQL
                     if (!empty($toRemove)) {
                         $removeQueries[] = "(
                             _document = :_uid_{$index}
-                            {$this->getTenantQuery($collection)}
+                            {$this->getTenantQuery($collection, tenantCount: \count($toRemove))}
                             AND _type = '{$type}'
                             AND _permission IN (" . \implode(',', \array_map(fn ($i) => ":remove_{$type}_{$index}_{$i}", \array_keys($toRemove))) . ")
                         )";

@@ -1192,7 +1192,7 @@ abstract class SQL extends Adapter
         return [];
     }
 
-    public function getTenantQuery(string $collection, string $parentAlias = ''): string
+    public function getTenantQuery(string $collection, string $parentAlias = '', array $tenants = []): string
     {
         if (!$this->sharedTables) {
             return '';
@@ -1202,7 +1202,17 @@ abstract class SQL extends Adapter
             $parentAlias .= '.';
         }
 
-        $query = "AND ({$parentAlias}_tenant = :_tenant";
+        $query = "AND ({$parentAlias}_tenant IN (";
+
+        foreach ($tenants as $index => $tenant) {
+            $query .= ":_tenant_{$index}";
+
+            if ($index !== \array_key_last($tenants)) {
+                $query .= ', ';
+            }
+        }
+
+        $query .= ")";
 
         if ($collection === Database::METADATA) {
             $query .= " OR {$parentAlias}_tenant IS NULL";
@@ -1226,6 +1236,7 @@ abstract class SQL extends Adapter
      * @param array<string> $permissionIds
      *
      * @return int
+     * @throws DatabaseException
      */
     public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int
     {
@@ -1423,12 +1434,12 @@ abstract class SQL extends Adapter
                 // Build inner query to remove permissions
                 if (!empty($removals)) {
                     foreach ($removals as $type => $permissionsToRemove) {
-                        $bindKey = 'uid_' . $index;
-                        $removeBindKeys[] = ':uid_' . $index;
+                        $bindKey = '_uid_' . $index;
+                        $removeBindKeys[] = ':_uid_' . $index;
                         $removeBindValues[$bindKey] = $document->getId();
 
                         $removeQueries[] = "(
-                            _document = :uid_{$index}
+                            _document = :_uid_{$index}
                             {$this->getTenantQuery($collection)}
                             AND _type = '{$type}'
                             AND _permission IN (" . \implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
@@ -1462,7 +1473,7 @@ abstract class SQL extends Adapter
                             $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
                             $addBindValues[$bindKey] = $permission;
 
-                            $addQuery .= "(:uid_{$index}, '{$type}', :{$bindKey}";
+                            $addQuery .= "(:_uid_{$index}, '{$type}', :{$bindKey}";
 
                             if ($this->sharedTables) {
                                 $addQuery .= ", :_tenant)";

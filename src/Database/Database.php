@@ -4686,6 +4686,16 @@ class Database
                 ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
+            if ($this->adapter->getSharedTables()) {
+                if ($this->adapter->getTenantPerDocument()) {
+                    if ($document->getTenant() === null) {
+                        throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
+                    }
+                } else {
+                    $document->setAttribute('$tenant', $this->adapter->getTenant());
+                }
+            }
+
             $document = $this->encode($collection, $document);
 
             $validator = new Structure(

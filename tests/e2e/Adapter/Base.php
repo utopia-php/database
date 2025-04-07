@@ -16469,6 +16469,7 @@ abstract class Base extends TestCase
         $database->createCollection(__FUNCTION__, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
+            Permission::update(Role::any()),
         ], documentSecurity: false);
 
         $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 100, false);

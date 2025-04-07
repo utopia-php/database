@@ -346,7 +346,7 @@ abstract class SQL extends Adapter
                 $attribute = $this->quote($this->filter($attribute));
 
                 if ($increment) {
-                    $new = "{$attribute} + VALUES({$attribute}";
+                    $new = "{$attribute} + VALUES({$attribute})";
                 } else {
                     $new = "VALUES({$attribute})";
                 }

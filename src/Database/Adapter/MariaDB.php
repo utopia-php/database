@@ -1395,32 +1395,7 @@ class MariaDB extends SQL
             $name = $this->filter($collection);
             $attribute = $this->filter($attribute);
 
-            $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
-
-            $hasInternalId = null;
-            foreach ($documents as $document) {
-                $attributes = $document->getAttributes();
-                $attributeKeys = [...$attributeKeys, ...\array_keys($attributes)];
-
-                if ($hasInternalId === null) {
-                    $hasInternalId = !empty($document->getInternalId());
-                } elseif ($hasInternalId == empty($document->getInternalId())) {
-                    throw new DatabaseException('All documents must have an internalId if one is set');
-                }
-            }
-
-            $attributeKeys = \array_unique($attributeKeys);
-
-            if ($this->sharedTables) {
-                $attributeKeys[] = '_tenant';
-            }
-
-            $columns = [];
-            foreach ($attributeKeys as $key => $attr) {
-                $columns[$key] = "`{$this->filter($attr)}`";
-            }
-            $columns = '(' . \implode(', ', $columns) . ')';
-
+            $attributes = [];
             $bindIndex = 0;
             $batchKeys = [];
             $bindValues = [];
@@ -1436,15 +1411,23 @@ class MariaDB extends SQL
 
                 if (!empty($document->getInternalId())) {
                     $attributes['_id'] = $document->getInternalId();
-                    $attributeKeys[] = '_id';
                 } else {
                     $documentIds[] = $document->getId();
-                    $documentTenants[] = $document->getTenant();
+
+                    if ($this->sharedTables) {
+                        $documentTenants[] = $document->getTenant();
+                    }
                 }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();
                 }
+
+                $columns = [];
+                foreach (\array_keys($attributes) as $key => $attr) {
+                    $columns[$key] = "`{$this->filter($attr)}`";
+                }
+                $columns = '(' . \implode(', ', $columns) . ')';
 
                 $bindKeys = [];
 
@@ -1485,7 +1468,7 @@ class MariaDB extends SQL
             } else {
                 // Update all columns
                 $updateColumns = [];
-                foreach ($attributeKeys as $attr) {
+                foreach (\array_keys($attributes) as $attr) {
                     $updateColumns[] = $getUpdateClause($this->filter($attr));
                 }
             }
@@ -1519,8 +1502,8 @@ class MariaDB extends SQL
             }
 
             if ($this->sharedTables) {
-                foreach ($documentTenants as $index => $id) {
-                    $stmt->bindValue(":_tenant_{$index}", $id);
+                foreach ($documentTenants as $index => $tenant) {
+                    $stmt->bindValue(":_tenant_{$index}", $tenant);
                 }
             }
 

@@ -16581,6 +16581,72 @@ abstract class Base extends TestCase
             } catch (\Throwable) {
                 // Expected
             }
+
+            // Upsert new documents with different tenants
+            $doc4Id = ID::unique();
+            $doc5Id = ID::unique();
+            $database
+                ->setTenant(null)
+                ->setTenantPerDocument(true)
+                ->createOrUpdateDocuments(__FUNCTION__, [new Document([
+                    '$id' => $doc4Id,
+                    '$tenant' => 4,
+                    'name' => 'Superman4',
+                ]), new Document([
+                    '$id' => $doc5Id,
+                    '$tenant' => 5,
+                    'name' => 'Superman5',
+                ])]);
+
+            // Set to tenant 4 and read
+            $doc = $database
+                ->setTenantPerDocument(false)
+                ->setTenant(4)
+                ->getDocument(__FUNCTION__, $doc4Id);
+
+            $this->assertEquals('Superman4', $doc['name']);
+            $this->assertEquals(4, $doc->getTenant());
+
+            // Set to tenant 5 and read
+            $doc = $database
+                ->setTenantPerDocument(false)
+                ->setTenant(5)
+                ->getDocument(__FUNCTION__, $doc5Id);
+
+            $this->assertEquals('Superman5', $doc['name']);
+            $this->assertEquals(5, $doc->getTenant());
+
+            // Update names via upsert
+            $database
+                ->setTenant(null)
+                ->setTenantPerDocument(true)
+                ->createOrUpdateDocuments(__FUNCTION__, [new Document([
+                    '$id' => $doc4Id,
+                    '$tenant' => 4,
+                    'name' => 'Superman4 updated',
+                ]), new Document([
+                    '$id' => $doc5Id,
+                    '$tenant' => 5,
+                    'name' => 'Superman5 updated',
+                ])]);
+
+            // Set to tenant 4 and read
+            $doc = $database
+                ->setTenantPerDocument(false)
+                ->setTenant(4)
+                ->getDocument(__FUNCTION__, $doc4Id);
+
+            $this->assertEquals('Superman4 updated', $doc['name']);
+            $this->assertEquals(4, $doc->getTenant());
+
+            // Set to tenant 5 and read
+            $doc = $database
+                ->setTenantPerDocument(false)
+                ->setTenant(5)
+                ->getDocument(__FUNCTION__, $doc5Id);
+
+            $this->assertEquals('Superman5 updated', $doc['name']);
+            $this->assertEquals(5, $doc->getTenant());
         }
 
         // Reset instance

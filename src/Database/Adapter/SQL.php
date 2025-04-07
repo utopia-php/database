@@ -437,7 +437,7 @@ abstract class SQL extends Adapter
                         $removeQueries[] = "(
                             _document = :_uid_{$index}
                             {$this->getTenantQuery($collection, tenantCount: \count($toRemove))}
-                            AND _type = {$this->quote($type)}
+                            AND _type = '{$type}'
                             AND _permission IN (" . \implode(',', \array_map(fn ($i) => ":remove_{$type}_{$index}_{$i}", \array_keys($toRemove))) . ")
                         )";
                         $removeBindValues[":_uid_{$index}"] = $document->getId();

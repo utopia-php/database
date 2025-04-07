@@ -16471,7 +16471,7 @@ abstract class Base extends TestCase
             Permission::read(Role::any()),
         ], documentSecurity: false);
 
-        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 10, false);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 100, false);
         $database->createIndex(__FUNCTION__, 'nameIndex', Database::INDEX_KEY, ['name']);
 
         $doc1Id = ID::unique();

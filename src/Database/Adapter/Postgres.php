@@ -1378,6 +1378,11 @@ class Postgres extends SQL
         return $document;
     }
 
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
+    {
+        throw new \Exception('Not implemented');
+    }
+
     /**
      * Increase or decrease an attribute value
      *

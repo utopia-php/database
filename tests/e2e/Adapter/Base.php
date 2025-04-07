@@ -16523,6 +16523,62 @@ abstract class Base extends TestCase
         $this->assertEquals(1, \count($docs));
         $this->assertEquals($doc1Id, $docs[0]->getId());
 
+        // Test upsert with tenant per doc
+        $doc3Id = ID::unique();
+        $database
+            ->setTenant(null)
+            ->setTenantPerDocument(true)
+            ->createOrUpdateDocuments(__FUNCTION__, [new Document([
+                '$id' => $doc3Id,
+                '$tenant' => 3,
+                'name' => 'Superman',
+            ])]);
+
+        // Set to tenant 1 and read
+        $doc = $database
+            ->setTenantPerDocument(false)
+            ->setTenant(3)
+            ->getDocument(__FUNCTION__, $doc3Id);
+
+        $this->assertEquals('Superman', $doc['name']);
+        $this->assertEquals(3, $doc->getTenant());
+        $this->assertEquals($doc3Id, $doc->getId());
+
+        // Test no read from other tenants
+        $docs = $database
+            ->setTenantPerDocument(false)
+            ->setTenant(1)
+            ->find(__FUNCTION__);
+
+        $this->assertEquals(1, \count($docs));
+
+        // Ensure no cross-tenant upsert
+        try {
+            $database
+                ->setTenant(null)
+                ->setTenantPerDocument(true)
+                ->createOrUpdateDocuments(__FUNCTION__, [new Document([
+                    '$id' => $doc3Id,
+                    '$tenant' => 1,
+                    'name' => 'Superman updated',
+                ])]);
+
+            $this->fail('Expected to throw for cross-tenant upsert');
+        } catch (\Throwable) {
+            // Expected
+        }
+
+        // Ensure no cross-tenant read from upsert
+        try {
+            $database
+                ->setTenant(1)
+                ->setTenantPerDocument(false)
+                ->getDocument(__FUNCTION__, $doc3Id);
+            $this->fail('Expected to throw for cross-tenant read');
+        } catch (\Throwable) {
+            // Expected
+        }
+
         // Reset instance
         $database
             ->setSharedTables($sharedTables)

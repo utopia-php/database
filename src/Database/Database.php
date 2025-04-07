@@ -4648,11 +4648,17 @@ class Database
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $time = DateTime::now();
 
+        $selects = ['$internalId', '$permissions'];
+
+        if ($this->getSharedTables()) {
+            $selects[] = '$tenant';
+        }
+
         foreach ($documents as $key => $document) {
             $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
                 $collection->getId(),
                 $document->getId(),
-                [Query::select(['$internalId', '$permissions'])],
+                [Query::select($selects)],
                 forUpdate: true
             )));
 

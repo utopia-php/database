@@ -1534,7 +1534,7 @@ class MariaDB extends SQL
 
                 // Calculate removals
                 foreach (Database::PERMISSIONS as $type) {
-                    $toRemove = \array_diff($currentPermissions[$type], $document->getPermissionsByType($type));
+                    $toRemove = \array_diff($currentPermissions[$type] ?? [], $document->getPermissionsByType($type));
                     if (!empty($toRemove)) {
                         $removeQueries[] = "(
                             _document = :_uid_{$index}
@@ -1552,16 +1552,19 @@ class MariaDB extends SQL
 
                 // Calculate additions
                 foreach (Database::PERMISSIONS as $type) {
-                    $toAdd = \array_diff($document->getPermissionsByType($type), $currentPermissions[$type]);
+                    $toAdd = \array_diff($document->getPermissionsByType($type), $currentPermissions[$type] ?? []);
                     foreach ($toAdd as $i => $permission) {
                         $addQuery = "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}";
+
                         if ($this->sharedTables) {
                             $addQuery .= ", :_tenant_{$index}";
                         }
+
                         $addQuery .= ")";
                         $addQueries[] = $addQuery;
                         $addBindValues[":_uid_{$index}"] = $document->getId();
                         $addBindValues[":add_{$type}_{$index}_{$i}"] = $permission;
+
                         if ($this->sharedTables) {
                             $addBindValues[":_tenant_{$index}"] = $document->getTenant();
                         }

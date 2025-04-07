@@ -16445,6 +16445,7 @@ abstract class Base extends TestCase
     {
         $database = static::getDatabase();
         $sharedTables = $database->getSharedTables();
+        $tenantPerDocument = $database->getTenantPerDocument();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
 
@@ -16582,6 +16583,7 @@ abstract class Base extends TestCase
         // Reset instance
         $database
             ->setSharedTables($sharedTables)
+            ->setTenantPerDocument($tenantPerDocument)
             ->setNamespace($namespace)
             ->setDatabase($schema);
     }

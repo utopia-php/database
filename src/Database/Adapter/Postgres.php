@@ -406,10 +406,11 @@ class Postgres extends SQL
      * @param string $id
      * @param string $type
      * @param int $size
+     * @param bool $signed
      * @param bool $array
      *
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {

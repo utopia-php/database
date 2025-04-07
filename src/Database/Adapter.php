@@ -420,6 +420,14 @@ abstract class Adapter
     }
 
     /**
+     * Quote a string
+     *
+     * @param string $string
+     * @return string
+     */
+    abstract protected function quote(string $string): string;
+
+    /**
      * Ping Database
      *
      * @return bool

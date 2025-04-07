@@ -91,6 +91,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    protected function quote(string $string): string
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function ping(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

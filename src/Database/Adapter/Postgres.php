@@ -1378,17 +1378,6 @@ class Postgres extends SQL
     }
 
     /**
-     * @param string $collection
-     * @param string $attribute
-     * @param array<Document> $documents
-     * @return array<Document>
-     */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
-    {
-        return $documents;
-    }
-
-    /**
      * Increase or decrease an attribute value
      *
      * @param string $collection
@@ -1836,6 +1825,15 @@ class Postgres extends SQL
     }
 
     /**
+     * @return string
+     */
+    public function getConnectionId(): string
+    {
+        $stmt = $this->getPDO()->query("SELECT pg_backend_pid();");
+        return $stmt->fetchColumn();
+    }
+
+    /**
      * Get SQL Condition
      *
      * @param Query $query
@@ -2110,8 +2108,6 @@ class Postgres extends SQL
         return 'ILIKE';
     }
 
-
-
     protected function processException(PDOException $e): \Exception
     {
         // Timeout
@@ -2143,14 +2139,9 @@ class Postgres extends SQL
     }
 
     /**
+     * @param string $string
      * @return string
      */
-    public function getConnectionId(): string
-    {
-        $stmt = $this->getPDO()->query("SELECT pg_backend_pid();");
-        return $stmt->fetchColumn();
-    }
-
     protected function quote(string $string): string
     {
         return "\"{$string}\"";

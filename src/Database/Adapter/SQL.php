@@ -1562,6 +1562,14 @@ abstract class SQL extends Adapter
             $selections[] = '_updatedAt';
             $selections = \array_diff($selections, ['$updatedAt']);
         }
+        if (\in_array('$collection', $selections)) {
+            $selections[] = '_collection';
+            $selections = \array_diff($selections, ['$collection']);
+        }
+        if (\in_array('$tenant', $selections)) {
+            $selections[] = '_tenant';
+            $selections = \array_diff($selections, ['$tenant']);
+        }
 
         if (!empty($prefix)) {
             foreach ($selections as &$selection) {

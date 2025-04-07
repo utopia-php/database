@@ -1149,7 +1149,9 @@ abstract class SQL extends Adapter
             return '';
         }
 
+        $dot = '';
         if ($alias !== '') {
+            $dot = '.';
             $alias = $this->quote($alias);
         }
 
@@ -1160,15 +1162,15 @@ abstract class SQL extends Adapter
             for ($index = 0; $index < $tenantCount; $index++) {
                 $bindings[] = ":_tenant_{$index}";
             }
-            $bindings = \implode(',', $bindings);
         }
+        $bindings = \implode(',', $bindings);
 
         $orIsNull = '';
         if ($collection === Database::METADATA) {
-            $orIsNull = " OR {$alias}._tenant IS NULL";
+            $orIsNull = " OR {$alias}{$dot}_tenant IS NULL";
         }
 
-        return "{$condition} ({$alias}._tenant IN ({$bindings}) {$orIsNull})";
+        return "{$condition} ({$alias}{$dot}_tenant IN ({$bindings}) {$orIsNull})";
     }
 
     protected function processException(PDOException $e): \Exception

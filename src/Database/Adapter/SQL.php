@@ -1417,7 +1417,7 @@ abstract class SQL extends Adapter
                 if (!empty($additions)) {
                     foreach ($additions as $type => $permissionsToAdd) {
                         foreach ($permissionsToAdd as $i => $permission) {
-                            $bindKey = 'uid_' . $index;
+                            $bindKey = '_uid_' . $index;
                             $addBindValues[$bindKey] = $document->getId();
 
                             $bindKey = 'add_' . $type . '_' . $index . '_' . $i;

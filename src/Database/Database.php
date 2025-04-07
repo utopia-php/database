@@ -117,14 +117,15 @@ class Database
     public const EVENT_COLLECTION_DELETE = 'collection_delete';
 
     public const EVENT_DOCUMENT_FIND = 'document_find';
-    public const EVENT_DOCUMENT_CREATE = 'document_create';
     public const EVENT_DOCUMENT_PURGE = 'document_purge';
+    public const EVENT_DOCUMENT_CREATE = 'document_create';
     public const EVENT_DOCUMENTS_CREATE = 'documents_create';
-    public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
     public const EVENT_DOCUMENT_READ = 'document_read';
     public const EVENT_DOCUMENT_UPDATE = 'document_update';
     public const EVENT_DOCUMENTS_UPDATE = 'documents_update';
+    public const EVENT_DOCUMENTS_UPSERT = 'documents_upsert';
     public const EVENT_DOCUMENT_DELETE = 'document_delete';
+    public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
     public const EVENT_DOCUMENT_COUNT = 'document_count';
     public const EVENT_DOCUMENT_SUM = 'document_sum';
     public const EVENT_DOCUMENT_INCREASE = 'document_increase';
@@ -3017,7 +3018,12 @@ class Database
             return $document;
         }
 
-        $document = $this->adapter->getDocument($collection->getId(), $id, $queries, $forUpdate);
+        $document = $this->adapter->getDocument(
+            $collection->getId(),
+            $id,
+            $queries,
+            $forUpdate
+        );
 
         if ($document->isEmpty()) {
             return $document;
@@ -4748,9 +4754,9 @@ class Database
             $this->purgeCachedDocument($collection->getId(), $document->getId());
         }
 
-        $this->trigger(self::EVENT_DOCUMENTS_CREATE, new Document([
+        $this->trigger(self::EVENT_DOCUMENTS_UPSERT, new Document([
             '$collection' => $collection->getId(),
-            'modified' => count($documents)
+            'modified' => \count($documents)
         ]));
 
         return $documents;

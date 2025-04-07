@@ -1380,7 +1380,7 @@ class Postgres extends SQL
 
     public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
     {
-        throw new \Exception('Not implemented');
+        return $documents;
     }
 
     /**

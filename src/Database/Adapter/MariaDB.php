@@ -1358,6 +1358,7 @@ class MariaDB extends SQL
             $documentTenants = [];
 
             foreach ($documents as $document) {
+                $document = $document['new'];
                 $attributes = $document->getAttributes();
                 $attributes['_uid'] = $document->getId();
                 $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1441,42 +1442,7 @@ class MariaDB extends SQL
             }
 
             $stmt->execute();
-
-            // Fetch existing permissions in bulk after data updates
-            $sql = "
-                SELECT _document, _type, _permission
-                FROM {$this->getSQLTable($name . '_perms')}
-                WHERE _document IN (" . \implode(',', \array_map(fn ($index) => ":_key_{$index}", \array_keys($documents))) . ")
-                {$this->getTenantQuery($collection, tenantCount: \count($documentTenants))}
-            ";
-
-            $stmt = $this->getPDO()->prepare($sql);
-
-            foreach ($documents as $index => $document) {
-                $stmt->bindValue(":_key_{$index}", $document->getId());
-            }
-
-            if ($this->sharedTables) {
-                foreach ($documentTenants as $index => $tenant) {
-                    $stmt->bindValue(":_tenant_{$index}", $tenant);
-                }
-            }
-
-            $stmt->execute();
-            $existing = $stmt->fetchAll();
             $stmt->closeCursor();
-
-            // Group permissions by document
-            $permissionsByDocument = [];
-            foreach ($existing as $row) {
-                $permissionsByDocument[$row['_document']][$row['_type']][] = $row['_permission'];
-            }
-
-            foreach ($documentIds as $id) {
-                foreach (Database::PERMISSIONS as $type) {
-                    $permissionsByDocument[$id][$type] = $permissionsByDocument[$id][$type] ?? [];
-                }
-            }
 
             $removeQueries = [];
             $removeBindValues = [];
@@ -1484,11 +1450,17 @@ class MariaDB extends SQL
             $addBindValues = [];
 
             foreach ($documents as $index => $document) {
-                $currentPermissions = $permissionsByDocument[$document->getId()] ?? [];
+                $old = $document['old'];
+                $document = $document['new'];
+
+                $current = [];
+                foreach (Database::PERMISSIONS as $type) {
+                    $current[$type] = $old->getPermissionsByType($type) ?? [];
+                }
 
                 // Calculate removals
                 foreach (Database::PERMISSIONS as $type) {
-                    $toRemove = \array_diff($currentPermissions[$type] ?? [], $document->getPermissionsByType($type));
+                    $toRemove = \array_diff($current[$type] ?? [], $document->getPermissionsByType($type));
                     if (!empty($toRemove)) {
                         $removeQueries[] = "(
                             _document = :_uid_{$index}
@@ -1506,7 +1478,8 @@ class MariaDB extends SQL
 
                 // Calculate additions
                 foreach (Database::PERMISSIONS as $type) {
-                    $toAdd = \array_diff($document->getPermissionsByType($type), $currentPermissions[$type] ?? []);
+                    $toAdd = \array_diff($document->getPermissionsByType($type), $current[$type] ?? []);
+
                     foreach ($toAdd as $i => $permission) {
                         $addQuery = "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}";
 
@@ -1552,8 +1525,8 @@ class MariaDB extends SQL
 
             $internalIds = $this->getInternalIds($collection, $documentIds, $documentTenants);
             foreach ($documents as $document) {
-                if (isset($internalIds[$document->getId()])) {
-                    $document['$internalId'] = $internalIds[$document->getId()];
+                if (isset($internalIds[$document['new']->getId()])) {
+                    $document['new']['$internalId'] = $internalIds[$document['new']->getId()];
                 }
             }
         } catch (PDOException $e) {

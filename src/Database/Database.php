@@ -4742,7 +4742,10 @@ class Database
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
 
-            $documents[$key] = $document;
+            $documents[$key] = [
+                'old' => $old,
+                'new' => $document
+            ];
         }
 
         $documents = $this->withTransaction(function () use ($collection, $attribute, $documents, $batchSize) {
@@ -4763,6 +4766,8 @@ class Database
         });
 
         foreach ($documents as $key => $document) {
+            $document = $document['new'];
+
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
             }

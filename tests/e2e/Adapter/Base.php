@@ -2216,9 +2216,13 @@ abstract class Base extends TestCase
             ]);
         }
 
-        $documents = static::getDatabase()->createDocuments($collection, $documents, 3);
+        $created = 0;
 
-        $this->assertEquals($count, count($documents));
+        foreach (static::getDatabase()->createDocuments($collection, $documents, $count) as $chunk) {
+            $created += \count($chunk);
+        }
+
+        $this->assertEquals($count, $created);
 
         foreach ($documents as $document) {
             $this->assertNotEmpty(true, $document->getId());
@@ -2257,9 +2261,12 @@ abstract class Base extends TestCase
             ]),
         ];
 
-        $documents = static::getDatabase()->createDocuments($collection, $documents);
+        $created = 0;
+        foreach (static::getDatabase()->createDocuments($collection, $documents) as $chunk) {
+            $created += \count($chunk);
+        }
 
-        $this->assertEquals(2, count($documents));
+        $this->assertEquals(\count($documents), $created);
 
         $this->assertEquals('text📝', $documents[0]->getAttribute('string'));
         $this->assertEquals(5, $documents[0]->getAttribute('integer'));
@@ -2343,9 +2350,9 @@ abstract class Base extends TestCase
 
         $documents = static::getDatabase()->createOrUpdateDocuments($collection, $documents);
 
-        $this->assertEquals(2, count($documents));
-
+        $count = 0;
         foreach ($documents as $document) {
+            $count++;
             $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
@@ -2354,6 +2361,8 @@ abstract class Base extends TestCase
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
         }
+
+        $this->assertEquals(2, $count);
 
         $documents = static::getDatabase()->find($collection);
 
@@ -2376,9 +2385,9 @@ abstract class Base extends TestCase
 
         $documents = static::getDatabase()->createOrUpdateDocuments($collection, $documents);
 
-        $this->assertEquals(2, count($documents));
-
+        $count = 0;
         foreach ($documents as $document) {
+            $count++;
             $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
@@ -2387,6 +2396,8 @@ abstract class Base extends TestCase
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
         }
+
+        $this->assertEquals(2, $count);
 
         $documents = static::getDatabase()->find($collection);
 
@@ -2520,8 +2531,9 @@ abstract class Base extends TestCase
             [$document->setAttribute('string', 'updated')]
         );
 
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals('updated', $documents[0]->getAttribute('string'));
+        foreach ($documents as $document) {
+            $this->assertEquals('updated', $document->getAttribute('string'));
+        }
 
         $document = new Document([
             '$id' => 'third',
@@ -2546,8 +2558,13 @@ abstract class Base extends TestCase
             [$document->setAttribute('$permissions', $newPermissions)]
         );
 
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($newPermissions, $documents[0]->getPermissions());
+        $count = 0;
+        foreach ($documents as $document) {
+            $count++;
+            $this->assertEquals($newPermissions, $document->getPermissions());
+        }
+
+        $this->assertEquals(1, $count);
 
         $document = static::getDatabase()->getDocument($collection, 'third');
 
@@ -16639,11 +16656,19 @@ abstract class Base extends TestCase
         $modified = static::getDatabase()->deleteDocuments('bulk_delete', [
             Query::greaterThanEqual('integer', 5)
         ]);
-        $this->assertCount(5, $modified);
 
-        foreach ($modified as $document) {
-            $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
+        $count = 0;
+        foreach ($modified as $chunk) {
+            /**
+             * @var array<Document> $chunk
+             */
+            $count += \count($chunk);
+            foreach ($chunk as $document) {
+                $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
+            }
         }
+
+        $this->assertEquals(5, $count);
 
         $docs = static::getDatabase()->find('bulk_delete');
         $this->assertCount(5, $docs);
@@ -16665,7 +16690,7 @@ abstract class Base extends TestCase
         try {
             static::getDatabase()->deleteDocuments('bulk_delete');
             $this->fail('Bulk deleted documents with invalid collection permission');
-        } catch (\Utopia\Database\Exception\Authorization) {
+        } catch (AuthorizationException) {
         }
 
         static::getDatabase()->updateCollection('bulk_delete', [
@@ -17351,11 +17376,20 @@ abstract class Base extends TestCase
         ]), [
             Query::greaterThanEqual('integer', 5),
         ]);
-        $this->assertCount(5, $modified);
 
-        foreach ($modified as $document) {
-            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+        $count = 0;
+        foreach ($modified as $chunk) {
+            /**
+             * @var array<Document> $chunk
+             */
+            $count += \count($chunk);
+            foreach ($chunk as $document) {
+                $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
+                $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            }
         }
+
+        $this->assertEquals(5, $count);
 
         $updatedDocuments = static::getDatabase()->find($collection, [
             Query::greaterThanEqual('integer', 5),
@@ -17372,7 +17406,7 @@ abstract class Base extends TestCase
             Query::lessThan('integer', 5),
         ]);
 
-        $this->assertEquals(count($controlDocuments), 5);
+        $this->assertEquals(5, \count($controlDocuments));
 
         foreach ($controlDocuments as $document) {
             $this->assertNotEquals('text📝 updated', $document->getAttribute('string'));

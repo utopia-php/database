@@ -4185,11 +4185,15 @@ class Database
                     $affectedDocuments
                 );
 
-                $skipAuth ? $authorization->skip($getResults) : $getResults();
+                $skipAuth
+                    ? $authorization->skip($getResults)
+                    : $getResults();
             });
 
             foreach ($documents as $document) {
-                $this->purgeCachedDocument($collection->getId(), $document->getId());
+                $this->withTenant($document->getTenant(), function() use ($collection, $document) {
+                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                });
             }
 
             if (count($affectedDocuments) < $batchSize) {
@@ -4661,16 +4665,18 @@ class Database
         }
 
         foreach ($documents as $key => $document) {
-            $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
-                $collection->getId(),
-                $document->getId(),
-                [Query::select($selects)],
-                forUpdate: true
-            )));
+            $old = $this->withTenant($document->getTenant(), function() use ($collection, $document, $selects) {
+                return Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
+                    $collection->getId(),
+                    $document->getId(),
+                    [Query::select($selects)],
+                    forUpdate: true
+                )));
+            });
 
             // If old is empty, check if user has create permission on the collection
             // If old is not empty, check if user has update permission on the collection
-            // If old is not empty AND documentSecurity is enabled, we need to check if user has update permission on the collection or document
+            // If old is not empty AND documentSecurity is enabled, check if user has update permission on the collection or document
 
             $validator = new Authorization(
                 $old->isEmpty() ?
@@ -4754,7 +4760,9 @@ class Database
 
             $documents[$key] = $this->decode($collection, $document);
 
-            $this->purgeCachedDocument($collection->getId(), $document->getId());
+            $this->withTenant($document->getTenant(), function() use ($collection, $document) {
+                $this->purgeCachedDocument($collection->getId(), $document->getId());
+            });
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPSERT, new Document([
@@ -5528,7 +5536,9 @@ class Database
             });
 
             foreach ($affectedDocuments as $affectedDocument) {
-                $this->purgeCachedDocument($collection->getId(), $affectedDocument->getId());
+                $this->withTenant($affectedDocument->getTenant(), function () use ($collection, $affectedDocument) {
+                    $this->purgeCachedDocument($collection->getId(), $affectedDocument->getId());
+                });
             }
 
             if (count($affectedDocuments) < $batchSize) {
@@ -5580,8 +5590,8 @@ class Database
      *
      * @param string $collectionId
      * @param string $id
-     *
      * @return bool
+     * @throws Exception
      */
     public function purgeCachedDocument(string $collectionId, string $id): bool
     {

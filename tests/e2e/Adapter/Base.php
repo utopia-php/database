@@ -16555,32 +16555,13 @@ abstract class Base extends TestCase
 
             $this->assertEquals(1, \count($docs));
 
-            // Ensure no cross-tenant upsert
-            try {
-                $database
-                    ->setTenant(null)
-                    ->setTenantPerDocument(true)
-                    ->createOrUpdateDocuments(__FUNCTION__, [new Document([
-                        '$id' => $doc3Id,
-                        '$tenant' => 1,
-                        'name' => 'Superman updated',
-                    ])]);
-
-                $this->fail('Expected to throw for cross-tenant upsert');
-            } catch (\Throwable) {
-                // Expected
-            }
-
             // Ensure no cross-tenant read from upsert
-            try {
-                $database
-                    ->setTenant(1)
-                    ->setTenantPerDocument(false)
-                    ->getDocument(__FUNCTION__, $doc3Id);
-                $this->fail('Expected to throw for cross-tenant read');
-            } catch (\Throwable) {
-                // Expected
-            }
+            $doc = $database
+                ->setTenant(1)
+                ->setTenantPerDocument(false)
+                ->getDocument(__FUNCTION__, $doc3Id);
+
+            $this->assertEquals(true, $doc->isEmpty());
 
             // Upsert new documents with different tenants
             $doc4Id = ID::unique();

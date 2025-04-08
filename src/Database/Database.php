@@ -4191,9 +4191,13 @@ class Database
             });
 
             foreach ($documents as $document) {
-                $this->withTenant($document->getTenant(), function() use ($collection, $document) {
+                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
+                        $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    });
+                } else {
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
-                });
+                }
             }
 
             if (count($affectedDocuments) < $batchSize) {
@@ -4665,14 +4669,21 @@ class Database
         }
 
         foreach ($documents as $key => $document) {
-            $old = $this->withTenant($document->getTenant(), function() use ($collection, $document, $selects) {
-                return Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
+            if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+                $old = Authorization::skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
+                    $collection->getId(),
+                    $document->getId(),
+                    [Query::select($selects)],
+                    forUpdate: true
+                ))));
+            } else {
+                $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId(),
                     [Query::select($selects)],
                     forUpdate: true
                 )));
-            });
+            }
 
             // If old is empty, check if user has create permission on the collection
             // If old is not empty, check if user has update permission on the collection
@@ -4760,9 +4771,13 @@ class Database
 
             $documents[$key] = $this->decode($collection, $document);
 
-            $this->withTenant($document->getTenant(), function() use ($collection, $document) {
+            if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+                $this->withTenant($document->getTenant(), function () use ($collection, $document) {
+                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                });
+            } else {
                 $this->purgeCachedDocument($collection->getId(), $document->getId());
-            });
+            }
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPSERT, new Document([
@@ -5535,10 +5550,14 @@ class Database
                 $skipAuth ? $authorization->skip($getResults) : $getResults();
             });
 
-            foreach ($affectedDocuments as $affectedDocument) {
-                $this->withTenant($affectedDocument->getTenant(), function () use ($collection, $affectedDocument) {
-                    $this->purgeCachedDocument($collection->getId(), $affectedDocument->getId());
-                });
+            foreach ($affectedDocuments as $document) {
+                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
+                        $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    });
+                } else {
+                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                }
             }
 
             if (count($affectedDocuments) < $batchSize) {

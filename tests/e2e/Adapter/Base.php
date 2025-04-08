@@ -2306,13 +2306,10 @@ abstract class Base extends TestCase
             return;
         }
 
-        $collection = 'testCreateOrUpdateDocuments';
-
-        static::getDatabase()->createCollection($collection);
-
-        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
-        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, true);
-        static::getDatabase()->createAttribute($collection, 'bigint', Database::VAR_INTEGER, 8, true);
+        static::getDatabase()->createCollection(__FUNCTION__);
+        static::getDatabase()->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createAttribute(__FUNCTION__, 'integer', Database::VAR_INTEGER, 0, true);
+        static::getDatabase()->createAttribute(__FUNCTION__, 'bigint', Database::VAR_INTEGER, 8, true);
 
         $documents = [
             new Document([
@@ -2341,7 +2338,7 @@ abstract class Base extends TestCase
             ]),
         ];
 
-        $documents = static::getDatabase()->createOrUpdateDocuments($collection, $documents);
+        $documents = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, $documents);
 
         $this->assertEquals(2, count($documents));
 
@@ -2355,7 +2352,7 @@ abstract class Base extends TestCase
             $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
         }
 
-        $documents = static::getDatabase()->find($collection);
+        $documents = static::getDatabase()->find(__FUNCTION__);
 
         $this->assertEquals(2, count($documents));
 
@@ -2374,7 +2371,7 @@ abstract class Base extends TestCase
         $documents[1]->setAttribute('string', 'new text📝');
         $documents[1]->setAttribute('integer', 10);
 
-        $documents = static::getDatabase()->createOrUpdateDocuments($collection, $documents);
+        $documents = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, $documents);
 
         $this->assertEquals(2, count($documents));
 
@@ -2388,7 +2385,7 @@ abstract class Base extends TestCase
             $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
         }
 
-        $documents = static::getDatabase()->find($collection);
+        $documents = static::getDatabase()->find(__FUNCTION__);
 
         $this->assertEquals(2, count($documents));
 
@@ -2403,18 +2400,16 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testCreateOrUpdateDocumentsWithIncrease(): void
+    public function testCreateOrUpdateDocumentsInc(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $collection = 'testCreateOrUpdateInplace';
-
-        static::getDatabase()->createCollection($collection);
-        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, false);
-        static::getDatabase()->createAttribute($collection, 'integer', Database::VAR_INTEGER, 0, false);
+        static::getDatabase()->createCollection(__FUNCTION__);
+        static::getDatabase()->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, false);
+        static::getDatabase()->createAttribute(__FUNCTION__, 'integer', Database::VAR_INTEGER, 0, false);
 
         $documents = [
             new Document([
@@ -2441,18 +2436,18 @@ abstract class Base extends TestCase
             ]),
         ];
 
-        static::getDatabase()->createDocuments($collection, $documents);
+        static::getDatabase()->createDocuments(__FUNCTION__, $documents);
 
         $documents[0]->setAttribute('integer', 1);
         $documents[1]->setAttribute('integer', 1);
 
         static::getDatabase()->createOrUpdateDocumentsWithIncrease(
-            collection: $collection,
+            collection: __FUNCTION__,
             attribute:'integer',
             documents: $documents
         );
 
-        $documents = static::getDatabase()->find($collection);
+        $documents = static::getDatabase()->find(__FUNCTION__);
 
         foreach ($documents as $document) {
             $this->assertEquals(6, $document->getAttribute('integer'));
@@ -2462,12 +2457,12 @@ abstract class Base extends TestCase
         $documents[1]->setAttribute('integer', -1);
 
         static::getDatabase()->createOrUpdateDocumentsWithIncrease(
-            collection: $collection,
+            collection: __FUNCTION__,
             attribute:'integer',
             documents: $documents
         );
 
-        $documents = static::getDatabase()->find($collection);
+        $documents = static::getDatabase()->find(__FUNCTION__);
 
         foreach ($documents as $document) {
             $this->assertEquals(5, $document->getAttribute('integer'));
@@ -2481,10 +2476,8 @@ abstract class Base extends TestCase
             return;
         }
 
-        $collection = 'testCreateOrUpdateDocumentPermissions';
-
-        static::getDatabase()->createCollection($collection);
-        static::getDatabase()->createAttribute($collection, 'string', Database::VAR_STRING, 128, true);
+        static::getDatabase()->createCollection(__FUNCTION__);
+        static::getDatabase()->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true);
 
         $document = new Document([
             '$id' => 'first',
@@ -2495,10 +2488,10 @@ abstract class Base extends TestCase
             ],
         ]);
 
-        static::getDatabase()->createOrUpdateDocuments($collection, [$document]);
+        static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document]);
 
         try {
-            static::getDatabase()->createOrUpdateDocuments($collection, [$document->setAttribute('string', 'updated')]);
+            static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document->setAttribute('string', 'updated')]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(AuthorizationException::class, $e);
@@ -2513,10 +2506,10 @@ abstract class Base extends TestCase
             ],
         ]);
 
-        static::getDatabase()->createOrUpdateDocuments($collection, [$document]);
+        static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document]);
 
         $documents = static::getDatabase()->createOrUpdateDocuments(
-            $collection,
+            __FUNCTION__,
             [$document->setAttribute('string', 'updated')]
         );
 
@@ -2533,7 +2526,7 @@ abstract class Base extends TestCase
             ],
         ]);
 
-        static::getDatabase()->createOrUpdateDocuments($collection, [$document]);
+        static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document]);
 
         $newPermissions = [
             Permission::read(Role::any()),
@@ -2542,14 +2535,14 @@ abstract class Base extends TestCase
         ];
 
         $documents = static::getDatabase()->createOrUpdateDocuments(
-            $collection,
+            __FUNCTION__,
             [$document->setAttribute('$permissions', $newPermissions)]
         );
 
         $this->assertEquals(1, count($documents));
         $this->assertEquals($newPermissions, $documents[0]->getPermissions());
 
-        $document = static::getDatabase()->getDocument($collection, 'third');
+        $document = static::getDatabase()->getDocument(__FUNCTION__, 'third');
 
         $this->assertEquals($newPermissions, $document->getPermissions());
     }

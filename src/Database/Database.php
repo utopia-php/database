@@ -3539,7 +3539,7 @@ class Database
 
         $stackCount = count($this->relationshipWriteStack);
 
-        foreach ($relationships as $index => $relationship) {
+        foreach ($relationships as $relationship) {
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
@@ -4674,14 +4674,12 @@ class Database
                     $collection->getId(),
                     $document->getId(),
                     [Query::select($selects)],
-                    forUpdate: true
                 ))));
             } else {
                 $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId(),
                     [Query::select($selects)],
-                    forUpdate: true
                 )));
             }
 

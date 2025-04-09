@@ -1016,11 +1016,11 @@ class MariaDB extends SQL
                     $attributeKeys[] = '_id';
                 } else {
                     $documentIds[] = $document->getId();
-                    $documentTenants[] = $document->getTenant();
                 }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();
+                    $documentTenants[] = $document->getTenant();
                 }
 
                 $bindKeys = [];

@@ -4748,10 +4748,16 @@ class Database
             ];
         }
 
+        /**
+         * @var array<int|string, array{old: Document, new: Document}> $documents
+         */
         $documents = $this->withTransaction(function () use ($collection, $attribute, $documents, $batchSize) {
             $stack = [];
 
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
+                /**
+                 * @var array<int|string, array{old: Document, new: Document}> $chunk
+                 */
                 \array_push(
                     $stack,
                     ...Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
@@ -4766,8 +4772,6 @@ class Database
         });
 
         foreach ($documents as $key => $document) {
-            $document = $document['new'];
-
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
             }

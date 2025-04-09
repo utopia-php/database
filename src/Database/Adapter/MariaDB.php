@@ -1333,7 +1333,7 @@ class MariaDB extends SQL
     /**
      * @param string $collection
      * @param string $attribute
-     * @param array<Document> $documents
+     * @param array<string|int, array{old: Document, new: Document}> $documents
      * @return array<Document>
      * @throws DatabaseException
      */
@@ -1379,6 +1379,9 @@ class MariaDB extends SQL
 
                 $columns = [];
                 foreach (\array_keys($attributes) as $key => $attr) {
+                    /**
+                     * @var string $attr
+                     */
                     $columns[$key] = "{$this->quote($this->filter($attr))}";
                 }
                 $columns = '(' . \implode(', ', $columns) . ')';
@@ -1425,6 +1428,9 @@ class MariaDB extends SQL
                 // Update all columns
                 $updateColumns = [];
                 foreach (\array_keys($attributes) as $attr) {
+                    /**
+                     * @var string $attr
+                     */
                     $updateColumns[] = $getUpdateClause($this->filter($attr));
                 }
             }
@@ -1455,12 +1461,12 @@ class MariaDB extends SQL
 
                 $current = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    $current[$type] = $old->getPermissionsByType($type) ?? [];
+                    $current[$type] = $old->getPermissionsByType($type);
                 }
 
                 // Calculate removals
                 foreach (Database::PERMISSIONS as $type) {
-                    $toRemove = \array_diff($current[$type] ?? [], $document->getPermissionsByType($type));
+                    $toRemove = \array_diff($current[$type], $document->getPermissionsByType($type));
                     if (!empty($toRemove)) {
                         $removeQueries[] = "(
                             _document = :_uid_{$index}
@@ -1478,7 +1484,7 @@ class MariaDB extends SQL
 
                 // Calculate additions
                 foreach (Database::PERMISSIONS as $type) {
-                    $toAdd = \array_diff($document->getPermissionsByType($type), $current[$type] ?? []);
+                    $toAdd = \array_diff($document->getPermissionsByType($type), $current[$type]);
 
                     foreach ($toAdd as $i => $permission) {
                         $addQuery = "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}";
@@ -1533,7 +1539,7 @@ class MariaDB extends SQL
             throw $this->processException($e);
         }
 
-        return $documents;
+        return \array_map(fn ($document) => $document['new'], $documents);
     }
 
     /**

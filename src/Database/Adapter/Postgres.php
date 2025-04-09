@@ -1378,6 +1378,12 @@ class Postgres extends SQL
         return $document;
     }
 
+    /**
+     * @param string $collection
+     * @param string $attribute
+     * @param array<array{old: Document, new: Document}> $documents
+     * @return array<Document>
+     */
     public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
     {
         return $documents;

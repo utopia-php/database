@@ -1010,7 +1010,7 @@ class Database
 
     public function getMaxQueryValues(): int
     {
-        return$this->maxQueryValues;
+        return $this->maxQueryValues;
     }
 
     /**
@@ -1395,8 +1395,7 @@ class Database
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes'),
-            fn ($attribute) =>
-                $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
+            fn ($attribute) => $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
         );
 
         foreach ($relationships as $relationship) {
@@ -1511,7 +1510,7 @@ class Database
             case self::VAR_RELATIONSHIP:
                 break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER .  ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
         }
 
         // Only execute when $default is given
@@ -1569,8 +1568,8 @@ class Database
      * @param string $type Type of the attribute
      * @param mixed $default Default value of the attribute
      *
-     * @throws DatabaseException
      * @return void
+     * @throws DatabaseException
      */
     protected function validateDefaultTypes(string $type, mixed $default): void
     {
@@ -1603,7 +1602,7 @@ class Database
                 }
                 break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER .  ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
         }
     }
 
@@ -1845,7 +1844,7 @@ class Database
                     }
                     break;
                 default:
-                    throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER .  ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                    throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
             }
 
             /** Ensure required filters for the attribute are passed */
@@ -1912,7 +1911,7 @@ class Database
                         $this->adapter->getSupportForCastIndexArray(),
                     );
 
-                    if (! $validator->isValid($attribute)) {
+                    if (!$validator->isValid($attribute)) {
                         throw new DependencyException($validator->getDescription());
                     }
                 }
@@ -1955,8 +1954,8 @@ class Database
      * @param Document $collection
      * @param Document $attribute
      *
-     * @throws LimitException
      * @return bool
+     * @throws LimitException
      */
     public function checkAttribute(Document $collection, Document $attribute): bool
     {
@@ -2021,7 +2020,7 @@ class Database
                 $this->adapter->getSupportForCastIndexArray(),
             );
 
-            if (! $validator->isValid($attribute)) {
+            if (!$validator->isValid($attribute)) {
                 throw new DependencyException($validator->getDescription());
             }
         }
@@ -2108,7 +2107,7 @@ class Database
                 $this->adapter->getSupportForCastIndexArray(),
             );
 
-            if (! $validator->isValid($attribute)) {
+            if (!$validator->isValid($attribute)) {
                 throw new DependencyException($validator->getDescription());
             }
         }
@@ -2349,8 +2348,8 @@ class Database
      * @throws DatabaseException
      */
     public function updateRelationship(
-        string  $collection,
-        string  $id,
+        string $collection,
+        string $id,
         ?string $newKey = null,
         ?string $newTwoWayKey = null,
         ?bool $twoWay = null,
@@ -2476,8 +2475,7 @@ class Database
                 }
             );
             $this->silent(
-                fn () =>
-                $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
+                fn () => $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
             );
         };
 
@@ -3050,8 +3048,7 @@ class Database
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
-            fn ($attribute) =>
-                $attribute['type'] === Database::VAR_RELATIONSHIP
+            fn ($attribute) => $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
         // Don't save to cache if it's part of a relationship
@@ -3533,8 +3530,7 @@ class Database
 
         $relationships = \array_filter(
             $attributes,
-            fn ($attribute) =>
-                $attribute['type'] === Database::VAR_RELATIONSHIP
+            fn ($attribute) => $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
         $stackCount = count($this->relationshipWriteStack);
@@ -3868,8 +3864,7 @@ class Database
         $document = $this->withTransaction(function () use ($collection, $id, $document) {
             $time = DateTime::now();
             $old = Authorization::skip(fn () => $this->silent(
-                fn () =>
-                $this->getDocument($collection->getId(), $id, forUpdate: true)
+                fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
@@ -4145,7 +4140,7 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (! empty($lastDocument)) {
+            if (!empty($lastDocument)) {
                 $new[] = Query::cursorAfter($lastDocument);
             }
 
@@ -4245,14 +4240,14 @@ class Database
             $value = $document->getAttribute($key);
             $oldValue = $old->getAttribute($key);
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
-            $relationType = (string) $relationship['options']['relationType'];
-            $twoWay = (bool) $relationship['options']['twoWay'];
-            $twoWayKey = (string) $relationship['options']['twoWayKey'];
-            $side = (string) $relationship['options']['side'];
+            $relationType = (string)$relationship['options']['relationType'];
+            $twoWay = (bool)$relationship['options']['twoWay'];
+            $twoWayKey = (string)$relationship['options']['twoWayKey'];
+            $side = (string)$relationship['options']['side'];
 
             if ($oldValue == $value) {
                 if (
-                    ($relationType === Database::RELATION_ONE_TO_ONE  ||
+                    ($relationType === Database::RELATION_ONE_TO_ONE ||
                         ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
                     $value instanceof Document
                 ) {
@@ -4374,8 +4369,7 @@ class Database
                             case 'NULL':
                                 if (!\is_null($oldValue?->getId())) {
                                     $oldRelated = $this->skipRelationships(
-                                        fn () =>
-                                        $this->getDocument($relatedCollection->getId(), $oldValue->getId())
+                                        fn () => $this->getDocument($relatedCollection->getId(), $oldValue->getId())
                                     );
                                     $this->skipRelationships(fn () => $this->updateDocument(
                                         $relatedCollection->getId(),
@@ -4423,8 +4417,7 @@ class Database
                             foreach ($value as $relation) {
                                 if (\is_string($relation)) {
                                     $related = $this->skipRelationships(
-                                        fn () =>
-                                        $this->getDocument($relatedCollection->getId(), $relation, [Query::select(['$id'])])
+                                        fn () => $this->getDocument($relatedCollection->getId(), $relation, [Query::select(['$id'])])
                                     );
 
                                     if ($related->isEmpty()) {
@@ -4438,8 +4431,7 @@ class Database
                                     ));
                                 } elseif ($relation instanceof Document) {
                                     $related = $this->skipRelationships(
-                                        fn () =>
-                                        $this->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select(['$id'])])
+                                        fn () => $this->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select(['$id'])])
                                     );
 
                                     if ($related->isEmpty()) {
@@ -4689,8 +4681,8 @@ class Database
 
             $validator = new Authorization(
                 $old->isEmpty() ?
-                self::PERMISSION_CREATE :
-                self::PERMISSION_UPDATE
+                    self::PERMISSION_CREATE :
+                    self::PERMISSION_UPDATE
             );
 
             if ($old->isEmpty()) {
@@ -4748,28 +4740,23 @@ class Database
             );
         }
 
-        /**
-         * @var array<Change> $documents
-         */
-        $documents = $this->withTransaction(function () use ($collection, $attribute, $documents, $batchSize) {
-            $stack = [];
+        $stack = [];
 
-            foreach (\array_chunk($documents, $batchSize) as $chunk) {
-                /**
-                 * @var array<Change> $chunk
-                 */
-                \array_push(
-                    $stack,
-                    ...Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
-                        $collection->getId(),
-                        $attribute,
-                        $chunk
-                    ))
-                );
-            }
+        foreach (\array_chunk($documents, $batchSize) as $chunk) {
+            /**
+             * @var array<Change> $chunk
+             */
+            \array_push(
+                $stack,
+                ...$this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
+                    $collection->getId(),
+                    $attribute,
+                    $chunk
+                )))
+            );
+        }
 
-            return $stack;
-        });
+        $documents = $stack;
 
         /**
          * @var array<Document> $documents
@@ -5002,8 +4989,7 @@ class Database
 
         $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
             $document = Authorization::skip(fn () => $this->silent(
-                fn () =>
-                $this->getDocument($collection->getId(), $id, forUpdate: true)
+                fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
             if ($document->isEmpty()) {
@@ -5508,7 +5494,7 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (! empty($lastDocument)) {
+            if (!empty($lastDocument)) {
                 $new[] = Query::cursorAfter($lastDocument);
             }
 
@@ -5628,7 +5614,7 @@ class Database
     public function purgeCachedDocument(string $collectionId, string $id): bool
     {
         $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
-        $documentKey =  $collectionKey . ':' . $id;
+        $documentKey = $collectionKey . ':' . $id;
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
@@ -5814,8 +5800,8 @@ class Database
      * @param callable $callback
      * @param array<Query> $queries
      * @param string $forPermission
-     * @throws \Utopia\Database\Exception
      * @return void
+     * @throws \Utopia\Database\Exception
      */
     public function foreach(string $collection, callable $callback, array $queries = [], string $forPermission = Database::PERMISSION_READ): void
     {
@@ -5866,6 +5852,7 @@ class Database
             $latestDocument = $results[array_key_last($results)];
         }
     }
+
     /**
      * @param string $collection
      * @param array<Query> $queries
@@ -6066,14 +6053,12 @@ class Database
     {
         $attributes = \array_filter(
             $collection->getAttribute('attributes', []),
-            fn ($attribute) =>
-                $attribute['type'] !== self::VAR_RELATIONSHIP
+            fn ($attribute) => $attribute['type'] !== self::VAR_RELATIONSHIP
         );
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
-            fn ($attribute) =>
-                $attribute['type'] === self::VAR_RELATIONSHIP
+            fn ($attribute) => $attribute['type'] === self::VAR_RELATIONSHIP
         );
 
         foreach ($relationships as $relationship) {

@@ -1530,11 +1530,15 @@ class MariaDB extends SQL
                 $stmtAddPermissions->execute();
             }
 
-            $internalIds = $this->getInternalIds($collection, $documentIds, $documentTenants);
+            $internalIds = $this->getInternalIds(
+                $collection,
+                $documentIds,
+                $documentTenants
+            );
 
-            foreach ($changes as $document) {
-                if (isset($internalIds[$document->getNew()->getId()])) {
-                    $document->getNew()->setAttribute('$internalId', $internalIds[$document->getNew()->getId()]);
+            foreach ($changes as $change) {
+                if (isset($internalIds[$change->getNew()->getId()])) {
+                    $change->getNew()->setAttribute('$internalId', $internalIds[$change->getNew()->getId()]);
                 }
             }
         } catch (PDOException $e) {

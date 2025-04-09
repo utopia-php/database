@@ -216,7 +216,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

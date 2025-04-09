@@ -1334,17 +1334,17 @@ class MariaDB extends SQL
     /**
      * @param string $collection
      * @param string $attribute
-     * @param array<Change> $documents
+     * @param array<Change> $changes
      * @return array<Document>
      * @throws DatabaseException
      */
     public function createOrUpdateDocuments(
         string $collection,
         string $attribute,
-        array $documents
+        array $changes
     ): array {
-        if (empty($documents)) {
-            return $documents;
+        if (empty($changes)) {
+            return $changes;
         }
 
         try {
@@ -1358,7 +1358,7 @@ class MariaDB extends SQL
             $documentIds = [];
             $documentTenants = [];
 
-            foreach ($documents as $change) {
+            foreach ($changes as $change) {
                 $document = $change->getNew();
                 $attributes = $document->getAttributes();
                 $attributes['_uid'] = $document->getId();
@@ -1456,7 +1456,7 @@ class MariaDB extends SQL
             $addQueries = [];
             $addBindValues = [];
 
-            foreach ($documents as $index => $change) {
+            foreach ($changes as $index => $change) {
                 $old = $change->getOld();
                 $document = $change->getNew();
 
@@ -1532,7 +1532,7 @@ class MariaDB extends SQL
 
             $internalIds = $this->getInternalIds($collection, $documentIds, $documentTenants);
 
-            foreach ($documents as $document) {
+            foreach ($changes as $document) {
                 if (isset($internalIds[$document->getNew()->getId()])) {
                     $document->getNew()->setAttribute('$internalId', $internalIds[$document->getNew()->getId()]);
                 }
@@ -1541,7 +1541,7 @@ class MariaDB extends SQL
             throw $this->processException($e);
         }
 
-        return \array_map(fn ($change) => $change->getNew(), $documents);
+        return \array_map(fn ($change) => $change->getNew(), $changes);
     }
 
     /**

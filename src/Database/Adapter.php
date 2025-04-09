@@ -693,13 +693,13 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $attribute
-     * @param array<Change> $documents
+     * @param array<Change> $changes
      * @return array<Document>
      */
     abstract public function createOrUpdateDocuments(
         string $collection,
         string $attribute,
-        array $documents
+        array $changes
     ): array;
 
     /**

@@ -1382,12 +1382,12 @@ class Postgres extends SQL
     /**
      * @param string $collection
      * @param string $attribute
-     * @param array<Change> $documents
+     * @param array<Change> $changes
      * @return array<Document>
      */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
     {
-        return \array_map(fn ($change) => $change->getNew(), $documents);
+        return \array_map(fn ($change) => $change->getNew(), $changes);
     }
 
     /**

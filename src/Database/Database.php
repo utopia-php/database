@@ -4746,39 +4746,30 @@ class Database
             /**
              * @var array<Change> $chunk
              */
-            \array_push(
-                $stack,
-                ...$this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
-                    $collection->getId(),
-                    $attribute,
-                    $chunk
-                )))
-            );
+            $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
+                $collection->getId(),
+                $attribute,
+                $chunk
+            )));
+
+            foreach ($batch as $document) {
+                if ($this->resolveRelationships) {
+                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+                }
+
+                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
+                        $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    });
+                } else {
+                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                }
+
+                $stack[] = $document;
+            }
         }
 
         $documents = $stack;
-
-        /**
-         * @var array<Document> $documents
-         */
-        foreach ($documents as $key => $document) {
-            /**
-             * @var Document $document
-             */
-            if ($this->resolveRelationships) {
-                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
-            }
-
-            $documents[$key] = $this->decode($collection, $document);
-
-            if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
-                });
-            } else {
-                $this->purgeCachedDocument($collection->getId(), $document->getId());
-            }
-        }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPSERT, new Document([
             '$collection' => $collection->getId(),

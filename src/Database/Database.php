@@ -4742,21 +4742,21 @@ class Database
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
 
-            $documents[$key] = [
-                'old' => $old,
-                'new' => $document
-            ];
+            $documents[$key] = new Change(
+                old: $old,
+                new: $document
+            );
         }
 
         /**
-         * @var array<int|string, array{old: Document, new: Document}> $documents
+         * @var array<Change> $documents
          */
         $documents = $this->withTransaction(function () use ($collection, $attribute, $documents, $batchSize) {
             $stack = [];
 
             foreach (\array_chunk($documents, $batchSize) as $chunk) {
                 /**
-                 * @var array<int|string, array{old: Document, new: Document}> $chunk
+                 * @var array<Change> $chunk
                  */
                 \array_push(
                     $stack,
@@ -4771,7 +4771,13 @@ class Database
             return $stack;
         });
 
+        /**
+         * @var array<Document> $documents
+         */
         foreach ($documents as $key => $document) {
+            /**
+             * @var Document $document
+             */
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
             }

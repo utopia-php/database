@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -1381,12 +1382,12 @@ class Postgres extends SQL
     /**
      * @param string $collection
      * @param string $attribute
-     * @param array<array{old: Document, new: Document}> $documents
+     * @param array<Change> $documents
      * @return array<Document>
      */
     public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
     {
-        return $documents;
+        return \array_map(fn ($change) => $change->getNew(), $documents);
     }
 
     /**

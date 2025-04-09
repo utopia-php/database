@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -1333,7 +1334,7 @@ class MariaDB extends SQL
     /**
      * @param string $collection
      * @param string $attribute
-     * @param array<string|int, array{old: Document, new: Document}> $documents
+     * @param array<Change> $documents
      * @return array<Document>
      * @throws DatabaseException
      */
@@ -1357,8 +1358,8 @@ class MariaDB extends SQL
             $documentIds = [];
             $documentTenants = [];
 
-            foreach ($documents as $document) {
-                $document = $document['new'];
+            foreach ($documents as $change) {
+                $document = $change->getNew();
                 $attributes = $document->getAttributes();
                 $attributes['_uid'] = $document->getId();
                 $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1455,9 +1456,9 @@ class MariaDB extends SQL
             $addQueries = [];
             $addBindValues = [];
 
-            foreach ($documents as $index => $document) {
-                $old = $document['old'];
-                $document = $document['new'];
+            foreach ($documents as $index => $change) {
+                $old = $change->getOld();
+                $document = $change->getNew();
 
                 $current = [];
                 foreach (Database::PERMISSIONS as $type) {
@@ -1530,16 +1531,17 @@ class MariaDB extends SQL
             }
 
             $internalIds = $this->getInternalIds($collection, $documentIds, $documentTenants);
+
             foreach ($documents as $document) {
-                if (isset($internalIds[$document['new']->getId()])) {
-                    $document['new']['$internalId'] = $internalIds[$document['new']->getId()];
+                if (isset($internalIds[$document->getNew()->getId()])) {
+                    $document->getNew()->setAttribute('$internalId', $internalIds[$document->getNew()->getId()]);
                 }
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
-        return \array_map(fn ($document) => $document['new'], $documents);
+        return \array_map(fn ($change) => $change->getNew(), $documents);
     }
 
     /**

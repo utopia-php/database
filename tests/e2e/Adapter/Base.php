@@ -143,7 +143,7 @@ abstract class Base extends TestCase
                 'array' => true,
             ]),
             new Document([
-                '$id' => ID::custom('array'),
+                '$id' => ID::custom('cards'),
                 'type' => Database::VAR_STRING,
                 'size' => 5000,
                 'required' => false,
@@ -156,8 +156,8 @@ abstract class Base extends TestCase
             new Document([
                 '$id' => ID::custom('idx_cards'),
                 'type' => Database::INDEX_KEY,
-                'attributes' => ['array', '$createdAt'],
-                'lengths' => [500],
+                'attributes' => ['cards'],
+                'lengths' => [500], // Will be changed to Database::ARRAY_INDEX_LENGTH (255)
                 'orders' => [],
             ]),
             new Document([

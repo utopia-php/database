@@ -1178,7 +1178,7 @@ class Database
 
         /**
          * Fix metadata index length
-         * Validation will check orders
+         * $orders will be checked by IndexValidator
          */
         foreach ($indexes as $key => $index) {
             $lengths = $index->getAttribute('lengths', []);
@@ -1208,6 +1208,9 @@ class Database
                 }
             }
 
+            var_dump('---');
+var_dump($lengths);
+var_dump('---');
             $index->setAttribute('lengths', $lengths);
             //$index->setAttribute('orders', $orders);
             $indexes[$key] = $index;

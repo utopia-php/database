@@ -129,6 +129,58 @@ abstract class Base extends TestCase
         }
     }
 
+    public function testArrayIndex(): void
+    {
+        $database = static::getDatabase();
+
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('username'),
+                'type' => Database::VAR_STRING,
+                'size' => 100,
+                'required' => false,
+                'signed' => true,
+                'array' => true,
+            ]),
+            new Document([
+                '$id' => ID::custom('array'),
+                'type' => Database::VAR_STRING,
+                'size' => 5000,
+                'required' => false,
+                'signed' => true,
+                'array' => true,
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('idx_cards'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['array', '$createdAt'],
+                'lengths' => [500],
+                'orders' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('idx_username'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['username'],
+                'lengths' => [100], // Will be removed since equal to attributes size
+                'orders' => [],
+            ]),
+        ];
+
+        $collection = $database->createCollection(
+            'json',
+            $attributes,
+            $indexes,
+            permissions: [
+                Permission::create(Role::any()),
+            ]);
+
+        var_dump($collection);
+        $this->assertEquals('shmuel','fogel');
+    }
+
     public function testGetCollectionId(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForGetConnectionId()) {

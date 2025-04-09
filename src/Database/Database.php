@@ -1176,6 +1176,43 @@ class Database
             throw new DuplicateException('Collection ' . $id . ' already exists');
         }
 
+        /**
+         * Fix metadata index length
+         * Validation will check orders
+         */
+        foreach ($indexes as $key => $index) {
+            $lengths = $index->getAttribute('lengths', []);
+            //$orders = $index->getAttribute('orders', []);
+
+            foreach ($index->getAttribute('attributes', []) as $i => $attr) {
+                foreach ($attributes as $collectionAttribute) {
+                    if ($collectionAttribute->getAttribute('$id') === $attr) {
+                        /**
+                         * mysql does not save length in collection when length = attributes size
+                         */
+                        if ($collectionAttribute->getAttribute('type') === Database::VAR_STRING) {
+                            if (!empty($lengths[$i]) && $lengths[$i] === $collectionAttribute->getAttribute('size') && $this->adapter->getMaxIndexLength() > 0) {
+                                $lengths[$i] = null;
+                            }
+                        }
+
+                        $isArray = $collectionAttribute->getAttribute('array', false);
+                        if ($isArray) {
+                            if ($this->adapter->getMaxIndexLength() > 0) {
+                                $lengths[$i] = self::ARRAY_INDEX_LENGTH;
+                            }
+                            //$orders[$i] = null;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            $index->setAttribute('lengths', $lengths);
+            //$index->setAttribute('orders', $orders);
+            $indexes[$key] = $index;
+        }
+
         $collection = new Document([
             '$id' => ID::custom($id),
             '$permissions' => $permissions,
@@ -1220,6 +1257,9 @@ class Database
             }
         }
 
+        /**
+         * index length issues here
+         */
         $this->adapter->createCollection($id, $attributes, $indexes);
 
         if ($id === self::METADATA) {

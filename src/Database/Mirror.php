@@ -2,6 +2,7 @@
 
 namespace Utopia\Database;
 
+use PHPStan\Rules\DeadCode\FunctionWithoutImpurePointsCollector;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
@@ -556,7 +557,7 @@ class Mirror extends Database
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): void {
-        $documents = $this->source->createDocuments(
+        $this->source->createDocuments(
             $collection,
             $documents,
             null,
@@ -681,11 +682,13 @@ class Mirror extends Database
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): void {
-        $documents = $this->source->updateDocuments(
+        $documents = [];
+
+        $this->source->updateDocuments(
             $collection,
             $updates,
             $queries,
-            null,
+            fn ($doc) => $documents[] = $doc,
             $batchSize
         );
 
@@ -796,10 +799,11 @@ class Mirror extends Database
         ?callable $onNext = null,
         int $batchSize = self::DELETE_BATCH_SIZE,
     ): void {
-        $documents = $this->source->deleteDocuments(
+        $documents = [];
+        $this->source->deleteDocuments(
             $collection,
             $queries,
-            null,
+            fn ($doc) => $documents[] = $doc,
             $batchSize
         );
 
@@ -851,8 +855,6 @@ class Mirror extends Database
         } catch (\Throwable $err) {
             $this->logError('deleteDocuments', $err);
         }
-
-        return $documents;
     }
 
     public function updateAttributeRequired(string $collection, string $id, bool $required): Document

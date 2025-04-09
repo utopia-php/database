@@ -3415,7 +3415,7 @@ class Database
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param (callable(Document): void)|null $onNext
+     * @param callable|null $onNext
      * @param int $batchSize
      * @return void
      * @throws AuthorizationException
@@ -3486,7 +3486,7 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            $this->withTransaction(function () use ($collection, $documents, $batchSize, $chunk, $onNext, &$modified) {
+            $this->withTransaction(function () use ($collection, $chunk, $onNext, &$modified) {
                 $batch = $this->adapter->createDocuments($collection->getId(), $chunk);
 
                 foreach ($batch as $document) {
@@ -3504,8 +3504,6 @@ class Database
             '$collection' => $collection->getId(),
             'modified' => $modified
         ]));
-
-        return $documents;
     }
 
     /**
@@ -4040,7 +4038,7 @@ class Database
      * @param string $collection
      * @param Document $updates
      * @param array<Query> $queries
-     * @param (callable(Document): void)|null $onNext
+     * @param callable|null $onNext
      * @param int $batchSize
      * @return void
      * @throws AuthorizationException
@@ -4049,7 +4047,7 @@ class Database
      * @throws QueryException
      * @throws StructureException
      * @throws TimeoutException
-     * @throws Throwable
+     * @throws \Throwable
      * @throws Exception
      */
     public function updateDocuments(
@@ -4060,7 +4058,7 @@ class Database
         int $batchSize = self::INSERT_BATCH_SIZE
     ): void {
         if ($updates->isEmpty()) {
-            return [];
+            return;
         }
 
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
@@ -4603,7 +4601,7 @@ class Database
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param (callable(Document): void)|null $onNext
+     * @param callable|null $onNext
      * @param int $batchSize
      * @throws StructureException
      * @throws \Throwable
@@ -4613,8 +4611,8 @@ class Database
         array $documents,
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): array {
-        return $this->createOrUpdateDocumentsWithIncrease(
+    ): void {
+        $this->createOrUpdateDocumentsWithIncrease(
             $collection,
             '',
             $documents,
@@ -4629,9 +4627,9 @@ class Database
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
-     * @param (callable(Document): void)|null $onNext
+     * @param callable|null $onNext
      * @param int $batchSize
-     * @return array<Document>
+     * @return void
      * @throws StructureException
      * @throws \Throwable
      * @throws Exception
@@ -4740,8 +4738,6 @@ class Database
             '$collection' => $collection->getId(),
             'modified' => count($documents)
         ]));
-
-        return $documents;
     }
 
     /**
@@ -5380,9 +5376,9 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param (callable(Document): void)|null $onNext
+     * @param callable|null $onNext
      * @param int $batchSize
-     * @return array<Document>
+     * @return void
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws RestrictedException
@@ -5393,15 +5389,13 @@ class Database
         array $queries = [],
         ?callable $onNext = null,
         int $batchSize = self::DELETE_BATCH_SIZE
-    ): array {
+    ): void {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
         $batchSize = \min(Database::DELETE_BATCH_SIZE, \max(1, $batchSize));
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
         if ($collection->isEmpty()) {
             throw new DatabaseException('Collection not found');
         }
@@ -5523,13 +5517,9 @@ class Database
             $lastDocument = end($affectedDocuments);
         }
 
-        if ($modified === 0) {
-            return;
-        }
-
         $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
             '$collection' => $collection->getId(),
-            'modified' => count($documents)
+            'modified' => $modified
         ]));
     }
 

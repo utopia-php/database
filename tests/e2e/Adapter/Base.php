@@ -129,7 +129,7 @@ abstract class Base extends TestCase
         }
     }
 
-    public function testArrayIndex(): void
+    public function testCreateCollectionWithSchemaIndexes(): void
     {
         $database = static::getDatabase();
 
@@ -140,7 +140,7 @@ abstract class Base extends TestCase
                 'size' => 100,
                 'required' => false,
                 'signed' => true,
-                'array' => true,
+                'array' => false,
             ]),
             new Document([
                 '$id' => ID::custom('cards'),
@@ -158,7 +158,7 @@ abstract class Base extends TestCase
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['cards'],
                 'lengths' => [500], // Will be changed to Database::ARRAY_INDEX_LENGTH (255)
-                'orders' => [],
+                'orders' => [Database::ORDER_DESC],
             ]),
             new Document([
                 '$id' => ID::custom('idx_username'),
@@ -166,6 +166,13 @@ abstract class Base extends TestCase
                 'attributes' => ['username'],
                 'lengths' => [100], // Will be removed since equal to attributes size
                 'orders' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('idx_username2'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['username'],
+                'lengths' => [99], // Length not equal to attributes length
+                'orders' => [Database::ORDER_DESC],
             ]),
         ];
 
@@ -177,8 +184,18 @@ abstract class Base extends TestCase
                 Permission::create(Role::any()),
             ]);
 
-        var_dump($collection);
-        $this->assertEquals('shmuel','fogel');
+        $this->assertEquals($collection->getAttribute('indexes')[0]['attributes'][0], 'cards');
+        $this->assertEquals($collection->getAttribute('indexes')[0]['lengths'][0], Database::ARRAY_INDEX_LENGTH);
+        $this->assertEquals($collection->getAttribute('indexes')[0]['orders'][0], null);
+
+        $this->assertEquals($collection->getAttribute('indexes')[1]['attributes'][0], 'username');
+        $this->assertEquals($collection->getAttribute('indexes')[1]['lengths'][0], null);
+
+        $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'username');
+        $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], 99);
+        $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], Database::ORDER_DESC);
+
+        $this->assertTrue($database->deleteCollection('json'));
     }
 
     public function testGetCollectionId(): void

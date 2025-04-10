@@ -1177,12 +1177,11 @@ class Database
         }
 
         /**
-         * Fix metadata index length
-         * $orders will be checked by IndexValidator
+         * Fix metadata index length & orders
          */
         foreach ($indexes as $key => $index) {
             $lengths = $index->getAttribute('lengths', []);
-            //$orders = $index->getAttribute('orders', []);
+            $orders = $index->getAttribute('orders', []);
 
             foreach ($index->getAttribute('attributes', []) as $i => $attr) {
                 foreach ($attributes as $collectionAttribute) {
@@ -1201,18 +1200,15 @@ class Database
                             if ($this->adapter->getMaxIndexLength() > 0) {
                                 $lengths[$i] = self::ARRAY_INDEX_LENGTH;
                             }
-                            //$orders[$i] = null;
+                            $orders[$i] = null;
                         }
                         break;
                     }
                 }
             }
 
-            var_dump('---');
-var_dump($lengths);
-var_dump('---');
             $index->setAttribute('lengths', $lengths);
-            //$index->setAttribute('orders', $orders);
+            $index->setAttribute('orders', $orders);
             $indexes[$key] = $index;
         }
 

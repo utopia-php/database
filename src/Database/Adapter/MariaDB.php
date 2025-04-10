@@ -187,7 +187,6 @@ class MariaDB extends SQL
         }
 
         $collection .= ")";
-        var_dump($collection);
         $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
         $permissions = "

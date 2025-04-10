@@ -1256,9 +1256,6 @@ class Database
             }
         }
 
-        /**
-         * index length issues here
-         */
         $this->adapter->createCollection($id, $attributes, $indexes);
 
         if ($id === self::METADATA) {

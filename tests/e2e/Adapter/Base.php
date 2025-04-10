@@ -195,6 +195,8 @@ abstract class Base extends TestCase
         $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'username');
         $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], 99);
         $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], Database::ORDER_DESC);
+
+        $this->assertTrue($database->deleteCollection(__FUNCTION__));
     }
 
     public function testGetCollectionId(): void

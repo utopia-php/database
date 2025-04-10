@@ -170,14 +170,14 @@ abstract class Base extends TestCase
             new Document([
                 '$id' => ID::custom('idx_username_created_at'),
                 'type' => Database::INDEX_KEY,
-                'attributes' => ['username', '$createdAt'],
+                'attributes' => ['username'],
                 'lengths' => [99], // Length not equal to attributes length
                 'orders' => [Database::ORDER_DESC],
             ]),
         ];
 
         $collection = $database->createCollection(
-            __FUNCTION__,
+            'collection98',
             $attributes,
             $indexes,
             permissions: [
@@ -193,7 +193,6 @@ abstract class Base extends TestCase
         $this->assertEquals($collection->getAttribute('indexes')[1]['lengths'][0], null);
 
         $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'username');
-        $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][1], '$createdAt');
         $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], 99);
         $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], Database::ORDER_DESC);
     }

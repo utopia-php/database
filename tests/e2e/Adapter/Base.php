@@ -129,6 +129,74 @@ abstract class Base extends TestCase
         }
     }
 
+    public function testCreateCollectionWithSchemaIndexes(): void
+    {
+        $database = static::getDatabase();
+
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('username'),
+                'type' => Database::VAR_STRING,
+                'size' => 100,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => ID::custom('cards'),
+                'type' => Database::VAR_STRING,
+                'size' => 5000,
+                'required' => false,
+                'signed' => true,
+                'array' => true,
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('idx_cards'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['cards'],
+                'lengths' => [500], // Will be changed to Database::ARRAY_INDEX_LENGTH (255)
+                'orders' => [Database::ORDER_DESC],
+            ]),
+            new Document([
+                '$id' => ID::custom('idx_username'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['username'],
+                'lengths' => [100], // Will be removed since equal to attributes size
+                'orders' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('idx_username_created_at'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['username'],
+                'lengths' => [99], // Length not equal to attributes length
+                'orders' => [Database::ORDER_DESC],
+            ]),
+        ];
+
+        $collection = $database->createCollection(
+            'collection98',
+            $attributes,
+            $indexes,
+            permissions: [
+                Permission::create(Role::any()),
+            ]
+        );
+
+        $this->assertEquals($collection->getAttribute('indexes')[0]['attributes'][0], 'cards');
+        $this->assertEquals($collection->getAttribute('indexes')[0]['lengths'][0], Database::ARRAY_INDEX_LENGTH);
+        $this->assertEquals($collection->getAttribute('indexes')[0]['orders'][0], null);
+
+        $this->assertEquals($collection->getAttribute('indexes')[1]['attributes'][0], 'username');
+        $this->assertEquals($collection->getAttribute('indexes')[1]['lengths'][0], null);
+
+        $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'username');
+        $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], 99);
+        $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], Database::ORDER_DESC);
+    }
+
     public function testGetCollectionId(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForGetConnectionId()) {

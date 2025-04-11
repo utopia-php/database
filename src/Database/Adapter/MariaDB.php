@@ -85,8 +85,11 @@ class MariaDB extends SQL
         /** @var array<string> $indexStrings */
         $indexStrings = [];
 
+        $hash = [];
+
         foreach ($attributes as $key => $attribute) {
             $attrId = $this->filter($attribute->getId());
+            $hash[$attrId] = $attribute;
 
             $attrType = $this->getSQLType(
                 $attribute->getAttribute('type'),
@@ -131,6 +134,7 @@ class MariaDB extends SQL
                     '$updatedAt' => '_updatedAt',
                     default => $attribute
                 };
+
                 $indexAttribute = $this->filter($indexAttribute);
 
                 if ($indexType === Database::INDEX_FULLTEXT) {
@@ -138,6 +142,10 @@ class MariaDB extends SQL
                 }
 
                 $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
+
+                if (!empty($hash[$indexAttribute]['array']) && $this->getSupportForCastIndexArray()) {
+                    $indexAttributes[$nested] = '(CAST(`' . $indexAttribute . '` AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
+                }
             }
 
             $indexAttributes = \implode(", ", $indexAttributes);

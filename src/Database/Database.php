@@ -4781,7 +4781,7 @@ class Database
             );
         }
 
-        $stack = [];
+        $modified = 0;
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             /**
@@ -4806,15 +4806,14 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
 
-                $stack[] = $document;
+                $onNext($document);
+                $modified++;
             }
         }
 
-        $documents = $stack;
-
         $this->trigger(self::EVENT_DOCUMENTS_UPSERT, new Document([
             '$collection' => $collection->getId(),
-            'modified' => \count($documents)
+            'modified' => $modified,
         ]));
     }
 

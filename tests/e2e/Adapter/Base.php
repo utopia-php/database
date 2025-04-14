@@ -916,7 +916,7 @@ abstract class Base extends TestCase
                 'attr1' => 'value3',
                 '$createdAt' => $date
             ]),
-        ], 2);
+        ], batchSize: 2);
 
         $doc1 = static::getDatabase()->getDocument('preserve_create_dates', 'doc1');
         $doc2 = static::getDatabase()->getDocument('preserve_create_dates', 'doc2');
@@ -2284,9 +2284,9 @@ abstract class Base extends TestCase
             ]);
         }
 
-        $documents = static::getDatabase()->createDocuments($collection, $documents, 3);
+        $count = static::getDatabase()->createDocuments($collection, $documents, 3);
 
-        $this->assertEquals($count, count($documents));
+        $this->assertEquals($count, \count($documents));
 
         foreach ($documents as $document) {
             $this->assertNotEmpty(true, $document->getId());
@@ -2325,16 +2325,19 @@ abstract class Base extends TestCase
             ]),
         ];
 
-        $documents = static::getDatabase()->createDocuments($collection, $documents);
+        $results = [];
+        $count = static::getDatabase()->createDocuments($collection, $documents, onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
 
-        $this->assertEquals(2, count($documents));
+        $this->assertEquals(2, $count);
 
-        $this->assertEquals('text📝', $documents[0]->getAttribute('string'));
-        $this->assertEquals(5, $documents[0]->getAttribute('integer'));
-        $this->assertEquals('not_default', $documents[0]->getAttribute('string_default'));
-        $this->assertEquals('text📝', $documents[1]->getAttribute('string'));
-        $this->assertNull($documents[1]->getAttribute('integer'));
-        $this->assertEquals('default', $documents[1]->getAttribute('string_default'));
+        $this->assertEquals('text📝', $results[0]->getAttribute('string'));
+        $this->assertEquals(5, $results[0]->getAttribute('integer'));
+        $this->assertEquals('not_default', $results[0]->getAttribute('string_default'));
+        $this->assertEquals('text📝', $results[1]->getAttribute('string'));
+        $this->assertEquals(null, $results[1]->getAttribute('integer'));
+        $this->assertEquals('default', $results[1]->getAttribute('string_default'));
 
         /**
          * Expect fail, mix of internalId and no internalId
@@ -2406,11 +2409,14 @@ abstract class Base extends TestCase
             ]),
         ];
 
-        $documents = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, $documents);
+        $results = [];
+        $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
 
-        $this->assertEquals(2, count($documents));
+        $this->assertEquals(2, $count);
 
-        foreach ($documents as $document) {
+        foreach ($results as $document) {
             $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
@@ -2439,11 +2445,14 @@ abstract class Base extends TestCase
         $documents[1]->setAttribute('string', 'new text📝');
         $documents[1]->setAttribute('integer', 10);
 
-        $documents = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, $documents);
+        $results = [];
+        $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
 
-        $this->assertEquals(2, count($documents));
+        $this->assertEquals(2, $count);
 
-        foreach ($documents as $document) {
+        foreach ($results as $document) {
             $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
@@ -2576,13 +2585,17 @@ abstract class Base extends TestCase
 
         static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document]);
 
-        $documents = static::getDatabase()->createOrUpdateDocuments(
+        $results = [];
+        $count = static::getDatabase()->createOrUpdateDocuments(
             __FUNCTION__,
-            [$document->setAttribute('string', 'updated')]
+            [$document->setAttribute('string', 'updated')],
+            onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+            }
         );
 
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals('updated', $documents[0]->getAttribute('string'));
+        $this->assertEquals(1, $count);
+        $this->assertEquals('updated', $results[0]->getAttribute('string'));
 
         $document = new Document([
             '$id' => 'third',
@@ -2602,13 +2615,17 @@ abstract class Base extends TestCase
             Permission::delete(Role::user('user1')),
         ];
 
-        $documents = static::getDatabase()->createOrUpdateDocuments(
+        $results = [];
+        $count = static::getDatabase()->createOrUpdateDocuments(
             __FUNCTION__,
-            [$document->setAttribute('$permissions', $newPermissions)]
+            [$document->setAttribute('$permissions', $newPermissions)],
+            onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+            }
         );
 
-        $this->assertEquals(1, count($documents));
-        $this->assertEquals($newPermissions, $documents[0]->getPermissions());
+        $this->assertEquals(1, $count);
+        $this->assertEquals($newPermissions, $results[0]->getPermissions());
 
         $document = static::getDatabase()->getDocument(__FUNCTION__, 'third');
 
@@ -16783,9 +16800,9 @@ abstract class Base extends TestCase
          */
         $selects = ['$internalId', '$id', '$collection', '$permissions', '$updatedAt'];
 
-        $this->assertCount(2, static::getDatabase()->deleteDocuments(
-            'bulk_delete',
-            [
+        $count = static::getDatabase()->deleteDocuments(
+            collection: 'bulk_delete',
+            queries: [
                 Query::select([...$selects, '$createdAt']),
                 Query::cursorAfter($docs[6]),
                 Query::greaterThan('$createdAt', '2000-01-01'),
@@ -16793,11 +16810,13 @@ abstract class Base extends TestCase
                 Query::orderAsc(),
                 Query::limit(2),
             ],
-            1
-        ));
+            batchSize: 1
+        );
+
+        $this->assertEquals(2, $count);
 
         // TEST: Bulk Delete All Documents
-        $this->assertCount(8, static::getDatabase()->deleteDocuments('bulk_delete'));
+        $this->assertEquals(8, static::getDatabase()->deleteDocuments('bulk_delete'));
 
         $docs = static::getDatabase()->find('bulk_delete');
         $this->assertCount(0, $docs);
@@ -16805,17 +16824,21 @@ abstract class Base extends TestCase
         // TEST: Bulk delete documents with queries.
         $this->propagateBulkDocuments('bulk_delete');
 
-        $modified = static::getDatabase()->deleteDocuments('bulk_delete', [
+        $results = [];
+        $count = static::getDatabase()->deleteDocuments('bulk_delete', [
             Query::greaterThanEqual('integer', 5)
-        ]);
-        $this->assertCount(5, $modified);
+        ], onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
 
-        foreach ($modified as $document) {
+        $this->assertEquals(5, $count);
+
+        foreach ($results as $document) {
             $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
         }
 
         $docs = static::getDatabase()->find('bulk_delete');
-        $this->assertCount(5, $docs);
+        $this->assertEquals(5, \count($docs));
 
         // TEST (FAIL): Can't delete documents in the past
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
@@ -16843,8 +16866,8 @@ abstract class Base extends TestCase
             Permission::delete(Role::any())
         ], false);
 
-        $this->assertCount(5, static::getDatabase()->deleteDocuments('bulk_delete'));
-        $this->assertEquals(0, count($this->getDatabase()->find('bulk_delete')));
+        $this->assertEquals(5, static::getDatabase()->deleteDocuments('bulk_delete'));
+        $this->assertEquals(0, \count($this->getDatabase()->find('bulk_delete')));
 
         // TEST: Make sure we can't delete documents we don't have permissions for
         static::getDatabase()->updateCollection('bulk_delete', [
@@ -16852,21 +16875,23 @@ abstract class Base extends TestCase
         ], true);
         $this->propagateBulkDocuments('bulk_delete', documentSecurity: true);
 
-        $this->assertCount(0, static::getDatabase()->deleteDocuments('bulk_delete'));
+        $this->assertEquals(0, static::getDatabase()->deleteDocuments('bulk_delete'));
 
         $documents = Authorization::skip(function () {
             return static::getDatabase()->find('bulk_delete');
         });
 
-        $this->assertCount(10, $documents);
+        $this->assertEquals(10, \count($documents));
 
         static::getDatabase()->updateCollection('bulk_delete', [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::delete(Role::any())
         ], false);
+
         static::getDatabase()->deleteDocuments('bulk_delete');
-        $this->assertEquals(0, count($this->getDatabase()->find('bulk_delete')));
+
+        $this->assertEquals(0, \count($this->getDatabase()->find('bulk_delete')));
 
         // Teardown
         static::getDatabase()->deleteCollection('bulk_delete');
@@ -16906,30 +16931,30 @@ abstract class Base extends TestCase
         // Test limit
         $this->propagateBulkDocuments('bulk_delete_queries');
 
-        $this->assertCount(5, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
-        $this->assertCount(5, static::getDatabase()->find('bulk_delete_queries'));
+        $this->assertEquals(5, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
+        $this->assertEquals(5, \count(static::getDatabase()->find('bulk_delete_queries')));
 
-        $this->assertCount(5, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
-        $this->assertCount(0, static::getDatabase()->find('bulk_delete_queries'));
+        $this->assertEquals(5, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
+        $this->assertEquals(0, \count(static::getDatabase()->find('bulk_delete_queries')));
 
         // Test Limit more than batchSize
         $this->propagateBulkDocuments('bulk_delete_queries', Database::DELETE_BATCH_SIZE * 2);
-        $this->assertCount(Database::DELETE_BATCH_SIZE * 2, static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)]));
-        $this->assertCount(Database::DELETE_BATCH_SIZE + 2, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE + 2)]));
-        $this->assertCount(Database::DELETE_BATCH_SIZE - 2, static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)]));
-        $this->assertCount(Database::DELETE_BATCH_SIZE - 2, $this->getDatabase()->deleteDocuments('bulk_delete_queries'));
+        $this->assertEquals(Database::DELETE_BATCH_SIZE * 2, \count(static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
+        $this->assertEquals(Database::DELETE_BATCH_SIZE + 2, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE + 2)]));
+        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, \count(static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
+        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, $this->getDatabase()->deleteDocuments('bulk_delete_queries'));
 
         // Test Offset
         $this->propagateBulkDocuments('bulk_delete_queries', 100);
-        $this->assertCount(50, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::offset(50)]));
+        $this->assertEquals(50, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::offset(50)]));
 
         $docs = static::getDatabase()->find('bulk_delete_queries', [Query::limit(100)]);
-        $this->assertCount(50, $docs);
+        $this->assertEquals(50, \count($docs));
 
-        $lastDoc = end($docs);
+        $lastDoc = \end($docs);
         $this->assertNotEmpty($lastDoc);
         $this->assertEquals('doc49', $lastDoc->getId());
-        $this->assertCount(50, static::getDatabase()->deleteDocuments('bulk_delete_queries'));
+        $this->assertEquals(50, static::getDatabase()->deleteDocuments('bulk_delete_queries'));
 
         static::getDatabase()->deleteCollection('bulk_delete_queries');
     }
@@ -17515,14 +17540,18 @@ abstract class Base extends TestCase
         }
 
         // Test Update half of the documents
-        $modified = static::getDatabase()->updateDocuments($collection, new Document([
+        $results = [];
+        $count = static::getDatabase()->updateDocuments($collection, new Document([
             'string' => 'text📝 updated',
         ]), [
             Query::greaterThanEqual('integer', 5),
-        ]);
-        $this->assertCount(5, $modified);
+        ], onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
 
-        foreach ($modified as $document) {
+        $this->assertEquals(5, $count);
+
+        foreach ($results as $document) {
             $this->assertEquals('text📝 updated', $document->getAttribute('string'));
         }
 
@@ -17548,7 +17577,7 @@ abstract class Base extends TestCase
         }
 
         // Test Update all documents
-        $this->assertCount(10, static::getDatabase()->updateDocuments($collection, new Document([
+        $this->assertEquals(10, static::getDatabase()->updateDocuments($collection, new Document([
             'string' => 'text📝 updated all',
         ])));
 
@@ -17565,7 +17594,7 @@ abstract class Base extends TestCase
 
         try {
             $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($collection) {
-                return static::getDatabase()->updateDocuments($collection, new Document([
+                static::getDatabase()->updateDocuments($collection, new Document([
                     'string' => 'text📝 updated all',
                 ]));
             });
@@ -17638,7 +17667,7 @@ abstract class Base extends TestCase
         });
 
         // Test we can update more documents than batchSize
-        $this->assertCount(10, static::getDatabase()->updateDocuments($collection, new Document([
+        $this->assertEquals(10, static::getDatabase()->updateDocuments($collection, new Document([
             'string' => 'batchSize Test'
         ]), batchSize: 2));
 
@@ -17684,18 +17713,21 @@ abstract class Base extends TestCase
         // Test limit
         $this->propagateBulkDocuments($collection, 100);
 
-        $this->assertCount(10, static::getDatabase()->updateDocuments($collection, new Document([
+        $this->assertEquals(10, static::getDatabase()->updateDocuments($collection, new Document([
             'text' => 'text📝 updated',
         ]), [Query::limit(10)]));
-        $this->assertCount(10, static::getDatabase()->find($collection, [Query::equal('text', ['text📝 updated'])]));
-        $this->assertCount(100, static::getDatabase()->deleteDocuments($collection));
-        $this->assertCount(0, static::getDatabase()->find($collection));
+
+        $this->assertEquals(10, \count(static::getDatabase()->find($collection, [Query::equal('text', ['text📝 updated'])])));
+        $this->assertEquals(100, static::getDatabase()->deleteDocuments($collection));
+        $this->assertEquals(0, \count(static::getDatabase()->find($collection)));
 
         // Test Offset
         $this->propagateBulkDocuments($collection, 100);
-        $this->assertCount(50, static::getDatabase()->updateDocuments($collection, new Document([
+        $this->assertEquals(50, static::getDatabase()->updateDocuments($collection, new Document([
             'text' => 'text📝 updated',
-        ]), [Query::offset(50)]));
+        ]), [
+            Query::offset(50),
+        ]));
 
         $docs = static::getDatabase()->find($collection, [Query::equal('text', ['text📝 updated']), Query::limit(100)]);
         $this->assertCount(50, $docs);
@@ -17704,7 +17736,7 @@ abstract class Base extends TestCase
         $this->assertNotEmpty($lastDoc);
         $this->assertEquals('doc99', $lastDoc->getId());
 
-        $this->assertCount(100, static::getDatabase()->deleteDocuments($collection));
+        $this->assertEquals(100, static::getDatabase()->deleteDocuments($collection));
     }
 
     public function testUpdateDocumentsPermissions(): void
@@ -17752,7 +17784,7 @@ abstract class Base extends TestCase
             ]));
         });
 
-        $affected = static::getDatabase()->updateDocuments($collection, new Document([
+        $modified = static::getDatabase()->updateDocuments($collection, new Document([
             '$permissions' => [
                 Permission::read(Role::user('user2')),
                 Permission::create(Role::user('user2')),
@@ -17765,8 +17797,8 @@ abstract class Base extends TestCase
             return static::getDatabase()->find($collection);
         });
 
-        $this->assertCount(10, $affected);
-        $this->assertCount(11, $documents);
+        $this->assertEquals(10, $modified);
+        $this->assertEquals(11, \count($documents));
 
         $modifiedDocuments = array_filter($documents, function (Document $document) {
             return $document->getAttribute('$permissions') == [
@@ -17793,7 +17825,7 @@ abstract class Base extends TestCase
         Authorization::setRole(Role::user('user2')->toString());
 
         // Test Bulk permission update with data
-        $affected = static::getDatabase()->updateDocuments($collection, new Document([
+        $modified = static::getDatabase()->updateDocuments($collection, new Document([
             '$permissions' => [
                 Permission::read(Role::user('user3')),
                 Permission::create(Role::user('user3')),
@@ -17803,7 +17835,7 @@ abstract class Base extends TestCase
             'string' => 'text📝 updated',
         ]));
 
-        $this->assertCount(10, $affected);
+        $this->assertEquals(10, $modified);
 
         $documents = Authorization::skip(function () use ($collection) {
             return $this->getDatabase()->find($collection);

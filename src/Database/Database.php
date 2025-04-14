@@ -3455,32 +3455,29 @@ class Database
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
-     * @return array<Document>
+     * @param callable|null $onNext
+     * @return int
      * @throws AuthorizationException
      * @throws StructureException
-     * @throws NotFoundException
      * @throws \Throwable
+     * @throws Exception
      */
     public function createDocuments(
         string $collection,
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
-    ): array {
+        ?callable $onNext = null,
+    ): int {
         if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
 
         if (empty($documents)) {
-            return [];
+            return 0;
         }
 
-        $collection = $this->silent(fn () => $this->getCollection($collection));
-
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
-
-        /**
-         * Check collection exist
-         */
+        $collection = $this->silent(fn () => $this->getCollection($collection));
         if ($collection->getId() !== self::METADATA) {
             $authorization = new Authorization(self::PERMISSION_CREATE);
             if (!$authorization->isValid($collection->getCreate())) {
@@ -3489,8 +3486,9 @@ class Database
         }
 
         $time = DateTime::now();
+        $modified = 0;
 
-        foreach ($documents as $key => $document) {
+        foreach ($documents as &$document) {
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 
@@ -3524,34 +3522,28 @@ class Database
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
-
-            $documents[$key] = $document;
         }
 
-        $documents = $this->withTransaction(function () use ($collection, $documents, $batchSize) {
-            $stack = [];
+        foreach (\array_chunk($documents, $batchSize) as $chunk) {
+            $batch = $this->withTransaction(function () use ($collection, $chunk) {
+                return $this->adapter->createDocuments($collection->getId(), $chunk);
+            });
 
-            foreach (\array_chunk($documents, $batchSize) as $chunk) {
-                \array_push($stack, ...$this->adapter->createDocuments($collection->getId(), $chunk));
+            foreach ($batch as $doc) {
+                if ($this->resolveRelationships) {
+                    $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
+                }
+                $onNext && $onNext($doc);
+                $modified++;
             }
-
-            return $stack;
-        });
-
-        foreach ($documents as $key => $document) {
-            if ($this->resolveRelationships) {
-                $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
-            }
-
-            $documents[$key] = $this->decode($collection, $document);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_CREATE, new Document([
             '$collection' => $collection->getId(),
-            'modified' => count($documents)
+            'modified' => $modified
         ]));
 
-        return $documents;
+        return $modified;
     }
 
     /**
@@ -4085,28 +4077,35 @@ class Database
      * @param Document $updates
      * @param array<Query> $queries
      * @param int $batchSize
-     *
-     * @return array<Document>
-     *
+     * @param callable|null $onNext
+     * @return int
      * @throws AuthorizationException
-     * @throws DatabaseException
+     * @throws ConflictException
+     * @throws DuplicateException
+     * @throws QueryException
+     * @throws StructureException
+     * @throws TimeoutException
+     * @throws \Throwable
+     * @throws Exception
      */
-    public function updateDocuments(string $collection, Document $updates, array $queries = [], int $batchSize = self::INSERT_BATCH_SIZE): array
-    {
+    public function updateDocuments(
+        string $collection,
+        Document $updates,
+        array $queries = [],
+        int $batchSize = self::INSERT_BATCH_SIZE,
+        ?callable $onNext = null,
+    ): int {
         if ($updates->isEmpty()) {
-            return [];
+            return 0;
         }
 
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
         if ($collection->isEmpty()) {
             throw new DatabaseException('Collection not found');
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-
         $authorization = new Authorization(self::PERMISSION_UPDATE);
         $skipAuth = $authorization->isValid($collection->getUpdate());
 
@@ -4160,9 +4159,9 @@ class Database
             throw new StructureException($validator->getDescription());
         }
 
-        $documents = [];
         $originalLimit = $limit;
-        $lastDocument = $cursor;
+        $last = $cursor;
+        $modified = 0;
 
         // Resolve and update relationships
         while (true) {
@@ -4176,25 +4175,25 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (!empty($lastDocument)) {
-                $new[] = Query::cursorAfter($lastDocument);
+            if (!empty($last)) {
+                $new[] = Query::cursorAfter($last);
             }
 
-            $affectedDocuments = $this->silent(fn () => $this->find(
+            $batch = $this->silent(fn () => $this->find(
                 $collection->getId(),
                 array_merge($new, $queries),
                 forPermission: Database::PERMISSION_UPDATE
             ));
 
-            if (empty($affectedDocuments)) {
+            if (empty($batch)) {
                 break;
             }
 
-            foreach ($affectedDocuments as $document) {
+            foreach ($batch as &$document) {
                 if ($this->resolveRelationships) {
                     $newDocument = new Document(array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
                     $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
-                    $documents[] = $newDocument;
+                    $document = $newDocument;
                 }
 
                 // Check if document was updated after the request timestamp
@@ -4209,11 +4208,11 @@ class Database
                 }
             }
 
-            $this->withTransaction(function () use ($collection, $updates, $authorization, $skipAuth, $affectedDocuments) {
+            $this->withTransaction(function () use ($collection, $updates, $authorization, $skipAuth, $batch) {
                 $getResults = fn () => $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
-                    $affectedDocuments
+                    $batch
                 );
 
                 $skipAuth
@@ -4221,31 +4220,34 @@ class Database
                     : $getResults();
             });
 
-            foreach ($documents as $document) {
+            foreach ($batch as $doc) {
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                        $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
+                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
                     });
                 } else {
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
+
+                $onNext && $onNext($doc);
+                $modified++;
             }
 
-            if (count($affectedDocuments) < $batchSize) {
+            if (count($batch) < $batchSize) {
                 break;
-            } elseif ($originalLimit && count($documents) == $originalLimit) {
+            } elseif ($originalLimit && $modified == $originalLimit) {
                 break;
             }
 
-            $lastDocument = end($affectedDocuments);
+            $last = \end($batch);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
             '$collection' => $collection->getId(),
-            'modified' => count($documents)
+            'modified' => $modified
         ]));
 
-        return $documents;
+        return $modified;
     }
 
     /**
@@ -4646,19 +4648,22 @@ class Database
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
-     * @return array<Document>
+     * @param callable|null $onNext
+     * @return int
      * @throws StructureException
      * @throws \Throwable
      */
     public function createOrUpdateDocuments(
         string $collection,
         array $documents,
-        int $batchSize = self::INSERT_BATCH_SIZE
-    ): array {
+        int $batchSize = self::INSERT_BATCH_SIZE,
+        ?callable $onNext = null,
+    ): int {
         return $this->createOrUpdateDocumentsWithIncrease(
             $collection,
             '',
             $documents,
+            $onNext,
             $batchSize
         );
     }
@@ -4669,8 +4674,9 @@ class Database
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
+     * @param callable|null $onNext
      * @param int $batchSize
-     * @return array<Document>
+     * @return int
      * @throws StructureException
      * @throws \Throwable
      * @throws Exception
@@ -4679,10 +4685,11 @@ class Database
         string $collection,
         string $attribute,
         array $documents,
+        ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): array {
+    ): int {
         if (empty($documents)) {
-            return [];
+            return 0;
         }
 
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
@@ -4776,7 +4783,7 @@ class Database
             );
         }
 
-        $stack = [];
+        $modified = 0;
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             /**
@@ -4788,31 +4795,30 @@ class Database
                 $chunk
             )));
 
-            foreach ($batch as $document) {
+            foreach ($batch as $doc) {
                 if ($this->resolveRelationships) {
-                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+                    $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
 
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                        $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
+                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
                     });
                 } else {
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                $stack[] = $document;
+                $onNext && $onNext($doc);
+                $modified++;
             }
         }
 
-        $documents = $stack;
-
         $this->trigger(self::EVENT_DOCUMENTS_UPSERT, new Document([
             '$collection' => $collection->getId(),
-            'modified' => \count($documents)
+            'modified' => $modified,
         ]));
 
-        return $documents;
+        return $modified;
     }
 
     /**
@@ -5451,24 +5457,25 @@ class Database
      * @param string $collection
      * @param array<Query> $queries
      * @param int $batchSize
-     *
-     * @return array<Document>
-     *
+     * @param callable|null $onNext
+     * @return int
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws RestrictedException
      * @throws \Throwable
      */
-    public function deleteDocuments(string $collection, array $queries = [], int $batchSize = self::DELETE_BATCH_SIZE): array
-    {
+    public function deleteDocuments(
+        string $collection,
+        array $queries = [],
+        int $batchSize = self::DELETE_BATCH_SIZE,
+        ?callable $onNext = null,
+    ): int {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
 
         $batchSize = \min(Database::DELETE_BATCH_SIZE, \max(1, $batchSize));
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
         if ($collection->isEmpty()) {
             throw new DatabaseException('Collection not found');
         }
@@ -5506,9 +5513,9 @@ class Database
             throw new DatabaseException("Cursor document must be from the same Collection.");
         }
 
-        $documents = [];
         $originalLimit = $limit;
-        $lastDocument = $cursor;
+        $last = $cursor;
+        $modified = 0;
 
         while (true) {
             if ($limit && $limit < $batchSize && $limit > 0) {
@@ -5521,27 +5528,26 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (!empty($lastDocument)) {
-                $new[] = Query::cursorAfter($lastDocument);
+            if (!empty($last)) {
+                $new[] = Query::cursorAfter($last);
             }
 
             /**
-             * @var array<Document> $affectedDocuments
+             * @var array<Document> $batch
              */
-            $affectedDocuments = $this->silent(fn () => $this->find(
+            $batch = $this->silent(fn () => $this->find(
                 $collection->getId(),
                 array_merge($new, $queries),
                 forPermission: Database::PERMISSION_DELETE
             ));
 
-            if (empty($affectedDocuments)) {
+            if (empty($batch)) {
                 break;
             }
 
             $internalIds = [];
             $permissionIds = [];
-            foreach ($affectedDocuments as $document) {
-                $documents[] = $document;
+            foreach ($batch as $document) {
                 $internalIds[] = $document->getInternalId();
                 if (!empty($document->getPermissions())) {
                     $permissionIds[] = $document->getId();
@@ -5573,10 +5579,12 @@ class Database
                     $permissionIds
                 );
 
-                $skipAuth ? $authorization->skip($getResults) : $getResults();
+                $skipAuth
+                    ? $authorization->skip($getResults)
+                    : $getResults();
             });
 
-            foreach ($affectedDocuments as $document) {
+            foreach ($batch as $document) {
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($document->getTenant(), function () use ($collection, $document) {
                         $this->purgeCachedDocument($collection->getId(), $document->getId());
@@ -5584,27 +5592,26 @@ class Database
                 } else {
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
+
+                $onNext && $onNext($document);
+                $modified++;
             }
 
-            if (count($affectedDocuments) < $batchSize) {
+            if (count($batch) < $batchSize) {
                 break;
-            } elseif ($originalLimit && count($documents) >= $originalLimit) {
+            } elseif ($originalLimit && $modified >= $originalLimit) {
                 break;
             }
 
-            $lastDocument = end($affectedDocuments);
-        }
-
-        if (empty($documents)) {
-            return [];
+            $last = \end($batch);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
             '$collection' => $collection->getId(),
-            'modified' => count($documents)
+            'modified' => $modified
         ]));
 
-        return $documents;
+        return $modified;
     }
 
     /**

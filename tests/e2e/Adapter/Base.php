@@ -16932,16 +16932,16 @@ abstract class Base extends TestCase
         $this->propagateBulkDocuments('bulk_delete_queries');
 
         $this->assertEquals(5, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
-        $this->assertEquals(5, static::getDatabase()->find('bulk_delete_queries'));
+        $this->assertEquals(5, \count(static::getDatabase()->find('bulk_delete_queries')));
 
         $this->assertEquals(5, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
-        $this->assertEquals(0, static::getDatabase()->find('bulk_delete_queries'));
+        $this->assertEquals(0, \count(static::getDatabase()->find('bulk_delete_queries')));
 
         // Test Limit more than batchSize
         $this->propagateBulkDocuments('bulk_delete_queries', Database::DELETE_BATCH_SIZE * 2);
-        $this->assertEquals(Database::DELETE_BATCH_SIZE * 2, static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)]));
+        $this->assertEquals(Database::DELETE_BATCH_SIZE * 2, \count(static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
         $this->assertEquals(Database::DELETE_BATCH_SIZE + 2, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE + 2)]));
-        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)]));
+        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, \count(static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
         $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, $this->getDatabase()->deleteDocuments('bulk_delete_queries'));
 
         // Test Offset

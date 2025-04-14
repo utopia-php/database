@@ -4179,17 +4179,17 @@ class Database
                 $new[] = Query::cursorAfter($last);
             }
 
-            $affectedDocuments = $this->silent(fn () => $this->find(
+            $batch = $this->silent(fn () => $this->find(
                 $collection->getId(),
                 array_merge($new, $queries),
                 forPermission: Database::PERMISSION_UPDATE
             ));
 
-            if (empty($affectedDocuments)) {
+            if (empty($batch)) {
                 break;
             }
 
-            foreach ($affectedDocuments as &$document) {
+            foreach ($batch as &$document) {
                 if ($this->resolveRelationships) {
                     $newDocument = new Document(array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
                     $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
@@ -4208,11 +4208,11 @@ class Database
                 }
             }
 
-            $this->withTransaction(function () use ($collection, $updates, $authorization, $skipAuth, $affectedDocuments) {
+            $this->withTransaction(function () use ($collection, $updates, $authorization, $skipAuth, $batch) {
                 $getResults = fn () => $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
-                    $affectedDocuments
+                    $batch
                 );
 
                 $skipAuth
@@ -4220,26 +4220,26 @@ class Database
                     : $getResults();
             });
 
-            foreach ($affectedDocuments as $document) {
+            foreach ($batch as $doc) {
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                        $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
+                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
                     });
                 } else {
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                $onNext && $onNext($document);
+                $onNext && $onNext($doc);
                 $modified++;
             }
 
-            if (count($affectedDocuments) < $batchSize) {
+            if (count($batch) < $batchSize) {
                 break;
             } elseif ($originalLimit && $modified == $originalLimit) {
                 break;
             }
 
-            $last = \end($affectedDocuments);
+            $last = \end($batch);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
@@ -5533,21 +5533,21 @@ class Database
             }
 
             /**
-             * @var array<Document> $affectedDocuments
+             * @var array<Document> $batch
              */
-            $affectedDocuments = $this->silent(fn () => $this->find(
+            $batch = $this->silent(fn () => $this->find(
                 $collection->getId(),
                 array_merge($new, $queries),
                 forPermission: Database::PERMISSION_DELETE
             ));
 
-            if (empty($affectedDocuments)) {
+            if (empty($batch)) {
                 break;
             }
 
             $internalIds = [];
             $permissionIds = [];
-            foreach ($affectedDocuments as $document) {
+            foreach ($batch as $document) {
                 $internalIds[] = $document->getInternalId();
                 if (!empty($document->getPermissions())) {
                     $permissionIds[] = $document->getId();
@@ -5584,7 +5584,7 @@ class Database
                     : $getResults();
             });
 
-            foreach ($affectedDocuments as $document) {
+            foreach ($batch as $document) {
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($document->getTenant(), function () use ($collection, $document) {
                         $this->purgeCachedDocument($collection->getId(), $document->getId());
@@ -5597,13 +5597,13 @@ class Database
                 $modified++;
             }
 
-            if (count($affectedDocuments) < $batchSize) {
+            if (count($batch) < $batchSize) {
                 break;
             } elseif ($originalLimit && $modified >= $originalLimit) {
                 break;
             }
 
-            $last = \end($affectedDocuments);
+            $last = \end($batch);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([

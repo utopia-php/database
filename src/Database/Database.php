@@ -3454,8 +3454,8 @@ class Database
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param callable|null $onNext
      * @param int $batchSize
+     * @param callable|null $onNext
      * @return int
      * @throws AuthorizationException
      * @throws StructureException
@@ -4076,8 +4076,8 @@ class Database
      * @param string $collection
      * @param Document $updates
      * @param array<Query> $queries
-     * @param callable|null $onNext
      * @param int $batchSize
+     * @param callable|null $onNext
      * @return int
      * @throws AuthorizationException
      * @throws ConflictException
@@ -4647,8 +4647,8 @@ class Database
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @param callable|null $onNext
      * @param int $batchSize
+     * @param callable|null $onNext
      * @return int
      * @throws StructureException
      * @throws \Throwable
@@ -5456,8 +5456,8 @@ class Database
      *
      * @param string $collection
      * @param array<Query> $queries
-     * @param callable|null $onNext
      * @param int $batchSize
+     * @param callable|null $onNext
      * @return int
      * @throws AuthorizationException
      * @throws DatabaseException

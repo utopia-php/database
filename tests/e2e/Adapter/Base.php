@@ -17545,7 +17545,7 @@ abstract class Base extends TestCase
             'string' => 'text📝 updated',
         ]), [
             Query::greaterThanEqual('integer', 5),
-        ], onNext: function($doc) use (&$results) {
+        ], onNext: function ($doc) use (&$results) {
             $results[] = $doc;
         });
 

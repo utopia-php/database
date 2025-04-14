@@ -3428,7 +3428,7 @@ class Database
         array $documents,
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE,
-    ): void {
+    ): int {
         if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
@@ -3449,7 +3449,7 @@ class Database
         $time = DateTime::now();
         $modified = 0;
 
-        foreach ($documents as $key => &$document) {
+        foreach ($documents as &$document) {
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 
@@ -3486,24 +3486,26 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            $this->withTransaction(function () use ($collection, $chunk, $onNext, &$modified) {
-                $batch = $this->adapter->createDocuments($collection->getId(), $chunk);
-
-                foreach ($batch as $document) {
-                    if ($this->resolveRelationships) {
-                        $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
-                    }
-
-                    $onNext($document);
-                    $modified++;
-                }
+            $batch = $this->withTransaction(function () use ($collection, $chunk, $onNext, &$modified) {
+                return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
+
+            foreach ($batch as $document) {
+                if ($this->resolveRelationships) {
+                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+                }
+
+                $onNext($document);
+                $modified++;
+            }
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_CREATE, new Document([
             '$collection' => $collection->getId(),
             'modified' => $modified
         ]));
+
+        return $modified;
     }
 
     /**
@@ -4151,11 +4153,11 @@ class Database
                 break;
             }
 
-            foreach ($affectedDocuments as $document) {
+            foreach ($affectedDocuments as &$document) {
                 if ($this->resolveRelationships) {
                     $newDocument = new Document(array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
                     $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
-                    $documents[] = $newDocument;
+                    $document = $newDocument;
                 }
 
                 // Check if document was updated after the request timestamp
@@ -4177,7 +4179,9 @@ class Database
                     $affectedDocuments
                 );
 
-                $skipAuth ? $authorization->skip($getResults) : $getResults();
+                $skipAuth
+                    ? $authorization->skip($getResults)
+                    : $getResults();
             });
 
             foreach ($affectedDocuments as $document) {
@@ -4192,7 +4196,7 @@ class Database
                 break;
             }
 
-            $lastDocument = end($affectedDocuments);
+            $lastDocument = \end($affectedDocuments);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
@@ -5499,7 +5503,9 @@ class Database
                     $permissionIds
                 );
 
-                $skipAuth ? $authorization->skip($getResults) : $getResults();
+                $skipAuth
+                    ? $authorization->skip($getResults)
+                    : $getResults();
             });
 
             foreach ($affectedDocuments as $document) {
@@ -5514,7 +5520,7 @@ class Database
                 break;
             }
 
-            $lastDocument = end($affectedDocuments);
+            $lastDocument = \end($affectedDocuments);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([

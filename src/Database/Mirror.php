@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-use PHPStan\Rules\DeadCode\FunctionWithoutImpurePointsCollector;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;

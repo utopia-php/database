@@ -2336,7 +2336,7 @@ abstract class Base extends TestCase
         $this->assertEquals(5, $results[0]->getAttribute('integer'));
         $this->assertEquals('not_default', $results[0]->getAttribute('string_default'));
         $this->assertEquals('text📝', $results[1]->getAttribute('string'));
-        $this->assertNull($results[1]->getAttribute('integer'));
+        $this->assertEquals(null, $results[1]->getAttribute('integer'));
         $this->assertEquals('default', $results[1]->getAttribute('string_default'));
 
         /**

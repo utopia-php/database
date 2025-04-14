@@ -3529,11 +3529,11 @@ class Database
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
-            foreach ($batch as $document) {
+            foreach ($batch as $doc) {
                 if ($this->resolveRelationships) {
-                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+                    $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
-                $onNext && $onNext($document);
+                $onNext && $onNext($doc);
                 $modified++;
             }
         }
@@ -4795,20 +4795,20 @@ class Database
                 $chunk
             )));
 
-            foreach ($batch as $document) {
+            foreach ($batch as $doc) {
                 if ($this->resolveRelationships) {
-                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+                    $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
 
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                        $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
+                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
                     });
                 } else {
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
+                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                $onNext && $onNext($document);
+                $onNext && $onNext($doc);
                 $modified++;
             }
         }

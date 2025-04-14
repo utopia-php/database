@@ -556,6 +556,8 @@ class Mirror extends Database
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
     ): int {
+        $modified = 0;
+
         $this->source->createDocuments(
             $collection,
             $documents,

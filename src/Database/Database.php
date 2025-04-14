@@ -4650,6 +4650,7 @@ class Database
      * @param array<Document> $documents
      * @param callable|null $onNext
      * @param int $batchSize
+     * @return int
      * @throws StructureException
      * @throws \Throwable
      */
@@ -4658,7 +4659,7 @@ class Database
         array $documents,
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): void {
+    ): int {
         $this->createOrUpdateDocumentsWithIncrease(
             $collection,
             '',
@@ -4676,7 +4677,7 @@ class Database
      * @param array<Document> $documents
      * @param callable|null $onNext
      * @param int $batchSize
-     * @return void
+     * @return int
      * @throws StructureException
      * @throws \Throwable
      * @throws Exception
@@ -4687,9 +4688,9 @@ class Database
         array $documents,
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): void {
+    ): int {
         if (empty($documents)) {
-            return;
+            return 0;
         }
 
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
@@ -4817,6 +4818,8 @@ class Database
             '$collection' => $collection->getId(),
             'modified' => $modified,
         ]));
+
+        return $modified;
     }
 
     /**

@@ -916,7 +916,7 @@ abstract class Base extends TestCase
                 'attr1' => 'value3',
                 '$createdAt' => $date
             ]),
-        ], 2);
+        ], batchSize: 2);
 
         $doc1 = static::getDatabase()->getDocument('preserve_create_dates', 'doc1');
         $doc2 = static::getDatabase()->getDocument('preserve_create_dates', 'doc2');
@@ -2284,9 +2284,9 @@ abstract class Base extends TestCase
             ]);
         }
 
-        $documents = static::getDatabase()->createDocuments($collection, $documents, 3);
+        $count = static::getDatabase()->createDocuments($collection, $documents, 3);
 
-        $this->assertEquals($count, count($documents));
+        $this->assertEquals($count, \count($documents));
 
         foreach ($documents as $document) {
             $this->assertNotEmpty(true, $document->getId());

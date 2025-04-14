@@ -3456,7 +3456,7 @@ class Database
      * @param array<Document> $documents
      * @param callable|null $onNext
      * @param int $batchSize
-     * @return void
+     * @return int
      * @throws AuthorizationException
      * @throws StructureException
      * @throws \Throwable
@@ -3473,7 +3473,7 @@ class Database
         }
 
         if (empty($documents)) {
-            return;
+            return 0;
         }
 
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
@@ -3525,7 +3525,7 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            $batch = $this->withTransaction(function () use ($collection, $chunk, $onNext, &$modified) {
+            $batch = $this->withTransaction(function () use ($collection, $chunk) {
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
@@ -4079,7 +4079,7 @@ class Database
      * @param array<Query> $queries
      * @param callable|null $onNext
      * @param int $batchSize
-     * @return void
+     * @return int
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DuplicateException
@@ -4095,9 +4095,9 @@ class Database
         array $queries = [],
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): void {
+    ): int {
         if ($updates->isEmpty()) {
-            return;
+            return 0;
         }
 
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
@@ -4161,7 +4161,7 @@ class Database
         }
 
         $originalLimit = $limit;
-        $lastDocument = $cursor;
+        $last = $cursor;
         $modified = 0;
 
         // Resolve and update relationships
@@ -4176,8 +4176,8 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (!empty($lastDocument)) {
-                $new[] = Query::cursorAfter($lastDocument);
+            if (!empty($last)) {
+                $new[] = Query::cursorAfter($last);
             }
 
             $affectedDocuments = $this->silent(fn () => $this->find(
@@ -4240,13 +4240,15 @@ class Database
                 break;
             }
 
-            $lastDocument = \end($affectedDocuments);
+            $last = \end($affectedDocuments);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPDATE, new Document([
             '$collection' => $collection->getId(),
             'modified' => $modified
         ]));
+
+        return $modified;
     }
 
     /**
@@ -5454,7 +5456,7 @@ class Database
      * @param array<Query> $queries
      * @param callable|null $onNext
      * @param int $batchSize
-     * @return void
+     * @return int
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws RestrictedException
@@ -5465,7 +5467,7 @@ class Database
         array $queries = [],
         ?callable $onNext = null,
         int $batchSize = self::DELETE_BATCH_SIZE
-    ): void {
+    ): int {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
@@ -5510,7 +5512,7 @@ class Database
         }
 
         $originalLimit = $limit;
-        $lastDocument = $cursor;
+        $last = $cursor;
         $modified = 0;
 
         while (true) {
@@ -5524,8 +5526,8 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (!empty($lastDocument)) {
-                $new[] = Query::cursorAfter($lastDocument);
+            if (!empty($last)) {
+                $new[] = Query::cursorAfter($last);
             }
 
             /**
@@ -5599,13 +5601,15 @@ class Database
                 break;
             }
 
-            $lastDocument = \end($affectedDocuments);
+            $last = \end($affectedDocuments);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
             '$collection' => $collection->getId(),
             'modified' => $modified
         ]));
+
+        return $modified;
     }
 
     /**

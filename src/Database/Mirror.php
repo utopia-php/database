@@ -555,7 +555,7 @@ class Mirror extends Database
         array $documents,
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): void {
+    ): int {
         $this->source->createDocuments(
             $collection,
             $documents,
@@ -571,7 +571,7 @@ class Mirror extends Database
                 $onNext($document);
             }
 
-            return;
+            return \count($documents);
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
@@ -580,7 +580,7 @@ class Mirror extends Database
                 $onNext($document);
             }
 
-            return;
+            return \count($documents);
         }
 
         try {
@@ -624,6 +624,8 @@ class Mirror extends Database
         } catch (\Throwable $err) {
             $this->logError('createDocuments', $err);
         }
+
+        return \count($documents);
     }
 
     public function updateDocument(string $collection, string $id, Document $document): Document
@@ -680,7 +682,7 @@ class Mirror extends Database
         array $queries = [],
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): void {
+    ): int {
         $documents = [];
 
         $this->source->updateDocuments(
@@ -695,20 +697,22 @@ class Mirror extends Database
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
+            // @phpstan-ignore-next-line
             foreach ($documents as $document) {
                 $onNext($document);
             }
 
-            return;
+            return \count($documents);
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
+            // @phpstan-ignore-next-line
             foreach ($documents as $document) {
                 $onNext($document);
             }
 
-            return;
+            return \count($documents);
         }
 
         try {
@@ -724,7 +728,7 @@ class Mirror extends Database
                 );
             }
 
-            $this->destination->withPreserveDates(
+            $count = $this->destination->withPreserveDates(
                 fn () =>
                 $this->destination->updateDocuments(
                     $collection,
@@ -747,6 +751,8 @@ class Mirror extends Database
         } catch (\Throwable $err) {
             $this->logError('updateDocuments', $err);
         }
+
+        return $count ?? 0;
     }
 
     public function deleteDocument(string $collection, string $id): bool
@@ -797,7 +803,7 @@ class Mirror extends Database
         array $queries = [],
         ?callable $onNext = null,
         int $batchSize = self::DELETE_BATCH_SIZE,
-    ): void {
+    ): int {
         $documents = [];
         $this->source->deleteDocuments(
             $collection,
@@ -810,20 +816,22 @@ class Mirror extends Database
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
+            // @phpstan-ignore-next-line
             foreach ($documents as $document) {
                 $onNext($document);
             }
 
-            return;
+            return \count($documents);
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
+            // @phpstan-ignore-next-line
             foreach ($documents as $document) {
                 $onNext($document);
             }
 
-            return;
+            return \count($documents);
         }
 
         try {
@@ -836,7 +844,7 @@ class Mirror extends Database
                 );
             }
 
-            $this->destination->deleteDocuments(
+            $count = $this->destination->deleteDocuments(
                 $collection,
                 $queries,
                 $onNext,
@@ -854,6 +862,8 @@ class Mirror extends Database
         } catch (\Throwable $err) {
             $this->logError('deleteDocuments', $err);
         }
+
+        return $count ?? 0;
     }
 
     public function updateAttributeRequired(string $collection, string $id, bool $required): Document

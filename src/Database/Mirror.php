@@ -553,25 +553,24 @@ class Mirror extends Database
     public function createDocuments(
         string $collection,
         array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
-        int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
         $this->source->createDocuments(
             $collection,
             $documents,
-            null,
             $batchSize,
+            function ($doc) use ($onNext, &$modified) {
+                $onNext($doc);
+                $modified++;
+            },
         );
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
-            foreach ($documents as $document) {
-                $onNext($document);
-            }
-
-            return \count($documents);
+            return $modified;
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
@@ -580,7 +579,7 @@ class Mirror extends Database
                 $onNext($document);
             }
 
-            return \count($documents);
+            return $modified;
         }
 
         try {
@@ -606,8 +605,8 @@ class Mirror extends Database
                 $this->destination->createDocuments(
                     $collection,
                     $clones,
-                    $onNext,
-                    $batchSize
+                    $batchSize,
+                    null,
                 )
             );
 
@@ -625,7 +624,7 @@ class Mirror extends Database
             $this->logError('createDocuments', $err);
         }
 
-        return \count($documents);
+        return $modified;
     }
 
     public function updateDocument(string $collection, string $id, Document $document): Document
@@ -680,39 +679,32 @@ class Mirror extends Database
         string $collection,
         Document $updates,
         array $queries = [],
+        int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
-        int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
-        $documents = [];
+        $modified = 0;
 
         $this->source->updateDocuments(
             $collection,
             $updates,
             $queries,
-            fn ($doc) => $documents[] = $doc,
-            $batchSize
+            $batchSize,
+            function ($doc) use ($onNext, &$modified) {
+                $onNext($doc);
+                $modified++;
+            }
         );
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
-            // @phpstan-ignore-next-line
-            foreach ($documents as $document) {
-                $onNext($document);
-            }
-
-            return \count($documents);
+            return $modified;
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-            // @phpstan-ignore-next-line
-            foreach ($documents as $document) {
-                $onNext($document);
-            }
-
-            return \count($documents);
+            return $modified;
         }
 
         try {
@@ -728,14 +720,14 @@ class Mirror extends Database
                 );
             }
 
-            $count = $this->destination->withPreserveDates(
+            $modified = $this->destination->withPreserveDates(
                 fn () =>
                 $this->destination->updateDocuments(
                     $collection,
                     $clone,
                     $queries,
-                    $onNext,
-                    $batchSize
+                    $batchSize,
+                    null,
                 )
             );
 
@@ -752,7 +744,7 @@ class Mirror extends Database
             $this->logError('updateDocuments', $err);
         }
 
-        return $count ?? 0;
+        return $modified;
     }
 
     public function deleteDocument(string $collection, string $id): bool
@@ -801,37 +793,31 @@ class Mirror extends Database
     public function deleteDocuments(
         string $collection,
         array $queries = [],
-        ?callable $onNext = null,
         int $batchSize = self::DELETE_BATCH_SIZE,
+        ?callable $onNext = null,
     ): int {
-        $documents = [];
+        $modified = 0;
+
         $this->source->deleteDocuments(
             $collection,
             $queries,
-            fn ($doc) => $documents[] = $doc,
-            $batchSize
+            $batchSize,
+            function ($doc) use (&$modified, $onNext) {
+                $onNext($doc);
+                $modified++;
+            },
         );
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
-            // @phpstan-ignore-next-line
-            foreach ($documents as $document) {
-                $onNext($document);
-            }
-
-            return \count($documents);
+            return $modified;
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-            // @phpstan-ignore-next-line
-            foreach ($documents as $document) {
-                $onNext($document);
-            }
-
-            return \count($documents);
+            return $modified;
         }
 
         try {
@@ -844,11 +830,11 @@ class Mirror extends Database
                 );
             }
 
-            $count = $this->destination->deleteDocuments(
+            $modified = $this->destination->deleteDocuments(
                 $collection,
                 $queries,
-                $onNext,
-                $batchSize
+                $batchSize,
+                null,
             );
 
             foreach ($this->writeFilters as $filter) {
@@ -863,7 +849,7 @@ class Mirror extends Database
             $this->logError('deleteDocuments', $err);
         }
 
-        return $count ?? 0;
+        return $modified;
     }
 
     public function updateAttributeRequired(string $collection, string $id, bool $required): Document

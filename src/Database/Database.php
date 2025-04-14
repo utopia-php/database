@@ -3465,8 +3465,8 @@ class Database
     public function createDocuments(
         string $collection,
         array $documents,
-        ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE,
+        ?callable $onNext = null,
     ): int {
         if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
@@ -4093,8 +4093,8 @@ class Database
         string $collection,
         Document $updates,
         array $queries = [],
+        int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
-        int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
         if ($updates->isEmpty()) {
             return 0;
@@ -4657,10 +4657,10 @@ class Database
     public function createOrUpdateDocuments(
         string $collection,
         array $documents,
+        int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
-        int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
-        $this->createOrUpdateDocumentsWithIncrease(
+        return $this->createOrUpdateDocumentsWithIncrease(
             $collection,
             '',
             $documents,
@@ -5468,8 +5468,8 @@ class Database
     public function deleteDocuments(
         string $collection,
         array $queries = [],
+        int $batchSize = self::DELETE_BATCH_SIZE,
         ?callable $onNext = null,
-        int $batchSize = self::DELETE_BATCH_SIZE
     ): int {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');

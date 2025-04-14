@@ -420,6 +420,14 @@ abstract class Adapter
     }
 
     /**
+     * Quote a string
+     *
+     * @param string $string
+     * @return string
+     */
+    abstract protected function quote(string $string): string;
+
+    /**
      * Ping Database
      *
      * @return bool
@@ -685,13 +693,13 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $attribute
-     * @param array<Document> $documents
+     * @param array<Change> $changes
      * @return array<Document>
      */
     abstract public function createOrUpdateDocuments(
         string $collection,
         string $attribute,
-        array $documents
+        array $changes
     ): array;
 
     /**
@@ -1124,8 +1132,8 @@ abstract class Adapter
      * Get the query to check for tenant when in shared tables mode
      *
      * @param string $collection   The collection being queried
-     * @param string $parentAlias  The alias of the parent collection if in a subquery
+     * @param string $alias  The alias of the parent collection if in a subquery
      * @return string
      */
-    abstract public function getTenantQuery(string $collection, string $parentAlias = ''): string;
+    abstract public function getTenantQuery(string $collection, string $alias = ''): string;
 }

@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -406,10 +407,11 @@ class Postgres extends SQL
      * @param string $id
      * @param string $type
      * @param int $size
+     * @param bool $signed
      * @param bool $array
      *
      * @return bool
-     * @throws Exception
+     * @throws DatabaseException
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
@@ -1380,12 +1382,12 @@ class Postgres extends SQL
     /**
      * @param string $collection
      * @param string $attribute
-     * @param array<Document> $documents
+     * @param array<Change> $changes
      * @return array<Document>
      */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
     {
-        return $documents;
+        return \array_map(fn ($change) => $change->getNew(), $changes);
     }
 
     /**
@@ -1518,7 +1520,7 @@ class Postgres extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
-        $defaultAlias = Query::DEFAULT_ALIAS;
+        $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
         $queries = array_map(fn ($query) => clone $query, $queries);
@@ -1553,11 +1555,11 @@ class Postgres extends SQL
                 $binds[':cursor'] = $cursor[$originalAttribute];
 
                 $where[] = "(
-                        {$this->quote($defaultAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
+                        {$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            {$this->quote($defaultAlias)}.{$this->quote($attribute)} = :cursor 
+                            {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
                             AND
-                            {$this->quote($defaultAlias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1581,7 +1583,7 @@ class Postgres extends SQL
                     : Query::TYPE_LESSER;
             }
 
-            $where[] = "({$this->quote($defaultAlias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
+            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1592,9 +1594,9 @@ class Postgres extends SQL
                     $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
 
-                $orders[] = "{$this->quote($defaultAlias)}._id ".$this->filter($order);
+                $orders[] = "{$this->quote($alias)}._id ".$this->filter($order);
             } else {
-                $orders[] = "{$this->quote($defaultAlias)}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+                $orders[] = "{$this->quote($alias)}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
         }
 
@@ -1604,12 +1606,12 @@ class Postgres extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $defaultAlias, $forPermission);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, and: '')}";
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1629,8 +1631,8 @@ class Postgres extends SQL
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $defaultAlias)}
-            FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
+            SELECT {$this->getAttributeProjection($selections, $alias)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -1705,7 +1707,7 @@ class Postgres extends SQL
         $roles = Authorization::getRoles();
         $binds = [];
         $where = [];
-        $defaultAlias = Query::DEFAULT_ALIAS;
+        $alias = Query::DEFAULT_ALIAS;
 
         $limit = '';
         if (! \is_null($max)) {
@@ -1721,12 +1723,12 @@ class Postgres extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $defaultAlias);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, and: '')}";
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where)
@@ -1736,7 +1738,7 @@ class Postgres extends SQL
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
-				FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
+				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -1778,7 +1780,7 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $defaultAlias = Query::DEFAULT_ALIAS;
+        $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
         $limit = '';
@@ -1795,12 +1797,12 @@ class Postgres extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $defaultAlias);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, and: '')}";
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where)
@@ -1810,7 +1812,7 @@ class Postgres extends SQL
         $sql = "
 			SELECT SUM({$this->quote($attribute)}) as sum FROM (
 				SELECT {$this->quote($attribute)}
-				FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
+				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -1833,6 +1835,15 @@ class Postgres extends SQL
         }
 
         return $result['sum'] ?? 0;
+    }
+
+    /**
+     * @return string
+     */
+    public function getConnectionId(): string
+    {
+        $stmt = $this->getPDO()->query("SELECT pg_backend_pid();");
+        return $stmt->fetchColumn();
     }
 
     /**
@@ -2110,8 +2121,6 @@ class Postgres extends SQL
         return 'ILIKE';
     }
 
-
-
     protected function processException(PDOException $e): \Exception
     {
         // Timeout
@@ -2143,14 +2152,9 @@ class Postgres extends SQL
     }
 
     /**
+     * @param string $string
      * @return string
      */
-    public function getConnectionId(): string
-    {
-        $stmt = $this->getPDO()->query("SELECT pg_backend_pid();");
-        return $stmt->fetchColumn();
-    }
-
     protected function quote(string $string): string
     {
         return "\"{$string}\"";

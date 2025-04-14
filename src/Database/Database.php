@@ -3533,8 +3533,7 @@ class Database
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
-
-                $onNext($document);
+                $onNext && $onNext($document);
                 $modified++;
             }
         }
@@ -4230,7 +4229,7 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
 
-                $onNext($document);
+                $onNext && $onNext($document);
                 $modified++;
             }
 
@@ -4809,7 +4808,7 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
 
-                $onNext($document);
+                $onNext && $onNext($document);
                 $modified++;
             }
         }
@@ -5594,7 +5593,7 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
 
-                $onNext($document);
+                $onNext && $onNext($document);
                 $modified++;
             }
 

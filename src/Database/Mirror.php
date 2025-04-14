@@ -561,7 +561,7 @@ class Mirror extends Database
             $documents,
             $batchSize,
             function ($doc) use ($onNext, &$modified) {
-                $onNext($doc);
+                $onNext && $onNext($doc);
                 $modified++;
             },
         );
@@ -575,10 +575,6 @@ class Mirror extends Database
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-            foreach ($documents as $document) {
-                $onNext($document);
-            }
-
             return $modified;
         }
 
@@ -690,7 +686,7 @@ class Mirror extends Database
             $queries,
             $batchSize,
             function ($doc) use ($onNext, &$modified) {
-                $onNext($doc);
+                $onNext && $onNext($doc);
                 $modified++;
             }
         );
@@ -803,7 +799,7 @@ class Mirror extends Database
             $queries,
             $batchSize,
             function ($doc) use (&$modified, $onNext) {
-                $onNext($doc);
+                $onNext && $onNext($doc);
                 $modified++;
             },
         );

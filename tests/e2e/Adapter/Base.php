@@ -16838,7 +16838,7 @@ abstract class Base extends TestCase
         }
 
         $docs = static::getDatabase()->find('bulk_delete');
-        $this->assertEquals(5, $docs);
+        $this->assertEquals(5, \count($docs));
 
         // TEST (FAIL): Can't delete documents in the past
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));

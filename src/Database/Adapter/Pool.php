@@ -112,6 +112,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    protected function quote(string $string): string
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function ping(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -232,7 +237,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -457,7 +462,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function getTenantQuery(string $collection, string $parentAlias = ''): string
+    public function getTenantQuery(string $collection, string $alias = ''): string
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

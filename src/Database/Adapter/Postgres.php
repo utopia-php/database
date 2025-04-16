@@ -10,7 +10,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\Order;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
@@ -1550,7 +1550,7 @@ class Postgres extends SQL
                 }
 
                 if (\is_null($cursor[$originalAttribute] ?? null)) {
-                    throw new Order("Order attribute '{$originalAttribute}' is empty", 400, null, $originalAttribute);
+                    throw new OrderException("Order attribute '{$originalAttribute}' is empty", 0, null, $originalAttribute);
                 }
 
                 $binds[':cursor'] = $cursor[$originalAttribute];

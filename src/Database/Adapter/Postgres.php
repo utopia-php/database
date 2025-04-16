@@ -1550,7 +1550,10 @@ class Postgres extends SQL
                 }
 
                 if (\is_null($cursor[$originalAttribute] ?? null)) {
-                    throw new OrderException("Order attribute '{$originalAttribute}' is empty", 0, null, $originalAttribute);
+                    throw new OrderException(
+                        message: "Order attribute '{$originalAttribute}' is empty",
+                        attribute: $originalAttribute
+                    );
                 }
 
                 $binds[':cursor'] = $cursor[$originalAttribute];

@@ -1696,9 +1696,9 @@ class MariaDB extends SQL
         $hasIdAttribute = false;
         foreach ($orderAttributes as $i => $attribute) {
             $originalAttribute = $attribute;
+
             $attribute = $this->getInternalKeyForAttribute($attribute);
             $attribute = $this->filter($attribute);
-
             if (\in_array($attribute, ['_uid', '_id'])) {
                 $hasIdAttribute = true;
             }
@@ -1723,23 +1723,21 @@ class MariaDB extends SQL
                     );
                 }
 
-                $alias = $this->quote($alias);
-                $attribute = $this->quote($attribute);
                 $binds[':cursor'] = $cursor[$originalAttribute];
 
                 $where[] = "(
-                        {$alias}.{$attribute} {$this->getSQLOperator($orderMethod)} :cursor 
+                        {$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            {$alias}.{$attribute} = :cursor 
+                            {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
                             AND
-                            {$alias}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "{$attribute} {$orderType}";
+            $orders[] = "{$this->quote($attribute)} {$orderType}";
         }
 
         // Allow after pagination without any order

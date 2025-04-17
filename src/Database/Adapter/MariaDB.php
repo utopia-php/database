@@ -1695,9 +1695,9 @@ class MariaDB extends SQL
         $hasIdAttribute = false;
         foreach ($orderAttributes as $i => $attribute) {
             $originalAttribute = $attribute;
-
             $attribute = $this->getInternalKeyForAttribute($attribute);
             $attribute = $this->filter($attribute);
+
             if (\in_array($attribute, ['_uid', '_id'])) {
                 $hasIdAttribute = true;
             }
@@ -1719,21 +1719,23 @@ class MariaDB extends SQL
                     throw new DatabaseException("Order attribute '{$originalAttribute}' is empty");
                 }
 
+                $alias = $this->quote($alias);
+                $attribute = $this->quote($attribute);
                 $binds[':cursor'] = $cursor[$originalAttribute];
 
                 $where[] = "(
-                        {$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
+                        {$alias}.{$attribute} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
+                            {$alias}.{$attribute} = :cursor 
                             AND
-                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$alias}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "{$this->quote($attribute)} {$orderType}";
+            $orders[] = "{$attribute} {$orderType}";
         }
 
         // Allow after pagination without any order

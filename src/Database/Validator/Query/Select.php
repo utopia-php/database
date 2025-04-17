@@ -62,6 +62,11 @@ class Select extends Base
             Database::INTERNAL_ATTRIBUTES
         );
 
+        if (\count($value->getValues()) === 0) {
+            $this->message = 'No attributes selected';
+            return false;
+        }
+
         if (\count($value->getValues()) !== \count(\array_unique($value->getValues()))) {
             $this->message = 'Duplicate attributes selected';
             return false;

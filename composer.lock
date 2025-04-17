@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5d1e7adf0910bdd2df5324f9cc531a01",
+    "content-hash": "5a68454fa54e1d31deef8571953a3da3",
     "packages": [
         {
             "name": "brick/math",
@@ -1781,16 +1781,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "0.12.0",
+            "version": "0.13.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "646038f1d470b759c129348be8fc14da3c00bbd9"
+                "reference": "dee01dec33a211644d60f6cfa56b1b8176d3fae3"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/646038f1d470b759c129348be8fc14da3c00bbd9",
-                "reference": "646038f1d470b759c129348be8fc14da3c00bbd9",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/dee01dec33a211644d60f6cfa56b1b8176d3fae3",
+                "reference": "dee01dec33a211644d60f6cfa56b1b8176d3fae3",
                 "shasum": ""
             },
             "require": {
@@ -1798,6 +1798,7 @@
                 "ext-memcached": "*",
                 "ext-redis": "*",
                 "php": ">=8.0",
+                "utopia-php/pools": "0.8.*",
                 "utopia-php/telemetry": "0.1.*"
             },
             "require-dev": {
@@ -1826,9 +1827,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/0.12.0"
+                "source": "https://github.com/utopia-php/cache/tree/0.13.0"
             },
-            "time": "2025-02-25T09:09:21+00:00"
+            "time": "2025-04-17T04:20:26+00:00"
         },
         {
             "name": "utopia-php/compression",

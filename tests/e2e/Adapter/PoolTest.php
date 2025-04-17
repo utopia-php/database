@@ -19,7 +19,11 @@ use Utopia\Pools\Pool as UtopiaPool;
 class PoolTest extends Base
 {
     public static ?Database $database = null;
-    protected static ?UtopiaPool $pool = null;
+
+    /**
+     * @var UtopiaPool<MySQL>
+     */
+    protected static UtopiaPool $pool;
     protected static string $namespace;
 
     /**
@@ -76,7 +80,7 @@ class PoolTest extends Base
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
-            // Hack to get adapter PDO
+            // Hack to get adapter PDO reference
             $class = new ReflectionClass($adapter);
             $property = $class->getProperty('pdo');
             $property->setAccessible(true);
@@ -93,7 +97,7 @@ class PoolTest extends Base
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
-            // Hack to get adapter PDO
+            // Hack to get adapter PDO reference
             $class = new ReflectionClass($adapter);
             $property = $class->getProperty('pdo');
             $property->setAccessible(true);

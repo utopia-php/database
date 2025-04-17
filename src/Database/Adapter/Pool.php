@@ -10,10 +10,13 @@ use Utopia\Pools\Pool as UtopiaPool;
 
 class Pool extends Adapter
 {
+    /**
+     * @var UtopiaPool<covariant Adapter>
+     */
     protected UtopiaPool $pool;
 
     /**
-     * @param UtopiaPool $pool The pool to use for connections. Must contain instances of Adapter.
+     * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
      * @throws DatabaseException
      */
     public function __construct(UtopiaPool $pool)

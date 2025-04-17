@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
@@ -1716,7 +1717,10 @@ class MariaDB extends SQL
                 }
 
                 if (\is_null($cursor[$originalAttribute] ?? null)) {
-                    throw new DatabaseException("Order attribute '{$originalAttribute}' is empty");
+                    throw new OrderException(
+                        message: "Order attribute '{$originalAttribute}' is empty",
+                        attribute: $originalAttribute
+                    );
                 }
 
                 $alias = $this->quote($alias);

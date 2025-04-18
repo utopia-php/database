@@ -727,4 +727,54 @@ class Query
     {
         $this->onArray = $bool;
     }
+
+    /**
+     * Filters queries to include only root-level select fields (no dot paths).
+     *
+     * Example: `select(['title', 'actors.name'])` → Keeps only 'title`.
+     */
+    public static function rootSelects(array $queries): array
+    {
+        $new = [];
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() !== self::TYPE_SELECT) {
+                $new[] = $query;
+                continue;
+            }
+
+            $filtered = array_filter($query->getValues(), fn ($v) => !str_contains($v, '.'));
+            if (!empty($filtered)) {
+                $new[] = self::select($filtered);
+            }
+        }
+
+        return $new;
+    }
+
+    /**
+     * Extracts and rewrites select fields for a specific relationship key.
+     *
+     * Example:
+     * `select(['actors.name', 'actors.age'])` → `select(['name', 'age'])`
+     */
+    public static function filterSelectsByPrefix(array $queries, string $prefix): array
+    {
+        $result = [];
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() !== self::TYPE_SELECT) {
+                continue;
+            }
+
+            $filtered = array_filter($query->getValues(), fn ($v) => str_starts_with($v, "$prefix."));
+            $stripped = array_map(fn ($v) => substr($v, strlen($prefix) + 1), $filtered);
+
+            if (!empty($stripped)) {
+                $result[] = self::select($stripped);
+            }
+        }
+
+        return $result;
+    }
 }

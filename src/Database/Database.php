@@ -2975,21 +2975,17 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
+        // actual queries are mutated later, so we clone!
+        $originalQueries = array_map(fn ($q) => clone $q, $queries);
+
         $selects = Query::groupByType($queries)['selections'];
         $selections = $this->validateSelections($collection, $selects);
-        $nestedSelections = [];
 
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
                 $values = $query->getValues();
                 foreach ($values as $valueIndex => $value) {
                     if (\str_contains($value, '.')) {
-                        // Shift the top level off the dot-path to pass the selection down the chain
-                        // 'foo.bar.baz' becomes 'bar.baz'
-                        $nestedSelections[] = Query::select([
-                            \implode('.', \array_slice(\explode('.', $value), 1))
-                        ]);
-
                         $key = \explode('.', $value)[0];
 
                         foreach ($relationships as $relationship) {
@@ -3078,8 +3074,8 @@ class Database
         $document = $this->decode($collection, $document, $selections);
         $this->map = [];
 
-        if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
+        if ($this->resolveRelationships && Query::hasNestedSelect($originalQueries)) {
+            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $originalQueries));
         }
 
         $relationships = \array_filter(
@@ -3133,6 +3129,15 @@ class Database
 
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
+
+            // Only continue if this relationship is requested!
+            $selects = Query::filterSelectsByPrefix($queries, $key);
+
+            if (empty($selects)) {
+                $document->removeAttribute($key);
+                continue;
+            }
+
             $value = $document->getAttribute($key);
             $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
             $relationType = $relationship['options']['relationType'];
@@ -3211,7 +3216,7 @@ class Database
                     $this->relationshipFetchDepth++;
                     $this->relationshipFetchStack[] = $relationship;
 
-                    $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
+                    $related = $this->getDocument($relatedCollection->getId(), $value, $selects);
 
                     $this->relationshipFetchDepth--;
                     \array_pop($this->relationshipFetchStack);
@@ -3228,7 +3233,7 @@ class Database
                             $this->relationshipFetchDepth++;
                             $this->relationshipFetchStack[] = $relationship;
 
-                            $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
+                            $related = $this->getDocument($relatedCollection->getId(), $value, $selects);
 
                             $this->relationshipFetchDepth--;
                             \array_pop($this->relationshipFetchStack);
@@ -3248,7 +3253,7 @@ class Database
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
-                        ...$queries
+                        ...$selects
                     ]);
 
                     $this->relationshipFetchDepth--;
@@ -3273,7 +3278,7 @@ class Database
                         $this->relationshipFetchDepth++;
                         $this->relationshipFetchStack[] = $relationship;
 
-                        $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
+                        $related = $this->getDocument($relatedCollection->getId(), $value, $selects);
 
                         $this->relationshipFetchDepth--;
                         \array_pop($this->relationshipFetchStack);
@@ -3297,7 +3302,7 @@ class Database
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
-                        ...$queries
+                        ...$selects
                     ]);
 
                     $this->relationshipFetchDepth--;
@@ -3334,7 +3339,7 @@ class Database
                         $related[] = $this->getDocument(
                             $relatedCollection->getId(),
                             $junction->getAttribute($key),
-                            $queries
+                            $selects
                         );
                     }
 
@@ -5733,8 +5738,9 @@ class Database
             self::convertQueries($collection, $filters)
         );
 
+        // actual queries are mutated later, so we clone!
+        $originalQueries = array_map(fn ($q) => clone $q, $queries);
         $selections = $this->validateSelections($collection, $selects);
-        $nestedSelections = [];
 
         foreach ($queries as $index => &$query) {
             switch ($query->getMethod()) {
@@ -5742,12 +5748,6 @@ class Database
                     $values = $query->getValues();
                     foreach ($values as $valueIndex => $value) {
                         if (\str_contains($value, '.')) {
-                            // Shift the top level off the dot-path to pass the selection down the chain
-                            // 'foo.bar.baz' becomes 'bar.baz'
-                            $nestedSelections[] = Query::select([
-                                \implode('.', \array_slice(\explode('.', $value), 1))
-                            ]);
-
                             $key = \explode('.', $value)[0];
 
                             foreach ($relationships as $relationship) {
@@ -5794,8 +5794,8 @@ class Database
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         foreach ($results as &$node) {
-            if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
-                $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
+            if ($this->resolveRelationships && Query::hasNestedSelect($originalQueries)) {
+                $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $originalQueries));
             }
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);

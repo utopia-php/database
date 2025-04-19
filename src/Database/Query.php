@@ -729,30 +729,6 @@ class Query
     }
 
     /**
-     * Filters queries to include only root-level select fields (no dot paths).
-     *
-     * Example: `select(['title', 'actors.name'])` → Keeps only 'title`.
-     */
-    public static function rootSelects(array $queries): array
-    {
-        $new = [];
-
-        foreach ($queries as $query) {
-            if ($query->getMethod() !== self::TYPE_SELECT) {
-                $new[] = $query;
-                continue;
-            }
-
-            $filtered = array_filter($query->getValues(), fn ($v) => !str_contains($v, '.'));
-            if (!empty($filtered)) {
-                $new[] = self::select($filtered);
-            }
-        }
-
-        return $new;
-    }
-
-    /**
      * Extracts and rewrites select fields for a specific relationship key.
      *
      * Example:
@@ -770,11 +746,32 @@ class Query
             $filtered = array_filter($query->getValues(), fn ($v) => str_starts_with($v, "$prefix."));
             $stripped = array_map(fn ($v) => substr($v, strlen($prefix) + 1), $filtered);
 
-            if (!empty($stripped)) {
+            if (! empty($stripped)) {
                 $result[] = self::select($stripped);
             }
         }
 
         return $result;
+    }
+
+    /**
+     * Checks if any select query contains a nested field (dot notation).
+     *
+     * This determines whether relationship resolution is required.
+     * For example, `select(['actors.name'])` is considered a nested select.
+     */
+    public static function hasNestedSelect(array $queries): bool
+    {
+        foreach ($queries as $query) {
+            if ($query->getMethod() === self::TYPE_SELECT) {
+                foreach ($query->getValues() as $value) {
+                    if (str_contains($value, '.')) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 }

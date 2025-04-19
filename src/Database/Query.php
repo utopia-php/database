@@ -733,6 +733,9 @@ class Query
      *
      * Example:
      * `select(['actors.name', 'actors.age'])` → `select(['name', 'age'])`
+     *
+     * @param array<Query>  $queries
+     * @return array<Query>
      */
     public static function filterSelectsByPrefix(array $queries, string $prefix): array
     {
@@ -759,6 +762,9 @@ class Query
      *
      * This determines whether relationship resolution is required.
      * For example, `select(['actors.name'])` is considered a nested select.
+     *
+     * @param array<Query>  $queries
+     * @return bool
      */
     public static function hasNestedSelect(array $queries): bool
     {

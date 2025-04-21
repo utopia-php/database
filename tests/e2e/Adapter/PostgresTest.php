@@ -16,16 +16,6 @@ class PostgresTest extends Base
     protected static string $namespace;
 
     /**
-     * Return name of adapter
-     *
-     * @return string
-     */
-    public static function getAdapterName(): string
-    {
-        return "postgres";
-    }
-
-    /**
      * @reture Adapter
      */
     public static function getDatabase(): Database

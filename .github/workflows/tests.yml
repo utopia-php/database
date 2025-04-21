@@ -76,13 +76,12 @@ jobs:
             MySQL,
             Postgres,
             SQLite,
-            MongoDB,
             Mirror,
+            Pool,
             SharedTables/MariaDB,
             SharedTables/MySQL,
             SharedTables/Postgres,
             SharedTables/SQLite,
-            SharedTables/MongoDB,
           ]
 
     steps:

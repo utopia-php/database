@@ -18,6 +18,10 @@ abstract class Adapter
 
     protected ?int $tenant = null;
 
+    protected bool $tenantPerDocument = false;
+
+    protected int $timeout = 0;
+
     protected int $inTransaction = 0;
 
     /**
@@ -122,15 +126,10 @@ abstract class Adapter
      * Get Database from current scope
      *
      * @return string
-     * @throws DatabaseException
      *
      */
     public function getDatabase(): string
     {
-        if (empty($this->database)) {
-            throw new DatabaseException('Missing database. Database must be set before use.');
-        }
-
         return $this->database;
     }
 
@@ -191,6 +190,34 @@ abstract class Adapter
     }
 
     /**
+     * Set Tenant Per Document.
+     *
+     * Set whether to use a different tenant for each document
+     *
+     * @param bool $tenantPerDocument
+     *
+     * @return bool
+     */
+    public function setTenantPerDocument(bool $tenantPerDocument): bool
+    {
+        $this->tenantPerDocument = $tenantPerDocument;
+
+        return true;
+    }
+
+    /**
+     * Get Tenant Per Document.
+     *
+     * Get whether to use a different tenant for each document
+     *
+     * @return bool
+     */
+    public function getTenantPerDocument(): bool
+    {
+        return $this->tenantPerDocument;
+    }
+
+    /**
      * Set metadata for query comments
      *
      * @param string $key
@@ -245,12 +272,17 @@ abstract class Adapter
      * and an appropriate error or exception will be raised to handle the timeout condition.
      *
      * @param int $milliseconds The timeout value in milliseconds for database queries.
-     * @param string $event     The event the timeout should fire fore
+     * @param string $event     The event the timeout should fire for
      * @return void
      *
      * @throws Exception The provided timeout value must be greater than or equal to 0.
      */
     abstract public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void;
+
+    public function getTimeout(): int
+    {
+        return $this->timeout;
+    }
 
     /**
      * Clears a global timeout for database queries.
@@ -261,7 +293,7 @@ abstract class Adapter
     public function clearTimeout(string $event): void
     {
         // Clear existing callback
-        $this->before($event, 'timeout', null);
+        $this->before($event, 'timeout');
     }
 
     /**
@@ -301,7 +333,6 @@ abstract class Adapter
      * Check if a transaction is active.
      *
      * @return bool
-     * @throws DatabaseException
      */
     public function inTransaction(): bool
     {
@@ -382,6 +413,14 @@ abstract class Adapter
 
         return $query;
     }
+
+    /**
+     * Quote a string
+     *
+     * @param string $string
+     * @return string
+     */
+    abstract protected function quote(string $string): string;
 
     /**
      * Ping Database
@@ -482,7 +521,7 @@ abstract class Adapter
      * @param int $size
      * @param bool $signed
      * @param bool $array
-     * @param string $newKey
+     * @param string|null $newKey
      *
      * @return bool
      */
@@ -620,6 +659,7 @@ abstract class Adapter
      * Update Document
      *
      * @param string $collection
+     * @param string $id
      * @param Document $document
      *
      * @return Document
@@ -648,13 +688,13 @@ abstract class Adapter
      *
      * @param string $collection
      * @param string $attribute
-     * @param array<Document> $documents
+     * @param array<Change> $changes
      * @return array<Document>
      */
     abstract public function createOrUpdateDocuments(
         string $collection,
         string $attribute,
-        array $documents
+        array $changes
     ): array;
 
     /**
@@ -671,11 +711,12 @@ abstract class Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $ids
+     * @param array<string> $internalIds
+     * @param array<string> $permissionIds
      *
      * @return int
      */
-    abstract public function deleteDocuments(string $collection, array $ids): int;
+    abstract public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int;
 
     /**
      * Find Documents
@@ -964,14 +1005,14 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public static function getCountOfDefaultAttributes(): int;
+    abstract public function getCountOfDefaultAttributes(): int;
 
     /**
      * Returns number of indexes used by default.
      *
      * @return int
      */
-    abstract public static function getCountOfDefaultIndexes(): int;
+    abstract public function getCountOfDefaultIndexes(): int;
 
     /**
      * Get maximum width, in bytes, allowed for a SQL row
@@ -979,7 +1020,7 @@ abstract class Adapter
      *
      * @return int
      */
-    abstract public static function getDocumentSizeLimit(): int;
+    abstract public function getDocumentSizeLimit(): int;
 
     /**
      * Estimate maximum number of bytes required to store a document in $collection.
@@ -1118,9 +1159,8 @@ abstract class Adapter
      * Get the query to check for tenant when in shared tables mode
      *
      * @param string $collection   The collection being queried
-     * @param string $parentAlias  The alias of the parent collection if in a subquery
-     * @param string $and Default and
+     * @param string $alias  The alias of the parent collection if in a subquery
      * @return string
      */
-    abstract public function getTenantQuery(string $collection, string $parentAlias = '', string $and = 'AND'): string;
+    abstract public function getTenantQuery(string $collection, string $alias = ''): string;
 }

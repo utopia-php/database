@@ -2,6 +2,8 @@
 
 namespace Utopia\Database;
 
+use Utopia\CLI\Console;
+
 /**
  * A PDO wrapper that forwards method calls to the internal PDO instance.
  *
@@ -35,10 +37,21 @@ class PDO
      * @param string $method
      * @param array<mixed> $args
      * @return mixed
+     * @throws \Throwable
      */
     public function __call(string $method, array $args): mixed
     {
-        return $this->pdo->{$method}(...$args);
+        try {
+            return $this->pdo->{$method}(...$args);
+        } catch (\Throwable $e) {
+            if (Connection::hasError($e)) {
+                Console::warning('[Database] Lost connection detected. Reconnecting...');
+                $this->reconnect();
+                return $this->pdo->{$method}(...$args);
+            }
+
+            throw $e;
+        }
     }
 
     /**

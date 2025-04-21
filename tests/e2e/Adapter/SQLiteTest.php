@@ -15,17 +15,6 @@ class SQLiteTest extends Base
     protected static ?PDO $pdo = null;
     protected static string $namespace;
 
-    // Remove once all methods are implemented
-    /**
-     * Return name of adapter
-     *
-     * @return string
-     */
-    public static function getAdapterName(): string
-    {
-        return "sqlite";
-    }
-
     /**
      * @return Database
      */

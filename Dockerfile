@@ -1,4 +1,4 @@
-FROM composer:2.0 AS composer
+FROM composer:2.8 AS composer
 
 WORKDIR /usr/local/src/
 
@@ -11,13 +11,12 @@ RUN composer install \
     --no-plugins \
     --no-scripts \
     --prefer-dist
-    
-FROM php:8.3.10-cli-alpine3.20 AS compile
+
+FROM php:8.3.19-cli-alpine3.21 AS compile
 
 ENV PHP_REDIS_VERSION="6.0.2" \
-    PHP_SWOOLE_VERSION="v5.1.3" \
-    PHP_MONGO_VERSION="1.16.1" \
-    PHP_XDEBUG_VERSION="3.3.2"
+    PHP_SWOOLE_VERSION="v5.1.7" \
+    PHP_XDEBUG_VERSION="3.4.2"
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
@@ -58,20 +57,10 @@ RUN \
   && ./configure --enable-http2 \
   && make && make install
 
-## MongoDB Extension
-FROM compile AS mongodb
-RUN \
-  git clone --depth 1 --branch $PHP_MONGO_VERSION https://github.com/mongodb/mongo-php-driver.git \
-  && cd mongo-php-driver \
-  && git submodule update --init \
-  && phpize \
-  && ./configure \
-  && make && make install
-
 ## PCOV Extension
 FROM compile AS pcov
 RUN \
-   git clone https://github.com/krakjoe/pcov.git \
+   git clone --depth 1 https://github.com/krakjoe/pcov.git \
    && cd pcov \
    && phpize \
    && ./configure --enable-pcov \
@@ -97,7 +86,6 @@ WORKDIR /usr/src/code
 
 RUN echo extension=redis.so >> /usr/local/etc/php/conf.d/redis.ini
 RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
-RUN echo extension=mongodb.so >> /usr/local/etc/php/conf.d/mongodb.ini
 RUN echo extension=pcov.so >> /usr/local/etc/php/conf.d/pcov.ini
 RUN echo extension=xdebug.so >> /usr/local/etc/php/conf.d/xdebug.ini
 
@@ -110,7 +98,6 @@ RUN echo "memory_limit=1024M" >> $PHP_INI_DIR/php.ini
 COPY --from=composer /usr/local/src/vendor /usr/src/code/vendor
 COPY --from=swoole /usr/local/lib/php/extensions/no-debug-non-zts-20230831/swoole.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
 COPY --from=redis /usr/local/lib/php/extensions/no-debug-non-zts-20230831/redis.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
-COPY --from=mongodb /usr/local/lib/php/extensions/no-debug-non-zts-20230831/mongodb.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
 COPY --from=pcov /usr/local/lib/php/extensions/no-debug-non-zts-20230831/pcov.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
 COPY --from=xdebug /usr/local/lib/php/extensions/no-debug-non-zts-20230831/xdebug.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/
 

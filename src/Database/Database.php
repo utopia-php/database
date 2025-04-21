@@ -335,6 +335,8 @@ class Database
 
     protected bool $resolveRelationships = true;
 
+    protected bool $ignoreNestedQueries = false;
+
     protected bool $checkRelationshipsExist = true;
 
     protected int $relationshipFetchDepth = 1;
@@ -544,6 +546,25 @@ class Database
             return $callback();
         } finally {
             $this->resolveRelationships = $previous;
+        }
+    }
+
+    /**
+     * Ignore the nested `Query::select` for relationships and return all the related documents.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function ignoreNestedQueries(callable $callback): mixed
+    {
+        $previous = $this->ignoreNestedQueries;
+        $this->ignoreNestedQueries = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->ignoreNestedQueries = $previous;
         }
     }
 
@@ -3074,7 +3095,7 @@ class Database
         $document = $this->decode($collection, $document, $selections);
         $this->map = [];
 
-        if ($this->resolveRelationships && Query::hasNestedSelect($originalQueries)) {
+        if ($this->resolveRelationships && ($this->ignoreNestedQueries || Query::hasNestedSelect($originalQueries))) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $originalQueries));
         }
 
@@ -3133,7 +3154,8 @@ class Database
             // Only continue if this relationship is requested!
             $selects = Query::filterSelectsByPrefix($queries, $key);
 
-            if (empty($selects)) {
+            // Skip resolving if respecting nested queries AND no fields were selected
+            if (! $this->ignoreNestedQueries && empty($selects)) {
                 $document->removeAttribute($key);
                 continue;
             }

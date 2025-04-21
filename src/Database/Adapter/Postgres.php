@@ -1346,7 +1346,6 @@ class Postgres extends SQL
         $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_internalId', $document->getInternalId());
-
         $stmt->bindValue(':_newUid', $document->getId());
 
         if ($this->sharedTables) {

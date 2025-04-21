@@ -510,9 +510,9 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find(
             '__users',
             [
-                Query::selection('*', 'A'),
+                Query::selection('*', 'main'),
                 Query::selection('*', 'U'),
-                Query::selection('$id', 'A'),
+                Query::selection('$id', 'main'),
                 Query::selection('user_id', 'U', as: 'user_id'),
                 Query::join(
                     '__sessions',

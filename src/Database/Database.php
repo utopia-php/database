@@ -2977,7 +2977,7 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $selects = Query::getSelectQueries($queries);
+        $selects = Query::groupByType($queries)['selections'];
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
@@ -4204,6 +4204,9 @@ class Database
                 }
             }
 
+            /**
+             * todo: why skip auth if in self::PERMISSION_UPDATE we do not do skipping?
+             */
             $this->withTransaction(function () use ($collection, $updates, $authorization, $skipAuth, $batch) {
                 $getResults = fn () => $this->adapter->updateDocuments(
                     $collection->getId(),
@@ -5688,7 +5691,7 @@ class Database
             );
         }
 
-        $authorization = new Authorization(self::PERMISSION_READ);
+        $authorization = new Authorization($forPermission);
 
         foreach ($context->getCollections() as $_collection) {
             $documentSecurity = $_collection->getAttribute('documentSecurity', false);

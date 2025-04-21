@@ -818,7 +818,7 @@ abstract class SQL extends Adapter
      *
      * @return int
      */
-    public static function getCountOfDefaultIndexes(): int
+    public function getCountOfDefaultIndexes(): int
     {
         return \count(Database::INTERNAL_INDEXES);
     }

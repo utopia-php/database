@@ -1718,12 +1718,6 @@ class MariaDB extends SQL
         foreach ($orderQueries as $i => $order) {
             $orderAlias = $order->getAlias();
             $attribute  = $order->getAttribute();
-
-            //remove this...
-            if (empty($attribute)) {
-                $attribute = '$internalId'; // Query::orderAsc('')
-            }
-
             $originalAttribute = $attribute;
             $attribute = $this->getInternalKeyForAttribute($attribute);
             $attribute = $this->filter($attribute);
@@ -1791,20 +1785,6 @@ class MariaDB extends SQL
 
             $orders[] = "{$this->quote($alias)}.{$this->quote('_id')} ".$order;
         }
-
-        //        // original code:
-        //        if (!$hasIdAttribute) {
-        //            if (empty($orderAttributes) && !empty($orderTypes)) {
-        //                $order = $orderTypes[0] ?? Database::ORDER_ASC;
-        //                if ($cursorDirection === Database::CURSOR_BEFORE) {
-        //                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-        //                }
-        //
-        //                $orders[] = "{$alias}._id " . $this->filter($order);
-        //            } else {
-        //                $orders[] = "{$alias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
-        //            }
-        //        }
 
         $sqlJoin = '';
         foreach ($joins as $join) {

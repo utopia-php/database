@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Validator\Authorization;
 
 class QueryContext
 {
@@ -66,6 +67,10 @@ class QueryContext
 
     public function skipAuth(string $collection, string $permission): bool
     {
+        if (!Authorization::$status) { // for Authorization::disable();
+            return true;
+        }
+
         $this->skipAuthCollections[$permission][$collection] = false;
 
         if (empty($this->skipAuthCollections[$permission][$collection])) {

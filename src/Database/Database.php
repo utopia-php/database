@@ -4212,7 +4212,7 @@ class Database
                 }
             }
 
-            $this->withTransaction(function () use ($collection, $updates, $authorization, $skipAuth, $batch) {
+            $this->withTransaction(function () use ($collection, $updates, $batch) {
                 $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,

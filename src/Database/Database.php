@@ -4179,11 +4179,15 @@ class Database
                 $new[] = Query::cursorAfter($last);
             }
 
-            $batch = $this->silent(fn () => $this->find(
+            $getResults = fn () => $this->find(
                 $collection->getId(),
                 array_merge($new, $queries),
                 forPermission: Database::PERMISSION_UPDATE
-            ));
+            );
+
+            $batch = $this->silent(
+                fn () => $skipAuth ? $authorization->skip($getResults) : $getResults()
+            );
 
             if (empty($batch)) {
                 break;
@@ -4209,15 +4213,11 @@ class Database
             }
 
             $this->withTransaction(function () use ($collection, $updates, $authorization, $skipAuth, $batch) {
-                $getResults = fn () => $this->adapter->updateDocuments(
+                $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
                     $batch
                 );
-
-                $skipAuth
-                    ? $authorization->skip($getResults)
-                    : $getResults();
             });
 
             foreach ($batch as $doc) {

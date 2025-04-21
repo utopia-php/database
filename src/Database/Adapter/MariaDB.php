@@ -1294,10 +1294,12 @@ class MariaDB extends SQL
                 $bindIndex++;
             }
 
+            $sqlInternalId = empty($document->getInternalId()) ? '' : ' and _id=:_internalId';
+
             $sql = "
                 UPDATE {$this->getSQLTable($name)}
                 SET {$columns} _uid = :_newUid
-                WHERE _uid = :_existingUid
+                WHERE _uid = :_existingUid {$sqlInternalId}
                 {$this->getTenantQuery($collection)}
 			";
 
@@ -1307,6 +1309,9 @@ class MariaDB extends SQL
 
             $stmt->bindValue(':_existingUid', $id);
             $stmt->bindValue(':_newUid', $document->getId());
+            if (!empty($document->getInternalId())) {
+                $stmt->bindValue(':_internalId', $document->getInternalId());
+            }
 
             if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant);

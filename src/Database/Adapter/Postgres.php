@@ -1334,12 +1334,10 @@ class Postgres extends SQL
             $bindIndex++;
         }
 
-        $sqlInternalId = empty($document->getInternalId()) ? '' : ' and _id=:_internalId';
-
         $sql = "
 			UPDATE {$this->getSQLTable($name)}
 			SET {$columns} _uid = :_newUid 
-			WHERE _uid = :_existingUid {$sqlInternalId}
+			WHERE _id=:_internalId
 			{$this->getTenantQuery($collection)}
 		";
 
@@ -1347,11 +1345,9 @@ class Postgres extends SQL
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        $stmt->bindValue(':_existingUid', $id);
+        $stmt->bindValue(':_internalId', $document->getInternalId());
+
         $stmt->bindValue(':_newUid', $document->getId());
-        if (!empty($document->getInternalId())) {
-            $stmt->bindValue(':_internalId', $document->getInternalId());
-        }
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);

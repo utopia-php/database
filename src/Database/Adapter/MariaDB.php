@@ -1700,7 +1700,6 @@ class MariaDB extends SQL
     ): array {
         unset($queries);
 
-        $defaultAlias = Query::DEFAULT_ALIAS;
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
@@ -1755,11 +1754,11 @@ class MariaDB extends SQL
                 $binds[':cursor'] = $cursor[$originalAttribute];
 
                 $where[] = "(
-                        {$this->quote($defaultAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
+                        {$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
                         OR (
-                            {$this->quote($defaultAlias)}.{$this->quote($attribute)} = :cursor 
+                            {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
                             AND
-                            {$this->quote($defaultAlias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1777,7 +1776,7 @@ class MariaDB extends SQL
                 $orderMethod = Query::TYPE_LESSER;
             }
 
-            $where[] = "({$this->quote($defaultAlias)}.{$this->quote('_id')} {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
+            $where[] = "({$this->quote($alias)}.{$this->quote('_id')} {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1790,7 +1789,7 @@ class MariaDB extends SQL
                 $order = Database::ORDER_DESC;
             }
 
-            $orders[] = "{$this->quote($defaultAlias)}.{$this->quote('_id')} ".$order;
+            $orders[] = "{$this->quote($alias)}.{$this->quote('_id')} ".$order;
         }
 
         //        // original code:
@@ -1801,9 +1800,9 @@ class MariaDB extends SQL
         //                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
         //                }
         //
-        //                $orders[] = "{$defaultAlias}._id " . $this->filter($order);
+        //                $orders[] = "{$alias}._id " . $this->filter($order);
         //            } else {
-        //                $orders[] = "{$defaultAlias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+        //                $orders[] = "{$alias}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
         //            }
         //        }
 
@@ -1834,12 +1833,12 @@ class MariaDB extends SQL
 
         $skipAuth = $context->skipAuth($collection, $forPermission);
         if (! $skipAuth) {
-            $where[] = $this->getSQLPermissionsCondition($mainCollection, $roles, $defaultAlias, $forPermission);
+            $where[] = $this->getSQLPermissionsCondition($mainCollection, $roles, $alias, $forPermission);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1859,8 +1858,8 @@ class MariaDB extends SQL
         $selections = $this->getAttributeSelections($selects);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $defaultAlias)}
-            FROM {$this->getSQLTable($mainCollection)} AS {$this->quote($defaultAlias)}
+            SELECT {$this->getAttributeProjection($selections, $alias)}
+            FROM {$this->getSQLTable($mainCollection)} AS {$this->quote($alias)}
             {$sqlJoin}
             {$sqlWhere}
             {$sqlOrder}
@@ -1938,7 +1937,7 @@ class MariaDB extends SQL
         $roles = Authorization::getRoles();
         $binds = [];
         $where = [];
-        $defaultAlias = Query::DEFAULT_ALIAS;
+        $alias = Query::DEFAULT_ALIAS;
 
         $limit = '';
         if (! \is_null($max)) {
@@ -1954,12 +1953,12 @@ class MariaDB extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $defaultAlias);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where)
@@ -1969,7 +1968,7 @@ class MariaDB extends SQL
         $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
-				FROM {$this->getSQLTable($name)} AS {$this->quote($defaultAlias)}
+				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
 				{$sqlWhere}
 				{$limit}
 			) table_count
@@ -2010,7 +2009,7 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $defaultAlias = Query::DEFAULT_ALIAS;
+        $alias = Query::DEFAULT_ALIAS;
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
@@ -2028,12 +2027,12 @@ class MariaDB extends SQL
         }
 
         if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $defaultAlias);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $defaultAlias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where)

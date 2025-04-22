@@ -510,10 +510,10 @@ abstract class Base extends TestCase
         $documents = static::getDatabase()->find(
             '__users',
             [
-                Query::selection('*', 'main'),
-                Query::selection('*', 'U'),
-                Query::selection('$id', 'main'),
-                Query::selection('user_id', 'U', as: 'user_id'),
+                Query::select('*', 'main'),
+                Query::select('*', 'U'),
+                Query::select('$id', 'main'),
+                Query::select('user_id', 'U', as: 'user_id'),
                 Query::join(
                     '__sessions',
                     'U',
@@ -2012,7 +2012,7 @@ abstract class Base extends TestCase
         ));
 
         $document = static::getDatabase()->find('dots.parent', [
-            Query::select(['dots.name']),
+            Query::select('dots.name'),
         ]);
         $this->assertEmpty($document);
 
@@ -2053,7 +2053,7 @@ abstract class Base extends TestCase
         ]));
 
         $documents = static::getDatabase()->find('dots.parent', [
-            Query::select(['*']),
+            Query::select('*'),
         ]);
 
         $this->assertEquals('Bill clinton', $documents[0]['dots.name']);
@@ -3145,7 +3145,8 @@ abstract class Base extends TestCase
         $documentId = $document->getId();
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed']),
+            Query::select('string'),
+            Query::select('integer_signed'),
         ]);
 
         $this->assertEmpty($document->getId());

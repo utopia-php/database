@@ -1528,6 +1528,43 @@ abstract class SQL extends Adapter
     /**
      * Get the SQL projection given the selected attributes
      *
+     * @param array<Query> $selects
+     * @return string
+     * @throws Exception
+     */
+    protected function getAttributeProjectionV2(array $selects): string
+    {
+        if (empty($selects)) {
+            return Query::DEFAULT_ALIAS.'.*';
+        }
+
+        $string = '';
+        foreach ($selects as $select) {
+            var_dump($select->getAttribute());
+            var_dump($select->getAlias());
+            if(!empty($string)){
+                $string .= ', ';
+            }
+
+            $alias = $this->filter($select->getAlias());
+
+            $attribute = $select->getAttribute();
+            $attribute = $this->getInternalKeyForAttribute($attribute);
+
+            if ($attribute !== '*'){
+                $attribute = $this->filter($attribute);
+                $attribute = $this->quote($attribute);
+            }
+
+            $string .= "{$this->quote($alias)}.{$attribute}";
+        }
+
+        return $string;
+    }
+
+    /**
+     * Get the SQL projection given the selected attributes
+     *
      * @param array<string> $selections
      * @param string $prefix
      * @return mixed

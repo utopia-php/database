@@ -1904,9 +1904,9 @@ class Postgres extends SQL
 
         $attribute = $this->filter($query->getAttribute());
         $attribute = $this->quote($attribute);
-        $alias = $this->quote($query->getAlias());
-
-        //$placeholder = $this->getSQLPlaceholder($query);
+        $alias = $query->getAlias();
+        $alias = $this->filter($alias);
+        $alias = $this->quote($alias);
         $placeholder = ID::unique();
         $operator = null;
 

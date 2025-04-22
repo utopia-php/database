@@ -249,8 +249,8 @@ class V2 extends Validator
                         $this->validateSelect($query);
 
                         break;
-                    case Query::TYPE_SELECTION:
-                        $this->validateSelections($query);
+//                    case Query::TYPE_SELECTION:
+//                        $this->validateSelections($query);
 
                         break;
                     case Query::TYPE_ORDER_ASC:

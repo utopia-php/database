@@ -1835,10 +1835,10 @@ class MariaDB extends SQL
             $sqlLimit .= ' OFFSET :offset';
         }
 
-        $selections = $this->getAttributeSelections($selects);
+       //$selections = $this->getAttributeSelections($selects);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias)}
+            SELECT {$this->getAttributeProjectionV2($selects, $alias)}
             FROM {$this->getSQLTable($mainCollection)} AS {$this->quote($alias)}
             {$sqlJoin}
             {$sqlWhere}
@@ -2063,7 +2063,9 @@ class MariaDB extends SQL
         $attribute = $query->getAttribute();
         $attribute = $this->filter($attribute);
         $attribute = $this->quote($attribute);
-        $alias = $this->quote($query->getAlias());
+        $alias = $query->getAlias();
+        $alias = $this->filter($alias);
+        $alias = $this->quote($alias);
 
         //$placeholder = $this->getSQLPlaceholder($query);
         $placeholder = ID::unique();

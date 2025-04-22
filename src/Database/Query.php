@@ -26,7 +26,7 @@ class Query
 
     public const TYPE_SELECT = 'select';
 
-    public const TYPE_SELECTION = 'selection';
+    //public const TYPE_SELECTION = 'selection';
 
     // Order methods
     public const TYPE_ORDER_DESC = 'orderDesc';
@@ -555,14 +555,14 @@ class Query
      * @param array<string> $attributes
      * @return Query
      */
-    public static function select(array $attributes): self
+    public static function select_old(array $attributes): self
     {
         return new self(self::TYPE_SELECT, values: $attributes);
     }
 
-    public static function selection(string $attribute, string $alias = '', string $as = '', string $function = ''): self
+    public static function select(string $attribute, string $alias = '', string $as = '', string $function = ''): self
     {
-        return new self(self::TYPE_SELECTION, $attribute, [], alias: $alias, as: $as);
+        return new self(self::TYPE_SELECT, $attribute, [], alias: $alias, as: $as);
     }
 
     /**

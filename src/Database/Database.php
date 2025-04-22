@@ -5746,57 +5746,91 @@ class Database
 
         //$filters = self::convertQueries($collection, $filters);
 
-        /**  @var array<Query> $queries */
-        $queries = \array_merge(
-            $selects,
-            $filters
-        );
+//        /**  @var array<Query> $queries */
+//        $queries = \array_merge(
+//            $selects,
+//            $filters
+//        );
 
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
-        foreach ($queries as $index => &$query) {
-            switch ($query->getMethod()) {
-                case Query::TYPE_SELECT:
-                    $values = $query->getValues();
-                    foreach ($values as $valueIndex => $value) {
-                        if (\str_contains($value, '.')) {
-                            // Shift the top level off the dot-path to pass the selection down the chain
-                            // 'foo.bar.baz' becomes 'bar.baz'
-                            $nestedSelections[] = Query::select([
-                                \implode('.', \array_slice(\explode('.', $value), 1))
-                            ]);
+        foreach ($selects as $i => $q) {
+            var_dump($q->getAlias());
+            var_dump($q->getAttribute());
+            if (\str_contains($q->getAttribute(), '.')) {
+                $nestedSelections[] = Query::select(
+                    \implode('.', \array_slice(\explode('.', $q->getAttribute()), 1))
+                );
 
-                            $key = \explode('.', $value)[0];
+                $key = \explode('.', $q->getAttribute())[0];
 
-                            foreach ($relationships as $relationship) {
-                                if ($relationship->getAttribute('key') === $key) {
-                                    switch ($relationship->getAttribute('options')['relationType']) {
-                                        case Database::RELATION_MANY_TO_MANY:
-                                        case Database::RELATION_ONE_TO_MANY:
-                                            unset($values[$valueIndex]);
-                                            break;
+                var_dump('####################################');
+                var_dump($key);
+                var_dump('####################################');
+                foreach ($relationships as $relationship) {
+                    if ($relationship->getAttribute('key') === $key) {
+                        switch ($relationship->getAttribute('options')['relationType']) {
+                            case Database::RELATION_MANY_TO_MANY:
+                            case Database::RELATION_ONE_TO_MANY:
+                                unset($selects[$i]);
+                                break;
 
-                                        case Database::RELATION_MANY_TO_ONE:
-                                        case Database::RELATION_ONE_TO_ONE:
-                                            $values[$valueIndex] = $key;
-                                            break;
-                                    }
-                                }
-                            }
+                            case Database::RELATION_MANY_TO_ONE:
+                            case Database::RELATION_ONE_TO_ONE:
+                                $q->setAttribute($key);
+                                $selects[$i] = $q;
+                                break;
                         }
                     }
-                    $query->setValues(\array_values($values));
-                    break;
-                default:
-                    if (\str_contains($query->getAttribute(), '.')) {
-                        unset($queries[$index]);
-                    }
-                    break;
+                }
             }
         }
 
-        $queries = \array_values($queries);
+        $selects = \array_values($selects); // Since we may unset above
+
+//        foreach ($queries as $index => &$query) {
+//            switch ($query->getMethod()) {
+//                case Query::TYPE_SELECT:
+//                    $values = $query->getValues();
+//                    foreach ($values as $valueIndex => $value) {
+//                        if (\str_contains($value, '.')) {
+//                            // Shift the top level off the dot-path to pass the selection down the chain
+//                            // 'foo.bar.baz' becomes 'bar.baz'
+//                            $nestedSelections[] = Query::select([
+//                                \implode('.', \array_slice(\explode('.', $value), 1))
+//                            ]);
+//
+//                            $key = \explode('.', $value)[0];
+//
+//                            foreach ($relationships as $relationship) {
+//                                if ($relationship->getAttribute('key') === $key) {
+//                                    switch ($relationship->getAttribute('options')['relationType']) {
+//                                        case Database::RELATION_MANY_TO_MANY:
+//                                        case Database::RELATION_ONE_TO_MANY:
+//                                            unset($values[$valueIndex]);
+//                                            break;
+//
+//                                        case Database::RELATION_MANY_TO_ONE:
+//                                        case Database::RELATION_ONE_TO_ONE:
+//                                            $values[$valueIndex] = $key;
+//                                            break;
+//                                    }
+//                                }
+//                            }
+//                        }
+//                    }
+//                    $query->setValues(\array_values($values));
+//                    break;
+//                default:
+//                    if (\str_contains($query->getAttribute(), '.')) {
+//                        unset($queries[$index]);
+//                    }
+//                    break;
+//            }
+//        }
+//
+//        $queries = \array_values($queries);
 
         $results = $this->adapter->find(
             $context,

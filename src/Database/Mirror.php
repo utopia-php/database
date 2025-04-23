@@ -292,7 +292,7 @@ class Mirror extends Database
         return $result;
     }
 
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = [], bool $autoIncrement = false): bool
     {
         $result = $this->source->createAttribute(
             $collection,

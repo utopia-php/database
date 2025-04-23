@@ -2253,7 +2253,7 @@ abstract class Base extends TestCase
         return $document;
     }
 
-    public function testCreateAutoIncrementAttributes()
+    public function testCreateAutoIncrementAttributes(): void
     {
         static::getDatabase()->createCollection('documents');
 

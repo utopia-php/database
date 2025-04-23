@@ -1826,9 +1826,9 @@ class Database
     /**
      * Update autoIncrement attribute of metadata of a collection.
      *
-     * @param string $collection
-     * @param string $id
-     * @param ?int $newValue
+     * @param string $collectionId
+     * @param string $attributeId
+     * @param int $newValue
      *
      * @return Document
      * @throws Exception
@@ -1837,7 +1837,6 @@ class Database
     {
         return $this->updateAttributeMeta($collectionId, $attributeId, function (Document $attribute) use ($newValue) {
             $currentValue = $attribute->getAttribute('autoIncrement');
-            // if value is provided => then no need to update the incrementor as the next value will start from the next
             $updatedValue = max($currentValue, $newValue);
             $attribute->setAttribute('autoIncrement', $updatedValue);
         });

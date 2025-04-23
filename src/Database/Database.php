@@ -3101,10 +3101,8 @@ class Database
             $selectedAttributes = array_map(fn($q) => $q->getAttribute(), $selects);
 
             foreach ($this->getInternalAttributes() as $internalAttribute) {
-                $attributeId = $internalAttribute['$id'];
-
-                if (!in_array($attributeId, $selectedAttributes, true)) {
-                    $document->removeAttribute($attributeId);
+                if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
+                    $document->removeAttribute($internalAttribute['$id']);
                 }
             }
         }

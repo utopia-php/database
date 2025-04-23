@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5d1e7adf0910bdd2df5324f9cc531a01",
+    "content-hash": "5a68454fa54e1d31deef8571953a3da3",
     "packages": [
         {
             "name": "brick/math",
@@ -593,16 +593,16 @@
         },
         {
             "name": "open-telemetry/sdk",
-            "version": "1.2.3",
+            "version": "1.2.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/opentelemetry-php/sdk.git",
-                "reference": "0e7804c176c4b09d95b7985400aa38ce544cb7fc"
+                "reference": "47fcb66ae5328c5a799195247b1dce551d85873e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/opentelemetry-php/sdk/zipball/0e7804c176c4b09d95b7985400aa38ce544cb7fc",
-                "reference": "0e7804c176c4b09d95b7985400aa38ce544cb7fc",
+                "url": "https://api.github.com/repos/opentelemetry-php/sdk/zipball/47fcb66ae5328c5a799195247b1dce551d85873e",
+                "reference": "47fcb66ae5328c5a799195247b1dce551d85873e",
                 "shasum": ""
             },
             "require": {
@@ -679,7 +679,7 @@
                 "issues": "https://github.com/open-telemetry/opentelemetry-php/issues",
                 "source": "https://github.com/open-telemetry/opentelemetry-php"
             },
-            "time": "2025-04-08T09:55:41+00:00"
+            "time": "2025-04-15T07:02:07+00:00"
         },
         {
             "name": "open-telemetry/sem-conv",
@@ -1781,16 +1781,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "0.12.0",
+            "version": "0.13.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "646038f1d470b759c129348be8fc14da3c00bbd9"
+                "reference": "dee01dec33a211644d60f6cfa56b1b8176d3fae3"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/646038f1d470b759c129348be8fc14da3c00bbd9",
-                "reference": "646038f1d470b759c129348be8fc14da3c00bbd9",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/dee01dec33a211644d60f6cfa56b1b8176d3fae3",
+                "reference": "dee01dec33a211644d60f6cfa56b1b8176d3fae3",
                 "shasum": ""
             },
             "require": {
@@ -1798,6 +1798,7 @@
                 "ext-memcached": "*",
                 "ext-redis": "*",
                 "php": ">=8.0",
+                "utopia-php/pools": "0.8.*",
                 "utopia-php/telemetry": "0.1.*"
             },
             "require-dev": {
@@ -1826,9 +1827,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/0.12.0"
+                "source": "https://github.com/utopia-php/cache/tree/0.13.0"
             },
-            "time": "2025-02-25T09:09:21+00:00"
+            "time": "2025-04-17T04:20:26+00:00"
         },
         {
             "name": "utopia-php/compression",
@@ -1925,16 +1926,16 @@
         },
         {
             "name": "utopia-php/pools",
-            "version": "0.8.0",
+            "version": "0.8.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/pools.git",
-                "reference": "60733929dc328e7ea47e800579c8bbf0d49df5ba"
+                "reference": "05c67aba42eb68ac65489cc1e7fc5db83db2dd4d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/pools/zipball/60733929dc328e7ea47e800579c8bbf0d49df5ba",
-                "reference": "60733929dc328e7ea47e800579c8bbf0d49df5ba",
+                "url": "https://api.github.com/repos/utopia-php/pools/zipball/05c67aba42eb68ac65489cc1e7fc5db83db2dd4d",
+                "reference": "05c67aba42eb68ac65489cc1e7fc5db83db2dd4d",
                 "shasum": ""
             },
             "require": {
@@ -1971,9 +1972,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/pools/issues",
-                "source": "https://github.com/utopia-php/pools/tree/0.8.0"
+                "source": "https://github.com/utopia-php/pools/tree/0.8.2"
             },
-            "time": "2025-03-19T10:22:03+00:00"
+            "time": "2025-04-17T02:04:54+00:00"
         },
         {
             "name": "utopia-php/telemetry",
@@ -2496,16 +2497,16 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "1.12.23",
+            "version": "1.12.24",
             "source": {
                 "type": "git",
                 "url": "https://github.com/phpstan/phpstan.git",
-                "reference": "29201e7a743a6ab36f91394eab51889a82631428"
+                "reference": "338b92068f58d9f8035b76aed6cf2b9e5624c025"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/29201e7a743a6ab36f91394eab51889a82631428",
-                "reference": "29201e7a743a6ab36f91394eab51889a82631428",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/338b92068f58d9f8035b76aed6cf2b9e5624c025",
+                "reference": "338b92068f58d9f8035b76aed6cf2b9e5624c025",
                 "shasum": ""
             },
             "require": {
@@ -2550,7 +2551,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-03-23T14:57:32+00:00"
+            "time": "2025-04-16T13:01:53+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",

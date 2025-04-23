@@ -2253,6 +2253,50 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testCreateAutoIncrementAttributes()
+    {
+        static::getDatabase()->createCollection('documents');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'auto-int', Database::VAR_INTEGER, 100, required: false, autoIncrement: true));
+
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'manual-int', Database::VAR_INTEGER, 100, required: false, autoIncrement: true));
+
+
+        $document1 = static::getDatabase()->createDocument('documents', new Document([]));
+        $this->assertNotEmpty(true, $document1->getId());
+        $this->assertEquals(1, $document1->getAttribute('auto-int'));
+
+        $document2 = static::getDatabase()->createDocument('documents', new Document([]));
+        $this->assertNotEmpty(true, $document2->getId());
+        $this->assertEquals(2, $document2->getAttribute('auto-int'));
+
+        $document3 = static::getDatabase()->createDocument('documents', new Document([]));
+        $this->assertNotEmpty(true, $document3->getId());
+        $this->assertEquals(3, $document3->getAttribute('auto-int'));
+
+        $document4 = static::getDatabase()->createDocument('documents', new Document(['manual-int' => 10]));
+        $this->assertNotEmpty(true, $document4->getId());
+        $this->assertEquals(10, $document4->getAttribute('manual-int'));
+
+        $document5 = static::getDatabase()->createDocument('documents', new Document([]));
+        $this->assertNotEmpty(true, $document5->getId());
+        $this->assertEquals(11, $document5->getAttribute('manual-int'));
+
+        $document6 = static::getDatabase()->createDocument('documents', new Document([]));
+        $this->assertNotEmpty(true, $document6->getId());
+        $this->assertEquals(6, $document6->getAttribute('auto-int'));
+
+        $document7 = static::getDatabase()->createDocument('documents', new Document(['manual-int' => 5]));
+        $this->assertNotEmpty(true, $document7->getId());
+        $this->assertEquals(7, $document7->getAttribute('auto-int'));
+        $this->assertEquals(5, $document7->getAttribute('manual-int'));
+
+        $document8 = static::getDatabase()->createDocument('documents', new Document([]));
+        $this->assertEquals(8, $document8->getAttribute('auto-int'));
+        $this->assertEquals(13, $document8->getAttribute('manual-int'));
+    }
+
     /**
      * @return array<Document>
      */

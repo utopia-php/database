@@ -1469,6 +1469,7 @@ class Database
      * @param string|null $format optional validation format of attribute
      * @param array<string, mixed> $formatOptions assoc array with custom options that can be passed for the format validation
      * @param array<string> $filters
+     * @param bool $autoIncrement
      *
      * @return bool
      * @throws AuthorizationException
@@ -1479,7 +1480,7 @@ class Database
      * @throws StructureException
      * @throws Exception
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = [], bool $autoIncrement = false): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -1506,7 +1507,7 @@ class Database
             throw new DatabaseException('Format ("' . $format . '") not available for this attribute type ("' . $type . '")');
         }
 
-        $attribute = new Document([
+        $attributeInput = [
             '$id' => ID::custom($id),
             'key' => $id,
             'type' => $type,
@@ -1517,8 +1518,12 @@ class Database
             'array' => $array,
             'format' => $format,
             'formatOptions' => $formatOptions,
-            'filters' => $filters,
-        ]);
+            'filters' => $filters
+        ];
+        if ($type === Database::VAR_INTEGER && $autoIncrement === true) {
+            $attributeInput['autoIncrement'] = 0;
+        }
+        $attribute = new Document($attributeInput);
 
         $this->checkAttribute($collection, $attribute);
 
@@ -1572,7 +1577,10 @@ class Database
         }
 
         if ($collection->getId() !== self::METADATA) {
+            // FIXME: remove the unused methods
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            $val = $this->silent(fn () => $this->getDocument(self::METADATA, $collection->getId()));
+            $val->getAttributes();
         }
 
         $this->purgeCachedCollection($collection->getId());
@@ -1812,6 +1820,26 @@ class Database
             $this->validateDefaultTypes($attribute->getAttribute('type'), $default);
 
             $attribute->setAttribute('default', $default);
+        });
+    }
+
+    /**
+     * Update autoIncrement attribute of metadata of a collection.
+     *
+     * @param string $collection
+     * @param string $id
+     * @param ?int $newValue
+     *
+     * @return Document
+     * @throws Exception
+     */
+    public function updateAttributeAutoIncrement(string $collectionId, string $attributeId, int $newValue): Document
+    {
+        return $this->updateAttributeMeta($collectionId, $attributeId, function (Document $attribute) use ($newValue) {
+            $currentValue = $attribute->getAttribute('autoIncrement');
+            // if value is provided => then no need to update the incrementor as the next value will start from the next
+            $updatedValue = max($currentValue, $newValue);
+            $attribute->setAttribute('autoIncrement', $updatedValue);
         });
     }
 
@@ -3378,7 +3406,7 @@ class Database
         ) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
-
+        $collectionId = $collection;
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
@@ -3429,8 +3457,24 @@ class Database
         if (!$structure->isValid($document)) {
             throw new StructureException($structure->getDescription());
         }
+        $document = $this->withTransaction(function () use ($collection, $collectionId, $document) {
+            $metadataDocument = $this->getDocument(Database::METADATA, $collectionId);
+            $attributes = $metadataDocument->getAttribute('attributes', []);
 
-        $document = $this->withTransaction(function () use ($collection, $document) {
+            foreach ($attributes as $index => $attr) {
+                if ($attr instanceof Document && $attr->getAttribute('autoIncrement') !== null) {
+                    $fieldId = $attr->getAttribute('$id');
+                    $currentAutoIncrement = $attr->getAttribute('autoIncrement');
+                    $userProvidedValue = $document->getAttribute($fieldId);
+
+                    $assignedValue = $userProvidedValue !== null ? $userProvidedValue : $currentAutoIncrement + 1;
+
+                    $document->setAttribute($fieldId, $assignedValue);
+
+                    $this->updateAttributeAutoIncrement($collectionId, $fieldId, $assignedValue);
+                }
+            }
+
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }

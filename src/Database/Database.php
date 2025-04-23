@@ -3097,13 +3097,14 @@ class Database
         // Remove internal attributes if not queried for select query
         // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
         // All internal attributes are default selected attributes for (MongoDB)
-        foreach ($selects as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($this->getInternalAttributes() as $internalAttribute) {
-                    if (!\in_array($internalAttribute['$id'], $values)) {
-                        $document->removeAttribute($internalAttribute['$id']);
-                    }
+        if (!empty($selects)) {
+            $selectedAttributes = array_map(fn($q) => $q->getAttribute(), $selects);
+
+            foreach ($this->getInternalAttributes() as $internalAttribute) {
+                $attributeId = $internalAttribute['$id'];
+
+                if (!in_array($attributeId, $selectedAttributes, true)) {
+                    $document->removeAttribute($attributeId);
                 }
             }
         }

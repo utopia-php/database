@@ -2960,7 +2960,10 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        $queries = Query::getSelectQueries($queries);
+        $selects = Query::getSelectQueries($queries);
+        if(count($selects) !== count($queries)){
+            throw new QueryException('Only select queries are allowed');
+        }
 
         $context = new QueryContext();
         $context->add($collection);
@@ -2977,45 +2980,37 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $selects = Query::groupByType($queries)['selections'];
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
-        foreach ($queries as $query) {
-            if ($query->getMethod() == Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($values as $valueIndex => $value) {
-                    if (\str_contains($value, '.')) {
-                        // Shift the top level off the dot-path to pass the selection down the chain
-                        // 'foo.bar.baz' becomes 'bar.baz'
-                        $nestedSelections[] = Query::select([
-                            \implode('.', \array_slice(\explode('.', $value), 1))
-                        ]);
+        foreach ($selects as $i => $q) {
+            if (\str_contains($q->getAttribute(), '.')) {
+                $key = \explode('.', $q->getAttribute())[0];
 
-                        $key = \explode('.', $value)[0];
+                foreach ($relationships as $relationship) {
+                    if ($relationship->getAttribute('key') === $key) {
+                        $nestedSelections[] = Query::select(
+                            \implode('.', \array_slice(\explode('.', $q->getAttribute()), 1))
+                        );
 
-                        foreach ($relationships as $relationship) {
-                            if ($relationship->getAttribute('key') === $key) {
-                                switch ($relationship->getAttribute('options')['relationType']) {
-                                    case Database::RELATION_MANY_TO_MANY:
-                                    case Database::RELATION_ONE_TO_MANY:
-                                        unset($values[$valueIndex]);
-                                        break;
+                        switch ($relationship->getAttribute('options')['relationType']) {
+                            case Database::RELATION_MANY_TO_MANY:
+                            case Database::RELATION_ONE_TO_MANY:
+                                unset($selects[$i]);
+                                break;
 
-                                    case Database::RELATION_MANY_TO_ONE:
-                                    case Database::RELATION_ONE_TO_ONE:
-                                        $values[$valueIndex] = $key;
-                                        break;
-                                }
-                            }
+                            case Database::RELATION_MANY_TO_ONE:
+                            case Database::RELATION_ONE_TO_ONE:
+                                $q->setAttribute($key);
+                                $selects[$i] = $q;
+                                break;
                         }
                     }
                 }
-                $query->setValues(\array_values($values));
             }
         }
 
-        $queries = \array_values($queries);
+        $selects = \array_values($selects); // Since we may unset above
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3057,7 +3052,7 @@ class Database
         $document = $this->adapter->getDocument(
             $collection->getId(),
             $id,
-            $queries,
+            $selects,
             $forUpdate
         );
 
@@ -3077,7 +3072,7 @@ class Database
         }
 
         $document = $this->casting($collection, $document);
-        $document = $this->decode($collection, $document, $selections);
+        $document = $this->decodeV2($context, $document, $selections);
         $this->map = [];
 
         if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
@@ -3102,7 +3097,7 @@ class Database
         // Remove internal attributes if not queried for select query
         // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
         // All internal attributes are default selected attributes for (MongoDB)
-        foreach ($queries as $query) {
+        foreach ($selects as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 $values = $query->getValues();
                 foreach ($this->getInternalAttributes() as $internalAttribute) {
@@ -4689,10 +4684,14 @@ class Database
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $time = DateTime::now();
 
-        $selects = ['$internalId', '$permissions'];
+        $selects = [
+            Query::select('$id'),
+            Query::select('$internalId'),
+            Query::select('$permissions'),
+        ];
 
         if ($this->getSharedTables()) {
-            $selects[] = '$tenant';
+            $selects[] = Query::select('$tenant');
         }
 
         foreach ($documents as $key => $document) {
@@ -4700,13 +4699,13 @@ class Database
                 $old = Authorization::skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId(),
-                    [Query::select($selects)],
+                    $selects,
                 ))));
             } else {
                 $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId(),
-                    [Query::select($selects)],
+                    $selects,
                 )));
             }
 
@@ -5756,20 +5755,14 @@ class Database
         $nestedSelections = [];
 
         foreach ($selects as $i => $q) {
-            var_dump($q->getAlias());
-            var_dump($q->getAttribute());
             if (\str_contains($q->getAttribute(), '.')) {
-                $nestedSelections[] = Query::select(
-                    \implode('.', \array_slice(\explode('.', $q->getAttribute()), 1))
-                );
-
                 $key = \explode('.', $q->getAttribute())[0];
-
-                var_dump('####################################');
-                var_dump($key);
-                var_dump('####################################');
                 foreach ($relationships as $relationship) {
                     if ($relationship->getAttribute('key') === $key) {
+                        $nestedSelections[] = Query::select(
+                            \implode('.', \array_slice(\explode('.', $q->getAttribute()), 1))
+                        );
+
                         switch ($relationship->getAttribute('options')['relationType']) {
                             case Database::RELATION_MANY_TO_MANY:
                             case Database::RELATION_ONE_TO_MANY:
@@ -5845,7 +5838,6 @@ class Database
             joins: $joins,
             orderQueries: $orders
         );
-
         //$skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
 
         //$results = $skipAuth ? Authorization::skip($getResults) : $getResults();
@@ -6251,6 +6243,80 @@ class Database
     }
 
     /**
+     * Decode Document
+     *
+     * @param QueryContext $context
+     * @param Document $document
+     * @param array<Query> $selects
+     * @return Document
+     * @throws DatabaseException
+     */
+    public function decodeV2(QueryContext $context, Document $document, array $selections = []): Document
+    {
+        $schema = [];
+
+        foreach ($context->getCollections() as $collection) {
+
+            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+                $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
+                $key = $this->adapter->filter($key);
+                $schema[$collection->getId()][$key] = $attribute->getArrayCopy();
+            }
+
+            foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+                $schema[$collection->getId()][$attribute['$id']] = new Document($attribute);
+            }
+        }
+
+        $new = new Document;
+
+        foreach ($document as $key => $value) {
+            $alias = Query::DEFAULT_ALIAS;
+
+            $collection = $context->getCollectionByAlias($alias);
+            if ($collection->isEmpty()) {
+                throw new \Exception('Invalid query: Unknown Alias context');
+            }
+
+            $attribute = $schema[$collection->getId()][$key];
+
+            $array = $attribute['array'] ?? false;
+            $filters = $attribute['filters'] ?? [];
+
+            $value = ($array) ? $value : [$value];
+            $value = (is_null($value)) ? [] : $value;
+
+            foreach ($value as $index => $node) {
+                foreach (array_reverse($filters) as $filter) {
+                    $value[$index] = $this->decodeAttribute($filter, $node, $document);
+                }
+            }
+
+            if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
+                if (
+                    empty($selections)
+                    || \in_array($key, $selections)
+                    || \in_array('*', $selections)
+                    || \in_array($key, ['$createdAt', '$updatedAt'])
+                ) {
+                    // Prevent null values being set for createdAt and updatedAt
+                    if (\in_array($key, ['$createdAt', '$updatedAt']) && $value[0] === null) {
+                        //continue;
+                    } else {
+                        //$document->setAttribute($key, ($array) ? $value : $value[0]);
+                    }
+                }
+            }
+
+            $value = ($array) ? $value : $value[0];
+
+            $new->setAttribute($attribute['$id'], $value);
+        }
+
+        return $new;
+    }
+
+    /**
      * Casting
      *
      * @param Document $collection
@@ -6388,13 +6454,11 @@ class Database
 
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
-                foreach ($query->getValues() as $value) {
-                    if (\str_contains($value, '.')) {
-                        $relationshipSelections[] = $value;
-                        continue;
-                    }
-                    $selections[] = $value;
+                if (\str_contains($query->getAttribute(), '.')) {
+                    $relationshipSelections[] = $query->getAttribute();
+                    continue;
                 }
+                $selections[] = $query->getAttribute();
             }
         }
 

@@ -1838,7 +1838,7 @@ class MariaDB extends SQL
        //$selections = $this->getAttributeSelections($selects);
 
         $sql = "
-            SELECT {$this->getAttributeProjectionV2($selects, $alias)}
+            SELECT {$this->getAttributeProjectionV2($selects)}
             FROM {$this->getSQLTable($mainCollection)} AS {$this->quote($alias)}
             {$sqlJoin}
             {$sqlWhere}
@@ -2066,8 +2066,6 @@ class MariaDB extends SQL
         $alias = $query->getAlias();
         $alias = $this->filter($alias);
         $alias = $this->quote($alias);
-
-        //$placeholder = $this->getSQLPlaceholder($query);
         $placeholder = ID::unique();
 
         switch ($query->getMethod()) {

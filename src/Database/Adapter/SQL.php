@@ -214,15 +214,16 @@ abstract class SQL extends Adapter
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $name = $this->filter($collection);
-        $selections = $this->getAttributeSelections($queries);
+        $alias = Query::DEFAULT_ALIAS;
+        //$selections = $this->getAttributeSelections($queries);
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections)}
-            FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid 
-            {$this->getTenantQuery($collection)}
+		    SELECT {$this->getAttributeProjectionV2($queries)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            WHERE {$this->quote($alias)}._uid = :_uid 
+            {$this->getTenantQuery($collection, $alias)}
 		";
 
         if ($this->getSupportForUpdateLock()) {
@@ -230,12 +231,12 @@ abstract class SQL extends Adapter
         }
 
         $stmt = $this->getPDO()->prepare($sql);
-
         $stmt->bindValue(':_uid', $id);
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->getTenant());
         }
+        echo $stmt->queryString;
 
         $stmt->execute();
         $document = $stmt->fetchAll();
@@ -1540,20 +1541,26 @@ abstract class SQL extends Adapter
 
         $string = '';
         foreach ($selects as $select) {
-            var_dump($select->getAttribute());
-            var_dump($select->getAlias());
-            if(!empty($string)){
-                $string .= ', ';
-            }
-
-            $alias = $this->filter($select->getAlias());
-
+            $alias = $select->getAlias();
+            $alias = $this->filter($alias);
             $attribute = $select->getAttribute();
-            $attribute = $this->getInternalKeyForAttribute($attribute);
+            $attribute = match ($attribute) {
+                '$id' => '_uid',
+                '$internalId' => '_id',
+                '$tenant' => '_tenant',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                '$permissions' => '_permissions',
+                default => $attribute
+            };
 
             if ($attribute !== '*'){
                 $attribute = $this->filter($attribute);
                 $attribute = $this->quote($attribute);
+            }
+
+            if (!empty($string)){
+                $string .= ', ';
             }
 
             $string .= "{$this->quote($alias)}.{$attribute}";

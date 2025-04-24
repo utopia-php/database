@@ -2961,8 +2961,17 @@ class Database
         }
 
         $selects = Query::getSelectQueries($queries);
-        if(count($selects) !== count($queries)){
+        if (count($selects) !== count($queries)) {
+            // Do we want this check?
             throw new QueryException('Only select queries are allowed');
+        }
+
+        /**
+         * For security check
+         */
+        if (!empty($selects)) {
+            //$selects[] = Query::select('$id'); // Do we need this?
+            $selects[] = Query::select('$permissions', system: true);
         }
 
         $context = new QueryContext();
@@ -3098,7 +3107,10 @@ class Database
         // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
         // All internal attributes are default selected attributes for (MongoDB)
         if (!empty($selects)) {
-            $selectedAttributes = array_map(fn($q) => $q->getAttribute(), $selects);
+            $selectedAttributes = array_map(
+                fn ($q) => $q->getAttribute(),
+                array_filter($selects, fn ($q) => $q->isSystem() === false)
+            );
 
             foreach ($this->getInternalAttributes() as $internalAttribute) {
                 if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
@@ -5744,11 +5756,11 @@ class Database
 
         //$filters = self::convertQueries($collection, $filters);
 
-//        /**  @var array<Query> $queries */
-//        $queries = \array_merge(
-//            $selects,
-//            $filters
-//        );
+        //        /**  @var array<Query> $queries */
+        //        $queries = \array_merge(
+        //            $selects,
+        //            $filters
+        //        );
 
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
@@ -5781,48 +5793,48 @@ class Database
 
         $selects = \array_values($selects); // Since we may unset above
 
-//        foreach ($queries as $index => &$query) {
-//            switch ($query->getMethod()) {
-//                case Query::TYPE_SELECT:
-//                    $values = $query->getValues();
-//                    foreach ($values as $valueIndex => $value) {
-//                        if (\str_contains($value, '.')) {
-//                            // Shift the top level off the dot-path to pass the selection down the chain
-//                            // 'foo.bar.baz' becomes 'bar.baz'
-//                            $nestedSelections[] = Query::select([
-//                                \implode('.', \array_slice(\explode('.', $value), 1))
-//                            ]);
-//
-//                            $key = \explode('.', $value)[0];
-//
-//                            foreach ($relationships as $relationship) {
-//                                if ($relationship->getAttribute('key') === $key) {
-//                                    switch ($relationship->getAttribute('options')['relationType']) {
-//                                        case Database::RELATION_MANY_TO_MANY:
-//                                        case Database::RELATION_ONE_TO_MANY:
-//                                            unset($values[$valueIndex]);
-//                                            break;
-//
-//                                        case Database::RELATION_MANY_TO_ONE:
-//                                        case Database::RELATION_ONE_TO_ONE:
-//                                            $values[$valueIndex] = $key;
-//                                            break;
-//                                    }
-//                                }
-//                            }
-//                        }
-//                    }
-//                    $query->setValues(\array_values($values));
-//                    break;
-//                default:
-//                    if (\str_contains($query->getAttribute(), '.')) {
-//                        unset($queries[$index]);
-//                    }
-//                    break;
-//            }
-//        }
-//
-//        $queries = \array_values($queries);
+        //        foreach ($queries as $index => &$query) {
+        //            switch ($query->getMethod()) {
+        //                case Query::TYPE_SELECT:
+        //                    $values = $query->getValues();
+        //                    foreach ($values as $valueIndex => $value) {
+        //                        if (\str_contains($value, '.')) {
+        //                            // Shift the top level off the dot-path to pass the selection down the chain
+        //                            // 'foo.bar.baz' becomes 'bar.baz'
+        //                            $nestedSelections[] = Query::select([
+        //                                \implode('.', \array_slice(\explode('.', $value), 1))
+        //                            ]);
+        //
+        //                            $key = \explode('.', $value)[0];
+        //
+        //                            foreach ($relationships as $relationship) {
+        //                                if ($relationship->getAttribute('key') === $key) {
+        //                                    switch ($relationship->getAttribute('options')['relationType']) {
+        //                                        case Database::RELATION_MANY_TO_MANY:
+        //                                        case Database::RELATION_ONE_TO_MANY:
+        //                                            unset($values[$valueIndex]);
+        //                                            break;
+        //
+        //                                        case Database::RELATION_MANY_TO_ONE:
+        //                                        case Database::RELATION_ONE_TO_ONE:
+        //                                            $values[$valueIndex] = $key;
+        //                                            break;
+        //                                    }
+        //                                }
+        //                            }
+        //                        }
+        //                    }
+        //                    $query->setValues(\array_values($values));
+        //                    break;
+        //                default:
+        //                    if (\str_contains($query->getAttribute(), '.')) {
+        //                        unset($queries[$index]);
+        //                    }
+        //                    break;
+        //            }
+        //        }
+        //
+        //        $queries = \array_values($queries);
 
         $results = $this->adapter->find(
             $context,
@@ -6267,7 +6279,7 @@ class Database
             }
         }
 
-        $new = new Document;
+        $new = new Document();
 
         foreach ($document as $key => $value) {
             $alias = Query::DEFAULT_ALIAS;

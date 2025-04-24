@@ -134,8 +134,7 @@ class V2 extends Validator
                     }
                 }
 
-                echo PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL;
-                var_dump($query->getMethod(), $query->getCollection(), $query->getAlias());
+                //var_dump($query->getMethod(), $query->getCollection(), $query->getAlias());
 
                 $this->validateAlias($query);
 
@@ -249,8 +248,8 @@ class V2 extends Validator
                         $this->validateSelect($query);
 
                         break;
-//                    case Query::TYPE_SELECTION:
-//                        $this->validateSelections($query);
+                        //                    case Query::TYPE_SELECTION:
+                        //                        $this->validateSelections($query);
 
                         break;
                     case Query::TYPE_ORDER_ASC:

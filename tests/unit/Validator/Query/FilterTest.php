@@ -8,7 +8,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
-use Utopia\Validator;
 
 class FilterTest extends TestCase
 {

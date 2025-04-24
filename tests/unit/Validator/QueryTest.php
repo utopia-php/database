@@ -93,7 +93,8 @@ class QueryTest extends TestCase
         ];
 
         $attributes = array_map(
-            fn($attribute) => new Document($attribute), $attributes
+            fn ($attribute) => new Document($attribute),
+            $attributes
         );
 
         $collection = new Document([

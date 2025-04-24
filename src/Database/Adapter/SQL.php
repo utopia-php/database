@@ -1539,11 +1539,26 @@ abstract class SQL extends Adapter
             return Query::DEFAULT_ALIAS.'.*';
         }
 
+        $duplications = [];
+
         $string = '';
         foreach ($selects as $select) {
+            if($select->getAttribute() === '$collection'){
+                continue;
+            }
+
+            $needle = $select->getAlias().':'.$select->getAttribute();
+            
+            if (in_array($needle, $duplications)){
+                continue;
+            }
+
+            $duplications[] = $needle;
+
             $alias = $select->getAlias();
             $alias = $this->filter($alias);
             $attribute = $select->getAttribute();
+
             $attribute = match ($attribute) {
                 '$id' => '_uid',
                 '$internalId' => '_id',
@@ -1554,12 +1569,12 @@ abstract class SQL extends Adapter
                 default => $attribute
             };
 
-            if ($attribute !== '*'){
+            if ($attribute !== '*') {
                 $attribute = $this->filter($attribute);
                 $attribute = $this->quote($attribute);
             }
 
-            if (!empty($string)){
+            if (!empty($string)) {
                 $string .= ', ';
             }
 

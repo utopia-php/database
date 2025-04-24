@@ -88,6 +88,7 @@ class Query
     protected string $aliasRight = '';
     protected string $attributeRight = '';
     protected string $as = '';
+    protected bool $system = false;
     protected bool $onArray = false;
 
     /**
@@ -111,6 +112,7 @@ class Query
         string $aliasRight = '',
         string $collection = '',
         string $as = '',
+        bool $system = false,
     ) {
         if ($attribute === '' && \in_array($method, [Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC])) {
             $attribute = '$internalId';
@@ -135,6 +137,7 @@ class Query
         $this->attributeRight = $attributeRight;
         $this->collection = $collection;
         $this->as = $as;
+        $this->system = $system;
     }
 
     public function __clone(): void
@@ -560,9 +563,9 @@ class Query
         return new self(self::TYPE_SELECT, values: $attributes);
     }
 
-    public static function select(string $attribute, string $alias = '', string $as = '', string $function = ''): self
+    public static function select(string $attribute, string $alias = '', string $as = '', string $function = '', bool $system = false): self
     {
-        return new self(self::TYPE_SELECT, $attribute, [], alias: $alias, as: $as);
+        return new self(self::TYPE_SELECT, $attribute, [], alias: $alias, as: $as, system: $system);
     }
 
     /**
@@ -993,8 +996,6 @@ class Query
         return false;
     }
 
-
-
     public function onArray(): bool
     {
         return $this->onArray;
@@ -1007,5 +1008,13 @@ class Query
     public function setOnArray(bool $bool): void
     {
         $this->onArray = $bool;
+    }
+
+    /**
+     * Is This query added by the system
+     */
+    public function isSystem(): bool
+    {
+        return $this->system;
     }
 }

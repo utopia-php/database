@@ -268,8 +268,7 @@ class Pool extends Adapter
         array $filters = [],
         array $joins = [],
         array $orderQueries = []
-    ): array
-    {
+    ): array {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 

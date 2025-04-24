@@ -1577,10 +1577,7 @@ class Database
         }
 
         if ($collection->getId() !== self::METADATA) {
-            // FIXME: remove the unused methods
             $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            $val = $this->silent(fn () => $this->getDocument(self::METADATA, $collection->getId()));
-            $val->getAttributes();
         }
 
         $this->purgeCachedCollection($collection->getId());
@@ -3405,7 +3402,7 @@ class Database
         ) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
-        $collectionId = $collection;
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
@@ -3456,9 +3453,9 @@ class Database
         if (!$structure->isValid($document)) {
             throw new StructureException($structure->getDescription());
         }
-        $document = $this->withTransaction(function () use ($collection, $collectionId, $document) {
-            $metadataDocument = $this->getDocument(Database::METADATA, $collectionId);
-            $attributes = $metadataDocument->getAttribute('attributes', []);
+        $document = $this->withTransaction(function () use ($collection, $document) {
+            $collectionId = $collection->getId();
+            $attributes = $collection->getAttribute('attributes', []);
 
             foreach ($attributes as $index => $attr) {
                 if ($attr instanceof Document && $attr->getAttribute('autoIncrement') !== null) {

@@ -2856,10 +2856,9 @@ abstract class Base extends TestCase
 
         try {
             $queries = [Query::equal('title', ['test'])];
-            $doc = static::getDatabase()->find('test_documents', $queries);
+            static::getDatabase()->find('test_documents', $queries);
         } catch (Throwable $e) {
-            $this->fail('Queried against encrypt field. Failed to throw exeception.');
-            $this->assertTrue($e instanceof QueryException);
+            $this->fail('Should not have thrown error');
         }
     }
 

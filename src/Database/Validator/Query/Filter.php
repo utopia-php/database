@@ -74,6 +74,13 @@ class Filter extends Base
      */
     protected function isValidAttributeAndValues(string $attribute, array $values, string $method): bool
     {
+        if (
+            isset($this->schema[$attribute]['filters'])
+            && in_array('encrypt', $this->schema[$attribute]['filters'])
+        ) {
+            $this->message = 'Cannot select encrypted attribute: ' . $attribute;
+            return false;
+        }
         if (!$this->isValidAttribute($attribute)) {
             return false;
         }

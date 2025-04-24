@@ -2069,6 +2069,24 @@ abstract class Base extends TestCase
 
     public function testCreateDocument(): Document
     {
+        static::getDatabase()->addFilter(
+            'encrypt',
+            function (mixed $value) {
+                return json_encode([
+                    'data' => base64_encode($value),
+                    'method' => 'base64',
+                    'version' => 'test',
+                ]);
+            },
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                $value = json_decode($value, true);
+                return base64_decode($value['data']);
+            }
+        );
+
         static::getDatabase()->createCollection('documents');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'string', Database::VAR_STRING, 128, true));
@@ -2082,6 +2100,7 @@ abstract class Base extends TestCase
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'encrypt', Database::VAR_STRING, 128, true, filters:["encrypt"]));
 
         $document = static::getDatabase()->createDocument('documents', new Document([
             '$permissions' => [
@@ -2109,7 +2128,12 @@ abstract class Base extends TestCase
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
             'with-dash' => 'Works',
+            'encrypt' => 'arnab'
         ]));
+        $queries = [Query::select(['string','encrypt'])];
+        $fetch = static::getDatabase()->getDocument("documents", $document->getId(), $queries);
+        $this->assertNotEmpty(true, $fetch->getId());
+        $this->assertEquals(false, true);
 
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
@@ -2812,6 +2836,53 @@ abstract class Base extends TestCase
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
 
         return $document;
+    }
+
+    public function testEncryptAttributes(): void
+    {
+        // Add custom encrypt filter
+        static::getDatabase()->addFilter(
+            'encrypt',
+            function (mixed $value) {
+                return json_encode([
+                    'data' => base64_encode($value),
+                    'method' => 'base64',
+                    'version' => 'v1',
+                ]);
+            },
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                $value = json_decode($value, true);
+                return base64_decode($value['data']);
+            }
+        );
+
+        static::getDatabase()->createCollection('test_documents');
+
+        static::getDatabase()->createAttribute('test_documents', 'title', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute('test_documents', 'encrypt', Database::VAR_STRING, 128, true, filters: ['encrypt']);
+
+        static::getDatabase()->createDocument('test_documents', new Document([
+            'title' => 'Sample Title',
+            'encrypt' => 'secret',
+        ]));
+        // query against encrypt
+        try {
+            $queries = [Query::equal('encrypt', ['test'])];
+            $doc = static::getDatabase()->find('test_documents', $queries);
+            $this->fail('Queried against encrypt field. Failed to throw exeception.');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+        }
+
+        try {
+            $queries = [Query::equal('title', ['test'])];
+            static::getDatabase()->find('test_documents', $queries);
+        } catch (Throwable $e) {
+            $this->fail('Queried against encrypt field. Failed to throw exeception.');
+        }
     }
 
     /**

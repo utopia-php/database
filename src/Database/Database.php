@@ -4310,7 +4310,7 @@ class Database
                             }
 
                             if (\is_string($value)) {
-                                $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])]));
+                                $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select('$id')]));
                                 if ($related->isEmpty()) {
                                     // If no such document exists in related collection
                                     // For one-one we need to update the related key to null if no relation exists
@@ -4339,7 +4339,7 @@ class Database
                         switch (\gettype($value)) {
                             case 'string':
                                 $related = $this->skipRelationships(
-                                    fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])])
+                                    fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select('$id')])
                                 );
 
                                 if ($related->isEmpty()) {
@@ -4351,7 +4351,7 @@ class Database
                                 if (
                                     $oldValue?->getId() !== $value
                                     && !($this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
-                                        Query::select(['$id']),
+                                        Query::select('$id'),
                                         Query::equal($twoWayKey, [$value]),
                                     ]))->isEmpty())
                                 ) {
@@ -4372,7 +4372,7 @@ class Database
                                     if (
                                         $oldValue?->getId() !== $value->getId()
                                         && !($this->skipRelationships(fn () => $this->findOne($relatedCollection->getId(), [
-                                            Query::select(['$id']),
+                                            Query::select('$id'),
                                             Query::equal($twoWayKey, [$value->getId()]),
                                         ]))->isEmpty())
                                     ) {
@@ -4453,7 +4453,7 @@ class Database
                             foreach ($value as $relation) {
                                 if (\is_string($relation)) {
                                     $related = $this->skipRelationships(
-                                        fn () => $this->getDocument($relatedCollection->getId(), $relation, [Query::select(['$id'])])
+                                        fn () => $this->getDocument($relatedCollection->getId(), $relation, [Query::select('$id')])
                                     );
 
                                     if ($related->isEmpty()) {
@@ -4467,7 +4467,7 @@ class Database
                                     ));
                                 } elseif ($relation instanceof Document) {
                                     $related = $this->skipRelationships(
-                                        fn () => $this->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select(['$id'])])
+                                        fn () => $this->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select('$id')])
                                     );
 
                                     if ($related->isEmpty()) {
@@ -4496,7 +4496,7 @@ class Database
 
                         if (\is_string($value)) {
                             $related = $this->skipRelationships(
-                                fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])])
+                                fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select('$id')])
                             );
 
                             if ($related->isEmpty()) {
@@ -4507,7 +4507,7 @@ class Database
                             $this->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
                             $related = $this->skipRelationships(
-                                fn () => $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])])
+                                fn () => $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select('$id')])
                             );
 
                             if ($related->isEmpty()) {
@@ -4577,11 +4577,11 @@ class Database
 
                         foreach ($value as $relation) {
                             if (\is_string($relation)) {
-                                if (\in_array($relation, $oldIds) || $this->getDocument($relatedCollection->getId(), $relation, [Query::select(['$id'])])->isEmpty()) {
+                                if (\in_array($relation, $oldIds) || $this->getDocument($relatedCollection->getId(), $relation, [Query::select('$id')])->isEmpty()) {
                                     continue;
                                 }
                             } elseif ($relation instanceof Document) {
-                                $related = $this->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select(['$id'])]);
+                                $related = $this->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select('$id')]);
 
                                 if ($related->isEmpty()) {
                                     if (!isset($value['$permissions'])) {
@@ -5203,7 +5203,7 @@ class Database
         ) {
             Authorization::skip(function () use ($document, $relatedCollection, $twoWayKey) {
                 $related = $this->findOne($relatedCollection->getId(), [
-                    Query::select(['$id']),
+                    Query::select('$id'),
                     Query::equal($twoWayKey, [$document->getId()])
                 ]);
 
@@ -5226,7 +5226,7 @@ class Database
             && $side === Database::RELATION_SIDE_CHILD
         ) {
             $related = Authorization::skip(fn () => $this->findOne($relatedCollection->getId(), [
-                Query::select(['$id']),
+                Query::select('$id'),
                 Query::equal($twoWayKey, [$document->getId()])
             ]));
 
@@ -5264,14 +5264,14 @@ class Database
                 Authorization::skip(function () use ($document, $value, $relatedCollection, $twoWay, $twoWayKey, $side) {
                     if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
                         $related = $this->findOne($relatedCollection->getId(), [
-                            Query::select(['$id']),
+                            Query::select('$id'),
                             Query::equal($twoWayKey, [$document->getId()])
                         ]);
                     } else {
                         if (empty($value)) {
                             return;
                         }
-                        $related = $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])]);
+                        $related = $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select('$id')]);
                     }
 
                     if ($related->isEmpty()) {
@@ -5312,7 +5312,7 @@ class Database
 
                 if (!$twoWay) {
                     $value = $this->find($relatedCollection->getId(), [
-                        Query::select(['$id']),
+                        Query::select('$id'),
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX)
                     ]);
@@ -5335,7 +5335,7 @@ class Database
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $junctions = $this->find($junction, [
-                    Query::select(['$id']),
+                    Query::select('$id'),
                     Query::equal($twoWayKey, [$document->getId()]),
                     Query::limit(PHP_INT_MAX)
                 ]);
@@ -5405,7 +5405,7 @@ class Database
                 }
 
                 $value = $this->find($relatedCollection->getId(), [
-                    Query::select(['$id']),
+                    Query::select('$id'),
                     Query::equal($twoWayKey, [$document->getId()]),
                     Query::limit(PHP_INT_MAX),
                 ]);
@@ -5426,7 +5426,8 @@ class Database
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
                 $junctions = $this->skipRelationships(fn () => $this->find($junction, [
-                    Query::select(['$id', $key]),
+                    Query::select('$id'),
+                    Query::select($key),
                     Query::equal($twoWayKey, [$document->getId()]),
                     Query::limit(PHP_INT_MAX)
                 ]));
@@ -5853,7 +5854,7 @@ class Database
 
         //$results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        foreach ($results as &$node) {
+        foreach ($results as $index => $node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
@@ -5863,22 +5864,22 @@ class Database
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
             }
-        }
 
-        unset($query);
+            // Remove internal attributes which are not queried
+            if (!empty($selects)) {
+                $selectedAttributes = array_map(
+                    fn ($q) => $q->getAttribute(),
+                    array_filter($selects, fn ($q) => $q->isSystem() === false)
+                );
 
-        // Remove internal attributes which are not queried
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($results as $result) {
-                    foreach ($this->getInternalAttributes() as $internalAttribute) {
-                        if (!\in_array($internalAttribute['$id'], $values)) {
-                            $result->removeAttribute($internalAttribute['$id']);
-                        }
+                foreach ($this->getInternalAttributes() as $internalAttribute) {
+                    if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
+                        $node->removeAttribute($internalAttribute['$id']);
                     }
                 }
             }
+
+            $results[$index] = $node;
         }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);

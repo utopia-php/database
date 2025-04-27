@@ -1003,7 +1003,7 @@ class MariaDB extends SQL
 
             $columns = [];
             foreach ($attributeKeys as $key => $attribute) {
-                $columns[$key] = "`{$this->filter($attribute)}`";
+                $columns[$key] = "{$this->quote($this->filter($attribute))}";
             }
             $columns = '(' . \implode(', ', $columns) . ')';
 

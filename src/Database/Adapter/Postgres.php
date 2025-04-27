@@ -1033,6 +1033,7 @@ class Postgres extends SQL
      * @return array<Document>
      *
      * @throws DuplicateException
+     * @throws \Throwable
      */
     public function createDocuments(string $collection, array $documents): array
     {
@@ -1042,12 +1043,13 @@ class Postgres extends SQL
 
         try {
             $name = $this->filter($collection);
+
             $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
 
             $hasInternalId = null;
             foreach ($documents as $document) {
                 $attributes = $document->getAttributes();
-                $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
+                $attributeKeys = [...$attributeKeys, ...\array_keys($attributes)];
 
                 if ($hasInternalId === null) {
                     $hasInternalId = !empty($document->getInternalId());
@@ -1063,16 +1065,16 @@ class Postgres extends SQL
 
             $columns = [];
             foreach ($attributeKeys as $key => $attribute) {
-                $columns[$key] = "\"{$this->filter($attribute)}\"";
+                $columns[$key] = "{$this->quote($this->filter($attribute))}";
             }
             $columns = '(' . \implode(', ', $columns) . ')';
-
-            $internalIds = [];
 
             $bindIndex = 0;
             $batchKeys = [];
             $bindValues = [];
             $permissions = [];
+            $documentIds = [];
+            $documentTenants = [];
 
             foreach ($documents as $index => $document) {
                 $attributes = $document->getAttributes();
@@ -1082,13 +1084,15 @@ class Postgres extends SQL
                 $attributes['_permissions'] = \json_encode($document->getPermissions());
 
                 if (!empty($document->getInternalId())) {
-                    $internalIds[$document->getId()] = true;
                     $attributes['_id'] = $document->getInternalId();
                     $attributeKeys[] = '_id';
+                } else {
+                    $documentIds[] = $document->getId();
                 }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();
+                    $documentTenants[] = $document->getTenant();
                 }
 
                 $bindKeys = [];
@@ -1149,18 +1153,20 @@ class Postgres extends SQL
 
                 $stmtPermissions?->execute();
             }
+
+            $internalIds = $this->getInternalIds(
+                $collection,
+                $documentIds,
+                $documentTenants
+            );
+
+            foreach ($documents as $document) {
+                if (isset($internalIds[$document->getId()])) {
+                    $document['$internalId'] = $internalIds[$document->getId()];
+                }
+            }
         } catch (PDOException $e) {
             throw $this->processException($e);
-        }
-
-        foreach ($documents as $document) {
-            if (!isset($internalIds[$document->getId()])) {
-                $document['$internalId'] = $this->getDocument(
-                    $collection,
-                    $document->getId(),
-                    [Query::select(['$internalId'])]
-                )->getInternalId();
-            }
         }
 
         return $documents;
@@ -1509,9 +1515,9 @@ class Postgres extends SQL
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
-     * @param array $selects
-     * @param array $filters
-     * @param array $joins
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
      * @param array<Query> $orderQueries
      * @return array<Document>
      * @throws DatabaseException
@@ -1536,9 +1542,9 @@ class Postgres extends SQL
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
-        $collection = $context->getCollections()[0]->getId();
+        $name = $context->getCollections()[0]->getId();
+        $name = $this->filter($name);
 
-        $mainCollection = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
@@ -1621,21 +1627,19 @@ class Postgres extends SQL
 
         $sqlJoin = '';
         foreach ($joins as $join) {
-            /**
-             * @var $join Query
-             */
             $permissions = '';
-            $joinCollectionName = $this->filter($join->getCollection());
+            $collection = $join->getCollection();
+            $collection = $this->filter($collection);
 
-            $skipAuth = $context->skipAuth($join->getCollection(), $forPermission);
+            $skipAuth = $context->skipAuth($collection, $forPermission);
             if (! $skipAuth) {
-                $permissions = 'AND '.$this->getSQLPermissionsCondition($joinCollectionName, $roles, $join->getAlias(), $forPermission);
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias(), $forPermission);
             }
 
-            $sqlJoin .= "INNER JOIN {$this->getSQLTable($joinCollectionName)} AS {$this->quote($join->getAlias())}
+            $sqlJoin .= "INNER JOIN {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
             ON {$this->getSQLConditions($join->getValues(), $binds)}
             {$permissions}
-            {$this->getTenantQuery($joinCollectionName, $join->getAlias())}
+            {$this->getTenantQuery($collection, $join->getAlias())}
             ";
         }
 
@@ -1644,14 +1648,14 @@ class Postgres extends SQL
             $where[] = $conditions;
         }
 
-        $skipAuth = $context->skipAuth($collection, $forPermission);
+        $skipAuth = $context->skipAuth($name, $forPermission);
         if (! $skipAuth) {
-            $where[] = $this->getSQLPermissionsCondition($mainCollection, $roles, $alias, $forPermission);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($name, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1668,11 +1672,11 @@ class Postgres extends SQL
             $sqlLimit .= ' OFFSET :offset';
         }
 
-        $selections = $this->getAttributeSelections($selects);
+        //$selections = $this->getAttributeSelections($selects);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias)}
-            FROM {$this->getSQLTable($mainCollection)} AS {$this->quote($alias)}
+            SELECT {$this->getAttributeProjectionV2($selects)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlJoin}
             {$sqlWhere}
             {$sqlOrder}

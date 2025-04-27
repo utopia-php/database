@@ -11344,7 +11344,8 @@ abstract class Base extends TestCase
 
         // Select all parent attributes, some child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['*', 'models.year']),
+            Query::select('*'),
+            Query::select('models.year')
         ]);
 
         if ($make->isEmpty()) {
@@ -11360,7 +11361,8 @@ abstract class Base extends TestCase
 
         // Select all parent attributes, all child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['*', 'models.*']),
+            Query::select('*'),
+            Query::select('models.*')
         ]);
 
         if ($make->isEmpty()) {
@@ -11377,7 +11379,7 @@ abstract class Base extends TestCase
         // Select all parent attributes, all child attributes
         // Must select parent if selecting children
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['models.*']),
+            Query::select('models.*')
         ]);
 
         if ($make->isEmpty()) {
@@ -11393,7 +11395,7 @@ abstract class Base extends TestCase
 
         // Select all parent attributes, no child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name']),
+            Query::select('name'),
         ]);
 
         if ($make->isEmpty()) {
@@ -11853,21 +11855,23 @@ abstract class Base extends TestCase
         $this->assertEquals('Mayor 1', $documents[0]['cities'][0]['mayor']['name']);
 
         $documents = static::getDatabase()->find('countries', [
-            Query::select(['name']),
+            Query::select('name'),
             Query::limit(1)
         ]);
         $this->assertArrayHasKey('name', $documents[0]);
         $this->assertArrayNotHasKey('cities', $documents[0]);
 
         $documents = static::getDatabase()->find('countries', [
-            Query::select(['*']),
+            Query::select('*'),
             Query::limit(1)
         ]);
         $this->assertArrayHasKey('name', $documents[0]);
         $this->assertArrayNotHasKey('cities', $documents[0]);
 
         $documents = static::getDatabase()->find('countries', [
-            Query::select(['*', 'cities.*', 'cities.mayor.*']),
+            Query::select('*'),
+            Query::select('cities.*'),
+            Query::select('cities.mayor.*'),
             Query::limit(1)
         ]);
 
@@ -17183,12 +17187,17 @@ abstract class Base extends TestCase
         /**
          * Test Short select query, test pagination as well, Add order to select
          */
-        $selects = ['$internalId', '$id', '$collection', '$permissions', '$updatedAt'];
+        $selects = [];
+        $selects[] = Query::select('$internalId');
+        $selects[] = Query::select('$id');
+        $selects[] = Query::select('$collection');
+        $selects[] = Query::select('$permissions');
+        $selects[] = Query::select('$updatedAt');
 
         $count = static::getDatabase()->deleteDocuments(
             collection: 'bulk_delete',
             queries: [
-                Query::select([...$selects, '$createdAt']),
+                [...$selects, Query::select('$createdAt')],
                 Query::cursorAfter($docs[6]),
                 Query::greaterThan('$createdAt', '2000-01-01'),
                 Query::orderAsc('$createdAt'),

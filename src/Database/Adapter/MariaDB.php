@@ -1703,9 +1703,9 @@ class MariaDB extends SQL
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
-        $collection = $context->getCollections()[0]->getId();
+        $name = $context->getCollections()[0]->getId();
+        $name = $this->filter($name);
 
-        $mainCollection = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
@@ -1811,14 +1811,14 @@ class MariaDB extends SQL
             $where[] = $conditions;
         }
 
-        $skipAuth = $context->skipAuth($collection, $forPermission);
+        $skipAuth = $context->skipAuth($name, $forPermission);
         if (! $skipAuth) {
-            $where[] = $this->getSQLPermissionsCondition($mainCollection, $roles, $alias, $forPermission);
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($name, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1839,7 +1839,7 @@ class MariaDB extends SQL
 
         $sql = "
             SELECT {$this->getAttributeProjectionV2($selects)}
-            FROM {$this->getSQLTable($mainCollection)} AS {$this->quote($alias)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlJoin}
             {$sqlWhere}
             {$sqlOrder}

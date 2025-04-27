@@ -5705,6 +5705,10 @@ class Database
                 throw new AuthorizationException($authorization->getDescription());
             }
 
+            var_dump('############');
+            var_dump($skipAuth);
+            var_dump($forPermission);
+            var_dump($_collection->getId());
             $context->addSkipAuth($_collection->getId(), $forPermission, $skipAuth);
         }
 

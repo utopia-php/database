@@ -60,7 +60,7 @@ class QueryContext
 
     public function addSkipAuth(string $collection, string $permission, bool $skipAuth): void
     {
-        $this->skipAuthCollections[$permission][$collection] = $skipAuth;
+        $this->skipAuthCollections[$collection][$permission] = $skipAuth;
 
         var_dump($this->skipAuthCollections);
     }
@@ -71,9 +71,7 @@ class QueryContext
             return true;
         }
 
-        $this->skipAuthCollections[$permission][$collection] = false;
-
-        if (empty($this->skipAuthCollections[$permission][$collection])) {
+        if (empty($this->skipAuthCollections[$collection][$permission])) {
             return false;
         }
 

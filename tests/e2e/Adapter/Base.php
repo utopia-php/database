@@ -17187,17 +17187,13 @@ abstract class Base extends TestCase
         /**
          * Test Short select query, test pagination as well, Add order to select
          */
-        $selects = [];
-        $selects[] = Query::select('$internalId');
-        $selects[] = Query::select('$id');
-        $selects[] = Query::select('$collection');
-        $selects[] = Query::select('$permissions');
-        $selects[] = Query::select('$updatedAt');
+        $mandatory = ['$internalId', '$id', '$collection', '$permissions', '$updatedAt'];
 
         $count = static::getDatabase()->deleteDocuments(
             collection: 'bulk_delete',
             queries: [
-                [...$selects, Query::select('$createdAt')],
+                Query::select('$createdAt'),
+                ...array_map(fn($f) => Query::select($f), $mandatory),
                 Query::cursorAfter($docs[6]),
                 Query::greaterThan('$createdAt', '2000-01-01'),
                 Query::orderAsc('$createdAt'),

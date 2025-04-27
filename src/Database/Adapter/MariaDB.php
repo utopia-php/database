@@ -1676,9 +1676,9 @@ class MariaDB extends SQL
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
-     * @param array $selects
-     * @param array $filters
-     * @param array $joins
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
      * @param array<Query> $orderQueries
      * @return array<Document>
      * @throws DatabaseException
@@ -1788,21 +1788,19 @@ class MariaDB extends SQL
 
         $sqlJoin = '';
         foreach ($joins as $join) {
-            /**
-             * @var $join Query
-             */
             $permissions = '';
-            $joinCollectionName = $this->filter($join->getCollection());
+            $collection = $join->getCollection();
+            $collection = $this->filter($collection);
 
-            $skipAuth = $context->skipAuth($join->getCollection(), $forPermission);
+            $skipAuth = $context->skipAuth($collection, $forPermission);
             if (! $skipAuth) {
-                $permissions = 'AND '.$this->getSQLPermissionsCondition($joinCollectionName, $roles, $join->getAlias(), $forPermission);
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias(), $forPermission);
             }
 
-            $sqlJoin .= "INNER JOIN {$this->getSQLTable($joinCollectionName)} AS {$this->quote($join->getAlias())}
+            $sqlJoin .= "INNER JOIN {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
             ON {$this->getSQLConditions($join->getValues(), $binds)}
             {$permissions}
-            {$this->getTenantQuery($joinCollectionName, $join->getAlias())}
+            {$this->getTenantQuery($collection, $join->getAlias())}
             ";
         }
 

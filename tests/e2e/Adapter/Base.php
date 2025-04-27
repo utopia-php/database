@@ -8344,7 +8344,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $country = static::getDatabase()->findOne('country', [
-            Query::select(['*', 'city.name'])
+            Query::select('*'),
+            Query::select('city.name')
         ]);
 
         if ($country->isEmpty()) {
@@ -8355,7 +8356,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
 
         $country = static::getDatabase()->getDocument('country', 'country1', [
-            Query::select(['*', 'city.name'])
+            Query::select('*'),
+            Query::select('city.name')
         ]);
 
         $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));
@@ -8887,7 +8889,7 @@ abstract class Base extends TestCase
         ]));
 
         $documents = static::getDatabase()->find('artist', [
-            Query::select(['name']),
+            Query::select('name'),
             Query::limit(1)
         ]);
         $this->assertArrayNotHasKey('albums', $documents[0]);
@@ -8918,7 +8920,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $artist = static::getDatabase()->findOne('artist', [
-            Query::select(['*', 'albums.name'])
+            Query::select('*'),
+            Query::select('albums.name')
         ]);
 
         if ($artist->isEmpty()) {
@@ -8929,7 +8932,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('price', $artist->getAttribute('albums')[0]);
 
         $artist = static::getDatabase()->getDocument('artist', 'artist1', [
-            Query::select(['*', 'albums.name'])
+            Query::select('*'),
+            Query::select('albums.name')
         ]);
 
         $this->assertEquals('Album 1', $artist->getAttribute('albums')[0]->getAttribute('name'));
@@ -9351,7 +9355,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $customer = static::getDatabase()->findOne('customer', [
-            Query::select(['*', 'accounts.name'])
+            Query::select('*'),
+            Query::select('accounts.name')
         ]);
 
         if ($customer->isEmpty()) {
@@ -9362,7 +9367,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('number', $customer->getAttribute('accounts')[0]);
 
         $customer = static::getDatabase()->getDocument('customer', 'customer1', [
-            Query::select(['*', 'accounts.name'])
+            Query::select('*'),
+            Query::select('accounts.name')
         ]);
 
         $this->assertEquals('Account 1', $customer->getAttribute('accounts')[0]->getAttribute('name'));
@@ -9732,7 +9738,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('reviews', $movie);
 
         $documents = static::getDatabase()->find('review', [
-            Query::select(['date', 'movie.date'])
+            Query::select('date'),
+            Query::select('movie.date')
         ]);
 
         $this->assertCount(3, $documents);
@@ -9763,7 +9770,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $review = static::getDatabase()->findOne('review', [
-            Query::select(['*', 'movie.name'])
+            Query::select('*'),
+            Query::select('movie.name')
         ]);
 
         if ($review->isEmpty()) {
@@ -9774,7 +9782,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('length', $review->getAttribute('movie'));
 
         $review = static::getDatabase()->getDocument('review', 'review1', [
-            Query::select(['*', 'movie.name'])
+            Query::select('*'),
+            Query::select('movie.name')
         ]);
 
         $this->assertEquals('Movie 1', $review->getAttribute('movie')->getAttribute('name'));
@@ -10140,7 +10149,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $product = static::getDatabase()->findOne('product', [
-            Query::select(['*', 'store.name'])
+            Query::select('*'),
+            Query::select('store.name')
         ]);
 
         if ($product->isEmpty()) {
@@ -10151,7 +10161,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('opensAt', $product->getAttribute('store'));
 
         $product = static::getDatabase()->getDocument('product', 'product1', [
-            Query::select(['*', 'store.name'])
+            Query::select('*'),
+            Query::select('store.name')
         ]);
 
         $this->assertEquals('Store 1', $product->getAttribute('store')->getAttribute('name'));
@@ -10492,7 +10503,7 @@ abstract class Base extends TestCase
         $this->assertEquals(1, \count($playlist1Document->getAttribute('songs')));
 
         $documents = static::getDatabase()->find('playlist', [
-            Query::select(['name']),
+            Query::select('name'),
             Query::limit(1)
         ]);
 
@@ -10522,7 +10533,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $playlist = static::getDatabase()->findOne('playlist', [
-            Query::select(['*', 'songs.name'])
+            Query::select('*'),
+            Query::select('songs.name')
         ]);
 
         if ($playlist->isEmpty()) {
@@ -10533,7 +10545,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('length', $playlist->getAttribute('songs')[0]);
 
         $playlist = static::getDatabase()->getDocument('playlist', 'playlist1', [
-            Query::select(['*', 'songs.name'])
+            Query::select('*'),
+            Query::select('songs.name')
         ]);
 
         $this->assertEquals('Song 1', $playlist->getAttribute('songs')[0]->getAttribute('name'));
@@ -10904,7 +10917,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $student = static::getDatabase()->findOne('students', [
-            Query::select(['*', 'classes.name'])
+            Query::select('*'),
+            Query::select('classes.name')
         ]);
 
         if ($student->isEmpty()) {
@@ -10915,7 +10929,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('number', $student->getAttribute('classes')[0]);
 
         $student = static::getDatabase()->getDocument('students', 'student1', [
-            Query::select(['*', 'classes.name'])
+            Query::select('*'),
+            Query::select('classes.name')
         ]);
 
         $this->assertEquals('Class 1', $student->getAttribute('classes')[0]->getAttribute('name'));
@@ -11208,7 +11223,9 @@ abstract class Base extends TestCase
 
         // Select some parent attributes, some child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', 'models.name']),
+            Query::select('name'),
+            Query::select('models.name'),
+            Query::select('*'), // Added this to make tests pass, perhaps to add in to nesting queries?
         ]);
 
         if ($make->isEmpty()) {
@@ -11230,7 +11247,8 @@ abstract class Base extends TestCase
 
         // Select internal attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$id']),
+            Query::select('name'),
+            Query::select('$id')
         ]);
 
         if ($make->isEmpty()) {
@@ -11245,7 +11263,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$internalId']),
+            Query::select('name'),
+            Query::select('$internalId')
         ]);
 
         if ($make->isEmpty()) {
@@ -11260,7 +11279,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$collection']),
+            Query::select('name'),
+            Query::select('$collection'),
         ]);
 
         if ($make->isEmpty()) {
@@ -11275,7 +11295,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$createdAt']),
+            Query::select('name'),
+            Query::select('$createdAt'),
         ]);
 
         if ($make->isEmpty()) {
@@ -11290,7 +11311,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$updatedAt']),
+            Query::select('name'),
+            Query::select('$updatedAt'),
         ]);
 
         if ($make->isEmpty()) {
@@ -11305,7 +11327,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$permissions']),
+            Query::select('name'),
+            Query::select('$permissions'),
         ]);
 
         if ($make->isEmpty()) {

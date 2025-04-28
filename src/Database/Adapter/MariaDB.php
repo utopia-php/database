@@ -767,7 +767,7 @@ class MariaDB extends SQL
         $id = $this->filter($id);
 
         foreach ($attributes as $i => $attr) {
-            $collectionAttribute = \array_filter($collectionAttributes, fn ($collectionAttribute) => array_key_exists('key', $collectionAttribute) && $collectionAttribute['key'] === $attr);
+            $collectionAttribute = \array_filter($collectionAttributes, fn ($collectionAttribute) => array_key_exists('$id', $collectionAttribute) && $collectionAttribute['$id'] === $attr);
             $collectionAttribute = end($collectionAttribute);
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
             $length = empty($lengths[$i]) ? '' : '(' . (int)$lengths[$i] . ')';

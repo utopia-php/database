@@ -2814,6 +2814,54 @@ abstract class Base extends TestCase
         return $document;
     }
 
+    public function testEncryptAttributes(): void
+    {
+        // Add custom encrypt filter
+        static::getDatabase()->addFilter(
+            'encrypt',
+            function (mixed $value) {
+                return json_encode([
+                    'data' => base64_encode($value),
+                    'method' => 'base64',
+                    'version' => 'v1',
+                ]);
+            },
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                $value = json_decode($value, true);
+                return base64_decode($value['data']);
+            }
+        );
+
+        $col = static::getDatabase()->createCollection(__FUNCTION__);
+        $this->assertNotNull($col->getId());
+
+        static::getDatabase()->createAttribute($col->getId(), 'title', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute($col->getId(), 'encrypt', Database::VAR_STRING, 128, true, filters: ['encrypt']);
+
+        static::getDatabase()->createDocument($col->getId(), new Document([
+            'title' => 'Sample Title',
+            'encrypt' => 'secret',
+        ]));
+        // query against encrypt
+        try {
+            $queries = [Query::equal('encrypt', ['test'])];
+            $doc = static::getDatabase()->find($col->getId(), $queries);
+            $this->fail('Queried against encrypt field. Failed to throw exeception.');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+        }
+
+        try {
+            $queries = [Query::equal('title', ['test'])];
+            static::getDatabase()->find($col->getId(), $queries);
+        } catch (Throwable $e) {
+            $this->fail('Should not have thrown error');
+        }
+    }
+
     /**
      * @depends testCreateDocument
      */

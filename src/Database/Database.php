@@ -4208,16 +4208,12 @@ class Database
                 }
             }
 
-            $this->withTransaction(function () use ($collection, $updates, $authorization, $skipAuth, $batch) {
-                $getResults = fn () => $this->adapter->updateDocuments(
+            $this->withTransaction(function () use ($collection, $updates, $batch) {
+                $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
                     $batch
                 );
-
-                $skipAuth
-                    ? $authorization->skip($getResults)
-                    : $getResults();
             });
 
             foreach ($batch as $doc) {

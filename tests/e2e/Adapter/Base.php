@@ -2069,7 +2069,6 @@ abstract class Base extends TestCase
 
     public function testCreateDocument(): Document
     {
-
         static::getDatabase()->createCollection('documents');
 
         $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'string', Database::VAR_STRING, 128, true));
@@ -2836,19 +2835,20 @@ abstract class Base extends TestCase
             }
         );
 
-        static::getDatabase()->createCollection('test_documents');
+        $col = static::getDatabase()->createCollection(__FUNCTION__);
+        $this->assertNotNull($col->getId());
 
-        static::getDatabase()->createAttribute('test_documents', 'title', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('test_documents', 'encrypt', Database::VAR_STRING, 128, true, filters: ['encrypt']);
+        static::getDatabase()->createAttribute($col->getId(), 'title', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute($col->getId(), 'encrypt', Database::VAR_STRING, 128, true, filters: ['encrypt']);
 
-        static::getDatabase()->createDocument('test_documents', new Document([
+        static::getDatabase()->createDocument($col->getId(), new Document([
             'title' => 'Sample Title',
             'encrypt' => 'secret',
         ]));
         // query against encrypt
         try {
             $queries = [Query::equal('encrypt', ['test'])];
-            $doc = static::getDatabase()->find('test_documents', $queries);
+            $doc = static::getDatabase()->find($col->getId(), $queries);
             $this->fail('Queried against encrypt field. Failed to throw exeception.');
         } catch (Throwable $e) {
             $this->assertTrue($e instanceof QueryException);
@@ -2856,7 +2856,7 @@ abstract class Base extends TestCase
 
         try {
             $queries = [Query::equal('title', ['test'])];
-            static::getDatabase()->find('test_documents', $queries);
+            static::getDatabase()->find($col->getId(), $queries);
         } catch (Throwable $e) {
             $this->fail('Should not have thrown error');
         }

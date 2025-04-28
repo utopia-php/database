@@ -303,6 +303,7 @@ class Structure extends Validator
             $required = $attribute['required'] ?? false;
             $size = $attribute['size'] ?? 0;
             $signed = $attribute['signed'] ?? true;
+            $autoIncrement = $attribute['autoIncrement'] ?? false;
 
             if ($required === false && is_null($value)) { // Allow null value to optional params
                 continue;
@@ -310,6 +311,11 @@ class Structure extends Validator
 
             if ($type === Database::VAR_RELATIONSHIP) {
                 continue;
+            }
+
+            if ($autoIncrement == true && !is_null($value)) {
+                $this->message = "Auto-increment attributes can not be assigned manually";
+                return false;
             }
 
             $validators = [];

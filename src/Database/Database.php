@@ -1521,7 +1521,10 @@ class Database
             'filters' => $filters
         ];
         if ($type === Database::VAR_INTEGER && $autoIncrement === true) {
-            $attributeInput['autoIncrement'] = 0;
+            if ($required == true) {
+                throw new DatabaseException('Cannot set auto increment for a required attribute');
+            }
+            $attributeInput['autoIncrement'] = true;
         }
         $attribute = new Document($attributeInput);
 
@@ -1830,14 +1833,6 @@ class Database
      * @return Document
      * @throws Exception
      */
-    public function updateAttributeAutoIncrement(string $collectionId, string $attributeId, int $newValue): Document
-    {
-        return $this->updateAttributeMeta($collectionId, $attributeId, function (Document $attribute) use ($newValue) {
-            $currentValue = $attribute->getAttribute('autoIncrement');
-            $updatedValue = max($currentValue, $newValue);
-            $attribute->setAttribute('autoIncrement', $updatedValue);
-        });
-    }
 
     /**
      * Update Attribute. This method is for updating data that causes underlying structure to change. Check out other updateAttribute methods if you are looking for metadata adjustments.
@@ -3457,25 +3452,22 @@ class Database
             $collectionId = $collection->getId();
             $attributes = $collection->getAttribute('attributes', []);
 
-            foreach ($attributes as $index => $attr) {
-                if ($attr instanceof Document && $attr->getAttribute('autoIncrement') !== null) {
-                    $fieldId = $attr->getAttribute('$id');
-                    $currentAutoIncrement = $attr->getAttribute('autoIncrement');
-                    $userProvidedValue = $document->getAttribute($fieldId);
-
-                    $assignedValue = $userProvidedValue !== null ? $userProvidedValue : $currentAutoIncrement + 1;
-
-                    $document->setAttribute($fieldId, $assignedValue);
-
-                    $this->updateAttributeAutoIncrement($collectionId, $fieldId, $assignedValue);
-                }
-            }
 
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
 
-            return $this->adapter->createDocument($collection->getId(), $document);
+            $createdDocument = $this->adapter->createDocument($collection->getId(), $document);
+
+            foreach ($attributes as $index => $attr) {
+                if ($attr->getAttribute('autoIncrement') !== null) {
+                    $fieldId = $attr->getAttribute('$id');
+                    $createdDocument->setAttribute($fieldId, $createdDocument->getInternalId());
+                    $this->adapter->updateDocument($collection->getId(), $createdDocument->getId(), $createdDocument);
+                }
+            }
+
+            return $createdDocument;
         });
 
         if ($this->resolveRelationships) {

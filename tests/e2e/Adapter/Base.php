@@ -2255,46 +2255,50 @@ abstract class Base extends TestCase
 
     public function testCreateAutoIncrementAttributes(): void
     {
-        static::getDatabase()->createCollection('documents');
+        $col = static::getDatabase()->createCollection(__FUNCTION__);
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'auto-int', Database::VAR_INTEGER, 100, required: false, autoIncrement: true));
+        $this->assertEquals(true, static::getDatabase()->createAttribute($col->getId(), 'auto-int', Database::VAR_INTEGER, 100, required: false, autoIncrement: true));
 
-
-        $this->assertEquals(true, static::getDatabase()->createAttribute('documents', 'manual-int', Database::VAR_INTEGER, 100, required: false, autoIncrement: true));
-
-
-        $document1 = static::getDatabase()->createDocument('documents', new Document([]));
-        $this->assertNotEmpty(true, $document1->getId());
+        // Create documents and check auto-incremented values
+        $document1 = static::getDatabase()->createDocument($col->getId(), new Document([]));
+        $this->assertNotEmpty($document1->getId());
         $this->assertEquals(1, $document1->getAttribute('auto-int'));
 
-        $document2 = static::getDatabase()->createDocument('documents', new Document([]));
-        $this->assertNotEmpty(true, $document2->getId());
+        $document2 = static::getDatabase()->createDocument($col->getId(), new Document([]));
+        $this->assertNotEmpty($document2->getId());
         $this->assertEquals(2, $document2->getAttribute('auto-int'));
 
-        $document3 = static::getDatabase()->createDocument('documents', new Document([]));
-        $this->assertNotEmpty(true, $document3->getId());
+        $document3 = static::getDatabase()->createDocument($col->getId(), new Document([]));
+        $this->assertNotEmpty($document3->getId());
         $this->assertEquals(3, $document3->getAttribute('auto-int'));
 
-        $document4 = static::getDatabase()->createDocument('documents', new Document(['manual-int' => 10]));
-        $this->assertNotEmpty(true, $document4->getId());
-        $this->assertEquals(10, $document4->getAttribute('manual-int'));
+        $document4 = static::getDatabase()->createDocument($col->getId(), new Document([]));
+        $this->assertNotEmpty($document4->getId());
+        $this->assertEquals(4, $document4->getAttribute('auto-int'));
 
-        $document5 = static::getDatabase()->createDocument('documents', new Document([]));
-        $this->assertNotEmpty(true, $document5->getId());
-        $this->assertEquals(11, $document5->getAttribute('manual-int'));
+        $document5 = static::getDatabase()->createDocument($col->getId(), new Document([]));
+        $this->assertNotEmpty($document5->getId());
+        $this->assertEquals(5, $document5->getAttribute('auto-int'));
 
-        $document6 = static::getDatabase()->createDocument('documents', new Document([]));
-        $this->assertNotEmpty(true, $document6->getId());
+        $document6 = static::getDatabase()->createDocument($col->getId(), new Document([]));
+        $this->assertNotEmpty($document6->getId());
         $this->assertEquals(6, $document6->getAttribute('auto-int'));
 
-        $document7 = static::getDatabase()->createDocument('documents', new Document(['manual-int' => 5]));
-        $this->assertNotEmpty(true, $document7->getId());
-        $this->assertEquals(7, $document7->getAttribute('auto-int'));
-        $this->assertEquals(5, $document7->getAttribute('manual-int'));
+        // not allowing providing of autoincrement value
+        try {
+            static::getDatabase()->createDocument($col->getId(), new Document(['auto-int' => 7]));
+            $this->fail('providing value for auto increment integer not allowed');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof StructureException);
+        }
 
-        $document8 = static::getDatabase()->createDocument('documents', new Document([]));
-        $this->assertEquals(8, $document8->getAttribute('auto-int'));
-        $this->assertEquals(13, $document8->getAttribute('manual-int'));
+        // expecting error for required attribute with auto increment
+        try {
+            static::getDatabase()->createAttribute($col->getId(), 'manual-int', Database::VAR_INTEGER, 100, required: true, autoIncrement: true);
+            $this->fail('required and autoIncrement together is used and should have thrown error');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof DatabaseException);
+        }
     }
 
     /**

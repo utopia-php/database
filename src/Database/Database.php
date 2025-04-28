@@ -3155,7 +3155,7 @@ class Database
             $selects = Query::filterSelectsByPrefix($queries, $key);
 
             // Skip resolving if respecting nested queries AND no fields were selected
-            if ($this->ignoreNestedQueries && empty($selects)) {
+            if (! $this->ignoreNestedQueries && empty($selects)) {
                 $document->removeAttribute($key);
                 continue;
             }

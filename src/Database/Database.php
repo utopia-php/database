@@ -4179,15 +4179,11 @@ class Database
                 $new[] = Query::cursorAfter($last);
             }
 
-            $getResults = fn () => $this->find(
+            $batch = $this->silent(fn () => $this->find(
                 $collection->getId(),
                 array_merge($new, $queries),
                 forPermission: Database::PERMISSION_UPDATE
-            );
-
-            $batch = $this->silent(
-                fn () => $skipAuth ? $authorization->skip($getResults) : $getResults()
-            );
+            ));
 
             if (empty($batch)) {
                 break;

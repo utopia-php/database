@@ -462,9 +462,9 @@ class Query
      * @param string|int|float|bool $value
      * @return Query
      */
-    public static function notEqual(string $attribute, string|int|float|bool $value): self
+    public static function notEqual(string $attribute, string|int|float|bool $value, string $alias = ''): self
     {
-        return new self(self::TYPE_NOT_EQUAL, $attribute, [$value]);
+        return new self(self::TYPE_NOT_EQUAL, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -474,9 +474,9 @@ class Query
      * @param string|int|float|bool $value
      * @return Query
      */
-    public static function lessThan(string $attribute, string|int|float|bool $value): self
+    public static function lessThan(string $attribute, string|int|float|bool $value, string $alias = ''): self
     {
-        return new self(self::TYPE_LESSER, $attribute, [$value]);
+        return new self(self::TYPE_LESSER, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -486,9 +486,9 @@ class Query
      * @param string|int|float|bool $value
      * @return Query
      */
-    public static function lessThanEqual(string $attribute, string|int|float|bool $value): self
+    public static function lessThanEqual(string $attribute, string|int|float|bool $value, string $alias = ''): self
     {
-        return new self(self::TYPE_LESSER_EQUAL, $attribute, [$value]);
+        return new self(self::TYPE_LESSER_EQUAL, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -498,9 +498,9 @@ class Query
      * @param string|int|float|bool $value
      * @return Query
      */
-    public static function greaterThan(string $attribute, string|int|float|bool $value): self
+    public static function greaterThan(string $attribute, string|int|float|bool $value, string $alias = ''): self
     {
-        return new self(self::TYPE_GREATER, $attribute, [$value]);
+        return new self(self::TYPE_GREATER, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -510,9 +510,9 @@ class Query
      * @param string|int|float|bool $value
      * @return Query
      */
-    public static function greaterThanEqual(string $attribute, string|int|float|bool $value): self
+    public static function greaterThanEqual(string $attribute, string|int|float|bool $value, string $alias = ''): self
     {
-        return new self(self::TYPE_GREATER_EQUAL, $attribute, [$value]);
+        return new self(self::TYPE_GREATER_EQUAL, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -535,9 +535,9 @@ class Query
      * @param string|int|float|bool $end
      * @return Query
      */
-    public static function between(string $attribute, string|int|float|bool $start, string|int|float|bool $end): self
+    public static function between(string $attribute, string|int|float|bool $start, string|int|float|bool $end, string $alias = ''): self
     {
-        return new self(self::TYPE_BETWEEN, $attribute, [$start, $end]);
+        return new self(self::TYPE_BETWEEN, $attribute, [$start, $end], alias: $alias);
     }
 
     /**

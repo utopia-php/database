@@ -3030,8 +3030,8 @@ class Database
         $collectionCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection->getId();
         $documentCacheKey = $documentCacheHash = $collectionCacheKey . ':' . $id;
 
-        if (!empty($selections)) {
-            $documentCacheHash .= ':' . \md5(\implode($selections));
+        if (!empty($selects)) {
+            $documentCacheHash .= ':' . \md5(\serialize($selects));
         }
 
         try {
@@ -3081,7 +3081,7 @@ class Database
         }
 
         $document = $this->casting($collection, $document);
-        $document = $this->decodeV2($context, $document, $selections);
+        $document = $this->decodeV2($context, $document, $selects);
         $this->map = [];
 
         if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
@@ -5701,12 +5701,6 @@ class Database
                 throw new AuthorizationException($authorization->getDescription());
             }
 
-            var_dump('############');
-            var_dump($skipAuth);
-            var_dump($forPermission);
-            var_dump($_collection->getId());
-            var_dump('############');
-
             $context->addSkipAuth($this->adapter->filter($_collection->getId()), $forPermission, $skipAuth);
         }
 
@@ -5857,11 +5851,12 @@ class Database
         //$results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         foreach ($results as $index => $node) {
+            $node = $this->casting($collection, $node);
+            $node = $this->decodeV2($context, $node, $selects);
+
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
-            $node = $this->casting($collection, $node);
-            $node = $this->decode($collection, $node, $selections);
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
@@ -6265,12 +6260,11 @@ class Database
      * @return Document
      * @throws DatabaseException
      */
-    public function decodeV2(QueryContext $context, Document $document, array $selections = []): Document
+    public function decodeV2(QueryContext $context, Document $document, array $selects = []): Document
     {
         $schema = [];
 
         foreach ($context->getCollections() as $collection) {
-
             foreach ($collection->getAttribute('attributes', []) as $attribute) {
                 $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
                 $key = $this->adapter->filter($key);
@@ -6278,7 +6272,7 @@ class Database
             }
 
             foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
-                $schema[$collection->getId()][$attribute['$id']] = new Document($attribute);
+                $schema[$collection->getId()][$attribute['$id']] = $attribute;
             }
         }
 
@@ -6287,12 +6281,23 @@ class Database
         foreach ($document as $key => $value) {
             $alias = Query::DEFAULT_ALIAS;
 
+            foreach ($selects as $select) {
+                if($this->adapter->filter($select->getAttribute()) == $key){
+                    $alias = $select->getAlias();
+                    break;
+                }
+            }
+
             $collection = $context->getCollectionByAlias($alias);
             if ($collection->isEmpty()) {
                 throw new \Exception('Invalid query: Unknown Alias context');
             }
 
-            $attribute = $schema[$collection->getId()][$key];
+            $attribute = $schema[$collection->getId()][$key] ?? null;
+
+            if($attribute === null){
+                continue;
+            }
 
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
@@ -6306,21 +6311,21 @@ class Database
                 }
             }
 
-            if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-                if (
-                    empty($selections)
-                    || \in_array($key, $selections)
-                    || \in_array('*', $selections)
-                    || \in_array($key, ['$createdAt', '$updatedAt'])
-                ) {
-                    // Prevent null values being set for createdAt and updatedAt
-                    if (\in_array($key, ['$createdAt', '$updatedAt']) && $value[0] === null) {
-                        //continue;
-                    } else {
-                        //$document->setAttribute($key, ($array) ? $value : $value[0]);
-                    }
-                }
-            }
+//            if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
+//                if (
+//                    empty($selections)
+//                    || \in_array($key, $selections)
+//                    || \in_array('*', $selections)
+//                    || \in_array($key, ['$createdAt', '$updatedAt'])
+//                ) {
+//                    // Prevent null values being set for createdAt and updatedAt
+//                    if (\in_array($key, ['$createdAt', '$updatedAt']) && $value[0] === null) {
+//                        continue;
+//                    } else {
+//                        $document->setAttribute($key, ($array) ? $value : $value[0]);
+//                    }
+//                }
+//            }
 
             $value = ($array) ? $value : $value[0];
 
@@ -6354,7 +6359,8 @@ class Database
             if (is_null($value)) {
                 continue;
             }
-
+var_dump('############# casting');
+var_dump($type);
             if ($array) {
                 $value = !is_string($value)
                     ? $value

@@ -231,6 +231,8 @@ abstract class Base extends TestCase
 
         static::getDatabase()->createAttribute('__users', 'username', Database::VAR_STRING, 100, false);
         static::getDatabase()->createAttribute('__sessions', 'user_id', Database::VAR_STRING, 100, false);
+        static::getDatabase()->createAttribute('__sessions', 'boolean', Database::VAR_BOOLEAN, 0, false);
+        static::getDatabase()->createAttribute('__sessions', 'float', Database::VAR_FLOAT, 0, false);
 
         $user1 = static::getDatabase()->createDocument('__users', new Document([
             'username' => 'Donald',
@@ -268,6 +270,8 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
+            'boolean' => false,
+            'float' => 10.5,
         ]));
 
         $user2 = static::getDatabase()->createDocument('__users', new Document([
@@ -283,6 +287,8 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
+            'boolean' => false,
+            'float' => 5.5,
         ]));
 
         /**
@@ -511,22 +517,34 @@ abstract class Base extends TestCase
             '__users',
             [
                 Query::select('*', 'main'),
-                Query::select('*', 'U'),
                 Query::select('$id', 'main'),
-                Query::select('user_id', 'U', as: 'user_id'),
+                Query::select('user_id', 'S', as: 'we need to support this'),
+                Query::select('float', 'S'),
+                Query::select('boolean', 'S'),
+                Query::select('*', 'S'),
                 Query::join(
                     '__sessions',
-                    'U',
+                    'S',
                     [
-                        Query::relationEqual('', '$id', 'U', 'user_id'),
-                        //Query::equal('$id', [$session1->getId()], 'U'),
+                        Query::relationEqual('', '$id', 'S', 'user_id'),
+                        Query::greaterThan('float', 1.1, 'S'),
                     ]
                 ),
             ]
         );
 
-        var_dump($documents);
-        //$this->assertEquals('shmuel1', 'shmuel2');
+        $document = end($documents);
+
+//        $this->assertIsFloat($document->getAttribute('float_unsigned'));
+//        $this->assertEquals(5.55, $document->getAttribute('float_unsigned'));
+//
+//        $this->assertIsBool($document->getAttribute('boolean'));
+//        $this->assertEquals(true, $document->getAttribute('boolean'));
+//        //$this->assertIsArray($document->getAttribute('colors'));
+//        //$this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+//
+//        var_dump($document);
+       $this->assertEquals('shmuel1', 'shmuel2');
     }
 
     public function testDeleteRelatedCollection(): void

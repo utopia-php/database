@@ -762,26 +762,31 @@ class MariaDB extends SQL
             throw new NotFoundException('Collection not found');
         }
 
+        /**
+         * We do not have internalId's added to list, since we check only for array field
+         */
         $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
 
         $id = $this->filter($id);
 
         foreach ($attributes as $i => $attr) {
-            $collectionAttribute = \array_filter($collectionAttributes, fn ($collectionAttribute) => array_key_exists('key', $collectionAttribute) && $collectionAttribute['key'] === $attr);
-            $collectionAttribute = end($collectionAttribute);
+            $attribute = null;
+            foreach ($collectionAttributes as $collectionAttribute) {
+                if (\strtolower($collectionAttribute['$id']) === \strtolower($attr)) {
+                    $attribute = $collectionAttribute;
+                    break;
+                }
+            }
+
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
             $length = empty($lengths[$i]) ? '' : '(' . (int)$lengths[$i] . ')';
 
-            $attr = match ($attr) {
-                '$id' => '_uid',
-                '$createdAt' => '_createdAt',
-                '$updatedAt' => '_updatedAt',
-                default => $this->filter($attr),
-            };
+            $attr = $this->getInternalKeyForAttribute($attr);
+            $attr = $this->filter($attr);
 
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
-            if (!empty($collectionAttribute['array']) && $this->getSupportForCastIndexArray()) {
+            if ($this->getSupportForCastIndexArray() && !empty($attribute['array'])) {
                 $attributes[$i] = '(CAST(`' . $attr . '` AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }

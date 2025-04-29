@@ -1783,6 +1783,10 @@ class MariaDB extends SQL
                 $order = Database::ORDER_DESC;
             }
 
+            /**
+             * Reminder to when releasing joins we do not add _id any more
+             * We can validate a cursor has an order by query
+             */
             $orders[] = "{$this->quote($alias)}.{$this->quote('_id')} ".$order;
         }
 

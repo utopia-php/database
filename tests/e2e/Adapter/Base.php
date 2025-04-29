@@ -530,6 +530,7 @@ abstract class Base extends TestCase
                         Query::greaterThan('float', 1.1, 'S'),
                     ]
                 ),
+                Query::orderDesc('float', 'S'),
             ]
         );
 
@@ -542,8 +543,8 @@ abstract class Base extends TestCase
 //        $this->assertEquals(true, $document->getAttribute('boolean'));
 //        //$this->assertIsArray($document->getAttribute('colors'));
 //        //$this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
-//
-//        var_dump($document);
+
+        var_dump($document);
        $this->assertEquals('shmuel1', 'shmuel2');
     }
 

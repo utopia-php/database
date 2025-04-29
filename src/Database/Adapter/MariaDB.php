@@ -762,14 +762,15 @@ class MariaDB extends SQL
             throw new NotFoundException('Collection not found');
         }
 
+        $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
+
+        /**
+         * We do not have internalId's added to list, since we check only for array field
+         */
+
         $id = $this->filter($id);
 
         foreach ($attributes as $i => $attr) {
-            $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
-
-            /**
-             * We do not have internalId's added to list, since we check only for array field
-             */
             $attribute = null;
             foreach ($collectionAttributes as $collectionAttribute) {
                 if (\strtolower($collectionAttribute['$id']) === \strtolower($attr)) {

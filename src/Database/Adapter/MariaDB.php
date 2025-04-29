@@ -768,7 +768,7 @@ class MariaDB extends SQL
             $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
 
             /**
-             * We do not have internalId's added to list, no need since we check for is array field
+             * We do not have internalId's added to list, since we check only for array field
              */
             $attribute = null;
             foreach ($collectionAttributes as $collectionAttribute) {

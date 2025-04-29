@@ -786,10 +786,8 @@ class MariaDB extends SQL
 
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
-            if($this->getSupportForCastIndexArray()){
-                if (!empty($attribute['array'])) {
-                    $attributes[$i] = '(CAST(`' . $attr . '` AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
-                }
+            if ($this->getSupportForCastIndexArray() && !empty($attribute['array'])) {
+                $attributes[$i] = '(CAST(`' . $attr . '` AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
 

@@ -3529,11 +3529,13 @@ class Database
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
-            foreach ($batch as $doc) {
+            foreach ($batch as $document) {
                 if ($this->resolveRelationships) {
-                    $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
+                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
-                $onNext && $onNext($doc);
+
+                $document = $this->decode($collection, $document);
+                $onNext && $onNext($document);
                 $modified++;
             }
         }
@@ -4206,6 +4208,8 @@ class Database
                 if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                     throw new ConflictException('Document was updated after the request timestamp');
                 }
+
+                $document = $this->encode($collection, $document);
             }
 
             $this->withTransaction(function () use ($collection, $updates, $batch) {
@@ -4216,16 +4220,19 @@ class Database
                 );
             });
 
-            foreach ($batch as $doc) {
+            unset($document);
+
+            foreach ($batch as $document) {
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
-                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
+                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
+                        $this->purgeCachedDocument($collection->getId(), $document->getId());
                     });
                 } else {
-                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
+                    $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
 
-                $onNext && $onNext($doc);
+                $document = $this->decode($collection, $document);
+                $onNext && $onNext($document);
                 $modified++;
             }
 

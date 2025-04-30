@@ -4144,6 +4144,10 @@ class Database
         unset($updates['$createdAt']);
         unset($updates['$tenant']);
 
+        if ($this->adapter->getSharedTables()) {
+            $updates['$tenant'] = $this->adapter->getTenant();
+        }
+
         if (!$this->preserveDates) {
             $updates['$updatedAt'] = DateTime::now();
         }
@@ -4165,7 +4169,6 @@ class Database
         $last = $cursor;
         $modified = 0;
 
-        // Resolve and update relationships
         while (true) {
             if ($limit && $limit < $batchSize) {
                 $batchSize = $limit;
@@ -4192,11 +4195,13 @@ class Database
             }
 
             foreach ($batch as &$document) {
+                $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+
                 if ($this->resolveRelationships) {
-                    $newDocument = new Document(array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
-                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
-                    $document = $newDocument;
+                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
                 }
+
+                $document = $new;
 
                 // Check if document was updated after the request timestamp
                 try {
@@ -4220,19 +4225,10 @@ class Database
                 );
             });
 
-            unset($document);
-
-            foreach ($batch as $document) {
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                        $this->purgeCachedDocument($collection->getId(), $document->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
-                }
-
-                $document = $this->decode($collection, $document);
-                $onNext && $onNext($document);
+            foreach ($batch as $i=>$doc) {
+                $this->purgeCachedDocument($collection->getId(), $doc->getId());
+                $doc = $this->decode($collection, $doc);
+                $onNext && $onNext($doc);
                 $modified++;
             }
 
@@ -6112,7 +6108,7 @@ class Database
             }
         }
 
-        $attributes = array_merge($attributes, $this->getInternalAttributes());
+        $attributes = \array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6132,7 +6128,7 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as &$node) {
-                foreach (array_reverse($filters) as $filter) {
+                foreach (\array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document);
                 }
             }

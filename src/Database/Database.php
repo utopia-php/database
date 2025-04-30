@@ -4225,7 +4225,7 @@ class Database
                 );
             });
 
-            foreach ($batch as $i=>$doc) {
+            foreach ($batch as $doc) {
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
                 $onNext && $onNext($doc);

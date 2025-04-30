@@ -128,9 +128,19 @@ class Postgres extends SQL
         $sql = "CREATE SCHEMA \"{$name}\"";
         $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 
-        return $this->getPDO()
+        $dbCreation = $this->getPDO()
             ->prepare($sql)
             ->execute();
+
+        $collation = "
+            CREATE COLLATION IF NOT EXISTS utf8_ci (
+            provider = icu,
+            locale   = 'und-u-ks-primary',
+            deterministic = false
+            );
+        ";
+        $this->getPDO()->prepare($collation)->execute();
+        return $dbCreation;
     }
 
     /**
@@ -203,7 +213,6 @@ class Postgres extends SQL
         }
 
         $sqlTenant = $this->sharedTables ? '_tenant INTEGER DEFAULT NULL,' : '';
-
         $collection = "
             CREATE TABLE {$this->getSQLTable($id)} (
                 _id SERIAL NOT NULL,
@@ -276,8 +285,15 @@ class Postgres extends SQL
                 $indexId = $this->filter($index->getId());
                 $indexType = $index->getAttribute('type');
                 $indexAttributes = $index->getAttribute('attributes', []);
+                // $indexAttributesWithType = [];
+                // foreach ($indexAttributes as $indexAttribute) {
+                //     foreach ($attributes as $attribute) {
+                //         if($attribute->getId()===$indexAttribute){
+                //             $indexAttributesWithType[$indexAttribute] = $attribute->getAttribute('type');
+                //         }
+                //     }
+                // }
                 $indexOrders = $index->getAttribute('orders', []);
-
                 $this->createIndex(
                     $id,
                     $indexId,
@@ -816,10 +832,11 @@ class Postgres extends SQL
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
+        
 
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
-
+    
             $attr = match ($attr) {
                 '$id' => '_uid',
                 '$createdAt' => '_createdAt',
@@ -828,30 +845,37 @@ class Postgres extends SQL
             };
 
             if (Database::INDEX_UNIQUE === $type) {
-                $attributes[$i] = "LOWER(\"{$attr}\"::text) {$order}";
+                if($attr === "time"){
+                    $attributes[$i] = "\"{$attr}\" {$order}";
+                }
+                else{
+                    // Use collation instead of LOWER() function
+                    $attributes[$i] = "\"{$attr}\" COLLATE utf8_ci {$order}";
+                }
             } else {
                 $attributes[$i] = "\"{$attr}\" {$order}";
             }
         }
-
+    
         $sqlType = match ($type) {
             Database::INDEX_KEY,
             Database::INDEX_FULLTEXT => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
             default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT),
         };
-
+    
         $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
         $attributes = \implode(', ', $attributes);
-
+    
         if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }
-
+    
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
+        
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
-
+    
         try {
             return $this->getPDO()
                 ->prepare($sql)
@@ -860,7 +884,6 @@ class Postgres extends SQL
             throw $this->processException($e);
         }
     }
-
     /**
      * Delete Index
      *

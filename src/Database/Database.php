@@ -3488,7 +3488,7 @@ class Database
         $time = DateTime::now();
         $modified = 0;
 
-        foreach ($documents as &$document) {
+        foreach ($documents as $document) {
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 

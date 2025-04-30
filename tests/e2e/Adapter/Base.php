@@ -2289,13 +2289,15 @@ abstract class Base extends TestCase
         $this->assertEquals($count, \count($documents));
 
         foreach ($documents as $document) {
+            $fresh = static::getDatabase()->getDocument($collection, $document->getId());
+            $this->assertEquals($document, $fresh);
             $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
             $this->assertEquals(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
+            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
         }
 
         return $documents;
@@ -17600,6 +17602,8 @@ abstract class Base extends TestCase
         $this->assertEquals(5, $count);
 
         foreach ($results as $document) {
+            $fresh = static::getDatabase()->getDocument($collection, $document->getId());
+            $this->assertEquals($fresh, $document);
             $this->assertEquals('text📝 updated', $document->getAttribute('string'));
         }
 

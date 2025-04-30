@@ -3488,7 +3488,7 @@ class Database
         $time = DateTime::now();
         $modified = 0;
 
-        foreach ($documents as &$document) {
+        foreach ($documents as $document) {
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 
@@ -3529,11 +3529,13 @@ class Database
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
-            foreach ($batch as $doc) {
+            foreach ($batch as $document) {
                 if ($this->resolveRelationships) {
-                    $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
+                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
-                $onNext && $onNext($doc);
+
+                $document = $this->decode($collection, $document);
+                $onNext && $onNext($document);
                 $modified++;
             }
         }
@@ -4142,6 +4144,10 @@ class Database
         unset($updates['$createdAt']);
         unset($updates['$tenant']);
 
+        if ($this->adapter->getSharedTables()) {
+            $updates['$tenant'] = $this->adapter->getTenant();
+        }
+
         if (!$this->preserveDates) {
             $updates['$updatedAt'] = DateTime::now();
         }
@@ -4163,7 +4169,6 @@ class Database
         $last = $cursor;
         $modified = 0;
 
-        // Resolve and update relationships
         while (true) {
             if ($limit && $limit < $batchSize) {
                 $batchSize = $limit;
@@ -4190,11 +4195,13 @@ class Database
             }
 
             foreach ($batch as &$document) {
+                $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+
                 if ($this->resolveRelationships) {
-                    $newDocument = new Document(array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
-                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
-                    $document = $newDocument;
+                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
                 }
+
+                $document = $new;
 
                 // Check if document was updated after the request timestamp
                 try {
@@ -4206,6 +4213,8 @@ class Database
                 if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                     throw new ConflictException('Document was updated after the request timestamp');
                 }
+
+                $document = $this->encode($collection, $document);
             }
 
             $this->withTransaction(function () use ($collection, $updates, $batch) {
@@ -4217,14 +4226,8 @@ class Database
             });
 
             foreach ($batch as $doc) {
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
-                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                }
-
+                $this->purgeCachedDocument($collection->getId(), $doc->getId());
+                $doc = $this->decode($collection, $doc);
                 $onNext && $onNext($doc);
                 $modified++;
             }
@@ -6105,7 +6108,7 @@ class Database
             }
         }
 
-        $attributes = array_merge($attributes, $this->getInternalAttributes());
+        $attributes = \array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6125,7 +6128,7 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as &$node) {
-                foreach (array_reverse($filters) as $filter) {
+                foreach (\array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document);
                 }
             }

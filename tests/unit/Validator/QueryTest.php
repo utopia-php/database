@@ -7,14 +7,12 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Queries\Documents;
+use Utopia\Database\QueryContext;
+use Utopia\Database\Validator\Queries\V2 as DocumentsValidator;
 
 class QueryTest extends TestCase
 {
-    /**
-     * @var array<Document>
-     */
-    protected array $attributes;
+    protected QueryContext $context;
 
     /**
      * @throws Exception
@@ -94,9 +92,23 @@ class QueryTest extends TestCase
             ],
         ];
 
-        foreach ($attributes as $attribute) {
-            $this->attributes[] = new Document($attribute);
-        }
+        $attributes = array_map(
+            fn ($attribute) => new Document($attribute),
+            $attributes
+        );
+
+        $collection = new Document([
+            '$id' => Database::METADATA,
+            '$collection' => Database::METADATA,
+            'name' => 'movies',
+            'attributes' => $attributes,
+            'indexes' => [],
+        ]);
+
+        $context = new QueryContext();
+        $context->add($collection);
+
+        $this->context = $context;
     }
 
     public function tearDown(): void
@@ -108,7 +120,7 @@ class QueryTest extends TestCase
      */
     public function testQuery(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man', 'Ant Man'])]));
         $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man'])]));
@@ -138,7 +150,7 @@ class QueryTest extends TestCase
      */
     public function testAttributeNotFound(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $response = $validator->isValid([Query::equal('name', ['Iron Man'])]);
         $this->assertEquals(false, $response);
@@ -154,7 +166,7 @@ class QueryTest extends TestCase
      */
     public function testAttributeWrongType(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $response = $validator->isValid([Query::equal('title', [1776])]);
         $this->assertEquals(false, $response);
@@ -166,7 +178,7 @@ class QueryTest extends TestCase
      */
     public function testQueryDate(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $response = $validator->isValid([Query::greaterThan('birthDay', '1960-01-01 10:10:10')]);
         $this->assertEquals(true, $response);
@@ -177,7 +189,7 @@ class QueryTest extends TestCase
      */
     public function testQueryLimit(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $response = $validator->isValid([Query::limit(25)]);
         $this->assertEquals(true, $response);
@@ -191,7 +203,7 @@ class QueryTest extends TestCase
      */
     public function testQueryOffset(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $response = $validator->isValid([Query::offset(25)]);
         $this->assertEquals(true, $response);
@@ -205,7 +217,7 @@ class QueryTest extends TestCase
      */
     public function testQueryOrder(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $response = $validator->isValid([Query::orderAsc('title')]);
         $this->assertEquals(true, $response);
@@ -225,7 +237,7 @@ class QueryTest extends TestCase
      */
     public function testQueryCursor(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $response = $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]);
         $this->assertEquals(true, $response);
@@ -243,11 +255,12 @@ class QueryTest extends TestCase
             Query::cursorAfter(new Document([])),
         ];
 
-        $queries = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]);
-        $this->assertCount(2, $queries);
-        foreach ($queries as $query) {
-            $this->assertEquals(true, in_array($query->getMethod(), [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]));
-        }
+        $query = Query::getCursorQueries($queries);
+
+        $this->assertNotNull($query);
+        $this->assertInstanceOf(Query::class, $query);
+        $this->assertEquals($query->getMethod(), Query::TYPE_CURSOR_BEFORE);
+        $this->assertNotEquals($query->getMethod(), Query::TYPE_CURSOR_AFTER);
     }
 
     /**
@@ -255,7 +268,7 @@ class QueryTest extends TestCase
      */
     public function testQueryEmpty(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $response = $validator->isValid([Query::equal('title', [''])]);
         $this->assertEquals(true, $response);
@@ -284,7 +297,7 @@ class QueryTest extends TestCase
      */
     public function testOrQuery(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context);
 
         $this->assertFalse($validator->isValid(
             [Query::or(

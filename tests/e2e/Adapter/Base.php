@@ -207,6 +207,347 @@ abstract class Base extends TestCase
         $this->assertIsString(static::getDatabase()->getConnectionId());
     }
 
+    /**
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws TimeoutException
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws DatabaseException
+     * @throws QueryException
+     */
+    public function testJoin()
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        Authorization::setRole('user:bob');
+
+        static::getDatabase()->createCollection('__users');
+        static::getDatabase()->createCollection('__sessions');
+
+        static::getDatabase()->createAttribute('__users', 'username', Database::VAR_STRING, 100, false);
+        static::getDatabase()->createAttribute('__sessions', 'user_id', Database::VAR_STRING, 100, false);
+        static::getDatabase()->createAttribute('__sessions', 'boolean', Database::VAR_BOOLEAN, 0, false);
+        static::getDatabase()->createAttribute('__sessions', 'float', Database::VAR_FLOAT, 0, false);
+
+        $user1 = static::getDatabase()->createDocument('__users', new Document([
+            'username' => 'Donald',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('bob')),
+            ],
+        ]));
+
+        $session1 = static::getDatabase()->createDocument('__sessions', new Document([
+            'user_id' => $user1->getId(),
+            '$permissions' => [],
+        ]));
+
+        /**
+         * Test $session1 does not have read permissions
+         * Test right attribute is internal attribute
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(0, $documents);
+
+        $session2 = static::getDatabase()->createDocument('__sessions', new Document([
+            'user_id' => $user1->getId(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'boolean' => false,
+            'float' => 10.5,
+        ]));
+
+        $user2 = static::getDatabase()->createDocument('__users', new Document([
+            'username' => 'Abraham',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('bob')),
+            ],
+        ]));
+
+        $session3 = static::getDatabase()->createDocument('__sessions', new Document([
+            'user_id' => $user2->getId(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'boolean' => false,
+            'float' => 5.5,
+        ]));
+
+        /**
+         * Test $session2 has read permissions
+         * Test right attribute is internal attribute
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(2, $documents);
+
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                        Query::equal('user_id', [$user1->getId()], 'B'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(1, $documents);
+
+        /**
+         * Test alias does not exist
+         */
+        try {
+            static::getDatabase()->find(
+                '__sessions',
+                [
+                    Query::equal('user_id', ['bob'], 'alias_not_found')
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Unknown Alias context', $e->getMessage());
+        }
+
+        /**
+         * Test Ambiguous alias
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join('__sessions', Query::DEFAULT_ALIAS, []),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Ambiguous alias for collection "__sessions".', $e->getMessage());
+        }
+
+        /**
+         * Test relation query exist, but not on the join alias
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join(
+                        '__sessions',
+                        'B',
+                        [
+                            Query::relationEqual('', '$id', '', '$id'),
+                        ]
+                    ),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: At least one relation query is required on the joined collection.', $e->getMessage());
+        }
+
+        /**
+         * Test if relation query exists in the join queries list
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join('__sessions', 'B', []),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: At least one relation query is required on the joined collection.', $e->getMessage());
+        }
+
+        /**
+         * Test allow only filter queries in joins ON clause
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join('__sessions', 'B', [
+                        Query::orderAsc()
+                    ]),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: InnerJoin queries can only contain filter queries', $e->getMessage());
+        }
+
+        /**
+         * Test Relations are valid within joins
+         */
+        try {
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::relationEqual('', '$id', '', '$internalId'),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid query: Relations are only valid within joins.', $e->getMessage());
+        }
+
+        /**
+         * Test invalid alias name
+         */
+        try {
+            $alias = 'drop schema;';
+            static::getDatabase()->find(
+                '__users',
+                [
+                    Query::join(
+                        '__sessions',
+                        $alias,
+                        [
+                            Query::relationEqual($alias, 'user_id', '', '$id'),
+                        ]
+                    ),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Query InnerJoin: Alias must contain at most 64 chars. Valid chars are a-z, A-Z, 0-9, and underscore.', $e->getMessage());
+        }
+
+        /**
+         * Test join same collection
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+                Query::join(
+                    '__sessions',
+                    'C',
+                    [
+                        Query::relationEqual('C', 'user_id', 'B', 'user_id'),
+                    ]
+                ),
+            ]
+        );
+        $this->assertCount(2, $documents);
+
+        /**
+         * Test order by related collection
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+                Query::orderAsc('$createdAt', 'B')
+            ]
+        );
+        $this->assertEquals('Donald', $documents[0]['username']);
+        $this->assertEquals('Abraham', $documents[1]['username']);
+
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::join(
+                    '__sessions',
+                    'B',
+                    [
+                        Query::relationEqual('B', 'user_id', '', '$id'),
+                    ]
+                ),
+                Query::orderDesc('$createdAt', 'B')
+            ]
+        );
+        $this->assertEquals('Abraham', $documents[0]['username']);
+        $this->assertEquals('Donald', $documents[1]['username']);
+
+        /**
+         * Select queries
+         */
+        $documents = static::getDatabase()->find(
+            '__users',
+            [
+                Query::select('*', 'main'),
+                Query::select('$id', 'main'),
+                Query::select('user_id', 'S', as: 'we need to support this'),
+                Query::select('float', 'S'),
+                Query::select('boolean', 'S'),
+                Query::select('*', 'S'),
+                Query::join(
+                    '__sessions',
+                    'S',
+                    [
+                        Query::relationEqual('', '$id', 'S', 'user_id'),
+                        Query::greaterThan('float', 1.1, 'S'),
+                    ]
+                ),
+                Query::orderDesc('float', 'S'),
+            ]
+        );
+
+        $document = end($documents);
+
+//        $this->assertIsFloat($document->getAttribute('float_unsigned'));
+//        $this->assertEquals(5.55, $document->getAttribute('float_unsigned'));
+//
+//        $this->assertIsBool($document->getAttribute('boolean'));
+//        $this->assertEquals(true, $document->getAttribute('boolean'));
+//        //$this->assertIsArray($document->getAttribute('colors'));
+//        //$this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+
+        var_dump($document);
+       $this->assertEquals('shmuel1', 'shmuel2');
+    }
+
     public function testDeleteRelatedCollection(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
@@ -1137,6 +1478,7 @@ abstract class Base extends TestCase
             ]);
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
+            var_dump($e->getTraceAsString());
             static::getDatabase()->clearTimeout();
             static::getDatabase()->deleteCollection('global-timeouts');
             $this->assertInstanceOf(TimeoutException::class, $e);
@@ -1689,7 +2031,7 @@ abstract class Base extends TestCase
         ));
 
         $document = static::getDatabase()->find('dots.parent', [
-            Query::select(['dots.name']),
+            Query::select('dots.name'),
         ]);
         $this->assertEmpty($document);
 
@@ -1730,7 +2072,7 @@ abstract class Base extends TestCase
         ]));
 
         $documents = static::getDatabase()->find('dots.parent', [
-            Query::select(['*']),
+            Query::select('*'),
         ]);
 
         $this->assertEquals('Bill clinton', $documents[0]['dots.name']);
@@ -2872,7 +3214,8 @@ abstract class Base extends TestCase
         $documentId = $document->getId();
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed']),
+            Query::select('string'),
+            Query::select('integer_signed'),
         ]);
 
         $this->assertEmpty($document->getId());
@@ -2893,7 +3236,9 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$id']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$id'),
         ]);
 
         $this->assertArrayHasKey('$id', $document);
@@ -2904,7 +3249,9 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$permissions']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$permissions'),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -2915,7 +3262,9 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$internalId']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$internalId'),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -2926,7 +3275,9 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$collection']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$collection'),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -2937,7 +3288,9 @@ abstract class Base extends TestCase
         $this->assertArrayHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$createdAt']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$createdAt'),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -2948,7 +3301,9 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$updatedAt']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$updatedAt'),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -4127,7 +4482,8 @@ abstract class Base extends TestCase
     public function testSelectInternalID(): void
     {
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['$internalId', '$id']),
+            Query::select('$internalId'),
+            Query::select('$id'),
             Query::orderAsc(''),
             Query::limit(1),
         ]);
@@ -4135,13 +4491,19 @@ abstract class Base extends TestCase
         $document = $documents[0];
 
         $this->assertArrayHasKey('$internalId', $document);
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
         $this->assertCount(2, $document);
 
         $document = static::getDatabase()->getDocument('movies', $document->getId(), [
-            Query::select(['$internalId']),
+            Query::select('$internalId'),
         ]);
 
         $this->assertArrayHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
         $this->assertCount(1, $document);
     }
 
@@ -4899,7 +5261,7 @@ abstract class Base extends TestCase
     public function testOrNested(): void
     {
         $queries = [
-            Query::select(['director']),
+            Query::select('director'),
             Query::equal('director', ['Joe Johnston']),
             Query::or([
                 Query::equal('name', ['Frozen']),
@@ -5103,7 +5465,8 @@ abstract class Base extends TestCase
     public function testFindSelect(): void
     {
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year'])
+            Query::select('name'),
+            Query::select('year')
         ]);
 
         foreach ($documents as $document) {
@@ -5121,7 +5484,9 @@ abstract class Base extends TestCase
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$id'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$id')
         ]);
 
         foreach ($documents as $document) {
@@ -5139,7 +5504,9 @@ abstract class Base extends TestCase
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$internalId'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$internalId')
         ]);
 
         foreach ($documents as $document) {
@@ -5157,7 +5524,9 @@ abstract class Base extends TestCase
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$collection'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$collection')
         ]);
 
         foreach ($documents as $document) {
@@ -5175,7 +5544,9 @@ abstract class Base extends TestCase
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$createdAt'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$createdAt')
         ]);
 
         foreach ($documents as $document) {
@@ -5193,7 +5564,9 @@ abstract class Base extends TestCase
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$updatedAt'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$updatedAt')
         ]);
 
         foreach ($documents as $document) {
@@ -5211,7 +5584,9 @@ abstract class Base extends TestCase
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$permissions'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$permissions')
         ]);
 
         foreach ($documents as $document) {
@@ -7122,6 +7497,9 @@ abstract class Base extends TestCase
             'Tue Dec 31 2024',
         ];
 
+        /**
+         * ConvertQueries method will fix the dates
+         */
         foreach ($validDates as $date) {
             $docs = static::getDatabase()->find('datetime', [
                 Query::equal('$createdAt', [$date])
@@ -7546,7 +7924,7 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('person', $library);
 
         $people = static::getDatabase()->find('person', [
-            Query::select(['name'])
+            Query::select('name')
         ]);
 
         $this->assertArrayNotHasKey('library', $people[0]);
@@ -7556,7 +7934,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $person = static::getDatabase()->findOne('person', [
-            Query::select(['*', 'library.name'])
+            Query::select('*'),
+            Query::select('library.name')
         ]);
 
         if ($person->isEmpty()) {
@@ -7567,7 +7946,9 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
         $person = static::getDatabase()->getDocument('person', 'person1', [
-            Query::select(['*', 'library.name', '$id'])
+            Query::select('*'),
+            Query::select('library.name'),
+            Query::select('$id')
         ]);
 
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
@@ -7576,18 +7957,18 @@ abstract class Base extends TestCase
 
 
         $document = static::getDatabase()->getDocument('person', $person->getId(), [
-            Query::select(['name']),
+            Query::select('name'),
         ]);
         $this->assertArrayNotHasKey('library', $document);
         $this->assertEquals('Person 1', $document['name']);
 
         $document = static::getDatabase()->getDocument('person', $person->getId(), [
-            Query::select(['*']),
+            Query::select('*'),
         ]);
         $this->assertEquals('library1', $document['library']);
 
         $document = static::getDatabase()->getDocument('person', $person->getId(), [
-            Query::select(['library.*']),
+            Query::select('library.*'),
         ]);
         $this->assertEquals('Library 1', $document['library']['name']);
         $this->assertArrayNotHasKey('name', $document);
@@ -8032,7 +8413,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $country = static::getDatabase()->findOne('country', [
-            Query::select(['*', 'city.name'])
+            Query::select('*'),
+            Query::select('city.name')
         ]);
 
         if ($country->isEmpty()) {
@@ -8043,7 +8425,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
 
         $country = static::getDatabase()->getDocument('country', 'country1', [
-            Query::select(['*', 'city.name'])
+            Query::select('*'),
+            Query::select('city.name')
         ]);
 
         $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));
@@ -8575,7 +8958,7 @@ abstract class Base extends TestCase
         ]));
 
         $documents = static::getDatabase()->find('artist', [
-            Query::select(['name']),
+            Query::select('name'),
             Query::limit(1)
         ]);
         $this->assertArrayNotHasKey('albums', $documents[0]);
@@ -8606,7 +8989,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $artist = static::getDatabase()->findOne('artist', [
-            Query::select(['*', 'albums.name'])
+            Query::select('*'),
+            Query::select('albums.name')
         ]);
 
         if ($artist->isEmpty()) {
@@ -8617,7 +9001,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('price', $artist->getAttribute('albums')[0]);
 
         $artist = static::getDatabase()->getDocument('artist', 'artist1', [
-            Query::select(['*', 'albums.name'])
+            Query::select('*'),
+            Query::select('albums.name')
         ]);
 
         $this->assertEquals('Album 1', $artist->getAttribute('albums')[0]->getAttribute('name'));
@@ -9039,7 +9424,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $customer = static::getDatabase()->findOne('customer', [
-            Query::select(['*', 'accounts.name'])
+            Query::select('*'),
+            Query::select('accounts.name')
         ]);
 
         if ($customer->isEmpty()) {
@@ -9050,7 +9436,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('number', $customer->getAttribute('accounts')[0]);
 
         $customer = static::getDatabase()->getDocument('customer', 'customer1', [
-            Query::select(['*', 'accounts.name'])
+            Query::select('*'),
+            Query::select('accounts.name')
         ]);
 
         $this->assertEquals('Account 1', $customer->getAttribute('accounts')[0]->getAttribute('name'));
@@ -9420,7 +9807,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('reviews', $movie);
 
         $documents = static::getDatabase()->find('review', [
-            Query::select(['date', 'movie.date'])
+            Query::select('date'),
+            Query::select('movie.date')
         ]);
 
         $this->assertCount(3, $documents);
@@ -9451,7 +9839,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $review = static::getDatabase()->findOne('review', [
-            Query::select(['*', 'movie.name'])
+            Query::select('*'),
+            Query::select('movie.name')
         ]);
 
         if ($review->isEmpty()) {
@@ -9462,7 +9851,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('length', $review->getAttribute('movie'));
 
         $review = static::getDatabase()->getDocument('review', 'review1', [
-            Query::select(['*', 'movie.name'])
+            Query::select('*'),
+            Query::select('movie.name')
         ]);
 
         $this->assertEquals('Movie 1', $review->getAttribute('movie')->getAttribute('name'));
@@ -9828,7 +10218,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $product = static::getDatabase()->findOne('product', [
-            Query::select(['*', 'store.name'])
+            Query::select('*'),
+            Query::select('store.name')
         ]);
 
         if ($product->isEmpty()) {
@@ -9839,7 +10230,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('opensAt', $product->getAttribute('store'));
 
         $product = static::getDatabase()->getDocument('product', 'product1', [
-            Query::select(['*', 'store.name'])
+            Query::select('*'),
+            Query::select('store.name')
         ]);
 
         $this->assertEquals('Store 1', $product->getAttribute('store')->getAttribute('name'));
@@ -10180,7 +10572,7 @@ abstract class Base extends TestCase
         $this->assertEquals(1, \count($playlist1Document->getAttribute('songs')));
 
         $documents = static::getDatabase()->find('playlist', [
-            Query::select(['name']),
+            Query::select('name'),
             Query::limit(1)
         ]);
 
@@ -10210,7 +10602,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $playlist = static::getDatabase()->findOne('playlist', [
-            Query::select(['*', 'songs.name'])
+            Query::select('*'),
+            Query::select('songs.name')
         ]);
 
         if ($playlist->isEmpty()) {
@@ -10221,7 +10614,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('length', $playlist->getAttribute('songs')[0]);
 
         $playlist = static::getDatabase()->getDocument('playlist', 'playlist1', [
-            Query::select(['*', 'songs.name'])
+            Query::select('*'),
+            Query::select('songs.name')
         ]);
 
         $this->assertEquals('Song 1', $playlist->getAttribute('songs')[0]->getAttribute('name'));
@@ -10592,7 +10986,8 @@ abstract class Base extends TestCase
 
         // Select related document attributes
         $student = static::getDatabase()->findOne('students', [
-            Query::select(['*', 'classes.name'])
+            Query::select('*'),
+            Query::select('classes.name')
         ]);
 
         if ($student->isEmpty()) {
@@ -10603,7 +10998,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('number', $student->getAttribute('classes')[0]);
 
         $student = static::getDatabase()->getDocument('students', 'student1', [
-            Query::select(['*', 'classes.name'])
+            Query::select('*'),
+            Query::select('classes.name')
         ]);
 
         $this->assertEquals('Class 1', $student->getAttribute('classes')[0]->getAttribute('name'));
@@ -10896,7 +11292,9 @@ abstract class Base extends TestCase
 
         // Select some parent attributes, some child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', 'models.name']),
+            Query::select('name'),
+            Query::select('models.name'),
+            Query::select('*'), // Added this to make tests pass, perhaps to add in to nesting queries?
         ]);
 
         if ($make->isEmpty()) {
@@ -10918,7 +11316,8 @@ abstract class Base extends TestCase
 
         // Select internal attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$id']),
+            Query::select('name'),
+            Query::select('$id')
         ]);
 
         if ($make->isEmpty()) {
@@ -10933,7 +11332,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$internalId']),
+            Query::select('name'),
+            Query::select('$internalId')
         ]);
 
         if ($make->isEmpty()) {
@@ -10948,7 +11348,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$collection']),
+            Query::select('name'),
+            Query::select('$collection'),
         ]);
 
         if ($make->isEmpty()) {
@@ -10963,7 +11364,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$createdAt']),
+            Query::select('name'),
+            Query::select('$createdAt'),
         ]);
 
         if ($make->isEmpty()) {
@@ -10978,7 +11380,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$updatedAt']),
+            Query::select('name'),
+            Query::select('$updatedAt'),
         ]);
 
         if ($make->isEmpty()) {
@@ -10993,7 +11396,8 @@ abstract class Base extends TestCase
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$permissions']),
+            Query::select('name'),
+            Query::select('$permissions'),
         ]);
 
         if ($make->isEmpty()) {
@@ -11009,7 +11413,8 @@ abstract class Base extends TestCase
 
         // Select all parent attributes, some child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['*', 'models.year']),
+            Query::select('*'),
+            Query::select('models.year')
         ]);
 
         if ($make->isEmpty()) {
@@ -11025,7 +11430,8 @@ abstract class Base extends TestCase
 
         // Select all parent attributes, all child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['*', 'models.*']),
+            Query::select('*'),
+            Query::select('models.*')
         ]);
 
         if ($make->isEmpty()) {
@@ -11042,7 +11448,7 @@ abstract class Base extends TestCase
         // Select all parent attributes, all child attributes
         // Must select parent if selecting children
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['models.*']),
+            Query::select('models.*')
         ]);
 
         if ($make->isEmpty()) {
@@ -11058,7 +11464,7 @@ abstract class Base extends TestCase
 
         // Select all parent attributes, no child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name']),
+            Query::select('name'),
         ]);
 
         if ($make->isEmpty()) {
@@ -11518,21 +11924,23 @@ abstract class Base extends TestCase
         $this->assertEquals('Mayor 1', $documents[0]['cities'][0]['mayor']['name']);
 
         $documents = static::getDatabase()->find('countries', [
-            Query::select(['name']),
+            Query::select('name'),
             Query::limit(1)
         ]);
         $this->assertArrayHasKey('name', $documents[0]);
         $this->assertArrayNotHasKey('cities', $documents[0]);
 
         $documents = static::getDatabase()->find('countries', [
-            Query::select(['*']),
+            Query::select('*'),
             Query::limit(1)
         ]);
         $this->assertArrayHasKey('name', $documents[0]);
         $this->assertArrayNotHasKey('cities', $documents[0]);
 
         $documents = static::getDatabase()->find('countries', [
-            Query::select(['*', 'cities.*', 'cities.mayor.*']),
+            Query::select('*'),
+            Query::select('cities.*'),
+            Query::select('cities.mayor.*'),
             Query::limit(1)
         ]);
 
@@ -16848,12 +17256,13 @@ abstract class Base extends TestCase
         /**
          * Test Short select query, test pagination as well, Add order to select
          */
-        $selects = ['$internalId', '$id', '$collection', '$permissions', '$updatedAt'];
+        $mandatory = ['$internalId', '$id', '$collection', '$permissions', '$updatedAt'];
 
         $count = static::getDatabase()->deleteDocuments(
             collection: 'bulk_delete',
             queries: [
-                Query::select([...$selects, '$createdAt']),
+                Query::select('$createdAt'),
+                ...array_map(fn($f) => Query::select($f), $mandatory),
                 Query::cursorAfter($docs[6]),
                 Query::greaterThan('$createdAt', '2000-01-01'),
                 Query::orderAsc('$createdAt'),

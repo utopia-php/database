@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -213,15 +214,16 @@ abstract class SQL extends Adapter
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $name = $this->filter($collection);
-        $selections = $this->getAttributeSelections($queries);
+        $alias = Query::DEFAULT_ALIAS;
+        //$selections = $this->getAttributeSelections($queries);
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections)}
-            FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid 
-            {$this->getTenantQuery($collection)}
+		    SELECT {$this->getAttributeProjectionV2($queries)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            WHERE {$this->quote($alias)}._uid = :_uid 
+            {$this->getTenantQuery($collection, $alias)}
 		";
 
         if ($this->getSupportForUpdateLock()) {
@@ -229,12 +231,12 @@ abstract class SQL extends Adapter
         }
 
         $stmt = $this->getPDO()->prepare($sql);
-
         $stmt->bindValue(':_uid', $id);
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->getTenant());
         }
+        echo $stmt->queryString;
 
         $stmt->execute();
         $document = $stmt->fetchAll();
@@ -1457,13 +1459,10 @@ abstract class SQL extends Adapter
      */
     public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
     {
+        $queries = Query::getFilterQueries($queries);
+
         $conditions = [];
         foreach ($queries as $query) {
-
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                continue;
-            }
-
             if ($query->isNested()) {
                 $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
             } else {
@@ -1525,6 +1524,64 @@ abstract class SQL extends Adapter
         }
 
         return "{$condition} ({$alias}{$dot}_tenant IN ({$bindings}) {$orIsNull})";
+    }
+
+    /**
+     * Get the SQL projection given the selected attributes
+     *
+     * @param array<Query> $selects
+     * @return string
+     * @throws Exception
+     */
+    protected function getAttributeProjectionV2(array $selects): string
+    {
+        if (empty($selects)) {
+            return Query::DEFAULT_ALIAS.'.*';
+        }
+
+        $duplications = [];
+
+        $string = '';
+        foreach ($selects as $select) {
+            if($select->getAttribute() === '$collection'){
+                continue;
+            }
+
+            $needle = $select->getAlias().':'.$select->getAttribute();
+            
+            if (in_array($needle, $duplications)){
+                continue;
+            }
+
+            $duplications[] = $needle;
+
+            $alias = $select->getAlias();
+            $alias = $this->filter($alias);
+            $attribute = $select->getAttribute();
+
+            $attribute = match ($attribute) {
+                '$id' => '_uid',
+                '$internalId' => '_id',
+                '$tenant' => '_tenant',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                '$permissions' => '_permissions',
+                default => $attribute
+            };
+
+            if ($attribute !== '*') {
+                $attribute = $this->filter($attribute);
+                $attribute = $this->quote($attribute);
+            }
+
+            if (!empty($string)) {
+                $string .= ', ';
+            }
+
+            $string .= "{$this->quote($alias)}.{$attribute}";
+        }
+
+        return $string;
     }
 
     /**

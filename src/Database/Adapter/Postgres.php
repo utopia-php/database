@@ -16,6 +16,7 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
 
 class Postgres extends SQL
@@ -1032,6 +1033,7 @@ class Postgres extends SQL
      * @return array<Document>
      *
      * @throws DuplicateException
+     * @throws \Throwable
      */
     public function createDocuments(string $collection, array $documents): array
     {
@@ -1041,12 +1043,13 @@ class Postgres extends SQL
 
         try {
             $name = $this->filter($collection);
+
             $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
 
             $hasInternalId = null;
             foreach ($documents as $document) {
                 $attributes = $document->getAttributes();
-                $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
+                $attributeKeys = [...$attributeKeys, ...\array_keys($attributes)];
 
                 if ($hasInternalId === null) {
                     $hasInternalId = !empty($document->getInternalId());
@@ -1062,16 +1065,16 @@ class Postgres extends SQL
 
             $columns = [];
             foreach ($attributeKeys as $key => $attribute) {
-                $columns[$key] = "\"{$this->filter($attribute)}\"";
+                $columns[$key] = "{$this->quote($this->filter($attribute))}";
             }
             $columns = '(' . \implode(', ', $columns) . ')';
-
-            $internalIds = [];
 
             $bindIndex = 0;
             $batchKeys = [];
             $bindValues = [];
             $permissions = [];
+            $documentIds = [];
+            $documentTenants = [];
 
             foreach ($documents as $index => $document) {
                 $attributes = $document->getAttributes();
@@ -1081,13 +1084,15 @@ class Postgres extends SQL
                 $attributes['_permissions'] = \json_encode($document->getPermissions());
 
                 if (!empty($document->getInternalId())) {
-                    $internalIds[$document->getId()] = true;
                     $attributes['_id'] = $document->getInternalId();
                     $attributeKeys[] = '_id';
+                } else {
+                    $documentIds[] = $document->getId();
                 }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();
+                    $documentTenants[] = $document->getTenant();
                 }
 
                 $bindKeys = [];
@@ -1148,18 +1153,20 @@ class Postgres extends SQL
 
                 $stmtPermissions?->execute();
             }
+
+            $internalIds = $this->getInternalIds(
+                $collection,
+                $documentIds,
+                $documentTenants
+            );
+
+            foreach ($documents as $document) {
+                if (isset($internalIds[$document->getId()])) {
+                    $document['$internalId'] = $internalIds[$document->getId()];
+                }
+            }
         } catch (PDOException $e) {
             throw $this->processException($e);
-        }
-
-        foreach ($documents as $document) {
-            if (!isset($internalIds[$document->getId()])) {
-                $document['$internalId'] = $this->getDocument(
-                    $collection,
-                    $document->getId(),
-                    [Query::select(['$internalId'])]
-                )->getInternalId();
-            }
         }
 
         return $documents;
@@ -1501,42 +1508,63 @@ class Postgres extends SQL
     /**
      * Find Documents
      *
-     * @param string $collection
+     * @param QueryContext $context
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     * @param array<Query> $orderQueries
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-    {
-        $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
-        $where = [];
-        $orders = [];
+    public function find(
+        QueryContext $context,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $orderQueries = []
+    ): array {
+        unset($queries);
+
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
+        $name = $context->getCollections()[0]->getId();
+        $name = $this->filter($name);
 
+        $roles = Authorization::getRoles();
+        $where = [];
+        $orders = [];
         $hasIdAttribute = false;
-        foreach ($orderAttributes as $i => $attribute) {
-            $originalAttribute = $attribute;
 
+        //$queries = array_map(fn ($query) => clone $query, $queries);
+        $filters = array_map(fn ($query) => clone $query, $filters);
+        //$filters = Query::getFilterQueries($filters); // for cloning if needed
+
+        foreach ($orderQueries as $i => $order) {
+            $orderAlias = $order->getAlias();
+            $attribute  = $order->getAttribute();
+            $originalAttribute = $attribute;
             $attribute = $this->getInternalKeyForAttribute($attribute);
             $attribute = $this->filter($attribute);
-            if (\in_array($attribute, ['_uid', '_id'])) {
+            if ($attribute === '_uid' || $attribute === '_id') {
                 $hasIdAttribute = true;
             }
 
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $orderType = $order->getOrderDirection();
 
             // Get most dominant/first order attribute
             if ($i === 0 && !empty($cursor)) {
@@ -1570,52 +1598,64 @@ class Postgres extends SQL
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $orders[] = "{$this->quote($attribute)} {$orderType}";
+            $orders[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$orderType}";
         }
 
         // Allow after pagination without any order
-        if (empty($orderAttributes) && !empty($cursor)) {
-            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-
+        if (empty($orderQueries) && !empty($cursor)) {
             if ($cursorDirection === Database::CURSOR_AFTER) {
-                $orderMethod = $orderType === Database::ORDER_DESC
-                    ? Query::TYPE_LESSER
-                    : Query::TYPE_GREATER;
+                $orderMethod = Query::TYPE_GREATER;
             } else {
-                $orderMethod = $orderType === Database::ORDER_DESC
-                    ? Query::TYPE_GREATER
-                    : Query::TYPE_LESSER;
+                $orderMethod = Query::TYPE_LESSER;
             }
 
-            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
+            $where[] = "({$this->quote($alias)}.{$this->quote('_id')} {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
-        if (!$hasIdAttribute) {
-            if (empty($orderAttributes) && !empty($orderTypes)) {
-                $order = $orderTypes[0] ?? Database::ORDER_ASC;
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                }
+        // Because if we have 2 movies with same year 2000 order by year, _id for pagination
 
-                $orders[] = "{$this->quote($alias)}._id ".$this->filter($order);
-            } else {
-                $orders[] = "{$this->quote($alias)}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+        if (!$hasIdAttribute) {
+            $order = Database::ORDER_ASC;
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $order = Database::ORDER_DESC;
             }
+
+            $orders[] = "{$this->quote($alias)}.{$this->quote('_id')} ".$order;
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $sqlJoin = '';
+        foreach ($joins as $join) {
+            $permissions = '';
+            $collection = $join->getCollection();
+            $collection = $this->filter($collection);
+
+            $skipAuth = $context->skipAuth($collection, $forPermission);
+            if (! $skipAuth) {
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias(), $forPermission);
+            }
+
+            $sqlJoin .= "INNER JOIN {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
+            ON {$this->getSQLConditions($join->getValues(), $binds)}
+            {$permissions}
+            {$this->getTenantQuery($collection, $join->getAlias())}
+            ";
+        }
+
+        $conditions = $this->getSQLConditions($filters, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        $skipAuth = $context->skipAuth($name, $forPermission);
+        if (! $skipAuth) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($name, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1632,11 +1672,12 @@ class Postgres extends SQL
             $sqlLimit .= ' OFFSET :offset';
         }
 
-        $selections = $this->getAttributeSelections($queries);
+        //$selections = $this->getAttributeSelections($selects);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias)}
+            SELECT {$this->getAttributeProjectionV2($selects)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            {$sqlJoin}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -1651,13 +1692,15 @@ class Postgres extends SQL
                 $stmt->bindValue($key, $value, $this->getPDOType($value));
             }
 
+            echo $stmt->queryString;
+            var_dump($binds);
             $stmt->execute();
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
+
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
-
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
 
         foreach ($results as $index => $document) {
             if (\array_key_exists('_uid', $document)) {
@@ -1748,7 +1791,6 @@ class Postgres extends SQL
 			) table_count
         ";
 
-
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -1784,6 +1826,7 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
+        $alias = Query::DEFAULT_ALIAS;
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
@@ -1861,10 +1904,13 @@ class Postgres extends SQL
     protected function getSQLCondition(Query $query, array &$binds): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+        $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
 
         $attribute = $this->filter($query->getAttribute());
         $attribute = $this->quote($attribute);
-        $alias = $this->quote(Query::DEFAULT_ALIAS);
+        $alias = $query->getAlias();
+        $alias = $this->filter($alias);
+        $alias = $this->quote($alias);
         $placeholder = ID::unique();
         $operator = null;
 
@@ -1889,6 +1935,12 @@ class Postgres extends SQL
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
                 return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
+            case Query::TYPE_RELATION_EQUAL:
+                $attributeRight = $this->quote($this->filter($query->getAttributeRight()));
+                $aliasRight = $this->quote($query->getRightAlias());
+
+                return "{$alias}.{$attribute}={$aliasRight}.{$attributeRight}";
+
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
@@ -1905,6 +1957,7 @@ class Postgres extends SQL
                     $value = match ($query->getMethod()) {
                         Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                        //Query::TYPE_SEARCH => $this->getFulltextValue($value),
                         Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
@@ -2000,16 +2053,16 @@ class Postgres extends SQL
         return "\"{$this->getDatabase()}\".";
     }
 
-    /**
-     * Get SQL table
-     *
-     * @param string $name
-     * @return string
-     */
-    protected function getSQLTable(string $name): string
-    {
-        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
-    }
+    //    /**
+    //     * Get SQL table
+    //     *
+    //     * @param string $name
+    //     * @return string
+    //     */
+    //    protected function getSQLTable(string $name): string
+    //    {
+    //        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
+    //    }
 
     /**
      * Get PDO Type

@@ -27,24 +27,6 @@ class Pool extends Adapter
             if (!($resource instanceof Adapter)) {
                 throw new DatabaseException('Pool must contain instances of ' . Adapter::class);
             }
-
-            // Run setters in case the pooled adapter has its own config
-            $this->setDatabase($resource->getDatabase());
-            $this->setNamespace($resource->getNamespace());
-            $this->setSharedTables($resource->getSharedTables());
-            $this->setTenant($resource->getTenant());
-
-            if ($resource->getTimeout() > 0) {
-                $this->setTimeout($resource->getTimeout());
-            }
-            $this->resetDebug();
-            foreach ($resource->getDebug() as $key => $value) {
-                $this->setDebug($key, $value);
-            }
-            $this->resetMetadata();
-            foreach ($resource->getMetadata() as $key => $value) {
-                $this->setMetadata($key, $value);
-            }
         });
     }
 

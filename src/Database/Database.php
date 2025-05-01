@@ -6129,7 +6129,7 @@ class Database
 
             foreach ($value as &$node) {
                 foreach (\array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node, $document);
+                    $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
             }
 
@@ -6246,27 +6246,27 @@ class Database
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the output format of the given attribute.
      *
-     * @param string $name
+     * @param string $filter
      * @param mixed $value
      * @param Document $document
      *
      * @return mixed
      * @throws DatabaseException
      */
-    protected function decodeAttribute(string $name, mixed $value, Document $document): mixed
+    protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {
         if (!$this->filter) {
             return $value;
         }
 
-        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new NotFoundException('Filter not found');
+        if (!array_key_exists($filter, self::$filters) && !array_key_exists($filter, $this->instanceFilters)) {
+            throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
         }
 
-        if (array_key_exists($name, $this->instanceFilters)) {
-            $value = $this->instanceFilters[$name]['decode']($value, $document, $this);
+        if (array_key_exists($filter, $this->instanceFilters)) {
+            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this);
         } else {
-            $value = self::$filters[$name]['decode']($value, $document, $this);
+            $value = self::$filters[$filter]['decode']($value, $document, $this);
         }
 
         return $value;

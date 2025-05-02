@@ -6460,12 +6460,11 @@ class Database
         }
 
         if ($documentId) {
-            $documentKey = "{$collectionKey}:{$documentId}";
-        }
+            $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
 
-        if ($documentId && !empty($selects)) {
-            $hash = \md5(\implode($selects));
-            $documentHashKey = "{$documentKey}:{$hash}";
+            if (!empty($selects)) {
+                $documentHashKey = $documentKey . ':' . \md5(\implode($selects));
+            }
         }
 
         return [

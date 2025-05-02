@@ -2,8 +2,6 @@
 
 namespace Utopia\Database;
 
-use Utopia\CLI\Console;
-
 /**
  * A PDO wrapper that forwards method calls to the internal PDO instance.
  *
@@ -41,17 +39,7 @@ class PDO
      */
     public function __call(string $method, array $args): mixed
     {
-        try {
-            return $this->pdo->{$method}(...$args);
-        } catch (\Throwable $e) {
-            if (Connection::hasError($e)) {
-                Console::warning('[Database] Lost connection detected. Reconnecting...');
-                $this->reconnect();
-                return $this->pdo->{$method}(...$args);
-            }
-
-            throw $e;
-        }
+        return $this->pdo->{$method}(...$args);
     }
 
     /**
@@ -67,5 +55,19 @@ class PDO
             $this->password,
             $this->config
         );
+    }
+
+    public function getScheme(): string
+    {
+        $parts = parse_url($this->dsn);
+
+        return $parts['scheme'] ?? throw new \Exception('No scheme found in DSN');
+    }
+
+    public function getHostname(): string
+    {
+        $parts = parse_url($this->dsn);
+
+        return $parts['host'] ?? throw new \Exception('No host found in DSN');
     }
 }

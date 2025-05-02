@@ -3078,12 +3078,7 @@ class Database
         $document = $this->decode($collection, $document, $selections);
         $this->map = [];
 
-        $hasWildcards = !empty(array_filter(
-            $selects,
-            fn ($select) => in_array('*', $select->getValues(), true)
-        ));
-
-        if ($this->resolveRelationships && (empty($selects) || $hasWildcards || !empty($nestedSelections))) {
+        if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
         }
 
@@ -5782,13 +5777,9 @@ class Database
         );
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
-        $hasWildcards = !empty(array_filter(
-            $selects,
-            fn ($select) => in_array('*', $select->getValues(), true)
-        ));
 
         foreach ($results as &$node) {
-            if ($this->resolveRelationships && (empty($selects) || $hasWildcards || !empty($nestedSelections))) {
+            if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
             $node = $this->casting($collection, $node);

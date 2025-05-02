@@ -3078,7 +3078,12 @@ class Database
         $document = $this->decode($collection, $document, $selections);
         $this->map = [];
 
-        if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+        $hasWildcards = !empty(array_filter(
+            $selects,
+            fn ($select) => in_array('*', $select->getValues(), true)
+        ));
+
+        if ($this->resolveRelationships && (empty($selects) || $hasWildcards || !empty($nestedSelections))) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
         }
 
@@ -3094,20 +3099,6 @@ class Database
                 $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
-            }
-        }
-
-        // Remove internal attributes if not queried for select query
-        // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
-        // All internal attributes are default selected attributes for (MongoDB)
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($this->getInternalAttributes() as $internalAttribute) {
-                    if (!\in_array($internalAttribute['$id'], $values)) {
-                        $document->removeAttribute($internalAttribute['$id']);
-                    }
-                }
             }
         }
 
@@ -5791,9 +5782,13 @@ class Database
         );
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
+        $hasWildcards = !empty(array_filter(
+            $selects,
+            fn ($select) => in_array('*', $select->getValues(), true)
+        ));
 
         foreach ($results as &$node) {
-            if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+            if ($this->resolveRelationships && (empty($selects) || $hasWildcards || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
             $node = $this->casting($collection, $node);
@@ -5805,20 +5800,6 @@ class Database
         }
 
         unset($query);
-
-        // Remove internal attributes which are not queried
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($results as $result) {
-                    foreach ($this->getInternalAttributes() as $internalAttribute) {
-                        if (!\in_array($internalAttribute['$id'], $values)) {
-                            $result->removeAttribute($internalAttribute['$id']);
-                        }
-                    }
-                }
-            }
-        }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 

@@ -80,7 +80,7 @@ abstract class Adapter
      *
      * @param string $namespace
      *
-     * @return bool
+     * @return $this
      * @throws DatabaseException
      *
      */
@@ -104,6 +104,12 @@ abstract class Adapter
         return $this->namespace;
     }
 
+    /**
+     * Set Hostname.
+     *
+     * @param string $hostname
+     * @return $this
+     */
     public function setHostname(string $hostname): static
     {
         $this->hostname = $hostname;
@@ -111,6 +117,11 @@ abstract class Adapter
         return $this;
     }
 
+    /**
+     * Get Hostname.
+     *
+     * @return string
+     */
     public function getHostname(): string
     {
         return $this->hostname;

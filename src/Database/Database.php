@@ -6437,4 +6437,47 @@ class Database
     {
         return $this->adapter->getSchemaAttributes($collection);
     }
+
+    /**
+     * @param string $collectionId
+     * @param string|null $documentId
+     * @param array<string> $selects
+     * @return array{0: ?string, 1: ?string, 2: ?string}
+     */
+    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
+    {
+        if ($this->getSharedTables()) {
+            $collectionKey = \sprintf(
+                '%s-cache-%s:%s:%s:collection:%s',
+                $this->cacheName,
+                $this->adapter->getHostname(),
+                $this->getNamespace(),
+                $this->adapter->getTenant(),
+                $collectionId
+            );
+        } else {
+            $collectionKey = \sprintf(
+                '%s-cache-%s:%s:collection:%s',
+                $this->cacheName,
+                $this->getNamespace(),
+                $this->adapter->getTenant(),
+                $collectionId
+            );
+        }
+
+        if ($documentId) {
+            $documentKey = "{$collectionKey}:{$documentId}";
+        }
+
+        if ($documentId && !empty($selects)) {
+            $hash = \md5(\implode($selects));
+            $documentHashKey = "{$documentKey}:{$hash}";
+        }
+
+        return [
+            $collectionKey,
+            $documentKey ?? null,
+            $documentHashKey ?? null
+        ];
+    }
 }

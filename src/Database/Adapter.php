@@ -11,6 +11,7 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 abstract class Adapter
 {
     protected string $database = '';
+    protected string $hostname = '';
 
     protected string $namespace = '';
 
@@ -83,11 +84,11 @@ abstract class Adapter
      * @throws DatabaseException
      *
      */
-    public function setNamespace(string $namespace): bool
+    public function setNamespace(string $namespace): static
     {
         $this->namespace = $this->filter($namespace);
 
-        return true;
+        return $this;
     }
 
     /**
@@ -101,6 +102,18 @@ abstract class Adapter
     public function getNamespace(): string
     {
         return $this->namespace;
+    }
+
+    public function setHostname(string $hostname): static
+    {
+        $this->hostname = $hostname;
+
+        return $this;
+    }
+
+    public function getHostname(): string
+    {
+        return $this->hostname;
     }
 
     /**

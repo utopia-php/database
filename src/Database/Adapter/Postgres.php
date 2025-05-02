@@ -978,7 +978,6 @@ class Postgres extends SQL
         $sql = "
 			INSERT INTO {$this->getSQLTable($name)} ({$columns} \"_uid\")
 			VALUES ({$columnNames} :_uid)
-			RETURNING _id
 		";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
@@ -1032,8 +1031,8 @@ class Postgres extends SQL
 
         try {
             $stmt->execute();
-
-            $document['$internalId'] = $stmt->fetch()["_id"];
+            $lastInsertedId = $this->getPDO()->lastInsertId();
+            $document['$internalId'] = $lastInsertedId;
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();

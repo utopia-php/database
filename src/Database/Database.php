@@ -3097,20 +3097,6 @@ class Database
             }
         }
 
-        // Remove internal attributes if not queried for select query
-        // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
-        // All internal attributes are default selected attributes for (MongoDB)
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($this->getInternalAttributes() as $internalAttribute) {
-                    if (!\in_array($internalAttribute['$id'], $values)) {
-                        $document->removeAttribute($internalAttribute['$id']);
-                    }
-                }
-            }
-        }
-
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
         return $document;
@@ -5805,20 +5791,6 @@ class Database
         }
 
         unset($query);
-
-        // Remove internal attributes which are not queried
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($results as $result) {
-                    foreach ($this->getInternalAttributes() as $internalAttribute) {
-                        if (!\in_array($internalAttribute['$id'], $values)) {
-                            $result->removeAttribute($internalAttribute['$id']);
-                        }
-                    }
-                }
-            }
-        }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 

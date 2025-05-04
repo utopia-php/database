@@ -1425,6 +1425,7 @@ class Database
         }
 
         if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+            var_dump($collection);
             throw new NotFoundException('Collection not found');
         }
 
@@ -2989,7 +2990,7 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $selections = $this->validateSelections($collection, $selects);
+        //$selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
         foreach ($selects as $i => $q) {
@@ -3080,8 +3081,8 @@ class Database
             }
         }
 
-        $document = $this->casting($collection, $document);
-        $document = $this->decodeV2($context, $document, $selects);
+        $document = $this->casting($context, $document, $selects);
+        $document = $this->decode($context, $document, $selects);
         $this->map = [];
 
         if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
@@ -3450,7 +3451,10 @@ class Database
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
 
-        $document = $this->decode($collection, $document);
+        $context = new QueryContext();
+        $context->add($collection);
+
+        $document = $this->decode($context, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
 
@@ -4069,7 +4073,10 @@ class Database
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
 
-        $document = $this->decode($collection, $document);
+        $context = new QueryContext();
+        $context->add($collection);
+
+        $document = $this->decode($context, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -5790,49 +5797,6 @@ class Database
 
         $selects = \array_values($selects); // Since we may unset above
 
-        //        foreach ($queries as $index => &$query) {
-        //            switch ($query->getMethod()) {
-        //                case Query::TYPE_SELECT:
-        //                    $values = $query->getValues();
-        //                    foreach ($values as $valueIndex => $value) {
-        //                        if (\str_contains($value, '.')) {
-        //                            // Shift the top level off the dot-path to pass the selection down the chain
-        //                            // 'foo.bar.baz' becomes 'bar.baz'
-        //                            $nestedSelections[] = Query::select([
-        //                                \implode('.', \array_slice(\explode('.', $value), 1))
-        //                            ]);
-        //
-        //                            $key = \explode('.', $value)[0];
-        //
-        //                            foreach ($relationships as $relationship) {
-        //                                if ($relationship->getAttribute('key') === $key) {
-        //                                    switch ($relationship->getAttribute('options')['relationType']) {
-        //                                        case Database::RELATION_MANY_TO_MANY:
-        //                                        case Database::RELATION_ONE_TO_MANY:
-        //                                            unset($values[$valueIndex]);
-        //                                            break;
-        //
-        //                                        case Database::RELATION_MANY_TO_ONE:
-        //                                        case Database::RELATION_ONE_TO_ONE:
-        //                                            $values[$valueIndex] = $key;
-        //                                            break;
-        //                                    }
-        //                                }
-        //                            }
-        //                        }
-        //                    }
-        //                    $query->setValues(\array_values($values));
-        //                    break;
-        //                default:
-        //                    if (\str_contains($query->getAttribute(), '.')) {
-        //                        unset($queries[$index]);
-        //                    }
-        //                    break;
-        //            }
-        //        }
-        //
-        //        $queries = \array_values($queries);
-
         $results = $this->adapter->find(
             $context,
             $queries,
@@ -5851,8 +5815,8 @@ class Database
         //$results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         foreach ($results as $index => $node) {
-            $node = $this->casting($collection, $node);
-            $node = $this->decodeV2($context, $node, $selects);
+            $node = $this->casting($context, $node, $selects);
+            $node = $this->decode($context, $node, $selects);
 
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
@@ -6174,94 +6138,90 @@ class Database
     /**
      * Decode Document
      *
-     * @param Document $collection
-     * @param Document $document
-     * @param array<string> $selections
-     * @return Document
-     * @throws DatabaseException
-     */
-    public function decode(Document $collection, Document $document, array $selections = []): Document
-    {
-        $attributes = \array_filter(
-            $collection->getAttribute('attributes', []),
-            fn ($attribute) => $attribute['type'] !== self::VAR_RELATIONSHIP
-        );
-
-        $relationships = \array_filter(
-            $collection->getAttribute('attributes', []),
-            fn ($attribute) => $attribute['type'] === self::VAR_RELATIONSHIP
-        );
-
-        foreach ($relationships as $relationship) {
-            $key = $relationship['$id'] ?? '';
-
-            if (
-                \array_key_exists($key, (array)$document)
-                || \array_key_exists($this->adapter->filter($key), (array)$document)
-            ) {
-                $value = $document->getAttribute($key);
-                $value ??= $document->getAttribute($this->adapter->filter($key));
-                $document->removeAttribute($this->adapter->filter($key));
-                $document->setAttribute($key, $value);
-            }
-        }
-
-        $attributes = array_merge($attributes, $this->getInternalAttributes());
-
-        foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
-            $array = $attribute['array'] ?? false;
-            $filters = $attribute['filters'] ?? [];
-            $value = $document->getAttribute($key);
-
-            if (\is_null($value)) {
-                $value = $document->getAttribute($this->adapter->filter($key));
-
-                if (!\is_null($value)) {
-                    $document->removeAttribute($this->adapter->filter($key));
-                }
-            }
-
-            $value = ($array) ? $value : [$value];
-            $value = (is_null($value)) ? [] : $value;
-
-            foreach ($value as &$node) {
-                foreach (array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node, $document);
-                }
-            }
-
-            if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-                if (
-                    empty($selections)
-                    || \in_array($key, $selections)
-                    || \in_array('*', $selections)
-                    || \in_array($key, ['$createdAt', '$updatedAt'])
-                ) {
-                    // Prevent null values being set for createdAt and updatedAt
-                    if (\in_array($key, ['$createdAt', '$updatedAt']) && $value[0] === null) {
-                        continue;
-                    } else {
-                        $document->setAttribute($key, ($array) ? $value : $value[0]);
-                    }
-                }
-            }
-        }
-
-        return $document;
-    }
-
-    /**
-     * Decode Document
-     *
      * @param QueryContext $context
      * @param Document $document
      * @param array<Query> $selects
      * @return Document
      * @throws DatabaseException
      */
-    public function decodeV2(QueryContext $context, Document $document, array $selects = []): Document
+    public function decode(QueryContext $context, Document $document, array $selects = []): Document
     {
+        $schema = [];
+
+        foreach ($context->getCollections() as $collection) {
+            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+                $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
+                $key = $this->adapter->filter($key);
+                $schema[$collection->getId()][$key] = $attribute->getArrayCopy();
+            }
+
+            foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+                $schema[$collection->getId()][$attribute['$id']] = $attribute;
+            }
+        }
+
+        $new = new Document();
+
+        foreach ($document as $key => $value) {
+            //$key = $this->adapter->filter($key);
+            $alias = Query::DEFAULT_ALIAS;
+
+            foreach ($selects as $select) {
+                if($this->adapter->filter($select->getAttribute()) == $key){
+                    $alias = $select->getAlias();
+                    break;
+                }
+            }
+
+            $collection = $context->getCollectionByAlias($alias);
+            if ($collection->isEmpty()) {
+                throw new \Exception('Invalid query: Unknown Alias context');
+            }
+
+            $attribute = $schema[$collection->getId()][$key] ?? null;
+
+            if (is_null($attribute)){
+                var_dump('####### Decode attribute not found');
+                var_dump($collection->getId());
+                var_dump($key);
+                continue;
+            }
+
+            $array = $attribute['array'] ?? false;
+            $filters = $attribute['filters'] ?? [];
+
+            $value = ($array) ? $value : [$value];
+            $value = (is_null($value)) ? [] : $value;
+
+            foreach ($value as $index => $node) {
+                foreach (array_reverse($filters) as $filter) {
+                    $value[$index] = $this->decodeAttribute($filter, $node, $document);
+                }
+            }
+
+            $value = ($array) ? $value : $value[0];
+
+            $new->setAttribute($attribute['$id'], $value);
+        }
+
+        return $new;
+    }
+
+    /**
+     * Casting
+     *
+     * @param QueryContext $context
+     * @param Document $document
+     * @param array<Query> $selects
+     * @return Document
+     * @throws Exception
+     */
+    public function casting(QueryContext $context, Document $document, array $selects = []): Document
+    {
+        if ($this->adapter->getSupportForCasting()) {
+            return $document;
+        }
+
         $schema = [];
 
         foreach ($context->getCollections() as $collection) {
@@ -6295,72 +6255,13 @@ class Database
 
             $attribute = $schema[$collection->getId()][$key] ?? null;
 
-            if($attribute === null){
+            if (is_null($attribute)){
                 continue;
             }
 
-            $array = $attribute['array'] ?? false;
-            $filters = $attribute['filters'] ?? [];
-
-            $value = ($array) ? $value : [$value];
-            $value = (is_null($value)) ? [] : $value;
-
-            foreach ($value as $index => $node) {
-                foreach (array_reverse($filters) as $filter) {
-                    $value[$index] = $this->decodeAttribute($filter, $node, $document);
-                }
-            }
-
-//            if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-//                if (
-//                    empty($selections)
-//                    || \in_array($key, $selections)
-//                    || \in_array('*', $selections)
-//                    || \in_array($key, ['$createdAt', '$updatedAt'])
-//                ) {
-//                    // Prevent null values being set for createdAt and updatedAt
-//                    if (\in_array($key, ['$createdAt', '$updatedAt']) && $value[0] === null) {
-//                        continue;
-//                    } else {
-//                        $document->setAttribute($key, ($array) ? $value : $value[0]);
-//                    }
-//                }
-//            }
-
-            $value = ($array) ? $value : $value[0];
-
-            $new->setAttribute($attribute['$id'], $value);
-        }
-
-        return $new;
-    }
-
-    /**
-     * Casting
-     *
-     * @param Document $collection
-     * @param Document $document
-     *
-     * @return Document
-     */
-    public function casting(Document $collection, Document $document): Document
-    {
-        if ($this->adapter->getSupportForCasting()) {
-            return $document;
-        }
-
-        $attributes = $collection->getAttribute('attributes', []);
-
-        foreach ($attributes as $attribute) {
-            $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
-            $value = $document->getAttribute($key, null);
-            if (is_null($value)) {
-                continue;
-            }
-var_dump('############# casting');
-var_dump($type);
+
             if ($array) {
                 $value = !is_string($value)
                     ? $value
@@ -6369,26 +6270,28 @@ var_dump($type);
                 $value = [$value];
             }
 
-            foreach ($value as &$node) {
+            foreach ($value as $i => $node) {
                 switch ($type) {
                     case self::VAR_BOOLEAN:
-                        $node = (bool)$node;
+                        $value[$i] = (bool)$node;
                         break;
+
                     case self::VAR_INTEGER:
-                        $node = (int)$node;
+                        $value[$i] = (int)$node;
                         break;
+
                     case self::VAR_FLOAT:
-                        $node = (float)$node;
-                        break;
-                    default:
+                        $value[$i] = (float)$node;
                         break;
                 }
             }
 
-            $document->setAttribute($key, ($array) ? $value : $value[0]);
+            $value = ($array) ? $value : $value[0];
+
+            $new->setAttribute($attribute['$id'], $value);
         }
 
-        return $document;
+        return $new;
     }
 
     /**

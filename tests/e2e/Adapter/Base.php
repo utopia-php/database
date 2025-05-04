@@ -287,7 +287,7 @@ abstract class Base extends TestCase
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
-            'boolean' => false,
+            'boolean' => true,
             'float' => 5.5,
         ]));
 
@@ -535,17 +535,16 @@ abstract class Base extends TestCase
         );
 
         $document = end($documents);
-
-//        $this->assertIsFloat($document->getAttribute('float_unsigned'));
-//        $this->assertEquals(5.55, $document->getAttribute('float_unsigned'));
-//
-//        $this->assertIsBool($document->getAttribute('boolean'));
-//        $this->assertEquals(true, $document->getAttribute('boolean'));
-//        //$this->assertIsArray($document->getAttribute('colors'));
-//        //$this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
-
         var_dump($document);
-       $this->assertEquals('shmuel1', 'shmuel2');
+        $this->assertIsFloat($document->getAttribute('float'));
+        $this->assertEquals(5.5, $document->getAttribute('float'));
+
+        $this->assertIsBool($document->getAttribute('boolean'));
+        $this->assertEquals(true, $document->getAttribute('boolean'));
+        //$this->assertIsArray($document->getAttribute('colors'));
+        //$this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
+
+       //$this->assertEquals('shmuel1', 'shmuel2');
     }
 
     public function testDeleteRelatedCollection(): void

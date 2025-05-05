@@ -126,15 +126,10 @@ abstract class Adapter
      * Get Database from current scope
      *
      * @return string
-     * @throws DatabaseException
      *
      */
     public function getDatabase(): string
     {
-        if (empty($this->database)) {
-            throw new DatabaseException('Missing database. Database must be set before use.');
-        }
-
         return $this->database;
     }
 

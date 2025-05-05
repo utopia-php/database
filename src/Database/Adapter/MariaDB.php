@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
@@ -761,26 +762,31 @@ class MariaDB extends SQL
             throw new NotFoundException('Collection not found');
         }
 
+        /**
+         * We do not have internalId's added to list, since we check only for array field
+         */
         $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
 
         $id = $this->filter($id);
 
         foreach ($attributes as $i => $attr) {
-            $collectionAttribute = \array_filter($collectionAttributes, fn ($collectionAttribute) => array_key_exists('key', $collectionAttribute) && $collectionAttribute['key'] === $attr);
-            $collectionAttribute = end($collectionAttribute);
+            $attribute = null;
+            foreach ($collectionAttributes as $collectionAttribute) {
+                if (\strtolower($collectionAttribute['$id']) === \strtolower($attr)) {
+                    $attribute = $collectionAttribute;
+                    break;
+                }
+            }
+
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
             $length = empty($lengths[$i]) ? '' : '(' . (int)$lengths[$i] . ')';
 
-            $attr = match ($attr) {
-                '$id' => '_uid',
-                '$createdAt' => '_createdAt',
-                '$updatedAt' => '_updatedAt',
-                default => $this->filter($attr),
-            };
+            $attr = $this->getInternalKeyForAttribute($attr);
+            $attr = $this->filter($attr);
 
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
-            if (!empty($collectionAttribute['array']) && $this->getSupportForCastIndexArray()) {
+            if ($this->getSupportForCastIndexArray() && !empty($attribute['array'])) {
                 $attributes[$i] = '(CAST(`' . $attr . '` AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
@@ -1128,10 +1134,6 @@ class MariaDB extends SQL
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = json_encode($document->getPermissions());
 
-            if ($this->sharedTables) {
-                $attributes['_tenant'] = $this->tenant;
-            }
-
             $name = $this->filter($collection);
             $columns = '';
 
@@ -1296,7 +1298,7 @@ class MariaDB extends SQL
             $sql = "
                 UPDATE {$this->getSQLTable($name)}
                 SET {$columns} _uid = :_newUid
-                WHERE _uid = :_existingUid
+                WHERE _id=:_internalId
                 {$this->getTenantQuery($collection)}
 			";
 
@@ -1304,7 +1306,7 @@ class MariaDB extends SQL
 
             $stmt = $this->getPDO()->prepare($sql);
 
-            $stmt->bindValue(':_existingUid', $id);
+            $stmt->bindValue(':_internalId', $document->getInternalId());
             $stmt->bindValue(':_newUid', $document->getId());
 
             if ($this->sharedTables) {
@@ -1716,7 +1718,10 @@ class MariaDB extends SQL
                 }
 
                 if (\is_null($cursor[$originalAttribute] ?? null)) {
-                    throw new DatabaseException("Order attribute '{$originalAttribute}' is empty");
+                    throw new OrderException(
+                        message: "Order attribute '{$originalAttribute}' is empty",
+                        attribute: $originalAttribute
+                    );
                 }
 
                 $binds[':cursor'] = $cursor[$originalAttribute];

@@ -10,6 +10,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
@@ -1182,10 +1183,6 @@ class Postgres extends SQL
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
-        if ($this->sharedTables) {
-            $attributes['_tenant'] = $this->tenant;
-        }
-
         $name = $this->filter($collection);
         $columns = '';
 
@@ -1336,7 +1333,7 @@ class Postgres extends SQL
         $sql = "
 			UPDATE {$this->getSQLTable($name)}
 			SET {$columns} _uid = :_newUid 
-			WHERE _uid = :_existingUid
+			WHERE _id=:_internalId
 			{$this->getTenantQuery($collection)}
 		";
 
@@ -1344,7 +1341,7 @@ class Postgres extends SQL
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        $stmt->bindValue(':_existingUid', $id);
+        $stmt->bindValue(':_internalId', $document->getInternalId());
         $stmt->bindValue(':_newUid', $document->getId());
 
         if ($this->sharedTables) {
@@ -1549,7 +1546,10 @@ class Postgres extends SQL
                 }
 
                 if (\is_null($cursor[$originalAttribute] ?? null)) {
-                    throw new DatabaseException("Order attribute '{$originalAttribute}' is empty");
+                    throw new OrderException(
+                        message: "Order attribute '{$originalAttribute}' is empty",
+                        attribute: $originalAttribute
+                    );
                 }
 
                 $binds[':cursor'] = $cursor[$originalAttribute];

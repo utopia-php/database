@@ -3488,7 +3488,7 @@ class Database
         $time = DateTime::now();
         $modified = 0;
 
-        foreach ($documents as &$document) {
+        foreach ($documents as $document) {
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 
@@ -3529,11 +3529,13 @@ class Database
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
-            foreach ($batch as $doc) {
+            foreach ($batch as $document) {
                 if ($this->resolveRelationships) {
-                    $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
+                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
-                $onNext && $onNext($doc);
+
+                $document = $this->decode($collection, $document);
+                $onNext && $onNext($document);
                 $modified++;
             }
         }
@@ -3900,7 +3902,7 @@ class Database
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant();       // Make sure user doesn't switch tenant
+                $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
             }
 
             $document = new Document($document);
@@ -4142,6 +4144,10 @@ class Database
         unset($updates['$createdAt']);
         unset($updates['$tenant']);
 
+        if ($this->adapter->getSharedTables()) {
+            $updates['$tenant'] = $this->adapter->getTenant();
+        }
+
         if (!$this->preserveDates) {
             $updates['$updatedAt'] = DateTime::now();
         }
@@ -4163,7 +4169,6 @@ class Database
         $last = $cursor;
         $modified = 0;
 
-        // Resolve and update relationships
         while (true) {
             if ($limit && $limit < $batchSize) {
                 $batchSize = $limit;
@@ -4190,11 +4195,13 @@ class Database
             }
 
             foreach ($batch as &$document) {
+                $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+
                 if ($this->resolveRelationships) {
-                    $newDocument = new Document(array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
-                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
-                    $document = $newDocument;
+                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
                 }
+
+                $document = $new;
 
                 // Check if document was updated after the request timestamp
                 try {
@@ -4206,29 +4213,21 @@ class Database
                 if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                     throw new ConflictException('Document was updated after the request timestamp');
                 }
+
+                $document = $this->encode($collection, $document);
             }
 
-            $this->withTransaction(function () use ($collection, $updates, $authorization, $skipAuth, $batch) {
-                $getResults = fn () => $this->adapter->updateDocuments(
+            $this->withTransaction(function () use ($collection, $updates, $batch) {
+                $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
                     $batch
                 );
-
-                $skipAuth
-                    ? $authorization->skip($getResults)
-                    : $getResults();
             });
 
             foreach ($batch as $doc) {
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
-                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                }
-
+                $this->purgeCachedDocument($collection->getId(), $doc->getId());
+                $doc = $this->decode($collection, $doc);
                 $onNext && $onNext($doc);
                 $modified++;
             }
@@ -6109,7 +6108,7 @@ class Database
             }
         }
 
-        $attributes = array_merge($attributes, $this->getInternalAttributes());
+        $attributes = \array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6129,8 +6128,8 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as &$node) {
-                foreach (array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node, $document);
+                foreach (\array_reverse($filters) as $filter) {
+                    $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
             }
 
@@ -6247,27 +6246,27 @@ class Database
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the output format of the given attribute.
      *
-     * @param string $name
+     * @param string $filter
      * @param mixed $value
      * @param Document $document
      *
      * @return mixed
      * @throws DatabaseException
      */
-    protected function decodeAttribute(string $name, mixed $value, Document $document): mixed
+    protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {
         if (!$this->filter) {
             return $value;
         }
 
-        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new NotFoundException('Filter not found');
+        if (!array_key_exists($filter, self::$filters) && !array_key_exists($filter, $this->instanceFilters)) {
+            throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
         }
 
-        if (array_key_exists($name, $this->instanceFilters)) {
-            $value = $this->instanceFilters[$name]['decode']($value, $document, $this);
+        if (array_key_exists($filter, $this->instanceFilters)) {
+            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this);
         } else {
-            $value = self::$filters[$name]['decode']($value, $document, $this);
+            $value = self::$filters[$filter]['decode']($value, $document, $this);
         }
 
         return $value;

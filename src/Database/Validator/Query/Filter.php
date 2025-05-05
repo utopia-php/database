@@ -41,6 +41,13 @@ class Filter extends Base
      */
     protected function isValidAttribute(string $attribute): bool
     {
+        if (
+            \in_array('encrypt', $this->schema[$attribute]['filters'] ?? [])
+        ) {
+            $this->message = 'Cannot query encrypted attribute: ' . $attribute;
+            return false;
+        }
+
         if (\str_contains($attribute, '.')) {
             // Check for special symbol `.`
             if (isset($this->schema[$attribute])) {

@@ -226,4 +226,51 @@ trait GeneralTests
         // ensure two sequential calls to getId do not give the same result
         $this->assertNotEquals(ID::unique(10), ID::unique(10));
     }
+
+    public function testSharedTablesUpdateTenant(): void
+    {
+        $database = static::getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForSchemas()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if ($database->exists('sharedTables')) {
+            $database->setDatabase('sharedTables')->delete();
+        }
+
+        $database
+            ->setDatabase('sharedTables')
+            ->setNamespace('')
+            ->setSharedTables(true)
+            ->setTenant(null)
+            ->create();
+
+        // Create collection
+        $database->createCollection(__FUNCTION__, documentSecurity: false);
+
+        $database
+            ->setTenant(1)
+            ->updateDocument(Database::METADATA, __FUNCTION__, new Document([
+                '$id' => __FUNCTION__,
+                'name' => 'Scooby Doo',
+            ]));
+
+        // Ensure tenant was not swapped
+        $doc = $database
+            ->setTenant(null)
+            ->getDocument(Database::METADATA, __FUNCTION__);
+
+        $this->assertEquals('Scooby Doo', $doc['name']);
+
+        // Reset state
+        $database
+            ->setSharedTables($sharedTables)
+            ->setNamespace($namespace)
+            ->setDatabase($schema);
+    }
 }

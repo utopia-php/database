@@ -9,6 +9,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -2842,4 +2843,345 @@ trait DocumentTests
             new Document(['$id' => '3', 'label' => 'z']),
         ], $result->getAttribute('tags'));
     }
+    /**
+     * @depends testGetDocument
+     */
+    public function testUpdateDocument(Document $document): Document
+    {
+        $document
+            ->setAttribute('string', 'text📝 updated')
+            ->setAttribute('integer_signed', -6)
+            ->setAttribute('integer_unsigned', 6)
+            ->setAttribute('float_signed', -5.56)
+            ->setAttribute('float_unsigned', 5.56)
+            ->setAttribute('boolean', false)
+            ->setAttribute('colors', 'red', Document::SET_TYPE_APPEND)
+            ->setAttribute('with-dash', 'Works');
+
+        $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+
+        $this->assertNotEmpty(true, $new->getId());
+        $this->assertIsString($new->getAttribute('string'));
+        $this->assertEquals('text📝 updated', $new->getAttribute('string'));
+        $this->assertIsInt($new->getAttribute('integer_signed'));
+        $this->assertEquals(-6, $new->getAttribute('integer_signed'));
+        $this->assertIsInt($new->getAttribute('integer_unsigned'));
+        $this->assertEquals(6, $new->getAttribute('integer_unsigned'));
+        $this->assertIsFloat($new->getAttribute('float_signed'));
+        $this->assertEquals(-5.56, $new->getAttribute('float_signed'));
+        $this->assertIsFloat($new->getAttribute('float_unsigned'));
+        $this->assertEquals(5.56, $new->getAttribute('float_unsigned'));
+        $this->assertIsBool($new->getAttribute('boolean'));
+        $this->assertEquals(false, $new->getAttribute('boolean'));
+        $this->assertIsArray($new->getAttribute('colors'));
+        $this->assertEquals(['pink', 'green', 'blue', 'red'], $new->getAttribute('colors'));
+        $this->assertEquals('Works', $new->getAttribute('with-dash'));
+
+        $oldPermissions = $document->getPermissions();
+
+        $new
+            ->setAttribute('$permissions', Permission::read(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::update(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::delete(Role::guests()), Document::SET_TYPE_APPEND);
+
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertContains('guests', $new->getRead());
+        $this->assertContains('guests', $new->getWrite());
+        $this->assertContains('guests', $new->getCreate());
+        $this->assertContains('guests', $new->getUpdate());
+        $this->assertContains('guests', $new->getDelete());
+
+        $new->setAttribute('$permissions', $oldPermissions);
+
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertNotContains('guests', $new->getRead());
+        $this->assertNotContains('guests', $new->getWrite());
+        $this->assertNotContains('guests', $new->getCreate());
+        $this->assertNotContains('guests', $new->getUpdate());
+        $this->assertNotContains('guests', $new->getDelete());
+
+        // Test change document ID
+        $id = $new->getId();
+        $newId = 'new-id';
+        $new->setAttribute('$id', $newId);
+        $new = $this->getDatabase()->updateDocument($new->getCollection(), $id, $new);
+        $this->assertEquals($newId, $new->getId());
+
+        // Reset ID
+        $new->setAttribute('$id', $id);
+        $new = $this->getDatabase()->updateDocument($new->getCollection(), $newId, $new);
+        $this->assertEquals($id, $new->getId());
+
+        return $document;
+    }
+
+    /**
+     * @depends testUpdateDocument
+     */
+    public function testUpdateDocumentConflict(Document $document): void
+    {
+        $document->setAttribute('integer_signed', 7);
+        $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function () use ($document) {
+            return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+        });
+        $this->assertEquals(7, $result->getAttribute('integer_signed'));
+
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $document->setAttribute('integer_signed', 8);
+        try {
+            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
+                return $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+            });
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof ConflictException);
+            $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
+        }
+    }
+
+    /**
+     * @depends testUpdateDocument
+     */
+    public function testDeleteDocumentConflict(Document $document): void
+    {
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+        $this->expectException(ConflictException::class);
+        $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($document) {
+            return $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
+        });
+    }
+
+    /**
+     * @depends testGetDocument
+     */
+    public function testUpdateDocumentDuplicatePermissions(Document $document): Document
+    {
+        $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
+
+        $new
+            ->setAttribute('$permissions', Permission::read(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::read(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND)
+            ->setAttribute('$permissions', Permission::create(Role::guests()), Document::SET_TYPE_APPEND);
+
+        $this->getDatabase()->updateDocument($new->getCollection(), $new->getId(), $new);
+
+        $new = $this->getDatabase()->getDocument($new->getCollection(), $new->getId());
+
+        $this->assertContains('guests', $new->getRead());
+        $this->assertContains('guests', $new->getCreate());
+
+        return $document;
+    }
+
+    /**
+     * @depends testUpdateDocument
+     */
+    public function testDeleteDocument(Document $document): void
+    {
+        $result = $this->getDatabase()->deleteDocument($document->getCollection(), $document->getId());
+        $document = $this->getDatabase()->getDocument($document->getCollection(), $document->getId());
+
+        $this->assertEquals(true, $result);
+        $this->assertEquals(true, $document->isEmpty());
+    }
+
+    public function testUpdateDocuments(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'testUpdateDocuments';
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        static::getDatabase()->createCollection($collection, attributes: [
+            new Document([
+                '$id' => ID::custom('string'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('integer'),
+                'type' => Database::VAR_INTEGER,
+                'format' => '',
+                'size' => 10000,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ], documentSecurity: false);
+
+        for ($i = 0; $i < 10; $i++) {
+            static::getDatabase()->createDocument($collection, new Document([
+                '$id' => 'doc' . $i,
+                'string' => 'text📝 ' . $i,
+                'integer' => $i
+            ]));
+        }
+
+        // Test Update half of the documents
+        $results = [];
+        $count = static::getDatabase()->updateDocuments($collection, new Document([
+            'string' => 'text📝 updated',
+        ]), [
+            Query::greaterThanEqual('integer', 5),
+        ], onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
+
+        $this->assertEquals(5, $count);
+
+        foreach ($results as $document) {
+            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+        }
+
+        $updatedDocuments = static::getDatabase()->find($collection, [
+            Query::greaterThanEqual('integer', 5),
+        ]);
+
+        $this->assertCount(5, $updatedDocuments);
+
+        foreach ($updatedDocuments as $document) {
+            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
+        }
+
+        $controlDocuments = static::getDatabase()->find($collection, [
+            Query::lessThan('integer', 5),
+        ]);
+
+        $this->assertEquals(count($controlDocuments), 5);
+
+        foreach ($controlDocuments as $document) {
+            $this->assertNotEquals('text📝 updated', $document->getAttribute('string'));
+        }
+
+        // Test Update all documents
+        $this->assertEquals(10, static::getDatabase()->updateDocuments($collection, new Document([
+            'string' => 'text📝 updated all',
+        ])));
+
+        $updatedDocuments = static::getDatabase()->find($collection);
+
+        $this->assertEquals(count($updatedDocuments), 10);
+
+        foreach ($updatedDocuments as $document) {
+            $this->assertEquals('text📝 updated all', $document->getAttribute('string'));
+        }
+
+        // TEST: Can't delete documents in the past
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+
+        try {
+            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($collection) {
+                static::getDatabase()->updateDocuments($collection, new Document([
+                    'string' => 'text📝 updated all',
+                ]));
+            });
+            $this->fail('Failed to throw exception');
+        } catch (ConflictException $e) {
+            $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
+        }
+
+        // Check collection level permissions
+        static::getDatabase()->updateCollection($collection, permissions: [
+            Permission::read(Role::user('asd')),
+            Permission::create(Role::user('asd')),
+            Permission::update(Role::user('asd')),
+            Permission::delete(Role::user('asd')),
+        ], documentSecurity: false);
+
+        try {
+            static::getDatabase()->updateDocuments($collection, new Document([
+                'string' => 'text📝 updated all',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (AuthorizationException $e) {
+            $this->assertStringStartsWith('Missing "update" permission for role "user:asd".', $e->getMessage());
+        }
+
+        // Check document level permissions
+        static::getDatabase()->updateCollection($collection, permissions: [], documentSecurity: true);
+
+        Authorization::skip(function () use ($collection) {
+            static::getDatabase()->updateDocument($collection, 'doc0', new Document([
+                'string' => 'text📝 updated all',
+                '$permissions' => [
+                    Permission::read(Role::user('asd')),
+                    Permission::create(Role::user('asd')),
+                    Permission::update(Role::user('asd')),
+                    Permission::delete(Role::user('asd')),
+                ],
+            ]));
+        });
+
+        Authorization::setRole(Role::user('asd')->toString());
+
+        static::getDatabase()->updateDocuments($collection, new Document([
+            'string' => 'permission text',
+        ]));
+
+        $documents = static::getDatabase()->find($collection, [
+            Query::equal('string', ['permission text']),
+        ]);
+
+        $this->assertCount(1, $documents);
+
+        Authorization::skip(function () use ($collection) {
+            $unmodifiedDocuments = static::getDatabase()->find($collection, [
+                Query::equal('string', ['text📝 updated all']),
+            ]);
+
+            $this->assertCount(9, $unmodifiedDocuments);
+        });
+
+        Authorization::skip(function () use ($collection) {
+            static::getDatabase()->updateDocuments($collection, new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]));
+        });
+
+        // Test we can update more documents than batchSize
+        $this->assertEquals(10, static::getDatabase()->updateDocuments($collection, new Document([
+            'string' => 'batchSize Test'
+        ]), batchSize: 2));
+
+        $documents = static::getDatabase()->find($collection);
+
+        foreach ($documents as $document) {
+            $this->assertEquals('batchSize Test', $document->getAttribute('string'));
+        }
+
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+    }
+
 }

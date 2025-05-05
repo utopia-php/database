@@ -3,11 +3,14 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -963,6 +966,162 @@ trait AttributeTests
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
             $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+        }
+    }
+
+    public function testUpdateAttributeSize(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForAttributeResizing()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('resize_test');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true));
+        $document = static::getDatabase()->createDocument('resize_test', new Document([
+            '$id' => ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'resize_me' => $this->createRandomString(128)
+        ]));
+
+        // Go up in size
+
+        // 0-16381 to 16382-65535
+        $document = $this->updateStringAttributeSize(16382, $document);
+
+        // 16382-65535 to 65536-16777215
+        $document = $this->updateStringAttributeSize(65536, $document);
+
+        // 65536-16777216 to PHP_INT_MAX or adapter limit
+        $document = $this->updateStringAttributeSize(16777217, $document);
+
+        // Test going down in size with data that is too big (Expect Failure)
+        try {
+            static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
+            $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
+        } catch (TruncateException $e) {
+        }
+
+        // Test going down in size when data isn't too big.
+        static::getDatabase()->updateDocument('resize_test', $document->getId(), $document->setAttribute('resize_me', $this->createRandomString(128)));
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
+
+        // VARCHAR -> VARCHAR Truncation Test
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 1000, true);
+        static::getDatabase()->updateDocument('resize_test', $document->getId(), $document->setAttribute('resize_me', $this->createRandomString(1000)));
+
+        try {
+            static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, 128, true);
+            $this->fail('Succeeded updating attribute size to smaller size with data that is too big');
+        } catch (TruncateException $e) {
+        }
+
+        if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
+            $length = intval(static::getDatabase()->getAdapter()->getMaxIndexLength() / 2);
+
+            $this->assertEquals(true, static::getDatabase()->createAttribute('resize_test', 'attr1', Database::VAR_STRING, $length, true));
+            $this->assertEquals(true, static::getDatabase()->createAttribute('resize_test', 'attr2', Database::VAR_STRING, $length, true));
+
+            /**
+             * No index length provided, we are able to validate
+             */
+            static::getDatabase()->createIndex('resize_test', 'index1', Database::INDEX_KEY, ['attr1', 'attr2']);
+
+            try {
+                static::getDatabase()->updateAttribute('resize_test', 'attr1', Database::VAR_STRING, 5000);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertEquals('Index length is longer than the maximum: '.static::getDatabase()->getAdapter()->getMaxIndexLength(), $e->getMessage());
+            }
+
+            static::getDatabase()->deleteIndex('resize_test', 'index1');
+
+            /**
+             * Index lengths are provided, We are able to validate
+             * Index $length === attr1, $length === attr2, so $length is removed, so we are able to validate
+             */
+            static::getDatabase()->createIndex('resize_test', 'index1', Database::INDEX_KEY, ['attr1', 'attr2'], [$length, $length]);
+
+            $collection = static::getDatabase()->getCollection('resize_test');
+            $indexes = $collection->getAttribute('indexes', []);
+            $this->assertEquals(null, $indexes[0]['lengths'][0]);
+            $this->assertEquals(null, $indexes[0]['lengths'][1]);
+
+            try {
+                static::getDatabase()->updateAttribute('resize_test', 'attr1', Database::VAR_STRING, 5000);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertEquals('Index length is longer than the maximum: '.static::getDatabase()->getAdapter()->getMaxIndexLength(), $e->getMessage());
+            }
+
+            static::getDatabase()->deleteIndex('resize_test', 'index1');
+
+            /**
+             * Index lengths are provided
+             * We are able to increase size because index length remains 50
+             */
+            static::getDatabase()->createIndex('resize_test', 'index1', Database::INDEX_KEY, ['attr1', 'attr2'], [50, 50]);
+
+            $collection = static::getDatabase()->getCollection('resize_test');
+            $indexes = $collection->getAttribute('indexes', []);
+            $this->assertEquals(50, $indexes[0]['lengths'][0]);
+            $this->assertEquals(50, $indexes[0]['lengths'][1]);
+
+            static::getDatabase()->updateAttribute('resize_test', 'attr1', Database::VAR_STRING, 5000);
+        }
+    }
+
+    public function testEncryptAttributes(): void
+    {
+        // Add custom encrypt filter
+        static::getDatabase()->addFilter(
+            'encrypt',
+            function (mixed $value) {
+                return json_encode([
+                    'data' => base64_encode($value),
+                    'method' => 'base64',
+                    'version' => 'v1',
+                ]);
+            },
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                $value = json_decode($value, true);
+                return base64_decode($value['data']);
+            }
+        );
+
+        $col = static::getDatabase()->createCollection(__FUNCTION__);
+        $this->assertNotNull($col->getId());
+
+        static::getDatabase()->createAttribute($col->getId(), 'title', Database::VAR_STRING, 255, true);
+        static::getDatabase()->createAttribute($col->getId(), 'encrypt', Database::VAR_STRING, 128, true, filters: ['encrypt']);
+
+        static::getDatabase()->createDocument($col->getId(), new Document([
+            'title' => 'Sample Title',
+            'encrypt' => 'secret',
+        ]));
+        // query against encrypt
+        try {
+            $queries = [Query::equal('encrypt', ['test'])];
+            $doc = static::getDatabase()->find($col->getId(), $queries);
+            $this->fail('Queried against encrypt field. Failed to throw exeception.');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+        }
+
+        try {
+            $queries = [Query::equal('title', ['test'])];
+            static::getDatabase()->find($col->getId(), $queries);
+        } catch (Throwable $e) {
+            $this->fail('Should not have thrown error');
         }
     }
 }

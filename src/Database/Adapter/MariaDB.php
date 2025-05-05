@@ -1134,10 +1134,6 @@ class MariaDB extends SQL
             $attributes['_updatedAt'] = $document->getUpdatedAt();
             $attributes['_permissions'] = json_encode($document->getPermissions());
 
-            if ($this->sharedTables) {
-                $attributes['_tenant'] = $this->tenant;
-            }
-
             $name = $this->filter($collection);
             $columns = '';
 

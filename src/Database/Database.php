@@ -354,9 +354,7 @@ class Database
      *
      * @var array<string, bool>
      */
-    protected array $globalCollections = [
-        self::METADATA => true
-    ];
+    protected array $globalCollections = [];
 
     /**
      * Stack of collection IDs when creating or updating related documents
@@ -1033,8 +1031,6 @@ class Database
         foreach ($collections as $collection) {
             $this->globalCollections[$collection] = true;
         }
-
-        $this->globalCollections[self::METADATA] = true;
 
         return $this;
     }

@@ -7,6 +7,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -1841,7 +1842,7 @@ trait RelationshipTests
      * @throws LimitException
      * @throws DuplicateException
      * @throws StructureException
-     * @throws Throwable
+     * @throws \Throwable
      */
     public function testOneToOneTwoWayRelationship(): void
     {

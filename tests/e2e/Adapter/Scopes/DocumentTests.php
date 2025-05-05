@@ -1425,7 +1425,12 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
         $this->assertEquals('Frozen', $documents[0]['name']);
     }
-
+    /**
+     * @depends testFind
+     * @param array<string, mixed> $data
+     * @return void
+     * @throws \Utopia\Database\Exception
+     */
     public function testFindByInternalID(array $data): void
     {
         /**
@@ -2064,7 +2069,9 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
     }
 
-
+    /**
+     * @depends testUpdateDocument
+     */
     public function testFindEdgeCases(Document $document): void
     {
         $collection = 'edgeCases';

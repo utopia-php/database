@@ -20,6 +20,10 @@ use Utopia\Validator\Range;
 
 trait AttributeTests
 {
+    public function createRandomString(int $length = 10): string
+    {
+        return \substr(\bin2hex(\random_bytes(\max(1, \intval(($length + 1) / 2)))), 0, $length);
+    }
     /**
      * Using phpunit dataProviders to check that all these combinations of types/defaults throw exceptions
      * https://phpunit.de/manual/3.7/en/writing-tests-for-phpunit.html#writing-tests-for-phpunit.data-providers
@@ -1123,5 +1127,20 @@ trait AttributeTests
         } catch (Throwable $e) {
             $this->fail('Should not have thrown error');
         }
+    }
+
+    public function updateStringAttributeSize(int $size, Document $document): Document
+    {
+        static::getDatabase()->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $size, true);
+
+        $document = $document->setAttribute('resize_me', $this->createRandomString($size));
+
+        static::getDatabase()->updateDocument('resize_test', $document->getId(), $document);
+        $checkDoc = static::getDatabase()->getDocument('resize_test', $document->getId());
+
+        $this->assertEquals($document->getAttribute('resize_me'), $checkDoc->getAttribute('resize_me'));
+        $this->assertEquals($size, strlen($checkDoc->getAttribute('resize_me')));
+
+        return $checkDoc;
     }
 }

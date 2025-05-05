@@ -10,6 +10,7 @@ use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
+use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -66,6 +67,19 @@ abstract class Base extends TestCase
     }
 
     protected string $testDatabase = 'utopiaTests';
+    /**
+     * @depends testAttributeCaseInsensitivity
+     */
+    public function testIndexCaseInsensitivity(): void
+    {
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+
+        try {
+            $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof DuplicateException);
+        }
+    }
 
     /**
      * Ensure the collection is removed after use

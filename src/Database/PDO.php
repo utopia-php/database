@@ -70,7 +70,12 @@ class PDO
 
         return $parts['host'] ?? throw new \Exception('No host found in DSN');
     }
-    public function parseDsn(string $dsn):array
+
+    /**
+     * @param string $dsn
+     * @return array<mixed>
+     */
+    public function parseDsn(string $dsn): array
     {
         $result = [];
 

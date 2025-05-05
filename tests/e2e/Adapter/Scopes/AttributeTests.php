@@ -5,6 +5,7 @@ use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -718,5 +719,249 @@ trait AttributeTests
 
         $this->assertEquals('string', $doc->getAttribute('renamed-test'));
         $this->assertArrayNotHasKey('renamed', $doc->getAttributes());
+    }
+
+
+    /**
+     * @depends testRenameAttribute
+     * @expectedException Exception
+     */
+    public function textRenameAttributeMissing(): void
+    {
+        $database = static::getDatabase();
+        $this->expectExceptionMessage('Attribute not found');
+        $database->renameAttribute('colors', 'name2', 'name3');
+    }
+
+    /**
+    * @depends testRenameAttribute
+    * @expectedException Exception
+    */
+    public function testRenameAttributeExisting(): void
+    {
+        $database = static::getDatabase();
+        $this->expectExceptionMessage('Attribute name already used');
+        $database->renameAttribute('colors', 'verbose', 'hex');
+    }
+
+    public function testWidthLimit(): void
+    {
+        if (static::getDatabase()->getAdapter()->getDocumentSizeLimit() === 0) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = static::getDatabase()->createCollection('width_limit');
+
+        $init = static::getDatabase()->getAdapter()->getAttributeWidth($collection);
+        $this->assertEquals(1067, $init);
+
+        $attribute = new Document([
+            '$id' => ID::custom('varchar_100'),
+            'type' => Database::VAR_STRING,
+            'size' => 100,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(401, $res - $init); // 100 * 4 + 1 (length)
+
+        $attribute = new Document([
+            '$id' => ID::custom('json'),
+            'type' => Database::VAR_STRING,
+            'size' => 100,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => true,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(20, $res - $init); // Pointer of Json / Longtext (mariaDB)
+
+        $attribute = new Document([
+            '$id' => ID::custom('text'),
+            'type' => Database::VAR_STRING,
+            'size' => 20000,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(20, $res - $init);
+
+        $attribute = new Document([
+            '$id' => ID::custom('bigint'),
+            'type' => Database::VAR_INTEGER,
+            'size' => 8,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(8, $res - $init);
+
+        $attribute = new Document([
+            '$id' => ID::custom('date'),
+            'type' => Database::VAR_DATETIME,
+            'size' => 8,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+        $res = static::getDatabase()->getAdapter()->getAttributeWidth($collection->setAttribute('attributes', [$attribute]));
+        $this->assertEquals(7, $res - $init);
+    }
+
+    public function testExceptionAttributeLimit(): void
+    {
+        if (static::getDatabase()->getAdapter()->getLimitForAttributes() === 0) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $limit = static::getDatabase()->getAdapter()->getLimitForAttributes() - static::getDatabase()->getAdapter()->getCountOfDefaultAttributes();
+
+        $attributes = [];
+
+        for ($i = 0; $i <= $limit; $i++) {
+            $attributes[] = new Document([
+                '$id' => ID::custom("attr_{$i}"),
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false,
+                'default' => null,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]);
+        }
+
+        try {
+            static::getDatabase()->createCollection('attributes_limit', $attributes);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Attribute limit of 1017 exceeded. Cannot create collection.', $e->getMessage());
+        }
+
+        /**
+         * Remove last attribute
+         */
+
+        array_pop($attributes);
+
+        $collection = static::getDatabase()->createCollection('attributes_limit', $attributes);
+
+        $attribute = new Document([
+            '$id' => ID::custom('breaking'),
+            'type' => Database::VAR_STRING,
+            'size' => 100,
+            'required' => true,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        try {
+            static::getDatabase()->checkAttribute($collection, $attribute);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Column limit reached. Cannot create new attribute.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createAttribute($collection->getId(), 'breaking', Database::VAR_STRING, 100, true);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Column limit reached. Cannot create new attribute.', $e->getMessage());
+        }
+    }
+
+    public function testExceptionWidthLimit(): void
+    {
+        if (static::getDatabase()->getAdapter()->getDocumentSizeLimit() === 0) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $attributes = [];
+
+        $attributes[] = new Document([
+            '$id' => ID::custom('varchar_16000'),
+            'type' => Database::VAR_STRING,
+            'size' => 16000,
+            'required' => true,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $attributes[] = new Document([
+            '$id' => ID::custom('varchar_200'),
+            'type' => Database::VAR_STRING,
+            'size' => 200,
+            'required' => true,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        try {
+            static::getDatabase()->createCollection("attributes_row_size", $attributes);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Document size limit of 65535 exceeded. Cannot create collection.', $e->getMessage());
+        }
+
+        /**
+         * Remove last attribute
+         */
+
+        array_pop($attributes);
+
+        $collection = static::getDatabase()->createCollection("attributes_row_size", $attributes);
+
+        $attribute = new Document([
+            '$id' => ID::custom('breaking'),
+            'type' => Database::VAR_STRING,
+            'size' => 200,
+            'required' => true,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        try {
+            static::getDatabase()->checkAttribute($collection, $attribute);
+            $this->fail('Failed to throw exception');
+        } catch (\Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->createAttribute($collection->getId(), 'breaking', Database::VAR_STRING, 200, true);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertEquals('Row width limit reached. Cannot create new attribute.', $e->getMessage());
+        }
     }
 }

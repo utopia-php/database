@@ -1143,4 +1143,30 @@ trait AttributeTests
 
         return $checkDoc;
     }
+
+    /**
+     * @depends testAttributeCaseInsensitivity
+     */
+    public function testIndexCaseInsensitivity(): void
+    {
+        $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+
+        try {
+            $this->assertEquals(true, static::getDatabase()->createIndex('attributes', 'key_CaseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof DuplicateException);
+        }
+    }
+
+    /**
+     * Ensure the collection is removed after use
+     *
+     * @depends testIndexCaseInsensitivity
+     */
+    public function testCleanupAttributeTests(): void
+    {
+        static::getDatabase()->deleteCollection('attributes');
+        $this->assertEquals(1, 1);
+    }
+
 }

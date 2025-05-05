@@ -350,6 +350,15 @@ class Database
     protected bool $migrating = false;
 
     /**
+     * List of collections that should be treated as globally accessible
+     *
+     * @var array<string>
+     */
+    protected array $globalCollections = [
+        self::METADATA,
+    ];
+
+    /**
      * Stack of collection IDs when creating or updating related documents
      * @var array<string>
      */
@@ -1011,6 +1020,33 @@ class Database
     public function getMaxQueryValues(): int
     {
         return $this->maxQueryValues;
+    }
+
+    /**
+     * Set list of collections which are globally accessible
+     *
+     * @param array<string> $collections
+     * @return $this
+     */
+    public function setGlobalCollections(array $collections): static
+    {
+        foreach ($collections as $collection) {
+            $this->globalCollections[$collection] = true;
+        }
+
+        $this->globalCollections[self::METADATA] = true;
+
+        return $this;
+    }
+
+    /**
+     * Get list of collections which are globally accessible
+     *
+     * @return array<string>
+     */
+    public function getGlobalCollections(): array
+    {
+        return $this->globalCollections;
     }
 
     /**
@@ -3021,7 +3057,12 @@ class Database
         /**
          * Cache hash keys
          */
-        $collectionCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection->getId();
+        $tenantSegment = $this->adapter->getTenant();
+        if (isset($this->globalCollections[$collection->getId()])) {
+            $tenantSegment = null;
+        }
+
+        $collectionCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $tenantSegment . ':collection:' . $collection->getId();
         $documentCacheKey = $documentCacheHash = $collectionCacheKey . ':' . $id;
 
         if (!empty($selections)) {

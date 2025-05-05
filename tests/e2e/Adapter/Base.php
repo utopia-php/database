@@ -3,6 +3,13 @@
 namespace Tests\E2E\Adapter;
 
 use PHPUnit\Framework\TestCase;
+use Tests\E2E\Adapter\Scopes\AttributeTests;
+use Tests\E2E\Adapter\Scopes\CollectionTests;
+use Tests\E2E\Adapter\Scopes\DocumentTests;
+use Tests\E2E\Adapter\Scopes\GeneralTests;
+use Tests\E2E\Adapter\Scopes\IndexTests;
+use Tests\E2E\Adapter\Scopes\PermissionTests;
+use Tests\E2E\Adapter\Scopes\RelationshipTests;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -11,13 +18,21 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Database\Validator\Index;
 
 \ini_set('memory_limit', '2048M');
 
 abstract class Base extends TestCase
 {
+    use CollectionTests;
+    use DocumentTests;
+    use AttributeTests;
+    use IndexTests;
+    use PermissionTests;
+    use RelationshipTests;
+    use GeneralTests;
+
     protected static string $namespace;
+
 
     /**
      * @return Database

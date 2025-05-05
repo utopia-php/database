@@ -1,5 +1,6 @@
 <?php
 
+namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use Utopia\Database\Database;

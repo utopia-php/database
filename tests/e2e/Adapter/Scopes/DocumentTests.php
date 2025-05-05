@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\E2E\Adapter;
+namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use Throwable;

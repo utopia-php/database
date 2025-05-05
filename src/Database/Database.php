@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Swoole\Database\PDOStatementProxy;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
@@ -1434,11 +1435,21 @@ class Database
             fn ($attribute) => $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
         );
 
-        foreach ($relationships as $relationship) {
-            $this->deleteRelationship($collection->getId(), $relationship->getId());
-        }
 
-        $this->adapter->deleteCollection($id);
+        try {
+            foreach ($relationships as $relationship) {
+                $this->deleteRelationship($collection->getId(), $relationship->getId());
+            }
+    
+            $this->adapter->deleteCollection($id);
+        } catch (PDOStatementProxy $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if($e->getCode() === '42S02') {
+                if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                    throw $e;
+                }
+            }
+        }
 
         if ($id === self::METADATA) {
             $deleted = true;

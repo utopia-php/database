@@ -59,15 +59,31 @@ class PDO
 
     public function getScheme(): string
     {
-        $parts = parse_url($this->dsn);
+        $parts = $this->parseDsn($this->dsn);
 
         return $parts['scheme'] ?? throw new \Exception('No scheme found in DSN');
     }
 
     public function getHostname(): string
     {
-        $parts = parse_url($this->dsn);
+        $parts = $this->parseDsn($this->dsn);
 
         return $parts['host'] ?? throw new \Exception('No host found in DSN');
+    }
+    public function parseDsn(string $dsn):array
+    {
+        $result = [];
+
+        [$driver, $params] = explode(':', $dsn, 2);
+        $result['driver'] = $driver;
+
+        foreach (explode(';', $params) as $pair) {
+            if (str_contains($pair, '=')) {
+                [$key, $value] = explode('=', $pair, 2);
+                $result[$key] = $value;
+            }
+        }
+
+        return $result;
     }
 }

@@ -6440,24 +6440,20 @@ class Database
      */
     public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
     {
+        $hostname = '';
+
         if ($this->getSharedTables()) {
-            $collectionKey = \sprintf(
-                '%s-cache-%s:%s:%s:collection:%s',
-                $this->cacheName,
-                $this->adapter->getHostname(),
-                $this->getNamespace(),
-                $this->adapter->getTenant(),
-                $collectionId
-            );
-        } else {
-            $collectionKey = \sprintf(
-                '%s-cache-%s:%s:collection:%s',
-                $this->cacheName,
-                $this->getNamespace(),
-                $this->adapter->getTenant(),
-                $collectionId
-            );
+            $hostname = $this->adapter->getHostname();
         }
+
+        $collectionKey = \sprintf(
+            '%s-cache-%s:%s:%s:collection:%s',
+            $this->cacheName,
+            $hostname,
+            $this->getNamespace(),
+            $this->adapter->getTenant(),
+            $collectionId
+        );
 
         if ($documentId) {
             $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";

@@ -1549,6 +1549,8 @@ abstract class SQL extends Adapter
             return '*';
         }
 
+        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
+
         $selections[] = $this->getInternalKeyForAttribute('$id');
         $selections[] = $this->getInternalKeyForAttribute('$permissions');
 

@@ -352,10 +352,10 @@ class Database
     /**
      * List of collections that should be treated as globally accessible
      *
-     * @var array<string>
+     * @var array<string, bool>
      */
     protected array $globalCollections = [
-        self::METADATA,
+        self::METADATA => true
     ];
 
     /**
@@ -1046,7 +1046,7 @@ class Database
      */
     public function getGlobalCollections(): array
     {
-        return $this->globalCollections;
+        return \array_keys($this->globalCollections);
     }
 
     /**

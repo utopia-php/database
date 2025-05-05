@@ -3,7 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
-use Swoole\Database\PDOStatementProxy;
+use PDOException;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
@@ -1440,11 +1440,12 @@ class Database
             foreach ($relationships as $relationship) {
                 $this->deleteRelationship($collection->getId(), $relationship->getId());
             }
-    
+
             $this->adapter->deleteCollection($id);
-        } catch (PDOStatementProxy $e) {
+        } catch (PDOException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if($e->getCode() === '42S02') {
+            // "42S02" is "Base table or view not found": https://learn.microsoft.com/en-us/sql/odbc/reference/appendixes/appendix-a-odbc-error-codes?view=sql-server-ver16
+            if ($e->getCode() === '42S02') {
                 if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                     throw $e;
                 }

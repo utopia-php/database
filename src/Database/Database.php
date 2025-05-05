@@ -5766,7 +5766,7 @@ class Database
         //            $filters
         //        );
 
-        $selections = $this->validateSelections($collection, $selects);
+        //$selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
         foreach ($selects as $i => $q) {
@@ -6146,7 +6146,12 @@ class Database
      */
     public function decode(QueryContext $context, Document $document, array $selects = []): Document
     {
+        $internals = [];
         $schema = [];
+
+        foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+            //$internals[$attribute['$id']] = $attribute;
+        }
 
         foreach ($context->getCollections() as $collection) {
             foreach ($collection->getAttribute('attributes', []) as $attribute) {
@@ -6154,20 +6159,15 @@ class Database
                 $key = $this->adapter->filter($key);
                 $schema[$collection->getId()][$key] = $attribute->getArrayCopy();
             }
-
-            foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
-                $schema[$collection->getId()][$attribute['$id']] = $attribute;
-            }
         }
 
         $new = new Document();
 
         foreach ($document as $key => $value) {
-            //$key = $this->adapter->filter($key);
             $alias = Query::DEFAULT_ALIAS;
 
             foreach ($selects as $select) {
-                if($this->adapter->filter($select->getAttribute()) == $key){
+                if($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key){
                     $alias = $select->getAlias();
                     break;
                 }
@@ -6178,12 +6178,13 @@ class Database
                 throw new \Exception('Invalid query: Unknown Alias context');
             }
 
-            $attribute = $schema[$collection->getId()][$key] ?? null;
+            $attribute = $internals[$key] ?? null;
 
             if (is_null($attribute)){
-                var_dump('####### Decode attribute not found');
-                var_dump($collection->getId());
-                var_dump($key);
+                $attribute = $schema[$collection->getId()][$this->adapter->filter($key)] ?? null;
+            }
+
+            if (is_null($attribute)){
                 continue;
             }
 
@@ -6222,17 +6223,18 @@ class Database
             return $document;
         }
 
+        $internals = [];
         $schema = [];
+
+        foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+            $internals[$attribute['$id']] = $attribute;
+        }
 
         foreach ($context->getCollections() as $collection) {
             foreach ($collection->getAttribute('attributes', []) as $attribute) {
                 $key = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
                 $key = $this->adapter->filter($key);
                 $schema[$collection->getId()][$key] = $attribute->getArrayCopy();
-            }
-
-            foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
-                $schema[$collection->getId()][$attribute['$id']] = $attribute;
             }
         }
 
@@ -6242,7 +6244,7 @@ class Database
             $alias = Query::DEFAULT_ALIAS;
 
             foreach ($selects as $select) {
-                if($this->adapter->filter($select->getAttribute()) == $key){
+                if($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key){
                     $alias = $select->getAlias();
                     break;
                 }
@@ -6253,9 +6255,18 @@ class Database
                 throw new \Exception('Invalid query: Unknown Alias context');
             }
 
-            $attribute = $schema[$collection->getId()][$key] ?? null;
+            $attribute = $internals[$key] ?? null;
 
             if (is_null($attribute)){
+                $attribute = $schema[$collection->getId()][$this->adapter->filter($key)] ?? null;
+            }
+
+            if (is_null($attribute)){
+                continue;
+            }
+
+            if (is_null($value)){
+                $new->setAttribute($attribute['$id'], null);
                 continue;
             }
 

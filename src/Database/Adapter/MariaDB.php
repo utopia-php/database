@@ -331,9 +331,13 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -2281,6 +2285,13 @@ class MariaDB extends SQL
 
         // Unknown collection
         if ($e->getCode() === '42S02' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {
+            return new NotFoundException('Collection not found', $e->getCode(), $e);
+        }
+
+        // Unknown collection
+        // We have two of same, because docs point to 1051.
+        // Keeping previous 1049 (above) just in case it's for older versions
+        if ($e->getCode() === '42S02' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1051) {
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 

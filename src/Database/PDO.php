@@ -2,7 +2,7 @@
 
 namespace Utopia\Database;
 
-use Utopia\CLI\Console;
+use InvalidArgumentException;
 
 /**
  * A PDO wrapper that forwards method calls to the internal PDO instance.
@@ -41,17 +41,7 @@ class PDO
      */
     public function __call(string $method, array $args): mixed
     {
-        try {
-            return $this->pdo->{$method}(...$args);
-        } catch (\Throwable $e) {
-            if (Connection::hasError($e)) {
-                Console::warning('[Database] Lost connection detected. Reconnecting...');
-                $this->reconnect();
-                return $this->pdo->{$method}(...$args);
-            }
-
-            throw $e;
-        }
+        return $this->pdo->{$method}(...$args);
     }
 
     /**
@@ -67,5 +57,66 @@ class PDO
             $this->password,
             $this->config
         );
+    }
+
+    /**
+     * Get the hostname from the DSN.
+     *
+     * @return string
+     * @throws \Exception
+     */
+    public function getHostname(): string
+    {
+        $parts = $this->parseDsn($this->dsn);
+
+        /**
+         * @var string $host
+         */
+        $host = $parts['host'] ?? throw new \Exception('No host found in DSN');
+
+        return $host;
+    }
+
+    /**
+     * Parse a PDO-style DSN string.
+     *
+     * @return array<string, string|int|float|bool|null>
+     * @throws InvalidArgumentException If the DSN is malformed.
+     */
+    private function parseDsn(string $dsn): array
+    {
+        if ($dsn === '' || !\str_contains($dsn, ':')) {
+            throw new InvalidArgumentException('Malformed DSN: missing driver separator.');
+        }
+
+        [$driver, $parameterString] = \explode(':', $dsn, 2);
+
+        $parsed = ['driver' => \trim($driver)];
+
+        // Handle “path only” DSNs like sqlite:/path/to.db
+        if (\in_array($driver, ['sqlite'], true) && $parameterString !== '') {
+            $parsed['path'] = \ltrim($parameterString, '/');
+            return $parsed;
+        }
+
+        $parameterSegments = \array_filter(\explode(';', $parameterString));
+
+        foreach ($parameterSegments as $segment) {
+            [$name, $rawValue] = \array_pad(\explode('=', $segment, 2), 2, null);
+
+            $name  = \trim($name);
+            $value = $rawValue !== null ? \trim($rawValue) : null;
+
+            // Casting for scalars
+            if ($value === 'true' || $value === 'false') {
+                $value = $value === 'true';
+            } elseif (\is_numeric($value)) {
+                $value += 0;
+            }
+
+            $parsed[$name] = $value;
+        }
+
+        return $parsed;
     }
 }

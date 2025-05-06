@@ -331,9 +331,13 @@ class MariaDB extends SQL
 
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**

@@ -3,7 +3,6 @@
 namespace Utopia\Database;
 
 use Exception;
-use PDOException;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
@@ -1435,20 +1434,16 @@ class Database
             fn ($attribute) => $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP
         );
 
+        foreach ($relationships as $relationship) {
+            $this->deleteRelationship($collection->getId(), $relationship->getId());
+        }
 
         try {
-            foreach ($relationships as $relationship) {
-                $this->deleteRelationship($collection->getId(), $relationship->getId());
-            }
-
             $this->adapter->deleteCollection($id);
-        } catch (PDOException $e) {
+        } catch (NotFoundException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            // "42S02" is "Base table or view not found": https://learn.microsoft.com/en-us/sql/odbc/reference/appendixes/appendix-a-odbc-error-codes?view=sql-server-ver16
-            if ($e->getCode() === '42S02') {
-                if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
-                    throw $e;
-                }
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
             }
         }
 

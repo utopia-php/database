@@ -369,4 +369,27 @@ trait IndexTests
         static::getDatabase()->setMaxQueryValues($max);
     }
 
+    public function testEmptySearch(): void
+    {
+        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        if (!$fulltextSupport) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', ''),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', '*'),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = static::getDatabase()->find('documents', [
+            Query::search('string', '<>'),
+        ]);
+        $this->assertEquals(0, count($documents));
+    }
 }

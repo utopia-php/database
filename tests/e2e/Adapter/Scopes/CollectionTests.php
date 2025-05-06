@@ -5,10 +5,17 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
 trait CollectionTests
@@ -716,5 +723,504 @@ trait CollectionTests
         }
 
         $this->assertIsString(static::getDatabase()->getConnectionId());
+    }
+
+    public function testKeywords(): void
+    {
+        $database = static::getDatabase();
+        $keywords = $database->getKeywords();
+
+        // Collection name tests
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('attribute1'),
+                'type' => Database::VAR_STRING,
+                'size' => 256,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index1'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute1'],
+                'lengths' => [256],
+                'orders' => ['ASC'],
+            ]),
+        ];
+
+        foreach ($keywords as $keyword) {
+            $collection = $database->createCollection($keyword, $attributes, $indexes);
+            $this->assertEquals($keyword, $collection->getId());
+
+            $document = $database->createDocument($keyword, new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                '$id' => ID::custom('helloWorld'),
+                'attribute1' => 'Hello World',
+            ]));
+            $this->assertEquals('helloWorld', $document->getId());
+
+            $document = $database->getDocument($keyword, 'helloWorld');
+            $this->assertEquals('helloWorld', $document->getId());
+
+            $documents = $database->find($keyword);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('helloWorld', $documents[0]->getId());
+
+            $collection = $database->deleteCollection($keyword);
+            $this->assertTrue($collection);
+        }
+
+        // TODO: updateCollection name tests
+
+        // Attribute name tests
+        foreach ($keywords as $keyword) {
+            $collectionName = 'rk' . $keyword; // rk is short-hand for reserved-keyword. We do this sicne there are some limits (64 chars max)
+
+            $collection = $database->createCollection($collectionName);
+            $this->assertEquals($collectionName, $collection->getId());
+
+            $attribute = static::getDatabase()->createAttribute($collectionName, $keyword, Database::VAR_STRING, 128, true);
+            $this->assertEquals(true, $attribute);
+
+            $document = new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                '$id' => 'reservedKeyDocument'
+            ]);
+            $document->setAttribute($keyword, 'Reserved:' . $keyword);
+
+            $document = $database->createDocument($collectionName, $document);
+            $this->assertEquals('reservedKeyDocument', $document->getId());
+            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
+
+            $document = $database->getDocument($collectionName, 'reservedKeyDocument');
+            $this->assertEquals('reservedKeyDocument', $document->getId());
+            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
+
+            $documents = $database->find($collectionName);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+            $this->assertEquals('Reserved:' . $keyword, $documents[0]->getAttribute($keyword));
+
+            $documents = $database->find($collectionName, [Query::equal($keyword, ["Reserved:{$keyword}"])]);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+
+            $documents = $database->find($collectionName, [
+                Query::orderDesc($keyword)
+            ]);
+            $this->assertCount(1, $documents);
+            $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
+
+            $collection = $database->deleteCollection($collectionName);
+            $this->assertTrue($collection);
+        }
+    }
+
+    public function testLabels(): void
+    {
+        $this->assertInstanceOf('Utopia\Database\Document', static::getDatabase()->createCollection(
+            'labels_test',
+        ));
+        static::getDatabase()->createAttribute('labels_test', 'attr1', Database::VAR_STRING, 10, false);
+
+        static::getDatabase()->createDocument('labels_test', new Document([
+            '$id' => 'doc1',
+            'attr1' => 'value1',
+            '$permissions' => [
+                Permission::read(Role::label('reader')),
+            ],
+        ]));
+
+        $documents = static::getDatabase()->find('labels_test');
+
+        $this->assertEmpty($documents);
+
+        Authorization::setRole(Role::label('reader')->toString());
+
+        $documents = static::getDatabase()->find('labels_test');
+
+        $this->assertCount(1, $documents);
+    }
+
+    public function testMetadata(): void
+    {
+        static::getDatabase()->setMetadata('key', 'value');
+
+        static::getDatabase()->createCollection('testers');
+
+        $this->assertEquals(['key' => 'value'], static::getDatabase()->getMetadata());
+
+        static::getDatabase()->resetMetadata();
+
+        $this->assertEquals([], static::getDatabase()->getMetadata());
+    }
+
+    public function testDeleteCollectionDeletesRelationships(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('devices');
+
+        static::getDatabase()->createRelationship(
+            collection: 'testers',
+            relatedCollection: 'devices',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            twoWayKey: 'tester'
+        );
+
+        $testers = static::getDatabase()->getCollection('testers');
+        $devices = static::getDatabase()->getCollection('devices');
+
+        $this->assertEquals(1, \count($testers->getAttribute('attributes')));
+        $this->assertEquals(1, \count($devices->getAttribute('attributes')));
+        $this->assertEquals(1, \count($devices->getAttribute('indexes')));
+
+        static::getDatabase()->deleteCollection('testers');
+
+        $testers = static::getDatabase()->getCollection('testers');
+        $devices = static::getDatabase()->getCollection('devices');
+
+        $this->assertEquals(true, $testers->isEmpty());
+        $this->assertEquals(0, \count($devices->getAttribute('attributes')));
+        $this->assertEquals(0, \count($devices->getAttribute('indexes')));
+    }
+
+
+    public function testCascadeMultiDelete(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection('cascadeMultiDelete1');
+        static::getDatabase()->createCollection('cascadeMultiDelete2');
+        static::getDatabase()->createCollection('cascadeMultiDelete3');
+
+        static::getDatabase()->createRelationship(
+            collection: 'cascadeMultiDelete1',
+            relatedCollection: 'cascadeMultiDelete2',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            onDelete: Database::RELATION_MUTATE_CASCADE
+        );
+
+        static::getDatabase()->createRelationship(
+            collection: 'cascadeMultiDelete2',
+            relatedCollection: 'cascadeMultiDelete3',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            onDelete: Database::RELATION_MUTATE_CASCADE
+        );
+
+        $root = static::getDatabase()->createDocument('cascadeMultiDelete1', new Document([
+            '$id' => 'cascadeMultiDelete1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::delete(Role::any())
+            ],
+            'cascadeMultiDelete2' => [
+                [
+                    '$id' => 'cascadeMultiDelete2',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::delete(Role::any())
+                    ],
+                    'cascadeMultiDelete3' => [
+                        [
+                            '$id' => 'cascadeMultiDelete3',
+                            '$permissions' => [
+                                Permission::read(Role::any()),
+                                Permission::delete(Role::any())
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]));
+
+        $this->assertCount(1, $root->getAttribute('cascadeMultiDelete2'));
+        $this->assertCount(1, $root->getAttribute('cascadeMultiDelete2')[0]->getAttribute('cascadeMultiDelete3'));
+
+        $this->assertEquals(true, static::getDatabase()->deleteDocument('cascadeMultiDelete1', $root->getId()));
+
+        $multi2 = static::getDatabase()->getDocument('cascadeMultiDelete2', 'cascadeMultiDelete2');
+        $this->assertEquals(true, $multi2->isEmpty());
+
+        $multi3 = static::getDatabase()->getDocument('cascadeMultiDelete3', 'cascadeMultiDelete3');
+        $this->assertEquals(true, $multi3->isEmpty());
+    }
+
+    /**
+     * @throws AuthorizationException
+     * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws QueryException
+     * @throws StructureException
+     * @throws TimeoutException
+     */
+    public function testSharedTables(): void
+    {
+        /**
+         * Default mode already tested, we'll test 'schema' and 'table' isolation here
+         */
+        $database = static::getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForSchemas()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if ($database->exists('schema1')) {
+            $database->setDatabase('schema1')->delete();
+        }
+        if ($database->exists('schema2')) {
+            $database->setDatabase('schema2')->delete();
+        }
+        if ($database->exists('sharedTables')) {
+            $database->setDatabase('sharedTables')->delete();
+        }
+
+        /**
+         * Schema
+         */
+        $database
+            ->setDatabase('schema1')
+            ->setNamespace('')
+            ->create();
+
+        $this->assertEquals(true, $database->exists('schema1'));
+
+        $database
+            ->setDatabase('schema2')
+            ->setNamespace('')
+            ->create();
+
+        $this->assertEquals(true, $database->exists('schema2'));
+
+        /**
+         * Table
+         */
+        $tenant1 = 1;
+        $tenant2 = 2;
+
+        $database
+            ->setDatabase('sharedTables')
+            ->setNamespace('')
+            ->setSharedTables(true)
+            ->setTenant($tenant1)
+            ->create();
+
+        $this->assertEquals(true, $database->exists('sharedTables'));
+
+        $database->createCollection('people', [
+            new Document([
+                '$id' => 'name',
+                'type' => Database::VAR_STRING,
+                'size' => 128,
+                'required' => true,
+            ]),
+            new Document([
+                '$id' => 'lifeStory',
+                'type' => Database::VAR_STRING,
+                'size' => 65536,
+                'required' => true,
+            ])
+        ], [
+            new Document([
+                '$id' => 'idx_name',
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['name']
+            ])
+        ], [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ]);
+
+        $this->assertCount(1, $database->listCollections());
+
+        if ($database->getAdapter()->getSupportForFulltextIndex()) {
+            $database->createIndex(
+                collection: 'people',
+                id: 'idx_lifeStory',
+                type: Database::INDEX_FULLTEXT,
+                attributes: ['lifeStory']
+            );
+        }
+
+        $docId = ID::unique();
+
+        $database->createDocument('people', new Document([
+            '$id' => $docId,
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Spiderman',
+            'lifeStory' => 'Spider-Man is a superhero appearing in American comic books published by Marvel Comics.'
+        ]));
+
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEquals('Spiderman', $doc['name']);
+        $this->assertEquals($tenant1, $doc->getTenant());
+
+        /**
+         * Remove Permissions
+         */
+        $doc->setAttribute('$permissions', [
+            Permission::read(Role::any())
+        ]);
+
+        $database->updateDocument('people', $docId, $doc);
+
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEquals([Permission::read(Role::any())], $doc['$permissions']);
+        $this->assertEquals($tenant1, $doc->getTenant());
+
+        /**
+         * Add Permissions
+         */
+        $doc->setAttribute('$permissions', [
+            Permission::read(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+
+        $database->updateDocument('people', $docId, $doc);
+
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEquals([Permission::read(Role::any()), Permission::delete(Role::any())], $doc['$permissions']);
+
+        $docs = $database->find('people');
+        $this->assertCount(1, $docs);
+
+        // Swap to tenant 2, no access
+        $database->setTenant($tenant2);
+
+        try {
+            $database->getDocument('people', $docId);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Collection not found', $e->getMessage());
+        }
+
+        try {
+            $database->find('people');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Collection not found', $e->getMessage());
+        }
+
+        $this->assertCount(0, $database->listCollections());
+
+        // Swap back to tenant 1, allowed
+        $database->setTenant($tenant1);
+
+        $doc = $database->getDocument('people', $docId);
+        $this->assertEquals('Spiderman', $doc['name']);
+        $docs = $database->find('people');
+        $this->assertEquals(1, \count($docs));
+
+        // Remove tenant but leave shared tables enabled
+        $database->setTenant(null);
+
+        try {
+            $database->getDocument('people', $docId);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals('Collection not found', $e->getMessage());
+        }
+
+        // Reset state
+        $database
+            ->setSharedTables($sharedTables)
+            ->setNamespace($namespace)
+            ->setDatabase($schema);
+    }
+    public function testSharedTablesDuplicates(): void
+    {
+        $database = static::getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForSchemas()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if ($database->exists('sharedTables')) {
+            $database->setDatabase('sharedTables')->delete();
+        }
+
+        $database
+            ->setDatabase('sharedTables')
+            ->setNamespace('')
+            ->setSharedTables(true)
+            ->setTenant(null)
+            ->create();
+
+        // Create collection
+        $database->createCollection('duplicates', documentSecurity: false);
+        $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+        $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+
+        $database->setTenant(2);
+
+        try {
+            $database->createCollection('duplicates', documentSecurity: false);
+        } catch (DuplicateException) {
+            // Ignore
+        }
+
+        try {
+            $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+        } catch (DuplicateException) {
+            // Ignore
+        }
+
+        try {
+            $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+        } catch (DuplicateException) {
+            // Ignore
+        }
+
+        $collection = $database->getCollection('duplicates');
+        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
+        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
+
+        $database->setTenant(1);
+
+        $collection = $database->getCollection('duplicates');
+        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
+        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
+
+        $database
+            ->setSharedTables($sharedTables)
+            ->setNamespace($namespace)
+            ->setDatabase($schema);
     }
 }

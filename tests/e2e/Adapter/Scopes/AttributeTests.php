@@ -5,7 +5,10 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use Throwable;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -17,6 +20,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 
@@ -1486,6 +1490,124 @@ trait AttributeTests
                 Query::contains('pref', ['Joe'])
             ]);
             $this->assertCount(1, $documents);
+        }
+    }
+
+    public function testCreateDatetime(): void
+    {
+        static::getDatabase()->createCollection('datetime');
+
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true, null, true, false, null, [], ['datetime']));
+        $this->assertEquals(true, static::getDatabase()->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
+
+        try {
+            static::getDatabase()->createDocument('datetime', new Document([
+                'date' => ['2020-01-01'], // array
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        $doc = static::getDatabase()->createDocument('datetime', new Document([
+            '$id' => ID::custom('id1234'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'date' => DateTime::now(),
+        ]));
+
+        $this->assertEquals(29, strlen($doc->getCreatedAt()));
+        $this->assertEquals(29, strlen($doc->getUpdatedAt()));
+        $this->assertEquals('+00:00', substr($doc->getCreatedAt(), -6));
+        $this->assertEquals('+00:00', substr($doc->getUpdatedAt(), -6));
+        $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getCreatedAt());
+        $this->assertGreaterThan('2020-08-16T19:30:08.363+00:00', $doc->getUpdatedAt());
+
+        $document = static::getDatabase()->getDocument('datetime', 'id1234');
+
+        $min = static::getDatabase()->getAdapter()->getMinDateTime();
+        $max = static::getDatabase()->getAdapter()->getMaxDateTime();
+        $dateValidator = new DatetimeValidator($min, $max);
+        $this->assertEquals(null, $document->getAttribute('date2'));
+        $this->assertEquals(true, $dateValidator->isValid($document->getAttribute('date')));
+        $this->assertEquals(false, $dateValidator->isValid($document->getAttribute('date2')));
+
+        $documents = static::getDatabase()->find('datetime', [
+            Query::greaterThan('date', '1975-12-06 10:00:00+01:00'),
+            Query::lessThan('date', '2030-12-06 10:00:00-01:00'),
+        ]);
+        $this->assertEquals(1, count($documents));
+
+        $documents = static::getDatabase()->find('datetime', [
+            Query::greaterThan('$createdAt', '1975-12-06 11:00:00.000'),
+        ]);
+        $this->assertCount(1, $documents);
+
+        try {
+            static::getDatabase()->createDocument('datetime', new Document([
+                'date' => "1975-12-06 00:00:61" // 61 seconds is invalid
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        try {
+            static::getDatabase()->createDocument('datetime', new Document([
+                'date' => '+055769-02-14T17:56:18.000Z'
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        $invalidDates = [
+            '+055769-02-14T17:56:18.000Z1',
+            '1975-12-06 00:00:61',
+            '16/01/2024 12:00:00AM'
+        ];
+
+        foreach ($invalidDates as $date) {
+            try {
+                static::getDatabase()->find('datetime', [
+                    Query::equal('$createdAt', [$date])
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertTrue($e instanceof QueryException);
+                $this->assertEquals('Invalid query: Query value is invalid for attribute "$createdAt"', $e->getMessage());
+            }
+
+            try {
+                static::getDatabase()->find('datetime', [
+                    Query::equal('date', [$date])
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertTrue($e instanceof QueryException);
+                $this->assertEquals('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());
+            }
+        }
+
+        $validDates = [
+            '2024-12-2509:00:21.891119',
+            'Tue Dec 31 2024',
+        ];
+
+        foreach ($validDates as $date) {
+            $docs = static::getDatabase()->find('datetime', [
+                Query::equal('$createdAt', [$date])
+            ]);
+            $this->assertCount(0, $docs);
+
+            $docs = static::getDatabase()->find('datetime', [
+                Query::equal('date', [$date])
+            ]);
+            $this->assertCount(0, $docs);
         }
     }
 

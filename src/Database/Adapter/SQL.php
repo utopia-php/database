@@ -1433,7 +1433,11 @@ abstract class SQL extends Adapter
 
     public function getHostname(): string
     {
-        return $this->pdo->getHostname();
+        try {
+            return $this->pdo->getHostname();
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     /**

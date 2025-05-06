@@ -2,6 +2,8 @@
 
 namespace Utopia\Database;
 
+use InvalidArgumentException;
+
 /**
  * A PDO wrapper that forwards method calls to the internal PDO instance.
  *
@@ -57,38 +59,64 @@ class PDO
         );
     }
 
-    public function getScheme(): string
-    {
-        $parts = $this->parseDsn($this->dsn);
-
-        return $parts['scheme'] ?? throw new \Exception('No scheme found in DSN');
-    }
-
+    /**
+     * Get the hostname from the DSN.
+     *
+     * @return string
+     * @throws \Exception
+     */
     public function getHostname(): string
     {
         $parts = $this->parseDsn($this->dsn);
 
-        return $parts['host'] ?? throw new \Exception('No host found in DSN');
+        /**
+         * @var string $host
+         */
+        $host = $parts['host'] ?? throw new \Exception('No host found in DSN');
+
+        return $host;
     }
 
     /**
-     * @param string $dsn
-     * @return array<mixed>
+     * Parse a PDO-style DSN string.
+     *
+     * @return array<string, string|int|float|bool|null>
+     * @throws InvalidArgumentException If the DSN is malformed.
      */
-    public function parseDsn(string $dsn): array
+    private function parseDsn(string $dsn): array
     {
-        $result = [];
-
-        [$driver, $params] = explode(':', $dsn, 2);
-        $result['driver'] = $driver;
-
-        foreach (explode(';', $params) as $pair) {
-            if (str_contains($pair, '=')) {
-                [$key, $value] = explode('=', $pair, 2);
-                $result[$key] = $value;
-            }
+        if ($dsn === '' || !\str_contains($dsn, ':')) {
+            throw new InvalidArgumentException('Malformed DSN: missing driver separator.');
         }
 
-        return $result;
+        [$driver, $parameterString] = \explode(':', $dsn, 2);
+
+        $parsed = ['driver' => \trim($driver)];
+
+        // Handle “path only” DSNs like sqlite:/path/to.db
+        if (\in_array($driver, ['sqlite'], true) && $parameterString !== '') {
+            $parsed['path'] = \ltrim($parameterString, '/');
+            return $parsed;
+        }
+
+        $parameterSegments = \array_filter(\explode(';', $parameterString));
+
+        foreach ($parameterSegments as $segment) {
+            [$name, $rawValue] = \array_pad(\explode('=', $segment, 2), 2, null);
+
+            $name  = \trim($name);
+            $value = $rawValue !== null ? \trim($rawValue) : null;
+
+            // Casting for scalars
+            if ($value === 'true' || $value === 'false') {
+                $value = $value === 'true';
+            } elseif (\is_numeric($value)) {
+                $value += 0;
+            }
+
+            $parsed[$name] = $value;
+        }
+
+        return $parsed;
     }
 }

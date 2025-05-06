@@ -2288,6 +2288,13 @@ class MariaDB extends SQL
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
+        // Unknown collection
+        // We have two of same, because docs point to 1051.
+        // Keeping previous 1049 (above) just in case it's for older versions
+        if ($e->getCode() === '42S02' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1051) {
+            return new NotFoundException('Collection not found', $e->getCode(), $e);
+        }
+
         return $e;
     }
 

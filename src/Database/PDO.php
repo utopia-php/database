@@ -2,6 +2,8 @@
 
 namespace Utopia\Database;
 
+use Utopia\DSN\DSN;
+
 /**
  * A PDO wrapper that forwards method calls to the internal PDO instance.
  *
@@ -59,36 +61,15 @@ class PDO
 
     public function getScheme(): string
     {
-        $parts = $this->parseDsn($this->dsn);
+        $dsn = new DSN($this->dsn);
 
-        return $parts['scheme'] ?? throw new \Exception('No scheme found in DSN');
+        return $dsn->getScheme();
     }
 
     public function getHostname(): string
     {
-        $parts = $this->parseDsn($this->dsn);
+        $dsn = new DSN($this->dsn);
 
-        return $parts['host'] ?? throw new \Exception('No host found in DSN');
-    }
-
-    /**
-     * @param string $dsn
-     * @return array<mixed>
-     */
-    public function parseDsn(string $dsn): array
-    {
-        $result = [];
-
-        [$driver, $params] = explode(':', $dsn, 2);
-        $result['driver'] = $driver;
-
-        foreach (explode(';', $params) as $pair) {
-            if (str_contains($pair, '=')) {
-                [$key, $value] = explode('=', $pair, 2);
-                $result[$key] = $value;
-            }
-        }
-
-        return $result;
+        return $dsn->getHost();
     }
 }

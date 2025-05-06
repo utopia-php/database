@@ -974,7 +974,19 @@ abstract class Adapter
      */
     abstract public function getSupportForCacheSkipOnFailure(): bool;
 
+    /**
+     * Is reconnection supported?
+     *
+     * @return bool
+     */
     abstract public function getSupportForReconnection(): bool;
+
+    /**
+     * Is hostname supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForHostname(): bool;
 
     /**
      * Get current attribute count from collection document

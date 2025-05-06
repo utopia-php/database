@@ -777,6 +777,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Is hostname supported?
+     *
+     * @return bool
+     */
+    public function getSupportForHostname(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

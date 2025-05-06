@@ -6440,10 +6440,14 @@ class Database
      */
     public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
     {
+        if ($this->adapter->getSupportForHostname()) {
+            $hostname = $this->adapter->getHostname();
+        }
+
         $collectionKey = \sprintf(
             '%s-cache-%s:%s:%s:collection:%s',
             $this->cacheName,
-            $this->adapter->getHostname(),
+            $hostname ?? '',
             $this->getNamespace(),
             $this->adapter->getTenant(),
             $collectionId

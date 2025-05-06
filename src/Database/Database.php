@@ -1410,6 +1410,17 @@ class Database
     }
 
     /**
+     * Analyze a collection updating its metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return $this->adapter->analyzeCollection($collection);
+    }
+
+    /**
      * Delete Collection
      *
      * @param string $id
@@ -3025,18 +3036,14 @@ class Database
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-        /**
-         * Cache hash keys
-         */
-        $collectionCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection->getId();
-        $documentCacheKey = $documentCacheHash = $collectionCacheKey . ':' . $id;
-
-        if (!empty($selections)) {
-            $documentCacheHash .= ':' . \md5(\implode($selections));
-        }
+        [$collectionKey, $documentKey, $hashKey] = $this->getCacheKeys(
+            $collection->getId(),
+            $id,
+            $selections
+        );
 
         try {
-            $cached = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash);
+            $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
         } catch (Exception $e) {
             Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
             $cached = null;
@@ -3097,8 +3104,8 @@ class Database
         // Don't save to cache if it's part of a relationship
         if (empty($relationships)) {
             try {
-                $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
-                $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
+                $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
+                $this->cache->save($collectionKey, 'empty', $documentKey);
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
             }
@@ -5630,7 +5637,7 @@ class Database
      */
     public function purgeCachedCollection(string $collectionId): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
+        [$collectionKey] = $this->getCacheKeys($collectionId);
 
         $documentKeys = $this->cache->list($collectionKey);
         foreach ($documentKeys as $documentKey) {
@@ -5653,8 +5660,7 @@ class Database
      */
     public function purgeCachedDocument(string $collectionId, string $id): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
-        $documentKey = $collectionKey . ':' . $id;
+        [$collectionKey, $documentKey] = $this->getCacheKeys($collectionId, $id);
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
@@ -5858,7 +5864,6 @@ class Database
             throw new DatabaseException('Cursor ' . Database::CURSOR_BEFORE . ' not supported in this method.');
         }
 
-        $results = [];
         $sum = $limit;
         $latestDocument = null;
 
@@ -6423,17 +6428,6 @@ class Database
     }
 
     /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return $this->adapter->analyzeCollection($collection);
-    }
-
-    /**
      * Get Schema Attributes
      *
      * @param string $collection
@@ -6443,5 +6437,41 @@ class Database
     public function getSchemaAttributes(string $collection): array
     {
         return $this->adapter->getSchemaAttributes($collection);
+    }
+
+    /**
+     * @param string $collectionId
+     * @param string|null $documentId
+     * @param array<string> $selects
+     * @return array{0: ?string, 1: ?string, 2: ?string}
+     */
+    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
+    {
+        if ($this->adapter->getSupportForHostname()) {
+            $hostname = $this->adapter->getHostname();
+        }
+
+        $collectionKey = \sprintf(
+            '%s-cache-%s:%s:%s:collection:%s',
+            $this->cacheName,
+            $hostname ?? '',
+            $this->getNamespace(),
+            $this->adapter->getTenant(),
+            $collectionId
+        );
+
+        if ($documentId) {
+            $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
+
+            if (!empty($selects)) {
+                $documentHashKey = $documentKey . ':' . \md5(\implode($selects));
+            }
+        }
+
+        return [
+            $collectionKey,
+            $documentKey ?? null,
+            $documentHashKey ?? null
+        ];
     }
 }

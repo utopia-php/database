@@ -6,6 +6,7 @@ use Exception;
 use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -15,6 +16,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
 
@@ -1169,4 +1171,339 @@ trait AttributeTests
         $this->assertEquals(1, 1);
     }
 
+    /**
+     * @throws AuthorizationException
+     * @throws DuplicateException
+     * @throws ConflictException
+     * @throws LimitException
+     * @throws StructureException
+     */
+    public function testArrayAttribute(): void
+    {
+        Authorization::setRole(Role::any()->toString());
+
+        $database = static::getDatabase();
+        $collection = 'json';
+        $permissions = [Permission::read(Role::any())];
+
+        $database->createCollection($collection, permissions: [
+            Permission::create(Role::any()),
+        ]);
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'booleans',
+            Database::VAR_BOOLEAN,
+            size: 0,
+            required: true,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'names',
+            Database::VAR_STRING,
+            size: 255, // Does this mean each Element max is 255? We need to check this on Structure validation?
+            required: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'cards',
+            Database::VAR_STRING,
+            size: 5000,
+            required: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'numbers',
+            Database::VAR_INTEGER,
+            size: 0,
+            required: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'age',
+            Database::VAR_INTEGER,
+            size: 0,
+            required: false,
+            signed: false
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'tv_show',
+            Database::VAR_STRING,
+            size: 700,
+            required: false,
+            signed: false,
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'short',
+            Database::VAR_STRING,
+            size: 5,
+            required: false,
+            signed: false,
+            array: true
+        ));
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'pref',
+            Database::VAR_STRING,
+            size: 16384,
+            required: false,
+            signed: false,
+            filters: ['json'],
+        ));
+
+        try {
+            $database->createDocument($collection, new Document([]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
+        }
+
+        $database->updateAttribute($collection, 'booleans', required: false);
+
+        $doc = $database->getCollection($collection);
+        $attribute = $doc->getAttribute('attributes')[0];
+        $this->assertEquals('boolean', $attribute['type']);
+        $this->assertEquals(true, $attribute['signed']);
+        $this->assertEquals(0, $attribute['size']);
+        $this->assertEquals(null, $attribute['default']);
+        $this->assertEquals(true, $attribute['array']);
+        $this->assertEquals(false, $attribute['required']);
+
+        try {
+            $database->createDocument($collection, new Document([
+                'short' => ['More than 5 size'],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "short[\'0\']" has invalid type. Value must be a valid string and no longer than 5 chars', $e->getMessage());
+        }
+
+        try {
+            $database->createDocument($collection, new Document([
+                'names' => ['Joe', 100],
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 255 chars', $e->getMessage());
+        }
+
+        try {
+            $database->createDocument($collection, new Document([
+                'age' => 1.5,
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
+        }
+
+        try {
+            $database->createDocument($collection, new Document([
+                'age' => -100,
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
+        }
+
+        $database->createDocument($collection, new Document([
+            '$id' => 'id1',
+            '$permissions' => $permissions,
+            'booleans' => [false],
+            'names' => ['Joe', 'Antony', '100'],
+            'numbers' => [0, 100, 1000, -1],
+            'age' => 41,
+            'tv_show' => 'Everybody Loves Raymond',
+            'pref' => [
+                'fname' => 'Joe',
+                'lname' => 'Baiden',
+                'age' => 80,
+                'male' => true,
+            ],
+        ]));
+
+        $document = $database->getDocument($collection, 'id1');
+
+        $this->assertEquals(false, $document->getAttribute('booleans')[0]);
+        $this->assertEquals('Antony', $document->getAttribute('names')[1]);
+        $this->assertEquals(100, $document->getAttribute('numbers')[1]);
+
+        /**
+         * functional index dependency cannot be dropped or rename
+         */
+        $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
+
+        if ($this->getDatabase()->getAdapter()->getSupportForCastIndexArray()) {
+            /**
+             * Delete attribute
+             */
+            try {
+                $database->deleteAttribute($collection, 'cards');
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(DependencyException::class, $e);
+                $this->assertEquals("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
+            }
+
+            /**
+             * Rename attribute
+             */
+            try {
+                $database->renameAttribute($collection, 'cards', 'cards_new');
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(DependencyException::class, $e);
+                $this->assertEquals("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
+            }
+
+            /**
+             * Update attribute
+             */
+            try {
+                $database->updateAttribute($collection, id:'cards', newKey: 'cards_new');
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(DependencyException::class, $e);
+                $this->assertEquals("Attribute can't be deleted or renamed because it is used in an index", $e->getMessage());
+            }
+
+        } else {
+            $this->assertTrue($database->renameAttribute($collection, 'cards', 'cards_new'));
+            $this->assertTrue($database->deleteAttribute($collection, 'cards_new'));
+        }
+
+        try {
+            $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+                $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
+            } else {
+                $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+            }
+        }
+
+        try {
+            $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+        }
+
+        $this->assertEquals(true, $database->createAttribute(
+            $collection,
+            'long_size',
+            Database::VAR_STRING,
+            size: 2000,
+            required: false,
+            array: true
+        ));
+
+        if ($database->getAdapter()->getMaxIndexLength() > 0) {
+            // If getMaxIndexLength() > 0 We clear length for array attributes
+            $database->createIndex($collection, 'indx1', Database::INDEX_KEY, ['long_size'], [], []);
+            $database->createIndex($collection, 'indx2', Database::INDEX_KEY, ['long_size'], [1000], []);
+
+            try {
+                $database->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertEquals('Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+            }
+        }
+
+        // We clear orders for array attributes
+        $database->createIndex($collection, 'indx3', Database::INDEX_KEY, ['names'], [255], ['desc']);
+
+        try {
+            $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
+        }
+
+        $this->assertTrue($database->createIndex($collection, 'indx6', Database::INDEX_KEY, ['age', 'names'], [null, 999], []));
+        $this->assertTrue($database->createIndex($collection, 'indx7', Database::INDEX_KEY, ['age', 'booleans'], [0, 999], []));
+
+        if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
+            try {
+                $database->find($collection, [
+                    Query::equal('names', ['Joe']),
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertEquals('Invalid query: Cannot query equal on attribute "names" because it is an array.', $e->getMessage());
+            }
+
+            try {
+                $database->find($collection, [
+                    Query::contains('age', [10])
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertEquals('Invalid query: Cannot query contains on attribute "age" because it is not an array or string.', $e->getMessage());
+            }
+
+            $documents = $database->find($collection, [
+                Query::isNull('long_size')
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::contains('tv_show', ['love'])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::contains('names', ['Jake', 'Joe'])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::contains('numbers', [-1, 0, 999])
+            ]);
+            $this->assertCount(1, $documents);
+
+            $documents = $database->find($collection, [
+                Query::contains('booleans', [false, true])
+            ]);
+            $this->assertCount(1, $documents);
+
+            // Regular like query on primitive json string data
+            $documents = $database->find($collection, [
+                Query::contains('pref', ['Joe'])
+            ]);
+            $this->assertCount(1, $documents);
+        }
+    }
+
+    public function testCreateDateTimeAttributeFailure(): void
+    {
+        static::getDatabase()->createCollection('datetime_fail');
+
+        /** Test for FAILURE */
+        $this->expectException(Exception::class);
+        static::getDatabase()->createAttribute('datetime_fail', 'date_fail', Database::VAR_DATETIME, 0, false);
+    }
+    /**
+     * @depends testCreateDeleteAttribute
+     * @expectedException Exception
+     */
+    public function testUnknownFormat(): void
+    {
+        $this->expectException(\Exception::class);
+        $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'bad_format', Database::VAR_STRING, 256, true, null, true, false, 'url'));
+    }
 }

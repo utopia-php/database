@@ -3374,4 +3374,347 @@ trait DocumentTests
 
         static::getDatabase()->updateDocument('movies', $document->getId(), $document->setAttribute('name', 'Frozen'));
     }
+
+    public function propagateBulkDocuments(string $collection, int $amount = 10, bool $documentSecurity = false): void
+    {
+        for ($i = 0; $i < $amount; $i++) {
+            static::getDatabase()->createDocument($collection, new Document(
+                array_merge([
+                    '$id' => 'doc' . $i,
+                    'text' => 'value' . $i,
+                    'integer' => $i
+                ], $documentSecurity ? [
+                    '$permissions' => [
+                        Permission::create(Role::any()),
+                        Permission::read(Role::any()),
+                    ],
+                ] : [])
+            ));
+        }
+    }
+
+    public function testDeleteBulkDocuments(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(
+            'bulk_delete',
+            attributes: [
+                new Document([
+                    '$id' => 'text',
+                    'type' => Database::VAR_STRING,
+                    'size' => 100,
+                    'required' => true,
+                ]),
+                new Document([
+                    '$id' => 'integer',
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 10,
+                    'required' => true,
+                ])
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::delete(Role::any())
+            ],
+            documentSecurity: false
+        );
+
+        $this->propagateBulkDocuments('bulk_delete');
+
+        $docs = static::getDatabase()->find('bulk_delete');
+        $this->assertCount(10, $docs);
+
+        /**
+         * Test Short select query, test pagination as well, Add order to select
+         */
+        $selects = ['$internalId', '$id', '$collection', '$permissions', '$updatedAt'];
+
+        $count = static::getDatabase()->deleteDocuments(
+            collection: 'bulk_delete',
+            queries: [
+                Query::select([...$selects, '$createdAt']),
+                Query::cursorAfter($docs[6]),
+                Query::greaterThan('$createdAt', '2000-01-01'),
+                Query::orderAsc('$createdAt'),
+                Query::orderAsc(),
+                Query::limit(2),
+            ],
+            batchSize: 1
+        );
+
+        $this->assertEquals(2, $count);
+
+        // TEST: Bulk Delete All Documents
+        $this->assertEquals(8, static::getDatabase()->deleteDocuments('bulk_delete'));
+
+        $docs = static::getDatabase()->find('bulk_delete');
+        $this->assertCount(0, $docs);
+
+        // TEST: Bulk delete documents with queries.
+        $this->propagateBulkDocuments('bulk_delete');
+
+        $results = [];
+        $count = static::getDatabase()->deleteDocuments('bulk_delete', [
+            Query::greaterThanEqual('integer', 5)
+        ], onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
+
+        $this->assertEquals(5, $count);
+
+        foreach ($results as $document) {
+            $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
+        }
+
+        $docs = static::getDatabase()->find('bulk_delete');
+        $this->assertEquals(5, \count($docs));
+
+        // TEST (FAIL): Can't delete documents in the past
+        $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
+
+        try {
+            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () {
+                return $this->getDatabase()->deleteDocuments('bulk_delete');
+            });
+            $this->fail('Failed to throw exception');
+        } catch (ConflictException $e) {
+            $this->assertEquals('Document was updated after the request timestamp', $e->getMessage());
+        }
+
+        // TEST (FAIL): Bulk delete all documents with invalid collection permission
+        static::getDatabase()->updateCollection('bulk_delete', [], false);
+        try {
+            static::getDatabase()->deleteDocuments('bulk_delete');
+            $this->fail('Bulk deleted documents with invalid collection permission');
+        } catch (\Utopia\Database\Exception\Authorization) {
+        }
+
+        static::getDatabase()->updateCollection('bulk_delete', [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::delete(Role::any())
+        ], false);
+
+        $this->assertEquals(5, static::getDatabase()->deleteDocuments('bulk_delete'));
+        $this->assertEquals(0, \count($this->getDatabase()->find('bulk_delete')));
+
+        // TEST: Make sure we can't delete documents we don't have permissions for
+        static::getDatabase()->updateCollection('bulk_delete', [
+            Permission::create(Role::any()),
+        ], true);
+        $this->propagateBulkDocuments('bulk_delete', documentSecurity: true);
+
+        $this->assertEquals(0, static::getDatabase()->deleteDocuments('bulk_delete'));
+
+        $documents = Authorization::skip(function () {
+            return static::getDatabase()->find('bulk_delete');
+        });
+
+        $this->assertEquals(10, \count($documents));
+
+        static::getDatabase()->updateCollection('bulk_delete', [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::delete(Role::any())
+        ], false);
+
+        static::getDatabase()->deleteDocuments('bulk_delete');
+
+        $this->assertEquals(0, \count($this->getDatabase()->find('bulk_delete')));
+
+        // Teardown
+        static::getDatabase()->deleteCollection('bulk_delete');
+    }
+
+    public function testDeleteBulkDocumentsQueries(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(
+            'bulk_delete_queries',
+            attributes: [
+                new Document([
+                    '$id' => 'text',
+                    'type' => Database::VAR_STRING,
+                    'size' => 100,
+                    'required' => true,
+                ]),
+                new Document([
+                    '$id' => 'integer',
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 10,
+                    'required' => true,
+                ])
+            ],
+            documentSecurity: false,
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::delete(Role::any())
+            ]
+        );
+
+        // Test limit
+        $this->propagateBulkDocuments('bulk_delete_queries');
+
+        $this->assertEquals(5, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
+        $this->assertEquals(5, \count(static::getDatabase()->find('bulk_delete_queries')));
+
+        $this->assertEquals(5, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
+        $this->assertEquals(0, \count(static::getDatabase()->find('bulk_delete_queries')));
+
+        // Test Limit more than batchSize
+        $this->propagateBulkDocuments('bulk_delete_queries', Database::DELETE_BATCH_SIZE * 2);
+        $this->assertEquals(Database::DELETE_BATCH_SIZE * 2, \count(static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
+        $this->assertEquals(Database::DELETE_BATCH_SIZE + 2, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE + 2)]));
+        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, \count(static::getDatabase()->find('bulk_delete_queries', [Query::limit(Database::DELETE_BATCH_SIZE * 2)])));
+        $this->assertEquals(Database::DELETE_BATCH_SIZE - 2, $this->getDatabase()->deleteDocuments('bulk_delete_queries'));
+
+        // Test Offset
+        $this->propagateBulkDocuments('bulk_delete_queries', 100);
+        $this->assertEquals(50, static::getDatabase()->deleteDocuments('bulk_delete_queries', [Query::offset(50)]));
+
+        $docs = static::getDatabase()->find('bulk_delete_queries', [Query::limit(100)]);
+        $this->assertEquals(50, \count($docs));
+
+        $lastDoc = \end($docs);
+        $this->assertNotEmpty($lastDoc);
+        $this->assertEquals('doc49', $lastDoc->getId());
+        $this->assertEquals(50, static::getDatabase()->deleteDocuments('bulk_delete_queries'));
+
+        static::getDatabase()->deleteCollection('bulk_delete_queries');
+    }
+
+    public function testUpdateDocumentsQueries(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'testUpdateDocumentsQueries';
+
+        static::getDatabase()->createCollection($collection, attributes: [
+            new Document([
+                '$id' => ID::custom('text'),
+                'type' => Database::VAR_STRING,
+                'size' => 64,
+                'required' => true,
+            ]),
+            new Document([
+                '$id' => ID::custom('integer'),
+                'type' => Database::VAR_INTEGER,
+                'size' => 64,
+                'required' => true,
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ], documentSecurity: true);
+
+        // Test limit
+        $this->propagateBulkDocuments($collection, 100);
+
+        $this->assertEquals(10, static::getDatabase()->updateDocuments($collection, new Document([
+            'text' => 'text📝 updated',
+        ]), [Query::limit(10)]));
+
+        $this->assertEquals(10, \count(static::getDatabase()->find($collection, [Query::equal('text', ['text📝 updated'])])));
+        $this->assertEquals(100, static::getDatabase()->deleteDocuments($collection));
+        $this->assertEquals(0, \count(static::getDatabase()->find($collection)));
+
+        // Test Offset
+        $this->propagateBulkDocuments($collection, 100);
+        $this->assertEquals(50, static::getDatabase()->updateDocuments($collection, new Document([
+            'text' => 'text📝 updated',
+        ]), [
+            Query::offset(50),
+        ]));
+
+        $docs = static::getDatabase()->find($collection, [Query::equal('text', ['text📝 updated']), Query::limit(100)]);
+        $this->assertCount(50, $docs);
+
+        $lastDoc = end($docs);
+        $this->assertNotEmpty($lastDoc);
+        $this->assertEquals('doc99', $lastDoc->getId());
+
+        $this->assertEquals(100, static::getDatabase()->deleteDocuments($collection));
+    }
+
+    /**
+     * @depends testCreateDocument
+     */
+    public function testFulltextIndexWithInteger(): void
+    {
+        $this->expectException(Exception::class);
+
+        if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+            $this->expectExceptionMessage('Fulltext index is not supported');
+        } else {
+            $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a FULLTEXT index, must be of type string');
+        }
+
+        static::getDatabase()->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
+    }
+
+    /**
+     * @depends testGetDocument
+     */
+    public function testExceptionDuplicate(Document $document): void
+    {
+        $document->setAttribute('$id', 'duplicated');
+        static::getDatabase()->createDocument($document->getCollection(), $document);
+        $this->expectException(DuplicateException::class);
+        static::getDatabase()->createDocument($document->getCollection(), $document);
+    }
+
+    /**
+     * @depends testGetDocument
+     */
+    public function testExceptionCaseInsensitiveDuplicate(Document $document): Document
+    {
+        $document->setAttribute('$id', 'caseSensitive');
+        $document->setAttribute('$internalId', '200');
+        static::getDatabase()->createDocument($document->getCollection(), $document);
+
+        $document->setAttribute('$id', 'CaseSensitive');
+
+        $this->expectException(DuplicateException::class);
+        static::getDatabase()->createDocument($document->getCollection(), $document);
+
+        return $document;
+    }
+
+    /**
+     * @throws LimitException
+     * @throws DuplicateException
+     * @throws DatabaseException
+     */
+    public function testCreateDuplicates(): void
+    {
+        static::getDatabase()->createCollection('duplicates', permissions: [
+            Permission::read(Role::any())
+        ]);
+
+        try {
+            static::getDatabase()->createCollection('duplicates');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+
+        $this->assertNotEmpty(static::getDatabase()->listCollections());
+
+        static::getDatabase()->deleteCollection('duplicates');
+    }
 }

@@ -1499,6 +1499,7 @@ class Database
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $required, mixed $default = null, bool $signed = true, bool $array = false, ?string $format = null, array $formatOptions = [], array $filters = []): bool
     {
+        $tt1 = \microtime(true);
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -1577,8 +1578,11 @@ class Database
         }
 
         try {
+            $t1 = \microtime(true);
             $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
-
+            $t2 = \microtime(true);
+            $diff = $t2 - $t1;
+            \var_dump("Create (" . $diff . "s): " . $collection->getId() . " - " . $id);
             if (!$created) {
                 throw new DatabaseException('Failed to create attribute');
             }
@@ -1598,6 +1602,9 @@ class Database
 
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
 
+        $tt2 = microtime(true);
+        $diff2 = $tt2 - $tt1;
+        \var_dump("Total (" . $diff2 . "s): " . $collection->getId() . " - " . $id);
         return true;
     }
 

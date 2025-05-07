@@ -10,17 +10,6 @@ class Permission
 {
     private Role $role;
 
-    /**
-     * @var array<string, array<string>>
-     */
-    private static array $aggregates = [
-        'write' => [
-            Database::PERMISSION_CREATE,
-            Database::PERMISSION_UPDATE,
-            Database::PERMISSION_DELETE,
-        ]
-    ];
-
     public function __construct(
         private string $permission,
         string $role,

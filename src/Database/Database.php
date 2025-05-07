@@ -4731,7 +4731,8 @@ class Database
                 )));
             }
 
-            if ($old->getAttributes() == $document->getAttributes()) {
+            $disallowed = ['$tenant', '$internalId'];
+            if ($old->getArrayCopy(disallow: $disallowed) == $document->getArrayCopy(disallow: $disallowed)) {
                 unset($documents[$key]);
                 continue;
             }

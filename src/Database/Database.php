@@ -4729,8 +4729,10 @@ class Database
                 )));
             }
 
-            $disallowed = ['$tenant', '$internalId'];
-            if ($old->getArrayCopy(disallow: $disallowed) == $document->getArrayCopy(disallow: $disallowed)) {
+            $updatesPermissions = \in_array('$permissions', \array_keys($document->getArrayCopy()))
+                && $document->getPermissions() != $old->getPermissions();
+
+            if ($old->getAttributes() == $document->getAttributes() && !$updatesPermissions) {
                 unset($documents[$key]);
                 continue;
             }
@@ -4764,6 +4766,10 @@ class Database
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
+            if (!$updatesPermissions) {
+                $document->setAttribute('$permissions', $old->getPermissions());
+            }
 
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {

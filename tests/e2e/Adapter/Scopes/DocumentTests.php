@@ -11,7 +11,6 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -3722,26 +3721,51 @@ trait DocumentTests
         return $document;
     }
 
-    /**
-     * @throws LimitException
-     * @throws DuplicateException
-     * @throws DatabaseException
-     */
-    public function testCreateDuplicates(): void
+    public function testEmptyTenant(): void
     {
-        static::getDatabase()->createCollection('duplicates', permissions: [
-            Permission::read(Role::any())
-        ]);
-
-        try {
-            static::getDatabase()->createCollection('duplicates');
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DuplicateException::class, $e);
+        if (static::getDatabase()->getAdapter()->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
-        $this->assertNotEmpty(static::getDatabase()->listCollections());
+        $documents = static::getDatabase()->find(
+            'documents',
+            [Query::notEqual('$id', '56000')] // Mongo bug with Integer UID
+        );
 
-        static::getDatabase()->deleteCollection('duplicates');
+        $document = $documents[0];
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$tenant', $document);
+
+        $document = static::getDatabase()->getDocument('documents', $document->getId());
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$tenant', $document);
+
+        $document = static::getDatabase()->updateDocument('documents', $document->getId(), $document);
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$tenant', $document);
+    }
+
+    public function testEmptyOperatorValues(): void
+    {
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::equal('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Equal queries require at least one value.', $e->getMessage());
+        }
+
+        try {
+            static::getDatabase()->findOne('documents', [
+                Query::contains('string', []),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
+        }
     }
 }

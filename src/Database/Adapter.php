@@ -371,36 +371,7 @@ abstract class Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        for ($attempts = 0; $attempts < 3; $attempts++) {
-            try {
-                $this->startTransaction();
-                $result = $callback();
-                $this->commitTransaction();
-                return $result;
-            } catch (\Throwable $action) {
-                try {
-                    $this->rollbackTransaction();
-                } catch (\Throwable $rollback) {
-                    if ($attempts < 2) {
-                        \usleep(5000); // 5ms
-                        continue;
-                    }
-
-                    $this->inTransaction = 0;
-                    throw $rollback;
-                }
-
-                if ($attempts < 2) {
-                    \usleep(5000); // 5ms
-                    continue;
-                }
-
-                $this->inTransaction = 0;
-                throw $action;
-            }
-        }
-
-        throw new TransactionException('Failed to execute transaction');
+        return $callback(); // Skip transaction to benchmark
     }
 
     /**

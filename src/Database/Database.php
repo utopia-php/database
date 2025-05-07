@@ -4721,14 +4721,20 @@ class Database
                 $old = Authorization::skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId(),
-                    [Query::select($selects)],
                 ))));
             } else {
                 $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId(),
-                    [Query::select($selects)],
                 )));
+            }
+
+            $updatesPermissions = \in_array('$permissions', \array_keys($document->getArrayCopy()))
+                && $document->getPermissions() != $old->getPermissions();
+
+            if ($old->getAttributes() == $document->getAttributes() && !$updatesPermissions) {
+                unset($documents[$key]);
+                continue;
             }
 
             // If old is empty, check if user has create permission on the collection
@@ -4760,6 +4766,10 @@ class Database
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
+            if (!$updatesPermissions) {
+                $document->setAttribute('$permissions', $old->getPermissions());
+            }
 
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {

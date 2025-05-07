@@ -4731,7 +4731,7 @@ class Database
                 )));
             }
 
-            if ($old->getAttributes() === $document->getAttributes()) {
+            if ($old->getAttributes() == $document->getAttributes()) {
                 unset($documents[$key]);
                 continue;
             }

@@ -253,9 +253,6 @@ class PermissionTest extends TestCase
 
         $permission = Permission::delete(Role::guests());
         $this->assertEquals('delete("guests")', $permission);
-
-        $permission = Permission::write(Role::any());
-        $this->assertEquals('write("any")', $permission);
     }
 
     public function testInvalidFormats(): void

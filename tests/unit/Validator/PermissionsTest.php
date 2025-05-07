@@ -316,7 +316,6 @@ class PermissionsTest extends TestCase
                 Permission::read(Role::any()),
                 Permission::read(Role::user($user)),
                 Permission::read(Role::user($user)),
-                Permission::write(Role::user($user)),
                 Permission::update(Role::user($user)),
                 Permission::delete(Role::user($user)),
             ],

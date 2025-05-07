@@ -4731,6 +4731,12 @@ class Database
                 )));
             }
 
+            $disallowed = ['$tenant', '$internalId'];
+            if ($old->getArrayCopy(disallow: $disallowed) == $document->getArrayCopy(disallow: $disallowed)) {
+                unset($documents[$key]);
+                continue;
+            }
+
             // If old is empty, check if user has create permission on the collection
             // If old is not empty, check if user has update permission on the collection
             // If old is not empty AND documentSecurity is enabled, check if user has update permission on the collection or document

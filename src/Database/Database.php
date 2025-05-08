@@ -4751,20 +4751,14 @@ class Database
             );
 
             if ($old->isEmpty()) {
-                $created++;
-
                 if (!$validator->isValid($collection->getCreate())) {
                     throw new AuthorizationException($validator->getDescription());
                 }
-            } else {
-                $updated++;
-
-                if (!$validator->isValid([
-                    ...$collection->getUpdate(),
-                    ...($documentSecurity ? $old->getUpdate() : [])
-                ])) {
-                    throw new AuthorizationException($validator->getDescription());
-                }
+            } elseif (!$validator->isValid([
+                ...$collection->getUpdate(),
+                ...($documentSecurity ? $old->getUpdate() : [])
+            ])) {
+                throw new AuthorizationException($validator->getDescription());
             }
 
             $createdAt = $document->getCreatedAt();
@@ -4815,8 +4809,6 @@ class Database
             );
         }
 
-        $modified = 0;
-
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             /**
              * @var array<Change> $chunk
@@ -4826,6 +4818,14 @@ class Database
                 $attribute,
                 $chunk
             )));
+
+            foreach ($chunk as $change) {
+                if ($change->getOld()->isEmpty()) {
+                    $created++;
+                } else {
+                    $updated++;
+                }
+            }
 
             foreach ($batch as $doc) {
                 if ($this->resolveRelationships) {

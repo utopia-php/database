@@ -2990,7 +2990,6 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        //$selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
         foreach ($selects as $i => $q) {
@@ -5758,15 +5757,6 @@ class Database
             $cursor = $this->encode($collection, $cursor)->getArrayCopy();
         }
 
-        //$filters = self::convertQueries($collection, $filters);
-
-        //        /**  @var array<Query> $queries */
-        //        $queries = \array_merge(
-        //            $selects,
-        //            $filters
-        //        );
-
-        //$selections = $this->validateSelections($collection, $selects);
         $nestedSelections = [];
 
         foreach ($selects as $i => $q) {
@@ -5810,9 +5800,6 @@ class Database
             joins: $joins,
             orderQueries: $orders
         );
-        //$skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
-
-        //$results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         foreach ($results as $index => $node) {
             $node = $this->casting($context, $node, $selects);
@@ -6150,7 +6137,7 @@ class Database
         $schema = [];
 
         foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
-            //$internals[$attribute['$id']] = $attribute;
+            $internals[$attribute['$id']] = $attribute;
         }
 
         foreach ($context->getCollections() as $collection) {
@@ -6367,63 +6354,6 @@ class Database
         }
 
         return $value;
-    }
-
-    /**
-     * Validate if a set of attributes can be selected from the collection
-     *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @return array<string>
-     * @throws QueryException
-     */
-    private function validateSelections(Document $collection, array $queries): array
-    {
-        if (empty($queries)) {
-            return [];
-        }
-
-        $selections = [];
-        $relationshipSelections = [];
-
-        foreach ($queries as $query) {
-            if ($query->getMethod() == Query::TYPE_SELECT) {
-                if (\str_contains($query->getAttribute(), '.')) {
-                    $relationshipSelections[] = $query->getAttribute();
-                    continue;
-                }
-                $selections[] = $query->getAttribute();
-            }
-        }
-
-        // Allow querying internal attributes
-        $keys = \array_map(
-            fn ($attribute) => $attribute['$id'],
-            self::getInternalAttributes()
-        );
-
-        foreach ($collection->getAttribute('attributes', []) as $attribute) {
-            if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
-                // Fallback to $id when key property is not present in metadata table for some tables such as Indexes or Attributes
-                $keys[] = $attribute['key'] ?? $attribute['$id'];
-            }
-        }
-
-        $invalid = \array_diff($selections, $keys);
-        if (!empty($invalid) && !\in_array('*', $invalid)) {
-            throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
-        }
-
-        $selections = \array_merge($selections, $relationshipSelections);
-
-        $selections[] = '$id';
-        $selections[] = '$internalId';
-        $selections[] = '$collection';
-        $selections[] = '$createdAt';
-        $selections[] = '$updatedAt';
-        $selections[] = '$permissions';
-
-        return $selections;
     }
 
     /**

@@ -4832,6 +4832,8 @@ class Database
                     $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
 
+                $doc = $this->decode($collection, $doc);
+
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
                         $this->purgeCachedDocument($collection->getId(), $doc->getId());

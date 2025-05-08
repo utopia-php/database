@@ -4710,11 +4710,8 @@ class Database
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $time = DateTime::now();
 
-        $selects = ['$internalId', '$permissions'];
-
-        if ($this->getSharedTables()) {
-            $selects[] = '$tenant';
-        }
+        $created = 0;
+        $updated = 0;
 
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
@@ -4754,14 +4751,20 @@ class Database
             );
 
             if ($old->isEmpty()) {
+                $created++;
+
                 if (!$validator->isValid($collection->getCreate())) {
                     throw new AuthorizationException($validator->getDescription());
                 }
-            } elseif (!$validator->isValid([
-                ...$collection->getUpdate(),
-                ...($documentSecurity ? $old->getUpdate() : [])
-            ])) {
-                throw new AuthorizationException($validator->getDescription());
+            } else {
+                $updated++;
+
+                if (!$validator->isValid([
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $old->getUpdate() : [])
+                ])) {
+                    throw new AuthorizationException($validator->getDescription());
+                }
             }
 
             $createdAt = $document->getCreatedAt();
@@ -4838,16 +4841,16 @@ class Database
                 }
 
                 $onNext && $onNext($doc);
-                $modified++;
             }
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPSERT, new Document([
             '$collection' => $collection->getId(),
-            'modified' => $modified,
+            'created' => $created,
+            'updated' => $updated,
         ]));
 
-        return $modified;
+        return $created + $updated;
     }
 
     /**

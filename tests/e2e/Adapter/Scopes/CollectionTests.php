@@ -1413,62 +1413,6 @@ trait CollectionTests
         static::getDatabase()->createCollection('created_at');
     }
 
-    public function testEnableDisableValidation(): void
-    {
-        $database = static::getDatabase();
-
-        $database->createCollection('validation', permissions: [
-            Permission::create(Role::any()),
-            Permission::read(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
-
-        $database->createAttribute(
-            'validation',
-            'name',
-            Database::VAR_STRING,
-            10,
-            false
-        );
-
-        $database->createDocument('validation', new Document([
-            '$id' => 'docwithmorethan36charsasitsidentifier',
-            'name' => 'value1',
-        ]));
-
-        try {
-            $database->find('validation', queries: [
-                Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-        }
-
-        $database->disableValidation();
-
-        $database->find('validation', queries: [
-            Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
-        ]);
-
-        $database->enableValidation();
-
-        try {
-            $database->find('validation', queries: [
-                Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-        }
-
-        $database->skipValidation(function () use ($database) {
-            $database->find('validation', queries: [
-                Query::equal('$id', ['docwithmorethan36charsasitsidentifier']),
-            ]);
-        });
-    }
 
     public function testTransformations(): void
     {

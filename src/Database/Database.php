@@ -1409,6 +1409,17 @@ class Database
     }
 
     /**
+     * Analyze a collection updating its metadata on the database engine
+     *
+     * @param string $collection
+     * @return bool
+     */
+    public function analyzeCollection(string $collection): bool
+    {
+        return $this->adapter->analyzeCollection($collection);
+    }
+
+    /**
      * Delete Collection
      *
      * @param string $id
@@ -1425,7 +1436,6 @@ class Database
         }
 
         if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
-            var_dump($collection);
             throw new NotFoundException('Collection not found');
         }
 
@@ -1438,7 +1448,14 @@ class Database
             $this->deleteRelationship($collection->getId(), $relationship->getId());
         }
 
-        $this->adapter->deleteCollection($id);
+        try {
+            $this->adapter->deleteCollection($id);
+        } catch (NotFoundException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
+            }
+        }
 
         if ($id === self::METADATA) {
             $deleted = true;
@@ -3024,18 +3041,14 @@ class Database
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-        /**
-         * Cache hash keys
-         */
-        $collectionCacheKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collection->getId();
-        $documentCacheKey = $documentCacheHash = $collectionCacheKey . ':' . $id;
-
-        if (!empty($selects)) {
-            $documentCacheHash .= ':' . \md5(\serialize($selects));
-        }
+        [$collectionKey, $documentKey, $hashKey] = $this->getCacheKeys(
+            $collection->getId(),
+            $id,
+            $selects
+        );
 
         try {
-            $cached = $this->cache->load($documentCacheKey, self::TTL, $documentCacheHash);
+            $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
         } catch (Exception $e) {
             Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
             $cached = null;
@@ -3096,8 +3109,8 @@ class Database
         // Don't save to cache if it's part of a relationship
         if (empty($relationships)) {
             try {
-                $this->cache->save($documentCacheKey, $document->getArrayCopy(), $documentCacheHash);
-                $this->cache->save($collectionCacheKey, 'empty', $documentCacheKey);
+                $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
+                $this->cache->save($collectionKey, 'empty', $documentKey);
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
             }
@@ -3496,10 +3509,13 @@ class Database
             }
         }
 
+        $context = new QueryContext();
+        $context->add($collection);
+
         $time = DateTime::now();
         $modified = 0;
 
-        foreach ($documents as &$document) {
+        foreach ($documents as $document) {
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 
@@ -3540,11 +3556,13 @@ class Database
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
-            foreach ($batch as $doc) {
+            foreach ($batch as $document) {
                 if ($this->resolveRelationships) {
-                    $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
+                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
-                $onNext && $onNext($doc);
+
+                $document = $this->decode($context, $document);
+                $onNext && $onNext($document);
                 $modified++;
             }
         }
@@ -3911,7 +3929,7 @@ class Database
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant();       // Make sure user doesn't switch tenant
+                $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
             }
 
             $document = new Document($document);
@@ -4119,6 +4137,14 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $authorization = new Authorization(self::PERMISSION_UPDATE);
+        $skipAuth = $authorization->isValid($collection->getUpdate());
+
+        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+            throw new AuthorizationException($authorization->getDescription());
+        }
+
         $context = new QueryContext();
         $context->add($collection);
 
@@ -4150,6 +4176,10 @@ class Database
         unset($updates['$createdAt']);
         unset($updates['$tenant']);
 
+        if ($this->adapter->getSharedTables()) {
+            $updates['$tenant'] = $this->adapter->getTenant();
+        }
+
         if (!$this->preserveDates) {
             $updates['$updatedAt'] = DateTime::now();
         }
@@ -4171,7 +4201,6 @@ class Database
         $last = $cursor;
         $modified = 0;
 
-        // Resolve and update relationships
         while (true) {
             if ($limit && $limit < $batchSize) {
                 $batchSize = $limit;
@@ -4198,11 +4227,13 @@ class Database
             }
 
             foreach ($batch as &$document) {
+                $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+
                 if ($this->resolveRelationships) {
-                    $newDocument = new Document(array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
-                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $newDocument));
-                    $document = $newDocument;
+                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
                 }
+
+                $document = $new;
 
                 // Check if document was updated after the request timestamp
                 try {
@@ -4214,6 +4245,8 @@ class Database
                 if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                     throw new ConflictException('Document was updated after the request timestamp');
                 }
+
+                $document = $this->encode($collection, $document);
             }
 
             $this->withTransaction(function () use ($collection, $updates, $batch) {
@@ -4225,14 +4258,8 @@ class Database
             });
 
             foreach ($batch as $doc) {
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
-                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                }
-
+                $this->purgeCachedDocument($collection->getId(), $doc->getId());
+                $doc = $this->decode($context, $doc);
                 $onNext && $onNext($doc);
                 $modified++;
             }
@@ -4701,29 +4728,37 @@ class Database
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $time = DateTime::now();
 
-        $selects = [
-            Query::select('$id'),
-            Query::select('$internalId'),
-            Query::select('$permissions'),
-        ];
+        $context = new QueryContext();
+        $context->add($collection);
 
-        if ($this->getSharedTables()) {
-            $selects[] = Query::select('$tenant');
-        }
+        $created = 0;
+        $updated = 0;
 
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                 $old = Authorization::skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId(),
-                    $selects,
                 ))));
             } else {
                 $old = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument(
                     $collection->getId(),
                     $document->getId(),
-                    $selects,
                 )));
+            }
+
+            $updatesPermissions = \in_array('$permissions', \array_keys($document->getArrayCopy()))
+                && $document->getPermissions() != $old->getPermissions();
+
+            if (
+                empty($attribute)
+                && !$updatesPermissions
+                && $old->getAttributes() == $document->getAttributes()
+            ) {
+                // If not updating a single attribute and the
+                // document is the same as the old one, skip it
+                unset($documents[$key]);
+                continue;
             }
 
             // If old is empty, check if user has create permission on the collection
@@ -4755,6 +4790,10 @@ class Database
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
+            if (!$updatesPermissions) {
+                $document->setAttribute('$permissions', $old->getPermissions());
+            }
 
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {
@@ -4791,8 +4830,6 @@ class Database
             );
         }
 
-        $modified = 0;
-
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             /**
              * @var array<Change> $chunk
@@ -4803,10 +4840,20 @@ class Database
                 $chunk
             )));
 
+            foreach ($chunk as $change) {
+                if ($change->getOld()->isEmpty()) {
+                    $created++;
+                } else {
+                    $updated++;
+                }
+            }
+
             foreach ($batch as $doc) {
                 if ($this->resolveRelationships) {
                     $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
+
+                $doc = $this->decode($context, $doc);
 
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
@@ -4817,16 +4864,16 @@ class Database
                 }
 
                 $onNext && $onNext($doc);
-                $modified++;
             }
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPSERT, new Document([
             '$collection' => $collection->getId(),
-            'modified' => $modified,
+            'created' => $created,
+            'updated' => $updated,
         ]));
 
-        return $modified;
+        return $created + $updated;
     }
 
     /**
@@ -5489,6 +5536,14 @@ class Database
             throw new DatabaseException('Collection not found');
         }
 
+        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $authorization = new Authorization(self::PERMISSION_DELETE);
+        $skipAuth = $authorization->isValid($collection->getDelete());
+
+        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+            throw new AuthorizationException($authorization->getDescription());
+        }
+
         $context = new QueryContext();
         $context->add($collection);
 
@@ -5575,12 +5630,16 @@ class Database
                 }
             }
 
-            $this->withTransaction(function () use ($collection, $internalIds, $permissionIds) {
-                $this->adapter->deleteDocuments(
+            $this->withTransaction(function () use ($collection, $skipAuth, $authorization, $internalIds, $permissionIds) {
+                $getResults = fn () => $this->adapter->deleteDocuments(
                     $collection->getId(),
                     $internalIds,
                     $permissionIds
                 );
+
+                $skipAuth
+                    ? $authorization->skip($getResults)
+                    : $getResults();
             });
 
             foreach ($batch as $document) {
@@ -5623,7 +5682,7 @@ class Database
      */
     public function purgeCachedCollection(string $collectionId): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
+        [$collectionKey] = $this->getCacheKeys($collectionId);
 
         $documentKeys = $this->cache->list($collectionKey);
         foreach ($documentKeys as $documentKey) {
@@ -5646,8 +5705,7 @@ class Database
      */
     public function purgeCachedDocument(string $collectionId, string $id): bool
     {
-        $collectionKey = $this->cacheName . '-cache-' . $this->getNamespace() . ':' . $this->adapter->getTenant() . ':collection:' . $collectionId;
-        $documentKey = $collectionKey . ':' . $id;
+        [$collectionKey, $documentKey] = $this->getCacheKeys($collectionId, $id);
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
@@ -6183,7 +6241,7 @@ class Database
 
             foreach ($value as $index => $node) {
                 foreach (array_reverse($filters) as $filter) {
-                    $value[$index] = $this->decodeAttribute($filter, $node, $document);
+                    $value[$index] = $this->decodeAttribute($filter, $node, $document, $key);
                 }
             }
 
@@ -6330,27 +6388,27 @@ class Database
      * Passes the attribute $value, and $document context to a predefined filter
      *  that allow you to manipulate the output format of the given attribute.
      *
-     * @param string $name
+     * @param string $filter
      * @param mixed $value
      * @param Document $document
      *
      * @return mixed
      * @throws DatabaseException
      */
-    protected function decodeAttribute(string $name, mixed $value, Document $document): mixed
+    protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {
         if (!$this->filter) {
             return $value;
         }
 
-        if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
-            throw new NotFoundException('Filter not found');
+        if (!array_key_exists($filter, self::$filters) && !array_key_exists($filter, $this->instanceFilters)) {
+            throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
         }
 
-        if (array_key_exists($name, $this->instanceFilters)) {
-            $value = $this->instanceFilters[$name]['decode']($value, $document, $this);
+        if (array_key_exists($filter, $this->instanceFilters)) {
+            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this);
         } else {
-            $value = self::$filters[$name]['decode']($value, $document, $this);
+            $value = self::$filters[$filter]['decode']($value, $document, $this);
         }
 
         return $value;
@@ -6466,17 +6524,6 @@ class Database
     }
 
     /**
-     * Analyze a collection updating it's metadata on the database engine
-     *
-     * @param string $collection
-     * @return bool
-     */
-    public function analyzeCollection(string $collection): bool
-    {
-        return $this->adapter->analyzeCollection($collection);
-    }
-
-    /**
      * Get Schema Attributes
      *
      * @param string $collection
@@ -6486,5 +6533,41 @@ class Database
     public function getSchemaAttributes(string $collection): array
     {
         return $this->adapter->getSchemaAttributes($collection);
+    }
+
+    /**
+     * @param string $collectionId
+     * @param string|null $documentId
+     * @param array<Query> $selects
+     * @return array{0: ?string, 1: ?string, 2: ?string}
+     */
+    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
+    {
+        if ($this->adapter->getSupportForHostname()) {
+            $hostname = $this->adapter->getHostname();
+        }
+
+        $collectionKey = \sprintf(
+            '%s-cache-%s:%s:%s:collection:%s',
+            $this->cacheName,
+            $hostname ?? '',
+            $this->getNamespace(),
+            $this->adapter->getTenant(),
+            $collectionId
+        );
+
+        if ($documentId) {
+            $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
+
+            if (!empty($selects)) {
+                $documentHashKey = $documentKey . ':' . \md5(\serialize($selects));
+            }
+        }
+
+        return [
+            $collectionKey,
+            $documentKey ?? null,
+            $documentHashKey ?? null
+        ];
     }
 }

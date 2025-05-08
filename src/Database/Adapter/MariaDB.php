@@ -1837,10 +1837,8 @@ class MariaDB extends SQL
             $sqlLimit .= ' OFFSET :offset';
         }
 
-        //$selections = $this->getAttributeSelections($selects);
-
         $sql = "
-            SELECT {$this->getAttributeProjectionV2($selects)}
+            SELECT {$this->getAttributeProjection($selects)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlJoin}
             {$sqlWhere}

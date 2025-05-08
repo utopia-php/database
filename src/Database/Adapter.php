@@ -1041,13 +1041,10 @@ abstract class Adapter
     abstract public function getKeywords(): array;
 
     /**
-     * Get an attribute projection given a list of selected attributes
-     *
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
+     * @param array<Query> $selections
+     * @return string
      */
-    abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
+    abstract protected function getAttributeProjection(array $selects): string;
 
     /**
      * Get all selected attributes from queries

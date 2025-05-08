@@ -4732,7 +4732,13 @@ class Database
             $updatesPermissions = \in_array('$permissions', \array_keys($document->getArrayCopy()))
                 && $document->getPermissions() != $old->getPermissions();
 
-            if ($old->getAttributes() == $document->getAttributes() && !$updatesPermissions) {
+            if (
+                empty($attribute)
+                && !$updatesPermissions
+                && $old->getAttributes() == $document->getAttributes()
+            ) {
+                // If not updating a single attribute and the
+                // document is the same as the old one, skip it
                 unset($documents[$key]);
                 continue;
             }

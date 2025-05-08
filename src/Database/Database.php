@@ -350,6 +350,13 @@ class Database
     protected bool $migrating = false;
 
     /**
+     * List of collections that should be treated as globally accessible
+     *
+     * @var array<string, bool>
+     */
+    protected array $globalCollections = [];
+
+    /**
      * Stack of collection IDs when creating or updating related documents
      * @var array<string>
      */
@@ -1011,6 +1018,31 @@ class Database
     public function getMaxQueryValues(): int
     {
         return $this->maxQueryValues;
+    }
+
+    /**
+     * Set list of collections which are globally accessible
+     *
+     * @param array<string> $collections
+     * @return $this
+     */
+    public function setGlobalCollections(array $collections): static
+    {
+        foreach ($collections as $collection) {
+            $this->globalCollections[$collection] = true;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Get list of collections which are globally accessible
+     *
+     * @return array<string>
+     */
+    public function getGlobalCollections(): array
+    {
+        return \array_keys($this->globalCollections);
     }
 
     /**
@@ -6472,12 +6504,18 @@ class Database
             $hostname = $this->adapter->getHostname();
         }
 
+        $tenantSegment = $this->adapter->getTenant();
+
+        if (isset($this->globalCollections[$collectionId])) {
+            $tenantSegment = null;
+        }
+
         $collectionKey = \sprintf(
             '%s-cache-%s:%s:%s:collection:%s',
             $this->cacheName,
             $hostname ?? '',
             $this->getNamespace(),
-            $this->adapter->getTenant(),
+            $tenantSegment,
             $collectionId
         );
 

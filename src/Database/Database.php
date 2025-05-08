@@ -3068,14 +3068,6 @@ class Database
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-        /**
-         * Cache hash keys
-         */
-        $tenantSegment = $this->adapter->getTenant();
-        if (isset($this->globalCollections[$collection->getId()])) {
-            $tenantSegment = null;
-        }
-
         [$collectionKey, $documentKey, $hashKey] = $this->getCacheKeys(
             $collection->getId(),
             $id,
@@ -6512,12 +6504,18 @@ class Database
             $hostname = $this->adapter->getHostname();
         }
 
+        $tenantSegment = $this->adapter->getTenant();
+
+        if (isset($this->globalCollections[$collectionId])) {
+            $tenantSegment = null;
+        }
+
         $collectionKey = \sprintf(
             '%s-cache-%s:%s:%s:collection:%s',
             $this->cacheName,
             $hostname ?? '',
             $this->getNamespace(),
-            $this->adapter->getTenant(),
+            $tenantSegment,
             $collectionId
         );
 

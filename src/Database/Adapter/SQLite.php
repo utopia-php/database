@@ -928,7 +928,22 @@ class SQLite extends MariaDB
         return false;
     }
 
+    /**
+     * Is upsert supported?
+     *
+     * @return bool
+     */
     public function getSupportForUpserts(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is hostname supported?
+     *
+     * @return bool
+     */
+    public function getSupportForHostname(): bool
     {
         return false;
     }

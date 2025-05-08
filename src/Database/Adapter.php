@@ -11,6 +11,7 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 abstract class Adapter
 {
     protected string $database = '';
+    protected string $hostname = '';
 
     protected string $namespace = '';
 
@@ -79,15 +80,15 @@ abstract class Adapter
      *
      * @param string $namespace
      *
-     * @return bool
+     * @return $this
      * @throws DatabaseException
      *
      */
-    public function setNamespace(string $namespace): bool
+    public function setNamespace(string $namespace): static
     {
         $this->namespace = $this->filter($namespace);
 
-        return true;
+        return $this;
     }
 
     /**
@@ -101,6 +102,29 @@ abstract class Adapter
     public function getNamespace(): string
     {
         return $this->namespace;
+    }
+
+    /**
+     * Set Hostname.
+     *
+     * @param string $hostname
+     * @return $this
+     */
+    public function setHostname(string $hostname): static
+    {
+        $this->hostname = $hostname;
+
+        return $this;
+    }
+
+    /**
+     * Get Hostname.
+     *
+     * @return string
+     */
+    public function getHostname(): string
+    {
+        return $this->hostname;
     }
 
     /**
@@ -950,7 +974,19 @@ abstract class Adapter
      */
     abstract public function getSupportForCacheSkipOnFailure(): bool;
 
+    /**
+     * Is reconnection supported?
+     *
+     * @return bool
+     */
     abstract public function getSupportForReconnection(): bool;
+
+    /**
+     * Is hostname supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForHostname(): bool;
 
     /**
      * Get current attribute count from collection document

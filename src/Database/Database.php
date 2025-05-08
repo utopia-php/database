@@ -4710,11 +4710,8 @@ class Database
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $time = DateTime::now();
 
-        $selects = ['$internalId', '$permissions'];
-
-        if ($this->getSharedTables()) {
-            $selects[] = '$tenant';
-        }
+        $created = 0;
+        $updated = 0;
 
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
@@ -4732,7 +4729,13 @@ class Database
             $updatesPermissions = \in_array('$permissions', \array_keys($document->getArrayCopy()))
                 && $document->getPermissions() != $old->getPermissions();
 
-            if ($old->getAttributes() == $document->getAttributes() && !$updatesPermissions) {
+            if (
+                empty($attribute)
+                && !$updatesPermissions
+                && $old->getAttributes() == $document->getAttributes()
+            ) {
+                // If not updating a single attribute and the
+                // document is the same as the old one, skip it
                 unset($documents[$key]);
                 continue;
             }
@@ -4806,8 +4809,6 @@ class Database
             );
         }
 
-        $modified = 0;
-
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             /**
              * @var array<Change> $chunk
@@ -4818,10 +4819,20 @@ class Database
                 $chunk
             )));
 
+            foreach ($chunk as $change) {
+                if ($change->getOld()->isEmpty()) {
+                    $created++;
+                } else {
+                    $updated++;
+                }
+            }
+
             foreach ($batch as $doc) {
                 if ($this->resolveRelationships) {
                     $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
+
+                $doc = $this->decode($collection, $doc);
 
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
@@ -4832,16 +4843,16 @@ class Database
                 }
 
                 $onNext && $onNext($doc);
-                $modified++;
             }
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_UPSERT, new Document([
             '$collection' => $collection->getId(),
-            'modified' => $modified,
+            'created' => $created,
+            'updated' => $updated,
         ]));
 
-        return $modified;
+        return $created + $updated;
     }
 
     /**

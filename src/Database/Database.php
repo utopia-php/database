@@ -1288,7 +1288,14 @@ class Database
             }
         }
 
-        $this->adapter->createCollection($id, $attributes, $indexes);
+        try {
+            $this->adapter->createCollection($id, $attributes, $indexes);
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
+            }
+        }
 
         if ($id === self::METADATA) {
             return new Document(self::COLLECTION);

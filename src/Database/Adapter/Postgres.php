@@ -101,11 +101,18 @@ class Postgres extends SQL
         $this->timeout = $milliseconds;
 
         $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
-            return "
-				SET statement_timeout = {$milliseconds};
-				{$sql};
-				SET statement_timeout = 0;
-			";
+            // $sql = rtrim($sql, " \t\n\r\0\x0B;");
+            // return "
+            //     WITH
+            //       __timeout AS (
+            //         SELECT pg_catalog.set_config('statement_timeout', '{$milliseconds}', true)
+            //       ),
+            //       actual AS (
+            //         {$sql}
+            //       )
+            //     SELECT * FROM actual;
+            // ";
+            return $sql;
         });
     }
 
@@ -1663,9 +1670,12 @@ class Postgres extends SQL
 
         try {
             $stmt = $this->getPDO()->prepare($sql);
-
             foreach ($binds as $key => $value) {
-                $stmt->bindValue($key, $value, $this->getPDOType($value));
+                if ($key === ":internalId") {
+                    $stmt->bindValue($key, $value, PDO::PARAM_INT);
+                } else {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
             }
 
             $stmt->execute();
@@ -1925,10 +1935,14 @@ class Postgres extends SQL
                         Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
+                    if ($attribute === $this->quote("_id")) {
+                        $binds[":internalId"] = $value;
+                        $conditions[] = "{$alias}.{$attribute} {$operator} :internalId";
+                    } else {
+                        $binds[":{$placeholder}_{$key}"] = $value;
+                        $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";
+                    }
 
-                    $binds[":{$placeholder}_{$key}"] = $value;
-
-                    $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";
                 }
 
                 return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';

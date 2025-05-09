@@ -101,17 +101,16 @@ class Postgres extends SQL
         $this->timeout = $milliseconds;
 
         $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
-            // $sql = rtrim($sql, " \t\n\r\0\x0B;");
-            // return "
-            //     WITH
-            //       __timeout AS (
-            //         SELECT pg_catalog.set_config('statement_timeout', '{$milliseconds}', true)
-            //       ),
-            //       actual AS (
-            //         {$sql}
-            //       )
-            //     SELECT * FROM actual;
-            // ";
+            return "
+                WITH
+                  __timeout AS (
+                    SELECT pg_catalog.set_config('statement_timeout', '{$milliseconds}', true)
+                  ),
+                  actual AS (
+                    {$sql}
+                  )
+                SELECT * FROM actual;
+            ";
             return $sql;
         });
     }
@@ -292,14 +291,6 @@ class Postgres extends SQL
                 $indexId = $this->filter($index->getId());
                 $indexType = $index->getAttribute('type');
                 $indexAttributes = $index->getAttribute('attributes', []);
-                // $indexAttributesWithType = [];
-                // foreach ($indexAttributes as $indexAttribute) {
-                //     foreach ($attributes as $attribute) {
-                //         if($attribute->getId()===$indexAttribute){
-                //             $indexAttributesWithType[$indexAttribute] = $attribute->getAttribute('type');
-                //         }
-                //     }
-                // }
                 $indexOrders = $index->getAttribute('orders', []);
                 $this->createIndex(
                     $id,
@@ -852,10 +843,10 @@ class Postgres extends SQL
             };
 
             if (Database::INDEX_UNIQUE === $type) {
+                // TODO: pass an external map for this
                 if ($attr === "time") {
                     $attributes[$i] = "\"{$attr}\" {$order}";
                 } else {
-                    // Use collation instead of LOWER() function
                     $attributes[$i] = "\"{$attr}\" COLLATE utf8_ci {$order}";
                 }
             } else {

@@ -750,10 +750,11 @@ class MariaDB extends SQL
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
+     * @param array<string,string> $indexAttributeTypes
      * @return bool
      * @throws DatabaseException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool
     {
         $collection = $this->getDocument(Database::METADATA, $collection);
 
@@ -2338,4 +2339,8 @@ class MariaDB extends SQL
         return "`{$string}`";
     }
 
+    public function getSupportForNumericCasting(): bool
+    {
+        return true;
+    }
 }

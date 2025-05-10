@@ -291,6 +291,14 @@ class Postgres extends SQL
                 $indexId = $this->filter($index->getId());
                 $indexType = $index->getAttribute('type');
                 $indexAttributes = $index->getAttribute('attributes', []);
+                $indexAttributesWithType = [];
+                foreach ($indexAttributes as $indexAttribute) {
+                    foreach ($attributes as $attribute) {
+                        if ($attribute->getId() === $indexAttribute) {
+                            $indexAttributesWithType[$indexAttribute] = $attribute->getAttribute('type');
+                        }
+                    }
+                }
                 $indexOrders = $index->getAttribute('orders', []);
                 $this->createIndex(
                     $id,
@@ -298,7 +306,8 @@ class Postgres extends SQL
                     $indexType,
                     $indexAttributes,
                     [],
-                    $indexOrders
+                    $indexOrders,
+                    $indexAttributesWithType
                 );
             }
         } catch (PDOException $e) {
@@ -823,10 +832,11 @@ class Postgres extends SQL
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
-     *
+     * @param array<string,string> $indexAttributeTypes
+
      * @return bool
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
@@ -843,11 +853,10 @@ class Postgres extends SQL
             };
 
             if (Database::INDEX_UNIQUE === $type) {
-                // TODO: pass an external map for this
-                if ($attr === "time") {
-                    $attributes[$i] = "\"{$attr}\" {$order}";
-                } else {
+                if ($indexAttributeTypes[$attr] === Database::VAR_STRING) {
                     $attributes[$i] = "\"{$attr}\" COLLATE utf8_ci {$order}";
+                } else {
+                    $attributes[$i] = "\"{$attr}\" {$order}";
                 }
             } else {
                 $attributes[$i] = "\"{$attr}\" {$order}";

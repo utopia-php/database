@@ -1229,6 +1229,12 @@ abstract class SQL extends Adapter
         return false;
     }
 
+    public function getSupportForNumericCasting(): bool
+    {
+        return false;
+    }
+
+
     /**
      * Does the adapter handle Query Array Contains?
      *

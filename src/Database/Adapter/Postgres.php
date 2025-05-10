@@ -103,10 +103,16 @@ class Postgres extends SQL
 
         $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
             return "
-				SET statement_timeout = {$milliseconds};
-				{$sql};
-				SET statement_timeout = 0;
-			";
+                WITH
+                  __timeout AS (
+                    SELECT pg_catalog.set_config('statement_timeout', '{$milliseconds}', true)
+                  ),
+                  actual AS (
+                    {$sql}
+                  )
+                SELECT * FROM actual;
+            ";
+            return $sql;
         });
     }
 
@@ -129,9 +135,19 @@ class Postgres extends SQL
         $sql = "CREATE SCHEMA \"{$name}\"";
         $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 
-        return $this->getPDO()
+        $dbCreation = $this->getPDO()
             ->prepare($sql)
             ->execute();
+
+        $collation = "
+            CREATE COLLATION IF NOT EXISTS utf8_ci (
+            provider = icu,
+            locale   = 'und-u-ks-primary',
+            deterministic = false
+            );
+        ";
+        $this->getPDO()->prepare($collation)->execute();
+        return $dbCreation;
     }
 
     /**
@@ -204,7 +220,6 @@ class Postgres extends SQL
         }
 
         $sqlTenant = $this->sharedTables ? '_tenant INTEGER DEFAULT NULL,' : '';
-
         $collection = "
             CREATE TABLE {$this->getSQLTable($id)} (
                 _id SERIAL NOT NULL,
@@ -277,15 +292,23 @@ class Postgres extends SQL
                 $indexId = $this->filter($index->getId());
                 $indexType = $index->getAttribute('type');
                 $indexAttributes = $index->getAttribute('attributes', []);
+                $indexAttributesWithType = [];
+                foreach ($indexAttributes as $indexAttribute) {
+                    foreach ($attributes as $attribute) {
+                        if ($attribute->getId() === $indexAttribute) {
+                            $indexAttributesWithType[$indexAttribute] = $attribute->getAttribute('type');
+                        }
+                    }
+                }
                 $indexOrders = $index->getAttribute('orders', []);
-
                 $this->createIndex(
                     $id,
                     $indexId,
                     $indexType,
                     $indexAttributes,
                     [],
-                    $indexOrders
+                    $indexOrders,
+                    $indexAttributesWithType
                 );
             }
         } catch (PDOException $e) {
@@ -810,13 +833,15 @@ class Postgres extends SQL
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
-     *
+     * @param array<string,string> $indexAttributeTypes
+
      * @return bool
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
+
 
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
@@ -829,7 +854,11 @@ class Postgres extends SQL
             };
 
             if (Database::INDEX_UNIQUE === $type) {
-                $attributes[$i] = "LOWER(\"{$attr}\"::text) {$order}";
+                if ($indexAttributeTypes[$attr] === Database::VAR_STRING) {
+                    $attributes[$i] = "\"{$attr}\" COLLATE utf8_ci {$order}";
+                } else {
+                    $attributes[$i] = "\"{$attr}\" {$order}";
+                }
             } else {
                 $attributes[$i] = "\"{$attr}\" {$order}";
             }
@@ -851,6 +880,7 @@ class Postgres extends SQL
         }
 
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
+
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         try {
@@ -861,7 +891,6 @@ class Postgres extends SQL
             throw $this->processException($e);
         }
     }
-
     /**
      * Delete Index
      *
@@ -956,7 +985,6 @@ class Postgres extends SQL
         $sql = "
 			INSERT INTO {$this->getSQLTable($name)} ({$columns} \"_uid\")
 			VALUES ({$columnNames} :_uid)
-			RETURNING _id
 		";
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
@@ -1010,8 +1038,8 @@ class Postgres extends SQL
 
         try {
             $stmt->execute();
-
-            $document['$internalId'] = $stmt->fetch()["_id"];
+            $lastInsertedId = $this->getPDO()->lastInsertId();
+            $document['$internalId'] = $lastInsertedId;
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
@@ -1642,9 +1670,12 @@ class Postgres extends SQL
 
         try {
             $stmt = $this->getPDO()->prepare($sql);
-
             foreach ($binds as $key => $value) {
-                $stmt->bindValue($key, $value, $this->getPDOType($value));
+                if ($key === ":internalId") {
+                    $stmt->bindValue($key, $value, PDO::PARAM_INT);
+                } else {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
             }
 
             $stmt->execute();
@@ -1904,10 +1935,14 @@ class Postgres extends SQL
                         Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
+                    if ($attribute === $this->quote("_id")) {
+                        $binds[":internalId"] = $value;
+                        $conditions[] = "{$alias}.{$attribute} {$operator} :internalId";
+                    } else {
+                        $binds[":{$placeholder}_{$key}"] = $value;
+                        $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";
+                    }
 
-                    $binds[":{$placeholder}_{$key}"] = $value;
-
-                    $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";
                 }
 
                 return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';

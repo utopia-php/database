@@ -5630,16 +5630,12 @@ class Database
                 }
             }
 
-            $this->withTransaction(function () use ($collection, $skipAuth, $authorization, $internalIds, $permissionIds) {
-                $getResults = fn () => $this->adapter->deleteDocuments(
+            $this->withTransaction(function () use ($collection, $internalIds, $permissionIds) {
+                $this->adapter->deleteDocuments(
                     $collection->getId(),
                     $internalIds,
                     $permissionIds
                 );
-
-                $skipAuth
-                    ? $authorization->skip($getResults)
-                    : $getResults();
             });
 
             foreach ($batch as $document) {

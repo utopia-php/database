@@ -141,7 +141,8 @@ trait ManyToOneTests
         $this->assertArrayNotHasKey('reviews', $movie);
 
         $documents = static::getDatabase()->find('review', [
-            Query::select(['date', 'movie.date'])
+            Query::select('date'),
+            Query::select('movie.date')
         ]);
 
         $this->assertCount(3, $documents);
@@ -172,7 +173,8 @@ trait ManyToOneTests
 
         // Select related document attributes
         $review = static::getDatabase()->findOne('review', [
-            Query::select(['*', 'movie.name'])
+            Query::select('*'),
+            Query::select('movie.name')
         ]);
 
         if ($review->isEmpty()) {
@@ -183,7 +185,8 @@ trait ManyToOneTests
         $this->assertArrayNotHasKey('length', $review->getAttribute('movie'));
 
         $review = static::getDatabase()->getDocument('review', 'review1', [
-            Query::select(['*', 'movie.name'])
+            Query::select('*'),
+            Query::select('movie.name')
         ]);
 
         $this->assertEquals('Movie 1', $review->getAttribute('movie')->getAttribute('name'));
@@ -549,7 +552,8 @@ trait ManyToOneTests
 
         // Select related document attributes
         $product = static::getDatabase()->findOne('product', [
-            Query::select(['*', 'store.name'])
+            Query::select('*'),
+            Query::select('store.name')
         ]);
 
         if ($product->isEmpty()) {
@@ -560,7 +564,8 @@ trait ManyToOneTests
         $this->assertArrayNotHasKey('opensAt', $product->getAttribute('store'));
 
         $product = static::getDatabase()->getDocument('product', 'product1', [
-            Query::select(['*', 'store.name'])
+            Query::select('*'),
+            Query::select('store.name')
         ]);
 
         $this->assertEquals('Store 1', $product->getAttribute('store')->getAttribute('name'));

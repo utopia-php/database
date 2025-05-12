@@ -105,7 +105,7 @@ trait ManyToManyTests
         $this->assertEquals(1, \count($playlist1Document->getAttribute('songs')));
 
         $documents = static::getDatabase()->find('playlist', [
-            Query::select(['name']),
+            Query::select('name'),
             Query::limit(1)
         ]);
 
@@ -135,7 +135,8 @@ trait ManyToManyTests
 
         // Select related document attributes
         $playlist = static::getDatabase()->findOne('playlist', [
-            Query::select(['*', 'songs.name'])
+            Query::select('*'),
+            Query::select('songs.name')
         ]);
 
         if ($playlist->isEmpty()) {
@@ -146,7 +147,8 @@ trait ManyToManyTests
         $this->assertArrayNotHasKey('length', $playlist->getAttribute('songs')[0]);
 
         $playlist = static::getDatabase()->getDocument('playlist', 'playlist1', [
-            Query::select(['*', 'songs.name'])
+            Query::select('*'),
+            Query::select('songs.name')
         ]);
 
         $this->assertEquals('Song 1', $playlist->getAttribute('songs')[0]->getAttribute('name'));
@@ -517,7 +519,8 @@ trait ManyToManyTests
 
         // Select related document attributes
         $student = static::getDatabase()->findOne('students', [
-            Query::select(['*', 'classes.name'])
+            Query::select('*'),
+            Query::select('classes.name')
         ]);
 
         if ($student->isEmpty()) {
@@ -528,7 +531,8 @@ trait ManyToManyTests
         $this->assertArrayNotHasKey('number', $student->getAttribute('classes')[0]);
 
         $student = static::getDatabase()->getDocument('students', 'student1', [
-            Query::select(['*', 'classes.name'])
+            Query::select('*'),
+            Query::select('classes.name')
         ]);
 
         $this->assertEquals('Class 1', $student->getAttribute('classes')[0]->getAttribute('name'));

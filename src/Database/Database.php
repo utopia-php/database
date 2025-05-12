@@ -6569,7 +6569,7 @@ class Database
     /**
      * @param string $collectionId
      * @param string|null $documentId
-     * @param array<string> $selects
+     * @param array<Query> $selects
      * @return array{0: ?string, 1: ?string, 2: ?string}
      */
     public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
@@ -6597,7 +6597,7 @@ class Database
             $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
 
             if (!empty($selects)) {
-                $documentHashKey = $documentKey . ':' . \md5(\implode($selects));
+                $documentHashKey = $documentKey . ':' . \md5(\serialize($selects));
             }
         }
 

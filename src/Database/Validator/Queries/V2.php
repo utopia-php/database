@@ -248,10 +248,6 @@ class V2 extends Validator
                         $this->validateSelect($query);
 
                         break;
-                        //                    case Query::TYPE_SELECTION:
-                        //                        $this->validateSelections($query);
-
-                        break;
                     case Query::TYPE_ORDER_ASC:
                     case Query::TYPE_ORDER_DESC:
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
@@ -404,6 +400,9 @@ class V2 extends Validator
 
         $attribute = $this->schema[$collection->getId()][$attributeId];
 
+        $array = $attribute['array'] ?? false;
+        $filters = $attribute['filters'] ?? [];
+
         foreach ($values as $value) {
 
             $validator = null;
@@ -466,8 +465,6 @@ class V2 extends Validator
             }
         }
 
-        $array = $attribute['array'] ?? false;
-
         if (
             ! $array &&
             $method === Query::TYPE_CONTAINS &&
@@ -481,6 +478,10 @@ class V2 extends Validator
             ! in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
         ) {
             throw new \Exception('Invalid query: Cannot query '.$method.' on attribute "'.$attributeId.'" because it is an array.');
+        }
+
+        if (Query::isFilter($method) && \in_array('encrypt', $filters)) {
+            throw new \Exception('Cannot query encrypted attribute: ' . $attributeId);
         }
     }
 

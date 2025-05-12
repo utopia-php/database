@@ -16,6 +16,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
 
 trait DocumentTests
@@ -772,7 +773,8 @@ trait DocumentTests
         $documentId = $document->getId();
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed']),
+            Query::select('string'),
+            Query::select('integer_signed'),
         ]);
 
         $this->assertEmpty($document->getId());
@@ -793,7 +795,9 @@ trait DocumentTests
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$id']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$id'),
         ]);
 
         $this->assertArrayHasKey('$id', $document);
@@ -804,7 +808,9 @@ trait DocumentTests
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$permissions']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$permissions'),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -815,7 +821,9 @@ trait DocumentTests
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$internalId']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$internalId'),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -826,7 +834,9 @@ trait DocumentTests
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$collection']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$collection'),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -837,7 +847,9 @@ trait DocumentTests
         $this->assertArrayHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$createdAt']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$createdAt'),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -848,7 +860,9 @@ trait DocumentTests
         $this->assertArrayNotHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
-            Query::select(['string', 'integer_signed', '$updatedAt']),
+            Query::select('string'),
+            Query::select('integer_signed'),
+            Query::select('$updatedAt'),
         ]);
 
         $this->assertArrayNotHasKey('$id', $document);
@@ -1045,7 +1059,8 @@ trait DocumentTests
     public function testSelectInternalID(): void
     {
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['$internalId', '$id']),
+            Query::select('$internalId'),
+            Query::select('$id'),
             Query::orderAsc(''),
             Query::limit(1),
         ]);
@@ -1053,13 +1068,19 @@ trait DocumentTests
         $document = $documents[0];
 
         $this->assertArrayHasKey('$internalId', $document);
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
         $this->assertCount(2, $document);
 
         $document = static::getDatabase()->getDocument('movies', $document->getId(), [
-            Query::select(['$internalId']),
+            Query::select('$internalId'),
         ]);
 
         $this->assertArrayHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
         $this->assertCount(1, $document);
     }
 
@@ -2203,7 +2224,7 @@ trait DocumentTests
     public function testOrNested(): void
     {
         $queries = [
-            Query::select(['director']),
+            Query::select('director'),
             Query::equal('director', ['Joe Johnston']),
             Query::or([
                 Query::equal('name', ['Frozen']),
@@ -2388,7 +2409,8 @@ trait DocumentTests
     public function testFindSelect(): void
     {
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year'])
+            Query::select('name'),
+            Query::select('year')
         ]);
 
         foreach ($documents as $document) {
@@ -2406,7 +2428,9 @@ trait DocumentTests
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$id'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$id')
         ]);
 
         foreach ($documents as $document) {
@@ -2424,7 +2448,9 @@ trait DocumentTests
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$internalId'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$internalId')
         ]);
 
         foreach ($documents as $document) {
@@ -2442,7 +2468,9 @@ trait DocumentTests
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$collection'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$collection')
         ]);
 
         foreach ($documents as $document) {
@@ -2460,7 +2488,9 @@ trait DocumentTests
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$createdAt'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$createdAt')
         ]);
 
         foreach ($documents as $document) {
@@ -2478,7 +2508,9 @@ trait DocumentTests
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$updatedAt'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$updatedAt')
         ]);
 
         foreach ($documents as $document) {
@@ -2496,7 +2528,9 @@ trait DocumentTests
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$permissions'])
+            Query::select('name'),
+            Query::select('year'),
+            Query::select('$permissions')
         ]);
 
         foreach ($documents as $document) {
@@ -2849,7 +2883,10 @@ trait DocumentTests
         $this->assertEquals(['admin', 'developer', 'tester',], $result->getAttribute('roles'));
         $this->assertEquals(['{"$id":"1","label":"x"}', '{"$id":"2","label":"y"}', '{"$id":"3","label":"z"}',], $result->getAttribute('tags'));
 
-        $result = static::getDatabase()->decode($collection, $document);
+        $context = new QueryContext();
+        $context->add($collection);
+
+        $result = static::getDatabase()->decode($context, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
         $this->assertContains('read("any")', $result->getAttribute('$permissions'));
@@ -3458,12 +3495,13 @@ trait DocumentTests
         /**
          * Test Short select query, test pagination as well, Add order to select
          */
-        $selects = ['$internalId', '$id', '$collection', '$permissions', '$updatedAt'];
+        $mandatory = ['$internalId', '$id', '$collection', '$permissions', '$updatedAt'];
 
         $count = static::getDatabase()->deleteDocuments(
             collection: 'bulk_delete',
             queries: [
-                Query::select([...$selects, '$createdAt']),
+                Query::select('$createdAt'),
+                ...array_map(fn($f) => Query::select($f), $mandatory),
                 Query::cursorAfter($docs[6]),
                 Query::greaterThan('$createdAt', '2000-01-01'),
                 Query::orderAsc('$createdAt'),

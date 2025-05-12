@@ -173,6 +173,7 @@ abstract class SQL extends Adapter
             $stmt->execute();
             $document = $stmt->fetchAll();
             $stmt->closeCursor();
+            var_dump($document);
         } catch (PDOException $e) {
             $e = $this->processException($e);
 

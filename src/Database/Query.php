@@ -81,6 +81,25 @@ class Query
         self::TYPE_OR,
     ];
 
+    protected const FILTER_TYPES = [
+        self::TYPE_EQUAL,
+        self::TYPE_NOT_EQUAL,
+        self::TYPE_LESSER,
+        self::TYPE_LESSER_EQUAL,
+        self::TYPE_GREATER,
+        self::TYPE_GREATER_EQUAL,
+        self::TYPE_CONTAINS,
+        self::TYPE_SEARCH,
+        self::TYPE_IS_NULL,
+        self::TYPE_IS_NOT_NULL,
+        self::TYPE_BETWEEN,
+        self::TYPE_STARTS_WITH,
+        self::TYPE_ENDS_WITH,
+        self::TYPE_AND,
+        self::TYPE_OR,
+        self::TYPE_RELATION_EQUAL,
+    ];
+
     protected string $method = '';
     protected string $collection = '';
     protected string $alias = '';
@@ -844,24 +863,7 @@ class Query
      */
     public static function getFilterQueries(array $queries): array
     {
-        return self::getByType($queries, [
-            self::TYPE_EQUAL,
-            self::TYPE_NOT_EQUAL,
-            self::TYPE_LESSER,
-            self::TYPE_LESSER_EQUAL,
-            self::TYPE_GREATER,
-            self::TYPE_GREATER_EQUAL,
-            self::TYPE_CONTAINS,
-            self::TYPE_SEARCH,
-            self::TYPE_IS_NULL,
-            self::TYPE_IS_NOT_NULL,
-            self::TYPE_BETWEEN,
-            self::TYPE_STARTS_WITH,
-            self::TYPE_ENDS_WITH,
-            self::TYPE_AND,
-            self::TYPE_OR,
-            self::TYPE_RELATION_EQUAL,
-        ]);
+        return self::getByType($queries, self::FILTER_TYPES);
     }
 
     /**
@@ -879,7 +881,7 @@ class Query
      *     cursorDirection: string|null
      * }
      */
-    public static function groupByType(array $queries): array
+    public static function groupByType_deprecated(array $queries): array
     {
         $filters = [];
         $joins = [];
@@ -994,6 +996,11 @@ class Query
         }
 
         return false;
+    }
+
+    public static function isFilter(string $method): bool
+    {
+        return in_array($method, self::FILTER_TYPES);
     }
 
     public function onArray(): bool

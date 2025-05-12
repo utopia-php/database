@@ -349,6 +349,13 @@ class Database
     protected bool $migrating = false;
 
     /**
+     * List of collections that should be treated as globally accessible
+     *
+     * @var array<string, bool>
+     */
+    protected array $globalCollections = [];
+
+    /**
      * Stack of collection IDs when creating or updating related documents
      * @var array<string>
      */
@@ -1013,6 +1020,31 @@ class Database
     }
 
     /**
+     * Set list of collections which are globally accessible
+     *
+     * @param array<string> $collections
+     * @return $this
+     */
+    public function setGlobalCollections(array $collections): static
+    {
+        foreach ($collections as $collection) {
+            $this->globalCollections[$collection] = true;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Get list of collections which are globally accessible
+     *
+     * @return array<string>
+     */
+    public function getGlobalCollections(): array
+    {
+        return \array_keys($this->globalCollections);
+    }
+
+    /**
      * Get list of keywords that cannot be used
      *
      * @return string[]
@@ -1255,7 +1287,14 @@ class Database
             }
         }
 
-        $this->adapter->createCollection($id, $attributes, $indexes);
+        try {
+            $this->adapter->createCollection($id, $attributes, $indexes);
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
+            }
+        }
 
         if ($id === self::METADATA) {
             return new Document(self::COLLECTION);
@@ -4728,11 +4767,11 @@ class Database
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $time = DateTime::now();
 
-        $context = new QueryContext();
-        $context->add($collection);
-
         $created = 0;
         $updated = 0;
+
+        $context = new QueryContext();
+        $context->add($collection);
 
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
@@ -5731,10 +5770,6 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        /**
-         * @var $collection Document
-         */
-
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
@@ -6534,7 +6569,7 @@ class Database
     /**
      * @param string $collectionId
      * @param string|null $documentId
-     * @param array<Query> $selects
+     * @param array<string> $selects
      * @return array{0: ?string, 1: ?string, 2: ?string}
      */
     public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
@@ -6543,12 +6578,18 @@ class Database
             $hostname = $this->adapter->getHostname();
         }
 
+        $tenantSegment = $this->adapter->getTenant();
+
+        if (isset($this->globalCollections[$collectionId])) {
+            $tenantSegment = null;
+        }
+
         $collectionKey = \sprintf(
             '%s-cache-%s:%s:%s:collection:%s',
             $this->cacheName,
             $hostname ?? '',
             $this->getNamespace(),
-            $this->adapter->getTenant(),
+            $tenantSegment,
             $collectionId
         );
 
@@ -6556,7 +6597,7 @@ class Database
             $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
 
             if (!empty($selects)) {
-                $documentHashKey = $documentKey . ':' . \md5(\serialize($selects));
+                $documentHashKey = $documentKey . ':' . \md5(\implode($selects));
             }
         }
 

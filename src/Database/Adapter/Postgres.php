@@ -99,20 +99,8 @@ class Postgres extends SQL
         }
 
         $this->timeout = $milliseconds;
-
-        $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
-            return "
-                WITH
-                  __timeout AS (
-                    SELECT pg_catalog.set_config('statement_timeout', '{$milliseconds}', true)
-                  ),
-                  actual AS (
-                    {$sql}
-                  )
-                SELECT * FROM actual;
-            ";
-            return $sql;
-        });
+        $this->getPDO()->exec("ALTER SYSTEM SET statement_timeout = '{$milliseconds}'");
+        $this->getPDO()->exec("SELECT pg_reload_conf()");
     }
 
     /**

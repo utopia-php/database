@@ -6243,7 +6243,7 @@ class Database
             $alias = Query::DEFAULT_ALIAS;
 
             foreach ($selects as $select) {
-                if($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key){
+                if ($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key) {
                     $alias = $select->getAlias();
                     break;
                 }
@@ -6256,11 +6256,11 @@ class Database
 
             $attribute = $internals[$key] ?? null;
 
-            if (is_null($attribute)){
+            if (is_null($attribute)) {
                 $attribute = $schema[$collection->getId()][$this->adapter->filter($key)] ?? null;
             }
 
-            if (is_null($attribute)){
+            if (is_null($attribute)) {
                 continue;
             }
 
@@ -6320,7 +6320,7 @@ class Database
             $alias = Query::DEFAULT_ALIAS;
 
             foreach ($selects as $select) {
-                if($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key){
+                if ($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key) {
                     $alias = $select->getAlias();
                     break;
                 }
@@ -6333,15 +6333,15 @@ class Database
 
             $attribute = $internals[$key] ?? null;
 
-            if (is_null($attribute)){
+            if (is_null($attribute)) {
                 $attribute = $schema[$collection->getId()][$this->adapter->filter($key)] ?? null;
             }
 
-            if (is_null($attribute)){
+            if (is_null($attribute)) {
                 continue;
             }
 
-            if (is_null($value)){
+            if (is_null($value)) {
                 $new->setAttribute($attribute['$id'], null);
                 continue;
             }

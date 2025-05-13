@@ -22,6 +22,9 @@ class V2 extends Validator
 {
     protected string $message = 'Invalid query';
 
+    /**
+     * @var array<mixed>
+     */
     protected array $schema = [];
 
     protected int $maxQueriesCount;
@@ -33,6 +36,10 @@ class V2 extends Validator
     protected int $maxOffset;
 
     protected QueryContext $context;
+
+    protected \DateTime $minAllowedDate;
+
+    protected \DateTime $maxAllowedDate;
 
     /**
      * @throws Exception
@@ -51,6 +58,8 @@ class V2 extends Validator
         $this->maxValuesCount = $maxValuesCount;
         $this->maxLimit = $maxLimit;
         $this->maxOffset = $maxOffset;
+        $this->minAllowedDate = $minAllowedDate;
+        $this->maxAllowedDate = $maxAllowedDate;
 
         //        $validators = [
         //            new Limit(),
@@ -385,6 +394,11 @@ class V2 extends Validator
     }
 
     /**
+     * @param string $attributeId
+     * @param string $alias
+     * @param array<mixed> $values
+     * @param string $method
+     * @return void
      * @throws \Exception
      */
     protected function validateValues(string $attributeId, string $alias, array $values, string $method): void
@@ -425,7 +439,10 @@ class V2 extends Validator
                     break;
 
                 case Database::VAR_DATETIME:
-                    $validator = new DatetimeValidator();
+                    $validator = new DatetimeValidator(
+                        min: $this->minAllowedDate,
+                        max: $this->maxAllowedDate
+                    );
                     break;
 
                 case Database::VAR_RELATIONSHIP:
@@ -600,7 +617,9 @@ class V2 extends Validator
     }
 
     /**
-     * @throws \Exception
+     * @param array<Query> $queries
+     * @param string $alias
+     * @return bool
      */
     public function isRelationExist(array $queries, string $alias): bool
     {
@@ -608,9 +627,6 @@ class V2 extends Validator
          * Do we want to validate only top lever or nesting as well?
          */
         foreach ($queries as $query) {
-            /**
-             * @var Query $query
-             */
             if ($query->isNested()) {
                 if ($this->isRelationExist($query->getValues(), $alias)) {
                     return true;

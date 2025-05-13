@@ -141,7 +141,10 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid([Query::between('birthDay', '2024-01-01', '2023-01-01')]));
         $this->assertEquals(true, $validator->isValid([Query::startsWith('title', 'Fro')]));
         $this->assertEquals(true, $validator->isValid([Query::endsWith('title', 'Zen')]));
-        $this->assertEquals(true, $validator->isValid([Query::select(['title', 'description'])]));
+        $this->assertEquals(true, $validator->isValid([
+            Query::select('title'),
+            Query::select('description')
+        ]));
         $this->assertEquals(true, $validator->isValid([Query::notEqual('title', '')]));
     }
 
@@ -250,7 +253,8 @@ class QueryTest extends TestCase
     {
         $queries = [
             Query::equal('key', ['value']),
-            Query::select(['attr1', 'attr2']),
+            Query::select('attr1'),
+            Query::select('attr2'),
             Query::cursorBefore(new Document([])),
             Query::cursorAfter(new Document([])),
         ];
@@ -324,7 +328,7 @@ class QueryTest extends TestCase
                 Query::equal('price', [10]),
                 Query::or(
                     [
-                        Query::select(['price']),
+                        Query::select('price'),
                         Query::limit(1)
                     ]
                 )]

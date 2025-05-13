@@ -216,6 +216,11 @@ class Query
         return $this->attributeRight;
     }
 
+    public function getAs(): string
+    {
+        return $this->as;
+    }
+
     public function getCollection(): string
     {
         return $this->collection;
@@ -703,18 +708,33 @@ class Query
         return new self(self::TYPE_AND, '', $queries);
     }
 
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $queries
+     * @return self
+     */
     public static function join(string $collection, string $alias, array $queries = []): self
     {
         return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collection: $collection);
     }
 
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $queries
+     * @return self
+     */
     public static function innerJoin(string $collection, string $alias, array $queries = []): self
     {
         return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collection: $collection);
     }
 
     /**
-     * @param  array<Query>  $conditions
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $queries
+     * @return self
      */
     public static function leftJoin(string $collection, string $alias, array $queries = []): self
     {
@@ -722,14 +742,17 @@ class Query
     }
 
     /**
-     * @param  array<Query>  $conditions
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $queries
+     * @return self
      */
     public static function rightJoin(string $collection, string $alias, array $queries = []): self
     {
         return new self(self::TYPE_RIGHT_JOIN, values: $queries, alias: $alias, collection: $collection);
     }
 
-    public static function relationEqual($leftAlias, string $leftColumn, string $rightAlias, string $rightColumn): self
+    public static function relationEqual(string $leftAlias, string $leftColumn, string $rightAlias, string $rightColumn): self
     {
         return new self(self::TYPE_RELATION_EQUAL, $leftColumn, [], alias: $leftAlias, attributeRight: $rightColumn, aliasRight: $rightAlias);
     }

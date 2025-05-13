@@ -747,15 +747,16 @@ abstract class Adapter
      *
      * Find data sets using chosen queries
      *
-     * @param string $collection
+     * @param QueryContext $context
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
      * @param array<Query> $orderQueries
      *
      * @return array<Document>
@@ -1077,7 +1078,7 @@ abstract class Adapter
     abstract public function getKeywords(): array;
 
     /**
-     * @param array<Query> $selections
+     * @param array<Query> $selects
      * @return string
      */
     abstract protected function getAttributeProjection(array $selects): string;

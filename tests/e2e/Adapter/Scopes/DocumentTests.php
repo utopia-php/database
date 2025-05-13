@@ -3501,7 +3501,7 @@ trait DocumentTests
             collection: 'bulk_delete',
             queries: [
                 Query::select('$createdAt'),
-                ...array_map(fn($f) => Query::select($f), $mandatory),
+                ...array_map(fn ($f) => Query::select($f), $mandatory),
                 Query::cursorAfter($docs[6]),
                 Query::greaterThan('$createdAt', '2000-01-01'),
                 Query::orderAsc('$createdAt'),

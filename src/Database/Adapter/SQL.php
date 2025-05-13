@@ -1562,13 +1562,13 @@ abstract class SQL extends Adapter
 
         $string = '';
         foreach ($selects as $select) {
-            if($select->getAttribute() === '$collection'){
+            if ($select->getAttribute() === '$collection') {
                 continue;
             }
 
             $needle = $select->getAlias().':'.$select->getAttribute();
-            
-            if (in_array($needle, $duplications)){
+
+            if (in_array($needle, $duplications)) {
                 continue;
             }
 

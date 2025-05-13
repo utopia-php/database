@@ -88,15 +88,15 @@ class FilterTest extends TestCase
 
     public function testFailure(): void
     {
-        $this->assertFalse($this->validator->isValid([Query::select(['attr'])]));
+        $this->assertFalse($this->validator->isValid([Query::select('attr')]));
         $this->assertEquals('Invalid query: Attribute not found in schema: attr', $this->validator->getDescription());
         $this->assertFalse($this->validator->isValid([Query::limit(0)]));
         $this->assertFalse($this->validator->isValid([Query::limit(-1)]));
         $this->assertFalse($this->validator->isValid([Query::offset(-1)]));
         $this->assertFalse($this->validator->isValid([Query::equal('dne', ['v'])]));
         $this->assertFalse($this->validator->isValid([Query::equal('', ['v'])]));
-        $this->assertFalse($this->validator->isValid([Query::cursorAfter(new Document(['asdf']))]));
-        $this->assertFalse($this->validator->isValid([Query::cursorBefore(new Document(['asdf']))]));
+        $this->assertFalse($this->validator->isValid([Query::cursorAfter(new Document(['$uid'=>'asdf']))]));
+        $this->assertFalse($this->validator->isValid([Query::cursorBefore(new Document(['$uid'=>'asdf']))]));
         $this->assertFalse($this->validator->isValid([Query::contains('integer', ['super'])]));
         $this->assertFalse($this->validator->isValid([Query::equal('integer_array', [100,-1])]));
         $this->assertFalse($this->validator->isValid([Query::contains('integer_array', [10.6])]));

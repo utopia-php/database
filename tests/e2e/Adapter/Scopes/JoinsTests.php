@@ -2,7 +2,6 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
-use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -30,7 +29,7 @@ trait JoinsTests
      * @throws DatabaseException
      * @throws QueryException
      */
-    public function testJoin()
+    public function testJoin(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -347,7 +346,7 @@ trait JoinsTests
             ]
         );
 
-        $document = end($documents);
+        $document = $documents[0];
         var_dump($document);
         $this->assertIsFloat($document->getAttribute('float'));
         $this->assertEquals(5.5, $document->getAttribute('float'));

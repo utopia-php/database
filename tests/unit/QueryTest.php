@@ -164,10 +164,12 @@ class QueryTest extends TestCase
         $this->assertEquals('director', $query->getAttribute());
         $this->assertEquals(['Tarantino'], $query->getValues());
 
-        $query = Query::parse(Query::select(['title', 'director'])->toString());
+        $query = Query::parse(Query::select('title', alias: 'alias', as: 'as')->toString());
         $this->assertEquals('select', $query->getMethod());
-        $this->assertEquals(null, $query->getAttribute());
-        $this->assertEquals(['title', 'director'], $query->getValues());
+        $this->assertEquals('title', $query->getAttribute());
+        $this->assertEquals('alias', $query->getAlias());
+        $this->assertEquals('as', $query->getAs());
+        //$this->assertEquals(['title', 'director'], $query->getValues());
 
         $query = Query::parse(Query::between('age', 15, 18)->toString());
         $this->assertEquals('between', $query->getMethod());
@@ -311,9 +313,7 @@ class QueryTest extends TestCase
         $this->assertEquals('u', $query->getAlias());
         $this->assertCount(2, $query->getValues());
 
-        /**
-         * @var $query0 Query
-         */
+        /** @var Query $query0 */
         $query0 = $query->getValues()[0];
         $this->assertEquals(Query::TYPE_RELATION_EQUAL, $query0->getMethod());
         $this->assertEquals(Query::DEFAULT_ALIAS, $query0->getAlias());
@@ -321,9 +321,7 @@ class QueryTest extends TestCase
         $this->assertEquals('u', $query0->getRightAlias());
         $this->assertEquals('user_id', $query0->getAttributeRight());
 
-        /**
-         * @var $query0 Query
-         */
+        /** @var Query $query1 */
         $query1 = $query->getValues()[1];
         $this->assertEquals(Query::TYPE_EQUAL, $query1->getMethod());
         $this->assertEquals('u', $query1->getAlias());

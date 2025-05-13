@@ -7,10 +7,19 @@ use Utopia\Database\Validator\Authorization;
 
 class QueryContext
 {
+    /**
+     * @var array<Document>
+     */
     protected array $collections = [];
 
+    /**
+     * @var array<string>
+     */
     protected array $aliases = [];
 
+    /**
+     * @var array<mixed>
+     */
     protected array $skipAuthCollections = [];
 
     public function __construct()

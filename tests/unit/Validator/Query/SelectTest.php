@@ -51,14 +51,14 @@ class SelectTest extends TestCase
 
     public function testValueSuccess(): void
     {
-        $this->assertTrue($this->validator->isValid([Query::select(['*', 'attr'])]));
-        $this->assertTrue($this->validator->isValid([Query::select(['artist.name'])]));
+        $this->assertTrue($this->validator->isValid([Query::select('*'), Query::select('attr')]));
+        $this->assertTrue($this->validator->isValid([Query::select('artist.name')]));
         $this->assertTrue($this->validator->isValid([Query::limit(1)]));
     }
 
     public function testValueFailure(): void
     {
         $this->assertEquals('Invalid query', $this->validator->getDescription());
-        $this->assertFalse($this->validator->isValid([Query::select(['name.artist'])]));
+        $this->assertFalse($this->validator->isValid([Query::select('name.artist')]));
     }
 }

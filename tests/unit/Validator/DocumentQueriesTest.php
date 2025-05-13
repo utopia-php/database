@@ -68,12 +68,12 @@ class DocumentQueriesTest extends TestCase
         $validator = new DocumentsValidator($this->context);
 
         $queries = [
-            Query::select(['title']),
+            Query::select('title'),
         ];
 
         $this->assertEquals(true, $validator->isValid($queries));
 
-        $queries[] = Query::select(['price.relation']);
+        $queries[] = Query::select('price.relation');
         $this->assertEquals(true, $validator->isValid($queries));
     }
 

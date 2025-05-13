@@ -1559,6 +1559,12 @@ class Database
             $filters
         );
 
+        $collection->setAttribute(
+            'attributes',
+            $attribute,
+            Document::SET_TYPE_APPEND
+        );
+
         try {
             $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
@@ -1643,7 +1649,7 @@ class Database
                 $attribute['filters'] = [];
             }
 
-            $attributeDocuments[] = $this->validateAttribute(
+            $attributeDocument = $this->validateAttribute(
                 $collection,
                 $attribute['$id'],
                 $attribute['type'],
@@ -1656,6 +1662,14 @@ class Database
                 $attribute['formatOptions'],
                 $attribute['filters']
             );
+
+            $collection->setAttribute(
+                'attributes',
+                $attributeDocument,
+                Document::SET_TYPE_APPEND
+            );
+
+            $attributeDocuments[] = $attributeDocument;
         }
 
         try {
@@ -1759,12 +1773,6 @@ class Database
         ]);
 
         $this->checkAttribute($collection, $attribute);
-
-        $collection->setAttribute(
-            'attributes',
-            $attribute,
-            Document::SET_TYPE_APPEND
-        );
 
         switch ($type) {
             case self::VAR_STRING:

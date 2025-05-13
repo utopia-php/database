@@ -1583,7 +1583,6 @@ class Database
         }
 
         $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
 
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
 
@@ -1691,7 +1690,6 @@ class Database
         }
 
         $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
 
         $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
 

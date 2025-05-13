@@ -10,6 +10,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -1927,17 +1928,6 @@ class Postgres extends SQL
     }
 
     /**
-     * Get SQL table
-     *
-     * @param string $name
-     * @return string
-     */
-    protected function getSQLTable(string $name): string
-    {
-        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
-    }
-
-    /**
      * Get PDO Type
      *
      * @param mixed $value
@@ -2076,6 +2066,11 @@ class Postgres extends SQL
         // Data is too big for column resize
         if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
+        }
+
+        // Unknown column
+        if ($e->getCode() === "42703" && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new NotFoundException('Attribute not found', $e->getCode(), $e);
         }
 
         return $e;

@@ -257,8 +257,6 @@ abstract class SQL extends Adapter
         $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$columns};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        \var_dump($sql);
-
         try {
             return $this->getPDO()
                 ->prepare($sql)
@@ -309,11 +307,8 @@ abstract class SQL extends Adapter
      */
     public function deleteAttribute(string $collection, string $id, bool $array = false): bool
     {
-        $name = $this->filter($collection);
         $id = $this->quote($this->filter($id));
-
-        $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN {$id};";
-
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} DROP COLUMN {$id};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
         try {

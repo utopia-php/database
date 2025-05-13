@@ -173,6 +173,7 @@ abstract class SQL extends Adapter
             $stmt->execute();
             $document = $stmt->fetchAll();
             $stmt->closeCursor();
+            var_dump($document);
         } catch (PDOException $e) {
             $e = $this->processException($e);
 
@@ -213,15 +214,16 @@ abstract class SQL extends Adapter
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         $name = $this->filter($collection);
-        $selections = $this->getAttributeSelections($queries);
+        $alias = Query::DEFAULT_ALIAS;
+        //$selections = $this->getAttributeSelections($queries);
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections)}
-            FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid 
-            {$this->getTenantQuery($collection)}
+		    SELECT {$this->getAttributeProjection($queries)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            WHERE {$this->quote($alias)}._uid = :_uid 
+            {$this->getTenantQuery($collection, $alias)}
 		";
 
         if ($this->getSupportForUpdateLock()) {
@@ -1476,13 +1478,10 @@ abstract class SQL extends Adapter
      */
     public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
     {
+        $queries = Query::getFilterQueries($queries);
+
         $conditions = [];
         foreach ($queries as $query) {
-
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                continue;
-            }
-
             if ($query->isNested()) {
                 $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
             } else {
@@ -1549,12 +1548,70 @@ abstract class SQL extends Adapter
     /**
      * Get the SQL projection given the selected attributes
      *
+     * @param array<Query> $selects
+     * @return string
+     * @throws Exception
+     */
+    protected function getAttributeProjection(array $selects): string
+    {
+        if (empty($selects)) {
+            return Query::DEFAULT_ALIAS.'.*';
+        }
+
+        $duplications = [];
+
+        $string = '';
+        foreach ($selects as $select) {
+            if ($select->getAttribute() === '$collection') {
+                continue;
+            }
+
+            $needle = $select->getAlias().':'.$select->getAttribute();
+
+            if (in_array($needle, $duplications)) {
+                continue;
+            }
+
+            $duplications[] = $needle;
+
+            $alias = $select->getAlias();
+            $alias = $this->filter($alias);
+            $attribute = $select->getAttribute();
+
+            $attribute = match ($attribute) {
+                '$id' => '_uid',
+                '$internalId' => '_id',
+                '$tenant' => '_tenant',
+                '$createdAt' => '_createdAt',
+                '$updatedAt' => '_updatedAt',
+                '$permissions' => '_permissions',
+                default => $attribute
+            };
+
+            if ($attribute !== '*') {
+                $attribute = $this->filter($attribute);
+                $attribute = $this->quote($attribute);
+            }
+
+            if (!empty($string)) {
+                $string .= ', ';
+            }
+
+            $string .= "{$this->quote($alias)}.{$attribute}";
+        }
+
+        return $string;
+    }
+
+    /**
+     * Get the SQL projection given the selected attributes
+     *
      * @param array<string> $selections
      * @param string $prefix
      * @return mixed
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    protected function getAttributeProjection_original(array $selections, string $prefix = ''): mixed
     {
         if (empty($selections) || \in_array('*', $selections)) {
             if (!empty($prefix)) {

@@ -22,7 +22,11 @@ class Query
     public const TYPE_STARTS_WITH = 'startsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
 
+    public const TYPE_RELATION_EQUAL = 'relationEqual';
+
     public const TYPE_SELECT = 'select';
+
+    //public const TYPE_SELECTION = 'selection';
 
     // Order methods
     public const TYPE_ORDER_DESC = 'orderDesc';
@@ -37,6 +41,13 @@ class Query
     // Logical methods
     public const TYPE_AND = 'and';
     public const TYPE_OR = 'or';
+
+    // Join methods
+    public const TYPE_INNER_JOIN = 'innerJoin';
+
+    public const TYPE_LEFT_JOIN = 'leftJoin';
+
+    public const TYPE_RIGHT_JOIN = 'rightJoin';
 
     public const DEFAULT_ALIAS = 'main';
 
@@ -70,8 +81,33 @@ class Query
         self::TYPE_OR,
     ];
 
+    protected const FILTER_TYPES = [
+        self::TYPE_EQUAL,
+        self::TYPE_NOT_EQUAL,
+        self::TYPE_LESSER,
+        self::TYPE_LESSER_EQUAL,
+        self::TYPE_GREATER,
+        self::TYPE_GREATER_EQUAL,
+        self::TYPE_CONTAINS,
+        self::TYPE_SEARCH,
+        self::TYPE_IS_NULL,
+        self::TYPE_IS_NOT_NULL,
+        self::TYPE_BETWEEN,
+        self::TYPE_STARTS_WITH,
+        self::TYPE_ENDS_WITH,
+        self::TYPE_AND,
+        self::TYPE_OR,
+        self::TYPE_RELATION_EQUAL,
+    ];
+
     protected string $method = '';
+    protected string $collection = '';
+    protected string $alias = '';
     protected string $attribute = '';
+    protected string $aliasRight = '';
+    protected string $attributeRight = '';
+    protected string $as = '';
+    protected bool $system = false;
     protected bool $onArray = false;
 
     /**
@@ -86,15 +122,41 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      */
-    public function __construct(string $method, string $attribute = '', array $values = [])
-    {
+    protected function __construct(
+        string $method,
+        string $attribute = '',
+        array $values = [],
+        string $alias = '',
+        string $attributeRight = '',
+        string $aliasRight = '',
+        string $collection = '',
+        string $as = '',
+        bool $system = false,
+    ) {
         if ($attribute === '' && \in_array($method, [Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC])) {
             $attribute = '$internalId';
         }
 
+        /**
+         * We can not make the fallback in the Query::static() calls , because parse method skips it
+         */
+        if (empty($alias)) {
+            $alias = Query::DEFAULT_ALIAS;
+        }
+
+        if (empty($aliasRight)) {
+            $aliasRight = Query::DEFAULT_ALIAS;
+        }
+
         $this->method = $method;
+        $this->alias = $alias;
         $this->attribute = $attribute;
         $this->values = $values;
+        $this->aliasRight = $aliasRight;
+        $this->attributeRight = $attributeRight;
+        $this->collection = $collection;
+        $this->as = $as;
+        $this->system = $system;
     }
 
     public function __clone(): void
@@ -139,6 +201,31 @@ class Query
         return $this->values[0] ?? $default;
     }
 
+    public function getAlias(): string
+    {
+        return $this->alias;
+    }
+
+    public function getRightAlias(): string
+    {
+        return $this->aliasRight;
+    }
+
+    public function getAttributeRight(): string
+    {
+        return $this->attributeRight;
+    }
+
+    public function getAs(): string
+    {
+        return $this->as;
+    }
+
+    public function getCollection(): string
+    {
+        return $this->collection;
+    }
+
     /**
      * Sets method
      *
@@ -165,6 +252,41 @@ class Query
         return $this;
     }
 
+    /**
+     * Sets right attribute
+     */
+    public function setAttributeRight(string $attribute): self
+    {
+        $this->attributeRight = $attribute;
+
+        return $this;
+    }
+
+    public function getCursorDirection(): string
+    {
+        if ($this->method === self::TYPE_CURSOR_AFTER) {
+            return Database::CURSOR_AFTER;
+        }
+
+        if ($this->method === self::TYPE_CURSOR_BEFORE) {
+            return Database::CURSOR_BEFORE;
+        }
+
+        throw new \Exception('Invalid method: Get cursor direction on "'.$this->method.'" Query');
+    }
+
+    public function getOrderDirection(): string
+    {
+        if ($this->method === self::TYPE_ORDER_ASC) {
+            return Database::ORDER_ASC;
+        }
+
+        if ($this->method === self::TYPE_ORDER_DESC) {
+            return Database::ORDER_DESC;
+        }
+
+        throw new \Exception('Invalid method: Get order direction on "'.$this->method.'" Query');
+    }
     /**
      * Sets values
      *
@@ -352,9 +474,9 @@ class Query
      * @param array<string|int|float|bool> $values
      * @return Query
      */
-    public static function equal(string $attribute, array $values): self
+    public static function equal(string $attribute, array $values, string $alias = ''): self
     {
-        return new self(self::TYPE_EQUAL, $attribute, $values);
+        return new self(self::TYPE_EQUAL, $attribute, $values, alias: $alias);
     }
 
     /**
@@ -364,9 +486,9 @@ class Query
      * @param string|int|float|bool $value
      * @return Query
      */
-    public static function notEqual(string $attribute, string|int|float|bool $value): self
+    public static function notEqual(string $attribute, string|int|float|bool $value, string $alias = ''): self
     {
-        return new self(self::TYPE_NOT_EQUAL, $attribute, [$value]);
+        return new self(self::TYPE_NOT_EQUAL, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -376,9 +498,9 @@ class Query
      * @param string|int|float|bool $value
      * @return Query
      */
-    public static function lessThan(string $attribute, string|int|float|bool $value): self
+    public static function lessThan(string $attribute, string|int|float|bool $value, string $alias = ''): self
     {
-        return new self(self::TYPE_LESSER, $attribute, [$value]);
+        return new self(self::TYPE_LESSER, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -388,9 +510,9 @@ class Query
      * @param string|int|float|bool $value
      * @return Query
      */
-    public static function lessThanEqual(string $attribute, string|int|float|bool $value): self
+    public static function lessThanEqual(string $attribute, string|int|float|bool $value, string $alias = ''): self
     {
-        return new self(self::TYPE_LESSER_EQUAL, $attribute, [$value]);
+        return new self(self::TYPE_LESSER_EQUAL, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -400,9 +522,9 @@ class Query
      * @param string|int|float|bool $value
      * @return Query
      */
-    public static function greaterThan(string $attribute, string|int|float|bool $value): self
+    public static function greaterThan(string $attribute, string|int|float|bool $value, string $alias = ''): self
     {
-        return new self(self::TYPE_GREATER, $attribute, [$value]);
+        return new self(self::TYPE_GREATER, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -412,9 +534,9 @@ class Query
      * @param string|int|float|bool $value
      * @return Query
      */
-    public static function greaterThanEqual(string $attribute, string|int|float|bool $value): self
+    public static function greaterThanEqual(string $attribute, string|int|float|bool $value, string $alias = ''): self
     {
-        return new self(self::TYPE_GREATER_EQUAL, $attribute, [$value]);
+        return new self(self::TYPE_GREATER_EQUAL, $attribute, [$value], alias: $alias);
     }
 
     /**
@@ -437,9 +559,9 @@ class Query
      * @param string|int|float|bool $end
      * @return Query
      */
-    public static function between(string $attribute, string|int|float|bool $start, string|int|float|bool $end): self
+    public static function between(string $attribute, string|int|float|bool $start, string|int|float|bool $end, string $alias = ''): self
     {
-        return new self(self::TYPE_BETWEEN, $attribute, [$start, $end]);
+        return new self(self::TYPE_BETWEEN, $attribute, [$start, $end], alias: $alias);
     }
 
     /**
@@ -460,9 +582,14 @@ class Query
      * @param array<string> $attributes
      * @return Query
      */
-    public static function select(array $attributes): self
+    public static function select_old(array $attributes): self
     {
         return new self(self::TYPE_SELECT, values: $attributes);
+    }
+
+    public static function select(string $attribute, string $alias = '', string $as = '', string $function = '', bool $system = false): self
+    {
+        return new self(self::TYPE_SELECT, $attribute, [], alias: $alias, as: $as, system: $system);
     }
 
     /**
@@ -471,9 +598,9 @@ class Query
      * @param string $attribute
      * @return Query
      */
-    public static function orderDesc(string $attribute = ''): self
+    public static function orderDesc(string $attribute = '', string $alias = ''): self
     {
-        return new self(self::TYPE_ORDER_DESC, $attribute);
+        return new self(self::TYPE_ORDER_DESC, $attribute, alias: $alias);
     }
 
     /**
@@ -482,9 +609,9 @@ class Query
      * @param string $attribute
      * @return Query
      */
-    public static function orderAsc(string $attribute = ''): self
+    public static function orderAsc(string $attribute = '', string $alias = ''): self
     {
-        return new self(self::TYPE_ORDER_ASC, $attribute);
+        return new self(self::TYPE_ORDER_ASC, $attribute, alias: $alias);
     }
 
     /**
@@ -582,13 +709,62 @@ class Query
     }
 
     /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $queries
+     * @return self
+     */
+    public static function join(string $collection, string $alias, array $queries = []): self
+    {
+        return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collection: $collection);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $queries
+     * @return self
+     */
+    public static function innerJoin(string $collection, string $alias, array $queries = []): self
+    {
+        return new self(self::TYPE_INNER_JOIN, values: $queries, alias: $alias, collection: $collection);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $queries
+     * @return self
+     */
+    public static function leftJoin(string $collection, string $alias, array $queries = []): self
+    {
+        return new self(self::TYPE_LEFT_JOIN, values: $queries, alias: $alias, collection: $collection);
+    }
+
+    /**
+     * @param string $collection
+     * @param string $alias
+     * @param array<Query> $queries
+     * @return self
+     */
+    public static function rightJoin(string $collection, string $alias, array $queries = []): self
+    {
+        return new self(self::TYPE_RIGHT_JOIN, values: $queries, alias: $alias, collection: $collection);
+    }
+
+    public static function relationEqual(string $leftAlias, string $leftColumn, string $rightAlias, string $rightColumn): self
+    {
+        return new self(self::TYPE_RELATION_EQUAL, $leftColumn, [], alias: $leftAlias, attributeRight: $rightColumn, aliasRight: $rightAlias);
+    }
+
+    /**
      * Filters $queries for $types
      *
      * @param array<Query> $queries
      * @param array<string> $types
      * @return array<Query>
      */
-    public static function getByType(array $queries, array $types): array
+    protected static function getByType(array $queries, array $types): array
     {
         $filtered = [];
 
@@ -599,6 +775,118 @@ class Query
         }
 
         return $filtered;
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    public static function getSelectQueries(array $queries): array
+    {
+        return self::getByType($queries, [
+            Query::TYPE_SELECT,
+        ]);
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    public static function getJoinQueries(array $queries): array
+    {
+        return self::getByType($queries, [
+            Query::TYPE_INNER_JOIN,
+            Query::TYPE_LEFT_JOIN,
+            Query::TYPE_RIGHT_JOIN,
+        ]);
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @param int|null $default
+     * @return int|null
+     */
+    public static function getLimitQueries(array $queries, ?int $default = null): ?int
+    {
+        $queries = self::getByType($queries, [
+            Query::TYPE_LIMIT,
+        ]);
+
+        if (empty($queries)) {
+            return $default;
+        }
+
+        return $queries[0]->getValue();
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @param int|null $default
+     * @return int|null
+     */
+    public static function getOffsetQueries(array $queries, ?int $default = null): ?int
+    {
+        $queries = self::getByType($queries, [
+            Query::TYPE_OFFSET,
+        ]);
+
+        if (empty($queries)) {
+            return $default;
+        }
+
+        return $queries[0]->getValue();
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    public static function getOrderQueries(array $queries): array
+    {
+        return self::getByType($queries, [
+            Query::TYPE_ORDER_ASC,
+            Query::TYPE_ORDER_DESC,
+        ]);
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return Query|null
+     */
+    public static function getCursorQueries(array $queries): ?Query
+    {
+        $queries = self::getByType($queries, [
+            Query::TYPE_CURSOR_AFTER,
+            Query::TYPE_CURSOR_BEFORE,
+        ]);
+
+        if (empty($queries)) {
+            return null;
+        }
+
+        return $queries[0];
+    }
+
+    /**
+     * @param Query $query
+     * @return Document
+     */
+    public function getCursorDocument(?Query $query): Document
+    {
+        if (! is_null($query) && in_array($query->getMethod(), [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE])) {
+            return $query->getValue();
+        }
+
+        return new Document();
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    public static function getFilterQueries(array $queries): array
+    {
+        return self::getByType($queries, self::FILTER_TYPES);
     }
 
     /**
@@ -616,9 +904,10 @@ class Query
      *     cursorDirection: string|null
      * }
      */
-    public static function groupByType(array $queries): array
+    public static function groupByType_deprecated(array $queries): array
     {
         $filters = [];
+        $joins = [];
         $selections = [];
         $limit = null;
         $offset = null;
@@ -679,6 +968,12 @@ class Query
                     $selections[] = clone $query;
                     break;
 
+                case Query::TYPE_INNER_JOIN:
+                case Query::TYPE_LEFT_JOIN:
+                case Query::TYPE_RIGHT_JOIN:
+                    $joins[] = clone $query;
+                    break;
+
                 default:
                     $filters[] = clone $query;
                     break;
@@ -694,6 +989,7 @@ class Query
             'orderTypes' => $orderTypes,
             'cursor' => $cursor,
             'cursorDirection' => $cursorDirection,
+            'join' => $joins,
         ];
     }
 
@@ -712,8 +1008,24 @@ class Query
     }
 
     /**
-     * @return bool
+     * Is this query able to contain other queries
      */
+    public function isJoin(): bool
+    {
+        $types = [self::TYPE_INNER_JOIN, self::TYPE_LEFT_JOIN, self::TYPE_RIGHT_JOIN];
+
+        if (in_array($this->getMethod(), $types)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public static function isFilter(string $method): bool
+    {
+        return in_array($method, self::FILTER_TYPES);
+    }
+
     public function onArray(): bool
     {
         return $this->onArray;
@@ -726,5 +1038,13 @@ class Query
     public function setOnArray(bool $bool): void
     {
         $this->onArray = $bool;
+    }
+
+    /**
+     * Is This query added by the system
+     */
+    public function isSystem(): bool
+    {
+        return $this->system;
     }
 }

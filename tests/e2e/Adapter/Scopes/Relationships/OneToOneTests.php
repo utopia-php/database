@@ -166,7 +166,7 @@ trait OneToOneTests
         $this->assertArrayNotHasKey('person', $library);
 
         $people = static::getDatabase()->find('person', [
-            Query::select(['name'])
+            Query::select('name')
         ]);
 
         $this->assertArrayNotHasKey('library', $people[0]);
@@ -176,7 +176,8 @@ trait OneToOneTests
 
         // Select related document attributes
         $person = static::getDatabase()->findOne('person', [
-            Query::select(['*', 'library.name'])
+            Query::select('*'),
+            Query::select('library.name')
         ]);
 
         if ($person->isEmpty()) {
@@ -187,7 +188,9 @@ trait OneToOneTests
         $this->assertArrayNotHasKey('area', $person->getAttribute('library'));
 
         $person = static::getDatabase()->getDocument('person', 'person1', [
-            Query::select(['*', 'library.name', '$id'])
+            Query::select('*'),
+            Query::select('library.name'),
+            Query::select('$id')
         ]);
 
         $this->assertEquals('Library 1', $person->getAttribute('library')->getAttribute('name'));
@@ -196,18 +199,18 @@ trait OneToOneTests
 
 
         $document = static::getDatabase()->getDocument('person', $person->getId(), [
-            Query::select(['name']),
+            Query::select('name'),
         ]);
         $this->assertArrayNotHasKey('library', $document);
         $this->assertEquals('Person 1', $document['name']);
 
         $document = static::getDatabase()->getDocument('person', $person->getId(), [
-            Query::select(['*']),
+            Query::select('*'),
         ]);
         $this->assertEquals('library1', $document['library']);
 
         $document = static::getDatabase()->getDocument('person', $person->getId(), [
-            Query::select(['library.*']),
+            Query::select('library.*'),
         ]);
         $this->assertEquals('Library 1', $document['library']['name']);
         $this->assertArrayNotHasKey('name', $document);
@@ -652,7 +655,8 @@ trait OneToOneTests
 
         // Select related document attributes
         $country = static::getDatabase()->findOne('country', [
-            Query::select(['*', 'city.name'])
+            Query::select('*'),
+            Query::select('city.name')
         ]);
 
         if ($country->isEmpty()) {
@@ -663,7 +667,8 @@ trait OneToOneTests
         $this->assertArrayNotHasKey('code', $country->getAttribute('city'));
 
         $country = static::getDatabase()->getDocument('country', 'country1', [
-            Query::select(['*', 'city.name'])
+            Query::select('*'),
+            Query::select('city.name')
         ]);
 
         $this->assertEquals('London', $country->getAttribute('city')->getAttribute('name'));

@@ -747,6 +747,39 @@ abstract class Adapter
      *
      * Find data sets using chosen queries
      *
+     * @param QueryContext $context
+     * @param array<Query> $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array<string, mixed> $cursor
+     * @param string $cursorDirection
+     * @param string $forPermission
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     * @param array<Query> $orderQueries
+     *
+     * @return array<Document>
+     */
+    abstract public function find(
+        QueryContext $context,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $orderQueries = []
+    ): array;
+
+    /**
+     * Find Documents
+     *
+     * Find data sets using chosen queries
+     *
      * @param string $collection
      * @param array<Query> $queries
      * @param int|null $limit
@@ -759,7 +792,7 @@ abstract class Adapter
      *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
+    // abstract public function find_org(QueryContext $context, string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
 
     /**
      * Sum an attribute
@@ -1045,13 +1078,10 @@ abstract class Adapter
     abstract public function getKeywords(): array;
 
     /**
-     * Get an attribute projection given a list of selected attributes
-     *
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
+     * @param array<Query> $selects
+     * @return string
      */
-    abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
+    abstract protected function getAttributeProjection(array $selects): string;
 
     /**
      * Get all selected attributes from queries

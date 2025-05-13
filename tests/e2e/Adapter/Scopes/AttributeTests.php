@@ -219,7 +219,7 @@ trait AttributeTests
         ));
 
         $document = static::getDatabase()->find('dots.parent', [
-            Query::select(['dots.name']),
+            Query::select('dots.name'),
         ]);
         $this->assertEmpty($document);
 
@@ -260,7 +260,7 @@ trait AttributeTests
         ]));
 
         $documents = static::getDatabase()->find('dots.parent', [
-            Query::select(['*']),
+            Query::select('*'),
         ]);
 
         $this->assertEquals('Bill clinton', $documents[0]['dots.name']);
@@ -1598,6 +1598,9 @@ trait AttributeTests
             'Tue Dec 31 2024',
         ];
 
+        /**
+         * ConvertQueries method will fix the dates
+         */
         foreach ($validDates as $date) {
             $docs = static::getDatabase()->find('datetime', [
                 Query::equal('$createdAt', [$date])

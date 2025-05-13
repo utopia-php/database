@@ -948,7 +948,9 @@ trait RelationshipTests
 
         // Select some parent attributes, some child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', 'models.name']),
+            Query::select('name'),
+            Query::select('models.name'),
+            Query::select('*'), // Added this to make tests pass, perhaps to add in to nesting queries?
         ]);
 
         if ($make->isEmpty()) {
@@ -970,7 +972,8 @@ trait RelationshipTests
 
         // Select internal attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$id']),
+            Query::select('name'),
+            Query::select('$id')
         ]);
 
         if ($make->isEmpty()) {
@@ -985,7 +988,8 @@ trait RelationshipTests
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$internalId']),
+            Query::select('name'),
+            Query::select('$internalId')
         ]);
 
         if ($make->isEmpty()) {
@@ -1000,7 +1004,8 @@ trait RelationshipTests
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$collection']),
+            Query::select('name'),
+            Query::select('$collection'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1015,7 +1020,8 @@ trait RelationshipTests
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$createdAt']),
+            Query::select('name'),
+            Query::select('$createdAt'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1030,7 +1036,8 @@ trait RelationshipTests
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$updatedAt']),
+            Query::select('name'),
+            Query::select('$updatedAt'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1045,7 +1052,8 @@ trait RelationshipTests
         $this->assertArrayNotHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$permissions']),
+            Query::select('name'),
+            Query::select('$permissions'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1061,7 +1069,8 @@ trait RelationshipTests
 
         // Select all parent attributes, some child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['*', 'models.year']),
+            Query::select('*'),
+            Query::select('models.year')
         ]);
 
         if ($make->isEmpty()) {
@@ -1077,7 +1086,8 @@ trait RelationshipTests
 
         // Select all parent attributes, all child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['*', 'models.*']),
+            Query::select('*'),
+            Query::select('models.*')
         ]);
 
         if ($make->isEmpty()) {
@@ -1094,7 +1104,7 @@ trait RelationshipTests
         // Select all parent attributes, all child attributes
         // Must select parent if selecting children
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['models.*']),
+            Query::select('models.*')
         ]);
 
         if ($make->isEmpty()) {
@@ -1110,7 +1120,7 @@ trait RelationshipTests
 
         // Select all parent attributes, no child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name']),
+            Query::select('name'),
         ]);
 
         if ($make->isEmpty()) {

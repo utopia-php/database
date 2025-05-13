@@ -949,6 +949,16 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Is batch create attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForBatchCreateAttributes(): bool
+    {
+        return false;
+    }
+
+    /**
      * Get SQL Index Type
      *
      * @param string $type
@@ -1049,7 +1059,7 @@ class SQLite extends MariaDB
      */
     protected function getSQLTable(string $name): string
     {
-        return "`{$this->getNamespace()}_{$name}`";
+        return $this->quote("{$this->getNamespace()}_{$this->filter($name)}");
     }
 
     /**

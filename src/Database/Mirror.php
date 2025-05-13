@@ -356,6 +356,40 @@ class Mirror extends Database
         return $result;
     }
 
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        $result = $this->source->createAttributes($collection, $attributes);
+
+        if ($this->destination === null) {
+            return $result;
+        }
+
+        try {
+            foreach ($attributes as &$attribute) {
+                foreach ($this->writeFilters as $filter) {
+                    $document = $filter->beforeCreateAttribute(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        attributeId: $attribute['$id'],
+                        attribute: new Document($attribute),
+                    );
+
+                    $attribute = $document->getArrayCopy();
+                }
+            }
+
+            $result = $this->destination->createAttributes(
+                $collection,
+                $attributes,
+            );
+        } catch (\Throwable $err) {
+            $this->logError('createAttributes', $err);
+        }
+
+        return $result;
+    }
+
     public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         $document = $this->source->updateAttribute(

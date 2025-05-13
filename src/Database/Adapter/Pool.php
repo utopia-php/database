@@ -170,6 +170,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -406,6 +411,11 @@ class Pool extends Adapter
     }
 
     public function getSupportForHostname(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForBatchCreateAttributes(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

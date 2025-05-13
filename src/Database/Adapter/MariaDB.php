@@ -358,33 +358,51 @@ class MariaDB extends SQL
     }
 
     /**
-     * Create Attribute
+     * Get Schema Attributes
      *
      * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
+     * @return array<Document>
+     * @throws DatabaseException
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function getSchemaAttributes(string $collection): array
     {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed, $array);
-
-        $sql = "ALTER TABLE {$this->getSQLTable($name)} ADD COLUMN `{$id}` {$type};";
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
+        $schema = $this->getDatabase();
+        $collection = $this->getNamespace().'_'.$this->filter($collection);
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            $stmt = $this->getPDO()->prepare('
+                SELECT
+                COLUMN_NAME as _id,
+                COLUMN_DEFAULT as columnDefault,
+                IS_NULLABLE as isNullable,
+                DATA_TYPE as dataType,
+                CHARACTER_MAXIMUM_LENGTH as characterMaximumLength,
+                NUMERIC_PRECISION as numericPrecision,
+                NUMERIC_SCALE as numericScale,
+                DATETIME_PRECISION as datetimePrecision,
+                COLUMN_TYPE as columnType,
+                COLUMN_KEY as columnKey,
+                EXTRA as extra
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
+            ');
+            $stmt->bindParam(':schema', $schema);
+            $stmt->bindParam(':table', $collection);
+            $stmt->execute();
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
+
+            foreach ($results as $index => $document) {
+                $document['$id'] = $document['_id'];
+                unset($document['_id']);
+
+                $results[$index] = new Document($document);
+            }
+
+            return $results;
+
         } catch (PDOException $e) {
-            throw $this->processException($e);
+            throw new DatabaseException('Failed to get schema attributes', $e->getCode(), $e);
         }
     }
 
@@ -420,67 +438,6 @@ class MariaDB extends SQL
             return $this->getPDO()
             ->prepare($sql)
             ->execute();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-    }
-
-    /**
-     * Delete Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param bool $array
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
-    {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-
-        $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`;";
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
-
-        try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-        } catch (PDOException $e) {
-            if ($e->getCode() === "42000" && $e->errorInfo[1] === 1091) {
-                return true;
-            }
-
-            throw $this->processException($e);
-        }
-    }
-
-    /**
-     * Rename Attribute
-     *
-     * @param string $collection
-     * @param string $old
-     * @param string $new
-     * @return bool
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function renameAttribute(string $collection, string $old, string $new): bool
-    {
-        $collection = $this->filter($collection);
-        $old = $this->filter($old);
-        $new = $this->filter($new);
-
-        $sql = "ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN `{$old}` TO `{$new}`;";
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
-
-        try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -2206,6 +2163,11 @@ class MariaDB extends SQL
         return true;
     }
 
+    public function getSupportForSchemaAttributes(): bool
+    {
+        return true;
+    }
+
     /**
      * Set max execution time
      * @param int $milliseconds
@@ -2295,58 +2257,12 @@ class MariaDB extends SQL
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
-        return $e;
-    }
-
-    /**
-     * Get Schema Attributes
-     *
-     * @param string $collection
-     * @return array<Document>
-     * @throws DatabaseException
-     */
-    public function getSchemaAttributes(string $collection): array
-    {
-        $schema = $this->getDatabase();
-        $collection = $this->getNamespace().'_'.$this->filter($collection);
-
-        try {
-            $stmt = $this->getPDO()->prepare('
-                SELECT
-                COLUMN_NAME as columnName,
-                COLUMN_DEFAULT as columnDefault,
-                IS_NULLABLE as isNullable,
-                DATA_TYPE as dataType,
-                CHARACTER_MAXIMUM_LENGTH as characterMaximumLength,
-                NUMERIC_PRECISION as numericPrecision,
-                NUMERIC_SCALE as numericScale,
-                DATETIME_PRECISION as datetimePrecision,
-                COLUMN_TYPE as columnType,
-                COLUMN_KEY as columnKey,
-                EXTRA as extra
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
-            ');
-            $stmt->bindParam(':schema', $schema);
-            $stmt->bindParam(':table', $collection);
-            $stmt->execute();
-            $results = $stmt->fetchAll();
-            $stmt->closeCursor();
-
-            foreach ($results as $index => $document) {
-                $results[$index] = new Document($document);
-            }
-
-            return $results;
-
-        } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get schema attributes', $e->getCode(), $e);
+        // Unknown column
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1091) {
+            return new NotFoundException('Attribute not found', $e->getCode(), $e);
         }
-    }
 
-    public function getSupportForSchemaAttributes(): bool
-    {
-        return true;
+        return $e;
     }
 
     protected function quote(string $string): string

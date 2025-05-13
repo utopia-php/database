@@ -136,6 +136,7 @@ class Database
     public const EVENT_PERMISSIONS_DELETE = 'permissions_delete';
 
     public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
+    public const EVENT_ATTRIBUTES_CREATE = 'attributes_create';
     public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
     public const EVENT_ATTRIBUTE_DELETE = 'attribute_delete';
 
@@ -1544,12 +1545,192 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
+        $attribute = $this->validateAttribute(
+            $collection,
+            $id,
+            $type,
+            $size,
+            $required,
+            $default,
+            $signed,
+            $array,
+            $format,
+            $formatOptions,
+            $filters
+        );
+
+        try {
+            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+
+            if (!$created) {
+                throw new DatabaseException('Failed to create attribute');
+            }
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
+            }
+        }
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedDocument(self::METADATA, $collection->getId());
+
+        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+
+        return true;
+    }
+
+    /**
+     * Create Attribute
+     *
+     * @param string $collection
+     * @param array<array<string, mixed>> $attributes
+     * @return bool
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws Exception
+     */
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        if (empty($attributes)) {
+            throw new DatabaseException('No attributes to create');
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $attributeDocuments = [];
+        foreach ($attributes as $attribute) {
+            if (!isset($attribute['$id'])) {
+                throw new DatabaseException('Missing attribute key');
+            }
+            if (!isset($attribute['type'])) {
+                throw new DatabaseException('Missing attribute type');
+            }
+            if (!isset($attribute['size'])) {
+                throw new DatabaseException('Missing attribute size');
+            }
+            if (!isset($attribute['required'])) {
+                throw new DatabaseException('Missing attribute required');
+            }
+            if (!isset($attribute['default'])) {
+                $attribute['default'] = null;
+            }
+            if (!isset($attribute['signed'])) {
+                $attribute['signed'] = true;
+            }
+            if (!isset($attribute['array'])) {
+                $attribute['array'] = false;
+            }
+            if (!isset($attribute['format'])) {
+                $attribute['format'] = null;
+            }
+            if (!isset($attribute['formatOptions'])) {
+                $attribute['formatOptions'] = [];
+            }
+            if (!isset($attribute['filters'])) {
+                $attribute['filters'] = [];
+            }
+
+            $attributeDocuments[] = $this->validateAttribute(
+                $collection,
+                $attribute['$id'],
+                $attribute['type'],
+                $attribute['size'],
+                $attribute['required'],
+                $attribute['default'],
+                $attribute['signed'],
+                $attribute['array'],
+                $attribute['format'],
+                $attribute['formatOptions'],
+                $attribute['filters']
+            );
+        }
+
+        try {
+            $created = $this->adapter->createAttributes($collection->getId(), $attributes);
+
+            if (!$created) {
+                throw new DatabaseException('Failed to create attributes');
+            }
+        } catch (DuplicateException $e) {
+            // No attributes were in a metadata, but at least one of them was present on the table
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
+            }
+        }
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedDocument(self::METADATA, $collection->getId());
+
+        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+
+        return true;
+    }
+
+    /**
+     * @param Document $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size
+     * @param bool $required
+     * @param mixed $default
+     * @param bool $signed
+     * @param bool $array
+     * @param string $format
+     * @param array<string, mixed> $formatOptions
+     * @param array<string> $filters
+     * @return Document
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws Exception
+     */
+    private function validateAttribute(
+        Document $collection,
+        string $id,
+        string $type,
+        int $size,
+        bool $required,
+        mixed $default,
+        bool $signed,
+        bool $array,
+        ?string $format,
+        array $formatOptions,
+        array $filters
+    ): Document {
         // Attribute IDs are case-insensitive
         $attributes = $collection->getAttribute('attributes', []);
+
         /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Attribute already exists');
+                throw new DuplicateException('Attribute already exists in metadata');
+            }
+        }
+
+        if ($this->adapter->getSupportForSchemaAttributes() && !($this->getSharedTables() && $this->isMigrating())) {
+            $schema = $this->getSchemaAttributes($collection->getId());
+            foreach ($schema as $attribute) {
+                $newId = $this->adapter->filter($attribute->getId());
+                if (\strtolower($newId) === \strtolower($id)) {
+                    throw new DuplicateException('Attribute already exists in schema');
+                }
             }
         }
 
@@ -1615,29 +1796,7 @@ class Database
             $this->validateDefaultTypes($type, $default);
         }
 
-        try {
-            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
-
-            if (!$created) {
-                throw new DatabaseException('Failed to create attribute');
-            }
-        } catch (DuplicateException $e) {
-            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
-                throw $e;
-            }
-        }
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
-
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
-
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
-
-        return true;
+        return $attribute;
     }
 
     /**
@@ -2130,10 +2289,12 @@ class Database
             }
         }
 
-        $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
-
-        if (!$deleted) {
-            throw new DatabaseException('Failed to delete attribute');
+        try {
+            if (!$this->adapter->deleteAttribute($collection->getId(), $id)) {
+                throw new DatabaseException('Failed to delete attribute');
+            }
+        } catch (NotFoundException) {
+            // Ignore
         }
 
         $collection->setAttribute('attributes', \array_values($attributes));

@@ -506,31 +506,32 @@ trait CollectionTests
             /**
              * @var Document $attribute
              */
-            $attributes[$attribute->getAttribute('columnName')] = $attribute;
+
+            $attributes[$attribute->getId()] = $attribute;
         }
 
         $attribute = $attributes['username'];
-        $this->assertEquals('username', $attribute['columnName']);
+        $this->assertEquals('username', $attribute['$id']);
         $this->assertEquals('varchar', $attribute['dataType']);
         $this->assertEquals('varchar(128)', $attribute['columnType']);
         $this->assertEquals('128', $attribute['characterMaximumLength']);
         $this->assertEquals('YES', $attribute['isNullable']);
 
         $attribute = $attributes['story'];
-        $this->assertEquals('story', $attribute['columnName']);
+        $this->assertEquals('story', $attribute['$id']);
         $this->assertEquals('text', $attribute['dataType']);
         $this->assertEquals('text', $attribute['columnType']);
         $this->assertEquals('65535', $attribute['characterMaximumLength']);
 
         $attribute = $attributes['string_list'];
-        $this->assertEquals('string_list', $attribute['columnName']);
+        $this->assertEquals('string_list', $attribute['$id']);
         $this->assertTrue(in_array($attribute['dataType'], ['json', 'longtext'])); // mysql vs maria
         $this->assertTrue(in_array($attribute['columnType'], ['json', 'longtext']));
         $this->assertTrue(in_array($attribute['characterMaximumLength'], [null, '4294967295']));
         $this->assertEquals('YES', $attribute['isNullable']);
 
         $attribute = $attributes['dob'];
-        $this->assertEquals('dob', $attribute['columnName']);
+        $this->assertEquals('dob', $attribute['$id']);
         $this->assertEquals('datetime', $attribute['dataType']);
         $this->assertEquals('datetime(3)', $attribute['columnType']);
         $this->assertEquals(null, $attribute['characterMaximumLength']);
@@ -538,7 +539,7 @@ trait CollectionTests
 
         if ($db->getSharedTables()) {
             $attribute = $attributes['_tenant'];
-            $this->assertEquals('_tenant', $attribute['columnName']);
+            $this->assertEquals('_tenant', $attribute['$id']);
             $this->assertEquals('int', $attribute['dataType']);
             $this->assertEquals('10', $attribute['numericPrecision']);
             $this->assertTrue(in_array($attribute['columnType'], ['int unsigned', 'int(11) unsigned']));
@@ -784,7 +785,7 @@ trait CollectionTests
 
         // Attribute name tests
         foreach ($keywords as $keyword) {
-            $collectionName = 'rk' . $keyword; // rk is short-hand for reserved-keyword. We do this sicne there are some limits (64 chars max)
+            $collectionName = 'rk' . $keyword; // rk is shorthand for reserved-keyword. We do this since there are some limits (64 chars max)
 
             $collection = $database->createCollection($collectionName);
             $this->assertEquals($collectionName, $collection->getId());

@@ -537,6 +537,17 @@ abstract class Adapter
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
     /**
+     * Create Attributes
+     *
+     * @param string $collection
+     * @param array<array<string, mixed>> $attributes
+     * @return bool
+     * @throws TimeoutException
+     * @throws DuplicateException
+     */
+    abstract public function createAttributes(string $collection, array $attributes): bool;
+
+    /**
      * Update Attribute
      *
      * @param string $collection
@@ -1094,7 +1105,7 @@ abstract class Adapter
         return $value;
     }
 
-    public function escapeWildcards(string $value): string
+    protected function escapeWildcards(string $value): string
     {
         $wildcards = [
             '%',

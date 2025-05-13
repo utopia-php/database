@@ -10,6 +10,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -399,76 +400,6 @@ class Postgres extends SQL
     public function analyzeCollection(string $collection): bool
     {
         return false;
-    }
-
-    /**
-     * Create Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param string $type
-     * @param int $size
-     * @param bool $signed
-     * @param bool $array
-     *
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
-    {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed, $array);
-
-        $sql = "
-			ALTER TABLE {$this->getSQLTable($name)}
-			ADD COLUMN \"{$id}\" {$type}
-		";
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
-
-        try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-    }
-
-    /**
-     * Delete Attribute
-     *
-     * @param string $collection
-     * @param string $id
-     * @param bool $array
-     *
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
-    {
-        $name = $this->filter($collection);
-        $id = $this->filter($id);
-
-        $sql = "
-			ALTER TABLE {$this->getSQLTable($name)}
-			DROP COLUMN \"{$id}\";
-		";
-
-        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
-
-        try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
-        } catch (PDOException $e) {
-            if ($e->getCode() === "42703" && $e->errorInfo[1] === 7) {
-                return true;
-            }
-
-            throw $e;
-        }
     }
 
     /**
@@ -1997,17 +1928,6 @@ class Postgres extends SQL
     }
 
     /**
-     * Get SQL table
-     *
-     * @param string $name
-     * @return string
-     */
-    protected function getSQLTable(string $name): string
-    {
-        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
-    }
-
-    /**
      * Get PDO Type
      *
      * @param mixed $value
@@ -2146,6 +2066,11 @@ class Postgres extends SQL
         // Data is too big for column resize
         if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
+        }
+
+        // Unknown column
+        if ($e->getCode() === "42703" && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new NotFoundException('Attribute not found', $e->getCode(), $e);
         }
 
         return $e;

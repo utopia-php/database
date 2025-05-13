@@ -201,6 +201,126 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Create Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size
+     * @param bool $signed
+     * @param bool $array
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    {
+        $id = $this->quote($this->filter($id));
+        $type = $this->getSQLType($type, $size, $signed, $array);
+
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Create Attributes
+     *
+     * @param string $collection
+     * @param array<array<string, mixed>> $attributes
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        $parts = [];
+        foreach ($attributes as $attribute) {
+            $id = $this->quote($this->filter($attribute['$id']));
+            $type = $this->getSQLType(
+                $attribute['type'],
+                $attribute['size'],
+                $attribute['signed'] ?? true,
+                $attribute['array'] ?? false,
+            );
+            $parts[] = "{$id} {$type}";
+        }
+
+        $columns = \implode(', ADD COLUMN ', $parts);
+
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$columns};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Rename Attribute
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->quote($this->filter($old));
+        $new = $this->quote($this->filter($new));
+
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN {$old} TO {$new};";
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Delete Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param bool $array
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
+    {
+        $id = $this->quote($this->filter($id));
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} DROP COLUMN {$id};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
      * Get Document
      *
      * @param string $collection
@@ -1261,6 +1381,11 @@ abstract class SQL extends Adapter
         return true;
     }
 
+    public function getSupportForBatchCreateAttributes(): bool
+    {
+        return true;
+    }
+
     /**
      * @param string $value
      * @return string
@@ -1324,16 +1449,12 @@ abstract class SQL extends Adapter
         }
     }
 
-    public function escapeWildcards(string $value): string
-    {
-        $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
-
-        foreach ($wildcards as $wildcard) {
-            $value = \str_replace($wildcard, "\\$wildcard", $value);
-        }
-
-        return $value;
-    }
+    abstract protected function getSQLType(
+        string $type,
+        int $size,
+        bool $signed = true,
+        bool $array = false
+    ): string;
 
     /**
      * Get SQL Index Type
@@ -1614,6 +1735,17 @@ abstract class SQL extends Adapter
             '$permissions' => '_permissions',
             default => $attribute
         };
+    }
+
+    protected function escapeWildcards(string $value): string
+    {
+        $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
+
+        foreach ($wildcards as $wildcard) {
+            $value = \str_replace($wildcard, "\\$wildcard", $value);
+        }
+
+        return $value;
     }
 
     protected function processException(PDOException $e): \Exception

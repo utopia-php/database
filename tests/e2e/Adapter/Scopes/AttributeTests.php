@@ -7,6 +7,7 @@ use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Dependency as DependencyException;
@@ -26,10 +27,11 @@ use Utopia\Validator\Range;
 
 trait AttributeTests
 {
-    public function createRandomString(int $length = 10): string
+    private function createRandomString(int $length = 10): string
     {
         return \substr(\bin2hex(\random_bytes(\max(1, \intval(($length + 1) / 2)))), 0, $length);
     }
+
     /**
      * Using phpunit dataProviders to check that all these combinations of types/defaults throw exceptions
      * https://phpunit.de/manual/3.7/en/writing-tests-for-phpunit.html#writing-tests-for-phpunit.data-providers
@@ -1627,5 +1629,370 @@ trait AttributeTests
     {
         $this->expectException(\Exception::class);
         $this->assertEquals(false, static::getDatabase()->createAttribute('attributes', 'bad_format', Database::VAR_STRING, 256, true, null, true, false, 'url'));
+    }
+
+
+    // Bulk attribute creation tests
+    public function testCreateAttributesEmpty(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, []);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesMissingId(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $attributes = [[
+            'type' => Database::VAR_STRING,
+            'size' => 10,
+            'required' => false
+        ]];
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesMissingType(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $attributes = [[
+            '$id' => 'foo',
+            'size' => 10,
+            'required' => false
+        ]];
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesMissingSize(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $attributes = [[
+            '$id' => 'foo',
+            'type' => Database::VAR_STRING,
+            'required' => false
+        ]];
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesMissingRequired(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $attributes = [[
+            '$id' => 'foo',
+            'type' => Database::VAR_STRING,
+            'size' => 10
+        ]];
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesDuplicateMetadata(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+        static::getDatabase()->createAttribute(__FUNCTION__, 'dup', Database::VAR_STRING, 10, false);
+
+        $attributes = [[
+            '$id' => 'dup',
+            'type' => Database::VAR_STRING,
+            'size' => 10,
+            'required' => false
+        ]];
+
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DuplicateException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesInvalidFilter(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $attributes = [[
+            '$id' => 'date',
+            'type' => Database::VAR_DATETIME,
+            'size' => 0,
+            'required' => false,
+            'filters' => []
+        ]];
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesInvalidFormat(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $attributes = [[
+            '$id' => 'foo',
+            'type' => Database::VAR_STRING,
+            'size' => 10,
+            'required' => false,
+            'format' => 'nonexistent'
+        ]];
+
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesDefaultOnRequired(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $attributes = [[
+            '$id' => 'foo',
+            'type' => Database::VAR_STRING,
+            'size' => 10,
+            'required' => true,
+            'default' => 'bar'
+        ]];
+
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesUnknownType(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $attributes = [[
+            '$id' => 'foo',
+            'type' => 'unknown',
+            'size' => 0,
+            'required' => false
+        ]];
+
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesStringSizeLimit(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $max = static::getDatabase()->getAdapter()->getLimitForString();
+
+        $attributes = [[
+            '$id' => 'foo',
+            'type' => Database::VAR_STRING,
+            'size' => $max + 1,
+            'required' => false
+        ]];
+
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesIntegerSizeLimit(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $limit = static::getDatabase()->getAdapter()->getLimitForInt() / 2;
+
+        $attributes = [[
+            '$id' => 'foo',
+            'type' => Database::VAR_INTEGER,
+            'size' => (int)$limit + 1,
+            'required' => false
+        ]];
+
+        try {
+            static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesSuccessMultiple(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $attributes = [
+            [
+                '$id' => 'a',
+                'type' => Database::VAR_STRING,
+                'size' => 10,
+                'required' => false
+            ],
+            [
+                '$id' => 'b',
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false
+            ],
+        ];
+
+        $result = static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+        $this->assertTrue($result);
+
+        $collection = static::getDatabase()->getCollection(__FUNCTION__);
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertCount(2, $attrs);
+        $this->assertEquals('a', $attrs[0]['$id']);
+        $this->assertEquals('b', $attrs[1]['$id']);
+
+        $doc = static::getDatabase()->createDocument(__FUNCTION__, new Document([
+            'a' => 'foo',
+            'b' => 123,
+        ]));
+
+        $this->assertEquals('foo', $doc->getAttribute('a'));
+        $this->assertEquals(123, $doc->getAttribute('b'));
+    }
+
+    public function testCreateAttributesDelete(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+
+        $attributes = [
+            [
+                '$id' => 'a',
+                'type' => Database::VAR_STRING,
+                'size' => 10,
+                'required' => false
+            ],
+            [
+                '$id' => 'b',
+                'type' => Database::VAR_INTEGER,
+                'size' => 0,
+                'required' => false
+            ],
+        ];
+
+        $result = static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
+        $this->assertTrue($result);
+
+        $collection = static::getDatabase()->getCollection(__FUNCTION__);
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertCount(2, $attrs);
+        $this->assertEquals('a', $attrs[0]['$id']);
+        $this->assertEquals('b', $attrs[1]['$id']);
+
+        static::getDatabase()->deleteAttribute(__FUNCTION__, 'a');
+
+        $collection = static::getDatabase()->getCollection(__FUNCTION__);
+        $attrs = $collection->getAttribute('attributes');
+        $this->assertCount(1, $attrs);
+        $this->assertEquals('b', $attrs[0]['$id']);
     }
 }

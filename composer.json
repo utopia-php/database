@@ -56,8 +56,8 @@
     },
     "config": {
         "allow-plugins": {
-            "php-http/discovery": true,
-            "tbachert/spi": true
+            "php-http/discovery": false,
+            "tbachert/spi": false
         }
     }
 }

@@ -199,7 +199,7 @@ class Index extends Validator
                     break;
             }
             if ($indexLength < 0) {
-                $this->message = 'Negative index provided for '.$attribute->getAttribute('key');
+                $this->message = 'Negative index provided for '.$attributeName;
                 return false;
             }
 

@@ -176,8 +176,12 @@ class Index extends Validator
 
         $total = 0;
         $lengths = $index->getAttribute('lengths', []);
-
-        foreach ($index->getAttribute('attributes', []) as $attributePosition => $attributeName) {
+        $attributes = $index->getAttribute('attributes', []);
+        if (count($lengths) > count($attributes)) {
+            $this->message = 'Invalid index lengths. Count of lengths must be equal or less than the number of attributes.';
+            return false;
+        }
+        foreach ($attributes as $attributePosition => $attributeName) {
             $attribute = $this->attributes[\strtolower($attributeName)];
 
             switch ($attribute->getAttribute('type')) {
@@ -193,6 +197,10 @@ class Index extends Validator
                     $attributeSize = 1; // 4 bytes / 4 mb4
                     $indexLength = 1;
                     break;
+            }
+            if ($indexLength < 0) {
+                $this->message = 'Negative index provided for '.$attribute->getAttribute('key');
+                return false;
             }
 
             if ($attribute->getAttribute('array', false)) {

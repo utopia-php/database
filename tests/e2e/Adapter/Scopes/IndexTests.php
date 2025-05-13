@@ -255,7 +255,7 @@ trait IndexTests
             ]),
         ];
 
-        $errorMessage = 'Negative index provided for title1';
+        $errorMessage = 'Negative index length provided for title1';
         $this->assertFalse($validator->isValid($indexes[0]));
         $this->assertEquals($errorMessage, $validator->getDescription());
 

@@ -1635,6 +1635,11 @@ trait AttributeTests
     // Bulk attribute creation tests
     public function testCreateAttributesEmpty(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
 
         try {
@@ -1647,6 +1652,11 @@ trait AttributeTests
 
     public function testCreateAttributesMissingId(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
 
         $attributes = [[
@@ -1664,6 +1674,11 @@ trait AttributeTests
 
     public function testCreateAttributesMissingType(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
 
         $attributes = [[
@@ -1681,6 +1696,11 @@ trait AttributeTests
 
     public function testCreateAttributesMissingSize(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
 
         $attributes = [[
@@ -1698,6 +1718,11 @@ trait AttributeTests
 
     public function testCreateAttributesMissingRequired(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
 
         $attributes = [[
@@ -1715,6 +1740,11 @@ trait AttributeTests
 
     public function testCreateAttributesDuplicateMetadata(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
         static::getDatabase()->createAttribute(__FUNCTION__, 'dup', Database::VAR_STRING, 10, false);
 
@@ -1735,6 +1765,11 @@ trait AttributeTests
 
     public function testCreateAttributesInvalidFilter(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
 
         $attributes = [[
@@ -1754,7 +1789,13 @@ trait AttributeTests
 
     public function testCreateAttributesInvalidFormat(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
+
         $attributes = [[
             '$id' => 'foo',
             'type' => Database::VAR_STRING,
@@ -1762,6 +1803,7 @@ trait AttributeTests
             'required' => false,
             'format' => 'nonexistent'
         ]];
+
         try {
             static::getDatabase()->createAttributes(__FUNCTION__, $attributes);
             $this->fail('Expected DatabaseException not thrown');
@@ -1772,6 +1814,11 @@ trait AttributeTests
 
     public function testCreateAttributesDefaultOnRequired(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
 
         $attributes = [[
@@ -1792,6 +1839,11 @@ trait AttributeTests
 
     public function testCreateAttributesUnknownType(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
 
         $attributes = [[
@@ -1811,6 +1863,11 @@ trait AttributeTests
 
     public function testCreateAttributesStringSizeLimit(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
 
         $max = static::getDatabase()->getAdapter()->getLimitForString();
@@ -1832,6 +1889,11 @@ trait AttributeTests
 
     public function testCreateAttributesIntegerSizeLimit(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
 
         $limit = static::getDatabase()->getAdapter()->getLimitForInt() / 2;
@@ -1853,7 +1915,13 @@ trait AttributeTests
 
     public function testCreateAttributesSuccessMultiple(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
+
         $attributes = [
             [
                 '$id' => 'a',
@@ -1889,7 +1957,13 @@ trait AttributeTests
 
     public function testCreateAttributesDelete(): void
     {
+        if (!static::getDatabase()->getAdapter()->getSupportForBatchCreateAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         static::getDatabase()->createCollection(__FUNCTION__);
+
         $attributes = [
             [
                 '$id' => 'a',

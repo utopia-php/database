@@ -257,6 +257,8 @@ abstract class SQL extends Adapter
         $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$columns};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
+        \var_dump($sql);
+
         try {
             return $this->getPDO()
                 ->prepare($sql)
@@ -1380,6 +1382,11 @@ abstract class SQL extends Adapter
     }
 
     public function getSupportForReconnection(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForBatchCreateAttributes(): bool
     {
         return true;
     }

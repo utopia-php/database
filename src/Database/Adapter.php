@@ -1000,6 +1000,13 @@ abstract class Adapter
     abstract public function getSupportForHostname(): bool;
 
     /**
+     * Is creating multiple attributes in a single query supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForBatchCreateAttributes(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

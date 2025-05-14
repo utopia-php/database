@@ -6678,7 +6678,7 @@ class Database
 
         $tenantSegment = $this->adapter->getTenant();
 
-        if (isset($this->globalCollections[$documentId]) && $collectionId === self::METADATA) {
+        if ($collectionId === self::METADATA && isset($this->globalCollections[$documentId])) {
             $tenantSegment = null;
         }
 

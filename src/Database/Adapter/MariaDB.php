@@ -128,14 +128,7 @@ class MariaDB extends SQL
                 $indexLength = $index->getAttribute('lengths')[$nested] ?? '';
                 $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
-
-                $indexAttribute = match ($attribute) {
-                    '$id' => '_uid',
-                    '$createdAt' => '_createdAt',
-                    '$updatedAt' => '_updatedAt',
-                    default => $attribute
-                };
-
+                $indexAttribute = $this->getInternalKeyForAttribute($attribute);
                 $indexAttribute = $this->filter($indexAttribute);
 
                 if ($indexType === Database::INDEX_FULLTEXT) {

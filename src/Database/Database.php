@@ -3169,6 +3169,7 @@ class Database
      */
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
+
         if ($collection === self::METADATA && $id === self::METADATA) {
             return new Document(self::COLLECTION);
         }
@@ -3316,20 +3317,6 @@ class Database
                 $this->cache->save($collectionKey, 'empty', $documentKey);
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
-            }
-        }
-
-        // Remove internal attributes if not queried for select query
-        // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
-        // All internal attributes are default selected attributes for (MongoDB)
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($this->getInternalAttributes() as $internalAttribute) {
-                    if (!\in_array($internalAttribute['$id'], $values)) {
-                        $document->removeAttribute($internalAttribute['$id']);
-                    }
-                }
             }
         }
 
@@ -6034,6 +6021,7 @@ class Database
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
+
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
 
@@ -6043,20 +6031,6 @@ class Database
         }
 
         unset($query);
-
-        // Remove internal attributes which are not queried
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($results as $result) {
-                    foreach ($this->getInternalAttributes() as $internalAttribute) {
-                        if (!\in_array($internalAttribute['$id'], $values)) {
-                            $result->removeAttribute($internalAttribute['$id']);
-                        }
-                    }
-                }
-            }
-        }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
@@ -6370,20 +6344,12 @@ class Database
                 }
             }
 
-            if (empty($selections) || \in_array($key, $selections) || \in_array('*', $selections)) {
-                if (
-                    empty($selections)
-                    || \in_array($key, $selections)
-                    || \in_array('*', $selections)
-                    || \in_array($key, ['$createdAt', '$updatedAt'])
-                ) {
-                    // Prevent null values being set for createdAt and updatedAt
-                    if (\in_array($key, ['$createdAt', '$updatedAt']) && $value[0] === null) {
-                        continue;
-                    } else {
-                        $document->setAttribute($key, ($array) ? $value : $value[0]);
-                    }
-                }
+            if (
+                empty($selections)
+                || \in_array($key, $selections)
+                || \in_array('*', $selections)
+            ) {
+                $document->setAttribute($key, ($array) ? $value : $value[0]);
             }
         }
 
@@ -6565,7 +6531,7 @@ class Database
         $selections[] = '$updatedAt';
         $selections[] = '$permissions';
 
-        return $selections;
+        return \array_values(\array_unique($selections));
     }
 
     /**

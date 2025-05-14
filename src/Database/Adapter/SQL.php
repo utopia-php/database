@@ -3,7 +3,6 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
-use PDO;
 use PDOException;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
@@ -11,6 +10,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\PDO;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -158,15 +158,15 @@ abstract class SQL extends Adapter
                 WHERE TABLE_SCHEMA = :schema 
                   AND TABLE_NAME = :table
             ");
-            $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
-            $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
+            $stmt->bindValue(':schema', $database, \PDO::PARAM_STR);
+            $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", \PDO::PARAM_STR);
         } else {
             $stmt = $this->getPDO()->prepare("
                 SELECT SCHEMA_NAME FROM
                 INFORMATION_SCHEMA.SCHEMATA
                 WHERE SCHEMA_NAME = :schema
             ");
-            $stmt->bindValue(':schema', $database, PDO::PARAM_STR);
+            $stmt->bindValue(':schema', $database, \PDO::PARAM_STR);
         }
 
         try {
@@ -198,6 +198,126 @@ abstract class SQL extends Adapter
     public function list(): array
     {
         return [];
+    }
+
+    /**
+     * Create Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size
+     * @param bool $signed
+     * @param bool $array
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    {
+        $id = $this->quote($this->filter($id));
+        $type = $this->getSQLType($type, $size, $signed, $array);
+
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Create Attributes
+     *
+     * @param string $collection
+     * @param array<array<string, mixed>> $attributes
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        $parts = [];
+        foreach ($attributes as $attribute) {
+            $id = $this->quote($this->filter($attribute['$id']));
+            $type = $this->getSQLType(
+                $attribute['type'],
+                $attribute['size'],
+                $attribute['signed'] ?? true,
+                $attribute['array'] ?? false,
+            );
+            $parts[] = "{$id} {$type}";
+        }
+
+        $columns = \implode(', ADD COLUMN ', $parts);
+
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$columns};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Rename Attribute
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->quote($this->filter($old));
+        $new = $this->quote($this->filter($new));
+
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN {$old} TO {$new};";
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Delete Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param bool $array
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
+    {
+        $id = $this->quote($this->filter($id));
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} DROP COLUMN {$id};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -364,7 +484,6 @@ abstract class SQL extends Adapter
             $addQuery = '';
             $addBindValues = [];
 
-            /* @var $document Document */
             foreach ($documents as $index => $document) {
                 // Permissions logic
                 $sql = "
@@ -625,7 +744,7 @@ abstract class SQL extends Adapter
             }
 
             $stmt->execute();
-            $results = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
+            $results = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
             $stmt->closeCursor();
 
             $internalIds = [...$internalIds, ...$results];
@@ -778,6 +897,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Is hostname supported?
+     *
+     * @return bool
+     */
+    public function getSupportForHostname(): bool
+    {
+        return true;
+    }
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -840,6 +969,7 @@ abstract class SQL extends Adapter
      *
      * @param Document $collection
      * @return int
+     * @throws DatabaseException
      */
     public function getAttributeWidth(Document $collection): int
     {
@@ -1257,6 +1387,11 @@ abstract class SQL extends Adapter
         return true;
     }
 
+    public function getSupportForBatchCreateAttributes(): bool
+    {
+        return true;
+    }
+
     /**
      * @param string $value
      * @return string
@@ -1320,16 +1455,12 @@ abstract class SQL extends Adapter
         }
     }
 
-    public function escapeWildcards(string $value): string
-    {
-        $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
-
-        foreach ($wildcards as $wildcard) {
-            $value = \str_replace($wildcard, "\\$wildcard", $value);
-        }
-
-        return $value;
-    }
+    abstract protected function getSQLType(
+        string $type,
+        int $size,
+        bool $signed = true,
+        bool $array = false
+    ): string;
 
     /**
      * Get SQL Index Type
@@ -1418,13 +1549,22 @@ abstract class SQL extends Adapter
     public static function getPDOAttributes(): array
     {
         return [
-            PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
-            PDO::ATTR_PERSISTENT => true, // Create a persistent connection
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, // Fetch a result row as an associative array.
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, // PDO will throw a PDOException on srrors
-            PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
-            PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
+            \PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
+            \PDO::ATTR_PERSISTENT => true, // Create a persistent connection
+            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC, // Fetch a result row as an associative array.
+            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, // PDO will throw a PDOException on errors
+            \PDO::ATTR_EMULATE_PREPARES => true, // Emulate prepared statements
+            \PDO::ATTR_STRINGIFY_FETCHES => true // Returns all fetched data as Strings
         ];
+    }
+
+    public function getHostname(): string
+    {
+        try {
+            return $this->pdo->getHostname();
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     /**
@@ -1550,30 +1690,29 @@ abstract class SQL extends Adapter
             return '*';
         }
 
-        // Remove $id, $permissions and $collection if present since it is always selected by default
         $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
 
-        $selections[] = '_uid';
-        $selections[] = '_permissions';
+        $selections[] = $this->getInternalKeyForAttribute('$id');
+        $selections[] = $this->getInternalKeyForAttribute('$permissions');
 
         if (\in_array('$internalId', $selections)) {
-            $selections[] = '_id';
+            $selections[] = $this->getInternalKeyForAttribute('$internalId');
             $selections = \array_diff($selections, ['$internalId']);
         }
         if (\in_array('$createdAt', $selections)) {
-            $selections[] = '_createdAt';
+            $selections[] = $this->getInternalKeyForAttribute('$createdAt');
             $selections = \array_diff($selections, ['$createdAt']);
         }
         if (\in_array('$updatedAt', $selections)) {
-            $selections[] = '_updatedAt';
+            $selections[] = $this->getInternalKeyForAttribute('$updatedAt');
             $selections = \array_diff($selections, ['$updatedAt']);
         }
         if (\in_array('$collection', $selections)) {
-            $selections[] = '_collection';
+            $selections[] = $this->getInternalKeyForAttribute('$collection');
             $selections = \array_diff($selections, ['$collection']);
         }
         if (\in_array('$tenant', $selections)) {
-            $selections[] = '_tenant';
+            $selections[] = $this->getInternalKeyForAttribute('$tenant');
             $selections = \array_diff($selections, ['$tenant']);
         }
 
@@ -1595,11 +1734,24 @@ abstract class SQL extends Adapter
         return match ($attribute) {
             '$id' => '_uid',
             '$internalId' => '_id',
+            '$collection' => '_collection',
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$permissions' => '_permissions',
             default => $attribute
         };
+    }
+
+    protected function escapeWildcards(string $value): string
+    {
+        $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
+
+        foreach ($wildcards as $wildcard) {
+            $value = \str_replace($wildcard, "\\$wildcard", $value);
+        }
+
+        return $value;
     }
 
     protected function processException(PDOException $e): \Exception

@@ -10,10 +10,13 @@ use Utopia\Pools\Pool as UtopiaPool;
 
 class Pool extends Adapter
 {
+    /**
+     * @var UtopiaPool<covariant Adapter>
+     */
     protected UtopiaPool $pool;
 
     /**
-     * @param UtopiaPool $pool The pool to use for connections. Must contain instances of Adapter.
+     * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
      * @throws DatabaseException
      */
     public function __construct(UtopiaPool $pool)
@@ -22,7 +25,25 @@ class Pool extends Adapter
 
         $this->pool->use(function (mixed $resource) {
             if (!($resource instanceof Adapter)) {
-                throw new DatabaseException('Pool must contain instances of Utopia\Database\Adapter');
+                throw new DatabaseException('Pool must contain instances of ' . Adapter::class);
+            }
+
+            // Run setters in case the pooled adapter has its own config
+            $this->setDatabase($resource->getDatabase());
+            $this->setNamespace($resource->getNamespace());
+            $this->setSharedTables($resource->getSharedTables());
+            $this->setTenant($resource->getTenant());
+
+            if ($resource->getTimeout() > 0) {
+                $this->setTimeout($resource->getTimeout());
+            }
+            $this->resetDebug();
+            foreach ($resource->getDebug() as $key => $value) {
+                $this->setDebug($key, $value);
+            }
+            $this->resetMetadata();
+            foreach ($resource->getMetadata() as $key => $value) {
+                $this->setMetadata($key, $value);
             }
         });
     }
@@ -40,6 +61,7 @@ class Pool extends Adapter
     public function delegate(string $method, array $args): mixed
     {
         return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
+            // Run setters in case config changed since this connection was last used
             $adapter->setDatabase($this->getDatabase());
             $adapter->setNamespace($this->getNamespace());
             $adapter->setSharedTables($this->getSharedTables());
@@ -48,9 +70,11 @@ class Pool extends Adapter
             if ($this->getTimeout() > 0) {
                 $adapter->setTimeout($this->getTimeout());
             }
+            $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {
                 $adapter->setDebug($key, $value);
             }
+            $adapter->resetMetadata();
             foreach ($this->getMetadata() as $key => $value) {
                 $adapter->setMetadata($key, $value);
             }
@@ -142,6 +166,11 @@ class Pool extends Adapter
     }
 
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function createAttributes(string $collection, array $attributes): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -377,6 +406,16 @@ class Pool extends Adapter
     }
 
     public function getSupportForReconnection(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForHostname(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForBatchCreateAttributes(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

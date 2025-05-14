@@ -929,7 +929,32 @@ class SQLite extends MariaDB
         return false;
     }
 
+    /**
+     * Is upsert supported?
+     *
+     * @return bool
+     */
     public function getSupportForUpserts(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is hostname supported?
+     *
+     * @return bool
+     */
+    public function getSupportForHostname(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is batch create attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForBatchCreateAttributes(): bool
     {
         return false;
     }
@@ -1035,7 +1060,7 @@ class SQLite extends MariaDB
      */
     protected function getSQLTable(string $name): string
     {
-        return "`{$this->getNamespace()}_{$name}`";
+        return $this->quote("{$this->getNamespace()}_{$this->filter($name)}");
     }
 
     /**

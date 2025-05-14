@@ -11,6 +11,7 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 abstract class Adapter
 {
     protected string $database = '';
+    protected string $hostname = '';
 
     protected string $namespace = '';
 
@@ -79,15 +80,15 @@ abstract class Adapter
      *
      * @param string $namespace
      *
-     * @return bool
+     * @return $this
      * @throws DatabaseException
      *
      */
-    public function setNamespace(string $namespace): bool
+    public function setNamespace(string $namespace): static
     {
         $this->namespace = $this->filter($namespace);
 
-        return true;
+        return $this;
     }
 
     /**
@@ -101,6 +102,29 @@ abstract class Adapter
     public function getNamespace(): string
     {
         return $this->namespace;
+    }
+
+    /**
+     * Set Hostname.
+     *
+     * @param string $hostname
+     * @return $this
+     */
+    public function setHostname(string $hostname): static
+    {
+        $this->hostname = $hostname;
+
+        return $this;
+    }
+
+    /**
+     * Get Hostname.
+     *
+     * @return string
+     */
+    public function getHostname(): string
+    {
+        return $this->hostname;
     }
 
     /**
@@ -126,15 +150,10 @@ abstract class Adapter
      * Get Database from current scope
      *
      * @return string
-     * @throws DatabaseException
      *
      */
     public function getDatabase(): string
     {
-        if (empty($this->database)) {
-            throw new DatabaseException('Missing database. Database must be set before use.');
-        }
-
         return $this->database;
     }
 
@@ -516,6 +535,17 @@ abstract class Adapter
      * @throws DuplicateException
      */
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
+
+    /**
+     * Create Attributes
+     *
+     * @param string $collection
+     * @param array<array<string, mixed>> $attributes
+     * @return bool
+     * @throws TimeoutException
+     * @throws DuplicateException
+     */
+    abstract public function createAttributes(string $collection, array $attributes): bool;
 
     /**
      * Update Attribute
@@ -956,7 +986,26 @@ abstract class Adapter
      */
     abstract public function getSupportForCacheSkipOnFailure(): bool;
 
+    /**
+     * Is reconnection supported?
+     *
+     * @return bool
+     */
     abstract public function getSupportForReconnection(): bool;
+
+    /**
+     * Is hostname supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForHostname(): bool;
+
+    /**
+     * Is creating multiple attributes in a single query supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForBatchCreateAttributes(): bool;
 
     /**
      * Get current attribute count from collection document
@@ -1064,7 +1113,7 @@ abstract class Adapter
         return $value;
     }
 
-    public function escapeWildcards(string $value): string
+    protected function escapeWildcards(string $value): string
     {
         $wildcards = [
             '%',

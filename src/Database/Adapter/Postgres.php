@@ -10,6 +10,8 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
@@ -1198,10 +1200,6 @@ class Postgres extends SQL
         $attributes['_updatedAt'] = $document->getUpdatedAt();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
-        if ($this->sharedTables) {
-            $attributes['_tenant'] = $this->tenant;
-        }
-
         $name = $this->filter($collection);
         $columns = '';
 
@@ -1352,7 +1350,7 @@ class Postgres extends SQL
         $sql = "
 			UPDATE {$this->getSQLTable($name)}
 			SET {$columns} _uid = :_newUid 
-			WHERE _uid = :_existingUid
+			WHERE _id=:_internalId
 			{$this->getTenantQuery($collection)}
 		";
 
@@ -1360,7 +1358,7 @@ class Postgres extends SQL
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        $stmt->bindValue(':_existingUid', $id);
+        $stmt->bindValue(':_internalId', $document->getInternalId());
         $stmt->bindValue(':_newUid', $document->getId());
 
         if ($this->sharedTables) {
@@ -1565,7 +1563,10 @@ class Postgres extends SQL
                 }
 
                 if (\is_null($cursor[$originalAttribute] ?? null)) {
-                    throw new DatabaseException("Order attribute '{$originalAttribute}' is empty");
+                    throw new OrderException(
+                        message: "Order attribute '{$originalAttribute}' is empty",
+                        attribute: $originalAttribute
+                    );
                 }
 
                 $binds[':cursor'] = $cursor[$originalAttribute];
@@ -2020,17 +2021,6 @@ class Postgres extends SQL
     }
 
     /**
-     * Get SQL table
-     *
-     * @param string $name
-     * @return string
-     */
-    protected function getSQLTable(string $name): string
-    {
-        return "\"{$this->getDatabase()}\".\"{$this->getNamespace()}_{$name}\"";
-    }
-
-    /**
      * Get PDO Type
      *
      * @param mixed $value
@@ -2169,6 +2159,11 @@ class Postgres extends SQL
         // Data is too big for column resize
         if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
+        }
+
+        // Unknown column
+        if ($e->getCode() === "42703" && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new NotFoundException('Attribute not found', $e->getCode(), $e);
         }
 
         return $e;

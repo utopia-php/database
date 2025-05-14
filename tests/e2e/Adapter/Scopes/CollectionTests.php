@@ -519,9 +519,9 @@ trait CollectionTests
 
         $attribute = $attributes['story'];
         $this->assertEquals('story', $attribute['$id']);
-        $this->assertEquals('text', $attribute['dataType']);
-        $this->assertEquals('text', $attribute['columnType']);
-        $this->assertEquals('65535', $attribute['characterMaximumLength']);
+        $this->assertEquals('longtext', $attribute['dataType']);
+        $this->assertEquals('longtext', $attribute['columnType']);
+        $this->assertEquals('4294967295', $attribute['characterMaximumLength']);
 
         $attribute = $attributes['string_list'];
         $this->assertEquals('string_list', $attribute['$id']);

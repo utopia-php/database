@@ -82,6 +82,23 @@ class Postgres extends SQL
         return $result;
     }
 
+    private function execute(\PDOStatement $stmt): bool
+    {
+        try {
+            $result = $stmt?->execute();
+        } catch (PDOException $e) {
+            throw $e;
+        } finally {
+            try {
+                $this->getPDO()->prepare('SET statement_timeout = 0')->execute();
+            } catch (PDOException $e) {
+                throw $e;
+            }
+        }
+
+        return $result;
+    }
+
     /**
      * Returns Max Execution Time
      * @param int $milliseconds
@@ -122,9 +139,8 @@ class Postgres extends SQL
         $sql = "CREATE SCHEMA \"{$name}\"";
         $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 
-        $dbCreation = $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        $dbCreation = $this->execute($this->getPDO()
+            ->prepare($sql));
 
         $collation = "
             CREATE COLLATION IF NOT EXISTS utf8_ci (
@@ -133,7 +149,7 @@ class Postgres extends SQL
             deterministic = false
             );
         ";
-        $this->getPDO()->prepare($collation)->execute();
+        $this->execute($this->getPDO()->prepare($collation));
         return $dbCreation;
     }
 
@@ -152,9 +168,8 @@ class Postgres extends SQL
         $sql = "DROP SCHEMA IF EXISTS \"{$name}\" CASCADE";
         $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
     }
 
     /**
@@ -267,13 +282,11 @@ class Postgres extends SQL
         $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
 
         try {
-            $this->getPDO()
-                ->prepare($collection)
-                ->execute();
+            $this->execute($this->getPDO()
+                ->prepare($collection));
 
-            $this->getPDO()
-                ->prepare($permissions)
-                ->execute();
+            $this->execute($this->getPDO()
+            ->prepare($permissions));
 
             foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
@@ -302,9 +315,8 @@ class Postgres extends SQL
             $e = $this->processException($e);
 
             if (!($e instanceof DuplicateException)) {
-                $this->getPDO()
-                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};")
-                    ->execute();
+                $this->execute($this->getPDO()
+                    ->prepare("DROP TABLE IF EXISTS {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')};"));
             }
 
             throw $e;
@@ -337,8 +349,8 @@ class Postgres extends SQL
         $permissionsSize->bindParam(':permissions', $permissions);
 
         try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
+            $this->execute($collectionSize);
+            $this->execute($permissionsSize);
             $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
@@ -372,8 +384,8 @@ class Postgres extends SQL
         $permissionsSize->bindParam(':permissions', $permissions);
 
         try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
+            $this->execute($collectionSize);
+            $this->execute($permissionsSize);
             $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
@@ -395,9 +407,8 @@ class Postgres extends SQL
         $sql = "DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')}";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
     }
 
     /**
@@ -438,9 +449,8 @@ class Postgres extends SQL
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -469,9 +479,8 @@ class Postgres extends SQL
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
         } catch (PDOException $e) {
             if ($e->getCode() === "42703" && $e->errorInfo[1] === 7) {
                 return true;
@@ -504,9 +513,8 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
     }
 
     /**
@@ -544,9 +552,8 @@ class Postgres extends SQL
 
             $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-            $result = $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            $result = $this->execute($this->getPDO()
+                ->prepare($sql));
 
             if (!$result) {
                 return false;
@@ -563,9 +570,8 @@ class Postgres extends SQL
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
         try {
-            $result = $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+            $result = $this->execute($this->getPDO()
+            ->prepare($sql));
 
             return $result;
         } catch (PDOException $e) {
@@ -621,9 +627,8 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
     }
 
     /**
@@ -720,9 +725,8 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
     }
 
     /**
@@ -806,9 +810,8 @@ class Postgres extends SQL
 
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
     }
 
     /**
@@ -871,9 +874,8 @@ class Postgres extends SQL
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->getPDO()
+                ->prepare($sql));
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -898,9 +900,8 @@ class Postgres extends SQL
         $sql = "DROP INDEX IF EXISTS \"{$schemaName}\".{$key}";
         $sql = $this->trigger(Database::EVENT_INDEX_DELETE, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
     }
 
     /**
@@ -925,9 +926,8 @@ class Postgres extends SQL
         $sql = "ALTER INDEX {$this->getSQLTable($oldIndexName)} RENAME TO \"{$newIndexName}\"";
         $sql = $this->trigger(Database::EVENT_INDEX_RENAME, $sql);
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->execute($this->getPDO()
+            ->prepare($sql));
     }
 
     /**
@@ -1024,12 +1024,12 @@ class Postgres extends SQL
         }
 
         try {
-            $stmt->execute();
+            $this->execute($stmt);
             $lastInsertedId = $this->getPDO()->lastInsertId();
             $document['$internalId'] = $lastInsertedId;
 
             if (isset($stmtPermissions)) {
-                $stmtPermissions->execute();
+                $this->execute($stmtPermissions);
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -1141,7 +1141,7 @@ class Postgres extends SQL
                 $stmt->bindValue($key, $value, $this->getPDOType($value));
             }
 
-            $stmt->execute();
+            $this->execute($stmt);
 
             if (!empty($permissions)) {
                 $tenantColumn = $this->sharedTables ? ', _tenant' : '';
@@ -1161,7 +1161,7 @@ class Postgres extends SQL
                     }
                 }
 
-                $stmtPermissions?->execute();
+                $this->execute($stmtPermissions);
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -1224,7 +1224,7 @@ class Postgres extends SQL
             $permissionsStmt->bindValue(':_tenant', $this->tenant);
         }
 
-        $permissionsStmt->execute();
+        $this->execute($permissionsStmt);
         $permissions = $permissionsStmt->fetchAll();
         $permissionsStmt->closeCursor();
 
@@ -1380,12 +1380,12 @@ class Postgres extends SQL
         }
 
         try {
-            $stmt->execute();
+            $this->execute($stmt);
             if (isset($stmtRemovePermissions)) {
-                $stmtRemovePermissions->execute();
+                $this->execute($stmtRemovePermissions);
             }
             if (isset($stmtAddPermissions)) {
-                $stmtAddPermissions->execute();
+                $this->execute($stmtAddPermissions);
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -1449,7 +1449,7 @@ class Postgres extends SQL
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        $stmt->execute() || throw new DatabaseException('Failed to update attribute');
+        $this->execute($stmt) || throw new DatabaseException('Failed to update attribute');
         return true;
     }
 
@@ -1497,13 +1497,13 @@ class Postgres extends SQL
         $deleted = false;
 
         try {
-            if (!$stmt->execute()) {
+            if (!$this->execute($stmt)) {
                 throw new DatabaseException('Failed to delete document');
             }
 
             $deleted = $stmt->rowCount();
 
-            if (!$stmtPermissions->execute()) {
+            if (!$this->execute($stmtPermissions)) {
                 throw new DatabaseException('Failed to delete permissions');
             }
         } catch (\Throwable $th) {
@@ -1666,7 +1666,7 @@ class Postgres extends SQL
                 }
             }
 
-            $stmt->execute();
+            $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1772,7 +1772,7 @@ class Postgres extends SQL
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
-        $stmt->execute();
+        $this->execute($stmt);
 
         $result = $stmt->fetchAll();
         $stmt->closeCursor();
@@ -1845,7 +1845,7 @@ class Postgres extends SQL
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
-        $stmt->execute();
+        $this->execute($stmt);
 
         $result = $stmt->fetchAll();
         $stmt->closeCursor();

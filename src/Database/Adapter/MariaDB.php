@@ -2060,18 +2060,9 @@ class MariaDB extends SQL
         switch ($type) {
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
-                if ($size > 16777215) {
+                if ($size > 767) {
                     return 'LONGTEXT';
                 }
-
-                if ($size > 65535) {
-                    return 'MEDIUMTEXT';
-                }
-
-                if ($size > $this->getMaxVarcharLength()) {
-                    return 'TEXT';
-                }
-
                 return "VARCHAR({$size})";
 
             case Database::VAR_INTEGER:  // We don't support zerofill: https://stackoverflow.com/a/5634147/2299554

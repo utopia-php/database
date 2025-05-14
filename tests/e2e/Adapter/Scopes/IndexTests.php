@@ -243,6 +243,49 @@ trait IndexTests
         } catch (Exception $e) {
             $this->assertEquals($errorMessage, $e->getMessage());
         }
+
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index_negative_length'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['title1'],
+                'lengths' => [-1],
+                'orders' => [],
+            ]),
+        ];
+
+        $errorMessage = 'Negative index length provided for title1';
+        $this->assertFalse($validator->isValid($indexes[0]));
+        $this->assertEquals($errorMessage, $validator->getDescription());
+
+        try {
+            static::getDatabase()->createCollection(ID::unique(), $attributes, $indexes);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals($errorMessage, $e->getMessage());
+        }
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index_extra_lengths'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['title1', 'title2'],
+                'lengths' => [100, 100, 100],
+                'orders' => [],
+            ]),
+        ];
+
+        $errorMessage = 'Invalid index lengths. Count of lengths must be equal or less than the number of attributes.';
+        $this->assertFalse($validator->isValid($indexes[0]));
+        $this->assertEquals($errorMessage, $validator->getDescription());
+
+        try {
+            static::getDatabase()->createCollection(ID::unique(), $attributes, $indexes);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertEquals($errorMessage, $e->getMessage());
+        }
     }
 
     public function testRenameIndex(): void

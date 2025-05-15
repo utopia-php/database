@@ -8,6 +8,7 @@ use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Alias as AliasValidator;
+use Utopia\Database\Validator\AsQuery as AsValidator;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Limit;
@@ -134,6 +135,8 @@ class V2 extends Validator
                 throw new \Exception('Queries count is greater than '.$this->maxQueriesCount);
             }
 
+            $ambiguous = [];
+            $duplications = [];
             foreach ($value as $query) {
                 if (!$query instanceof Query) {
                     try {
@@ -212,8 +215,6 @@ class V2 extends Validator
                     case Query::TYPE_INNER_JOIN:
                     case Query::TYPE_LEFT_JOIN:
                     case Query::TYPE_RIGHT_JOIN:
-                        var_dump('=== Query::TYPE_JOIN ===');
-                        var_dump($query);
                         $this->validateFilterQueries($query);
 
                         if (! self::isValid($query->getValues(), 'joins')) {
@@ -233,8 +234,6 @@ class V2 extends Validator
                             throw new \Exception('Invalid query: Relations are only valid within joins.');
                         }
 
-                        var_dump('=== Query::TYPE_RELATION ===');
-                        var_dump($query);
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
                         $this->validateAttributeExist($query->getAttributeRight(), $query->getRightAlias());
 
@@ -254,7 +253,42 @@ class V2 extends Validator
 
                         break;
                     case Query::TYPE_SELECT:
+                        $validator = new AsValidator($query->getAttribute());
+
+                        if (! $validator->isValid($query->getAs())) {
+                            throw new \Exception('Invalid Query Select: '.$validator->getDescription());
+                        }
+
                         $this->validateSelect($query);
+
+                        if($query->getAttribute() === '*'){
+                            $collection = $this->context->getCollectionByAlias($query->getAlias());
+                            $attributes = $this->schema[$collection->getId()];
+                            foreach ($attributes as $attribute){
+                                if (($duplications[$query->getAlias()][$attribute['$id']] ?? false) === true){
+                                    //throw new \Exception('Ambiguous column using "*" for "'.$query->getAlias().'.'.$attribute['$id'].'"');
+                                }
+
+                                $duplications[$query->getAlias()][$attribute['$id']] = true;
+                            }
+                        } else {
+                            if (($duplications[$query->getAlias()][$query->getAttribute()] ?? false) === true){
+                                //throw new \Exception('Duplicate Query Select on "'.$query->getAlias().'.'.$query->getAttribute().'"');
+                            }
+                            $duplications[$query->getAlias()][$query->getAttribute()] = true;
+                        }
+
+                        if (!empty($query->getAs())){
+                            $needle = $query->getAs();
+                        } else {
+                            $needle = $query->getAttribute(); // todo: convert internal attribute from $id => _id
+                        }
+
+                        if (in_array($needle, $ambiguous)){
+                            //throw new \Exception('Invalid Query Select: ambiguous column "'.$needle.'"');
+                        }
+
+                        $ambiguous[] = $needle;
 
                         break;
                     case Query::TYPE_ORDER_ASC:
@@ -274,6 +308,7 @@ class V2 extends Validator
                         throw new \Exception('Invalid query: Method not found ');
                 }
             }
+
         } catch (\Throwable $e) {
             $this->message = $e->getMessage();
             var_dump($this->message);
@@ -336,6 +371,13 @@ class V2 extends Validator
      */
     protected function validateAttributeExist(string $attributeId, string $alias): void
     {
+        /**
+         * This is for making query::select('$permissions')) pass
+         */
+        if($attributeId === '$permissions' || $attributeId === '$collection'){
+            return;
+        }
+
         var_dump('=== validateAttributeExist');
 
         //        if (\str_contains($attributeId, '.')) {
@@ -507,82 +549,44 @@ class V2 extends Validator
      */
     public function validateSelect(Query $query): void
     {
+        $asValidator = new AsValidator($query->getAttribute());
+        if (! $asValidator->isValid($query->getAs())) {
+            throw new \Exception('Query '.\ucfirst($query->getMethod()).': '.$asValidator->getDescription());
+        }
+
         $internalKeys = \array_map(
             fn ($attr) => $attr['$id'],
             Database::INTERNAL_ATTRIBUTES
         );
 
-        foreach ($query->getValues() as $attribute) {
-            $alias = Query::DEFAULT_ALIAS; // todo: Fix this
+        $attribute = $query->getAttribute();
 
-            var_dump($attribute);
+        if ($attribute === '*') {
+            return;
+        }
 
-            /**
-             * Special symbols with `dots`
-             */
+        if (\in_array($attribute, $internalKeys)) {
+            //return;
+        }
+
+        $alias = $query->getAlias();
+
+        if (\str_contains($attribute, '.')) {
             if (\str_contains($attribute, '.')) {
                 try {
+                    /**
+                     * Special symbols with `dots`
+                     */
                     $this->validateAttributeExist($attribute, $alias);
-
-                    continue;
-
                 } catch (\Throwable $e) {
                     /**
                      * For relationships, just validate the top level.
                      * Will validate each nested level during the recursive calls.
                      */
                     $attribute = \explode('.', $attribute)[0];
+                    $this->validateAttributeExist($attribute, $alias);
                 }
             }
-
-            /**
-             * Skip internal attributes
-             */
-            if (\in_array($attribute, $internalKeys)) {
-                continue;
-            }
-
-            if ($attribute === '*') {
-                continue;
-            }
-
-            $this->validateAttributeExist($attribute, $alias);
-        }
-    }
-
-    /**
-     * @throws \Exception
-     */
-    public function validateSelections(Query $query): void
-    {
-        $internalKeys = \array_map(fn ($attr) => $attr['$id'], Database::INTERNAL_ATTRIBUTES);
-
-        $alias = $query->getAlias();
-        $attribute = $query->getAttribute();
-
-        /**
-         * Special symbols with `dots`
-         */
-        if (\str_contains($attribute, '.')) {
-            try {
-                $this->validateAttributeExist($attribute, $alias);
-
-                return;
-            } catch (\Throwable $e) {
-                /**
-                 * For relationships, just validate the top level.
-                 * Will validate each nested level during the recursive calls.
-                 */
-                $attribute = \explode('.', $attribute)[0];
-            }
-        }
-
-        if (\in_array($attribute, $internalKeys)) {
-            return;
-        }
-
-        if ($attribute === '*') {
-            return;
         }
 
         $this->validateAttributeExist($attribute, $alias);

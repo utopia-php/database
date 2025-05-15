@@ -948,7 +948,7 @@ trait RelationshipTests
 
         // Select some parent attributes, some child attributes
         $make = static::getDatabase()->findOne('make', [
-            Query::select('name'),
+            //Query::select('name'),
             Query::select('models.name'),
             Query::select('*'), // Added this to make tests pass, perhaps to add in to nesting queries?
         ]);

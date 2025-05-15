@@ -1593,11 +1593,17 @@ abstract class SQL extends Adapter
                 $attribute = $this->quote($attribute);
             }
 
+            $as = $select->getAs();
+
+            if (!empty($as)){
+                $as = ' as '.$this->quote($this->filter($as));
+            }
+
             if (!empty($string)) {
                 $string .= ', ';
             }
 
-            $string .= "{$this->quote($alias)}.{$attribute}";
+            $string .= "{$this->quote($alias)}.{$attribute}{$as}";
         }
 
         return $string;

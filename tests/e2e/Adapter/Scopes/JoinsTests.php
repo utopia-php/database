@@ -367,6 +367,29 @@ trait JoinsTests
             $this->assertEquals('Invalid Query Select: Invalid "as" on attribute "*"', $e->getMessage());
         }
 
+
+
+
+        /**
+         * Simple as query
+         */
+        $documents = $db->find(
+            '__users',
+            [
+                Query::select('username', as: 'user'),
+            ]
+        );
+
+        $this->assertArrayHasKey('user', $documents[0]);
+        $this->assertArrayNotHasKey('username', $documents[0]);
+
+var_dump($documents);
+
+        $this->assertEquals('shmuel1', 'shmuel2');
+
+        /**
+         * ambiguous and duplications selects
+         */
         try {
             $db->find(
                 '__users',
@@ -421,25 +444,23 @@ trait JoinsTests
         /**
          * This should fail? since 2 _uid attributes will be returned?
          */
-//        try {
-//            $db->find(
-//                '__users',
-//                [
-//                    Query::select('*', 'main'),
-//                    Query::select('$id', 'S'),
-//                    Query::join('__sessions', 'S',
-//                        [
-//                            Query::relationEqual('', '$id', 'S', 'user_id'),
-//                        ]
-//                    )
-//                ]
-//            );
-//            $this->fail('Failed to throw exception');
-//        } catch (\Throwable $e) {
-//            $this->assertTrue($e instanceof QueryException);
-//            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
-//        }
-
-        //$this->assertEquals('shmuel1', 'shmuel2');
+        try {
+            $db->find(
+                '__users',
+                [
+                    Query::select('*', 'main'),
+                    Query::select('$id', 'S'),
+                    Query::join('__sessions', 'S',
+                        [
+                            Query::relationEqual('', '$id', 'S', 'user_id'),
+                        ]
+                    )
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertTrue($e instanceof QueryException);
+            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
+        }
     }
 }

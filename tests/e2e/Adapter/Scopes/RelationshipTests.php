@@ -961,12 +961,12 @@ trait RelationshipTests
         $this->assertEquals('Focus', $make['models'][1]['name']);
         $this->assertArrayNotHasKey('year', $make['models'][0]);
         $this->assertArrayNotHasKey('year', $make['models'][1]);
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
 
         // Select internal attributes
         $make = static::getDatabase()->findOne('make', [
@@ -977,12 +977,13 @@ trait RelationshipTests
             throw new Exception('Make not found');
         }
 
+        $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
+        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
             Query::select(['name', '$internalId']),
@@ -992,12 +993,13 @@ trait RelationshipTests
             throw new Exception('Make not found');
         }
 
-        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayHasKey('name', $make);
+        $this->assertArrayHasKey('$id', $make);
         $this->assertArrayHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
             Query::select(['name', '$collection']),
@@ -1007,12 +1009,13 @@ trait RelationshipTests
             throw new Exception('Make not found');
         }
 
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayHasKey('name', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$internalId', $make);
         $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
             Query::select(['name', '$createdAt']),
@@ -1022,12 +1025,13 @@ trait RelationshipTests
             throw new Exception('Make not found');
         }
 
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayHasKey('name', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
             Query::select(['name', '$updatedAt']),
@@ -1037,12 +1041,13 @@ trait RelationshipTests
             throw new Exception('Make not found');
         }
 
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('name', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
+        $this->assertArrayHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
             Query::select(['name', '$permissions']),
@@ -1052,11 +1057,12 @@ trait RelationshipTests
             throw new Exception('Make not found');
         }
 
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('name', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
         $this->assertArrayHasKey('$permissions', $make);
 
         // Select all parent attributes, some child attributes

@@ -84,22 +84,31 @@ class Postgres extends SQL
         return $result;
     }
 
-    private function execute(\PDOStatement $stmt): bool
+    private function execute(mixed $stmt): bool
     {
+        $pdo = $this->getPDO();
         try {
+            if ($this->inTransaction === 0) {
+                $pdo->exec("SET statement_timeout = '{$this->timeout}ms'");
+            } else {
+                $pdo->exec("SET LOCAL statement_timeout = '{$this->timeout}'");
+            }
+
             $result = $stmt?->execute();
-        } catch (PDOException $e) {
+            return $result;
+
+        } catch (\PDOException $e) {
             throw $e;
         } finally {
-            try {
-                $this->getPDO()->prepare('SET statement_timeout = 0')->execute();
-            } catch (PDOException $e) {
-                throw $e;
+            if ($this->inTransaction === 0) {
+                $pdo->exec("RESET statement_timeout");
             }
         }
 
-        return $result;
+
     }
+
+
 
     /**
      * Returns Max Execution Time
@@ -118,8 +127,6 @@ class Postgres extends SQL
         }
 
         $this->timeout = $milliseconds;
-        $this->getPDO()->exec("ALTER SYSTEM SET statement_timeout = '{$milliseconds}'");
-        $this->getPDO()->exec("SELECT pg_reload_conf()");
     }
 
     /**
@@ -141,8 +148,9 @@ class Postgres extends SQL
         $sql = "CREATE SCHEMA \"{$name}\"";
         $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 
-        $dbCreation = $this->execute($this->getPDO()
-            ->prepare($sql));
+        $dbCreation = $this->getPDO()
+        ->prepare($sql)
+        ->execute();
 
         $collation = "
             CREATE COLLATION IF NOT EXISTS utf8_ci (
@@ -151,7 +159,7 @@ class Postgres extends SQL
             deterministic = false
             );
         ";
-        $this->execute($this->getPDO()->prepare($collation));
+        $this->getPDO()->prepare($collation)->execute();
         return $dbCreation;
     }
 
@@ -170,8 +178,7 @@ class Postgres extends SQL
         $sql = "DROP SCHEMA IF EXISTS \"{$name}\" CASCADE";
         $sql = $this->trigger(Database::EVENT_DATABASE_DELETE, $sql);
 
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
+        return $this->getPDO()->prepare($sql)->execute();
     }
 
     /**
@@ -284,11 +291,9 @@ class Postgres extends SQL
         $permissions = $this->trigger(Database::EVENT_COLLECTION_CREATE, $permissions);
 
         try {
-            $this->execute($this->getPDO()
-                ->prepare($collection));
+            $this->getPDO()->prepare($collection)->execute();
 
-            $this->execute($this->getPDO()
-            ->prepare($permissions));
+            $this->getPDO()->prepare($permissions)->execute();
 
             foreach ($indexes as $index) {
                 $indexId = $this->filter($index->getId());
@@ -409,8 +414,7 @@ class Postgres extends SQL
         $sql = "DROP TABLE {$this->getSQLTable($id)}, {$this->getSQLTable($id . '_perms')}";
         $sql = $this->trigger(Database::EVENT_COLLECTION_DELETE, $sql);
 
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
+        return $this->getPDO()->prepare($sql)->execute();
     }
 
     /**
@@ -846,7 +850,7 @@ class Postgres extends SQL
             };
 
             if (Database::INDEX_UNIQUE === $type) {
-                if ($indexAttributeTypes[$attr] === Database::VAR_STRING) {
+                if (isset($indexAttributeTypes[$attr]) && $indexAttributeTypes[$attr] === Database::VAR_STRING) {
                     $attributes[$i] = "\"{$attr}\" COLLATE utf8_ci {$order}";
                 } else {
                     $attributes[$i] = "\"{$attr}\" {$order}";
@@ -876,8 +880,7 @@ class Postgres extends SQL
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
         try {
-            return $this->execute($this->getPDO()
-                ->prepare($sql));
+            return $this->getPDO()->prepare($sql)->execute();
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1028,7 +1031,8 @@ class Postgres extends SQL
         try {
             $this->execute($stmt);
             $lastInsertedId = $this->getPDO()->lastInsertId();
-            $document['$internalId'] = $lastInsertedId;
+            // internalId can be manually as well
+            $document['$internalId'] ??= $lastInsertedId;
 
             if (isset($stmtPermissions)) {
                 $this->execute($stmtPermissions);

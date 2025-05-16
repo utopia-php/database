@@ -400,7 +400,6 @@ trait DocumentTests
         $documents[1]->setAttribute('integer', 10);
 
         $results = [];
-
         $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
             $results[] = $doc;
         });

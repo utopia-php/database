@@ -84,7 +84,7 @@ class Postgres extends SQL
         return $result;
     }
 
-    private function execute(\PDOStatement $stmt): bool
+    private function execute(mixed $stmt): bool
     {
         $pdo = $this->getPDO();
 

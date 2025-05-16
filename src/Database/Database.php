@@ -4979,6 +4979,8 @@ class Database
             if ($old->isEmpty()) {
                 $createdAt = $document->getCreatedAt();
                 $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+            } else {
+                $document['$createdAt'] = $old->getCreatedAt();
             }
 
             if (!$updatesPermissions) {

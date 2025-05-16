@@ -368,7 +368,9 @@ trait DocumentTests
 
         $this->assertEquals(2, $count);
 
-        foreach ($results as $document) {
+        $createdAt = [];
+        foreach ($results as $index => $document) {
+            $createdAt[$index] = $document->getCreatedAt();
             $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
@@ -398,10 +400,10 @@ trait DocumentTests
         $documents[1]->setAttribute('integer', 10);
 
         $results = [];
+
         $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
             $results[] = $doc;
         });
-
         $this->assertEquals(2, $count);
 
         foreach ($results as $document) {
@@ -418,7 +420,8 @@ trait DocumentTests
 
         $this->assertEquals(2, count($documents));
 
-        foreach ($documents as $document) {
+        foreach ($documents as $index => $document) {
+            $this->assertEquals($createdAt[$index], $document->getCreatedAt());
             $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working

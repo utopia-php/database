@@ -4975,8 +4975,11 @@ class Database
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
+            if ($old->isEmpty()) {
+                $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+            }
 
             if (!$updatesPermissions) {
                 $document->setAttribute('$permissions', $old->getPermissions());

@@ -403,6 +403,7 @@ trait DocumentTests
         $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
             $results[] = $doc;
         });
+
         $this->assertEquals(2, $count);
 
         foreach ($results as $document) {

@@ -84,28 +84,26 @@ class Postgres extends SQL
         return $result;
     }
 
-    private function execute(mixed $stmt): bool
+    private function execute(\PDOStatement $stmt): bool
     {
         $pdo = $this->getPDO();
+
+        // Choose the right SET command based on transaction state
+        $sql = $this->inTransaction === 0
+            ? "SET statement_timeout = '{$this->timeout}ms'"
+            : "SET LOCAL statement_timeout = '{$this->timeout}ms'";
+
+        // Apply timeout
+        $pdo->exec($sql);
+
         try {
-            if ($this->inTransaction === 0) {
-                $pdo->exec("SET statement_timeout = '{$this->timeout}ms'");
-            } else {
-                $pdo->exec("SET LOCAL statement_timeout = '{$this->timeout}'");
-            }
-
-            $result = $stmt?->execute();
-            return $result;
-
-        } catch (\PDOException $e) {
-            throw $e;
+            return $stmt->execute();
         } finally {
+            // Only reset the global timeout when not in a transaction
             if ($this->inTransaction === 0) {
                 $pdo->exec("RESET statement_timeout");
             }
         }
-
-
     }
 
 

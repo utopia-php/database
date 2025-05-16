@@ -4969,7 +4969,6 @@ class Database
                 throw new AuthorizationException($validator->getDescription());
             }
 
-            $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 
             $document
@@ -4978,6 +4977,7 @@ class Database
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
             if ($old->isEmpty()) {
+                $createdAt = $document->getCreatedAt();
                 $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
             }
 

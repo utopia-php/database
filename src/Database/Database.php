@@ -3046,10 +3046,11 @@ class Database
 
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
-
+        $indexAttributesWithTypes = [];
         foreach ($attributes as $i => $attr) {
             foreach ($collectionAttributes as $collectionAttribute) {
                 if ($collectionAttribute->getAttribute('key') === $attr) {
+                    $indexAttributesWithTypes[$attr] = $collectionAttribute->getAttribute('type');
 
                     /**
                      * mysql does not save length in collection when length = attributes size
@@ -3095,7 +3096,7 @@ class Database
         }
 
         try {
-            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create index');
@@ -3656,7 +3657,6 @@ class Database
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
-
             return $this->adapter->createDocument($collection->getId(), $document);
         });
 

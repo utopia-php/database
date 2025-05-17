@@ -4969,14 +4969,19 @@ class Database
                 throw new AuthorizationException($validator->getDescription());
             }
 
-            $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+
+            if ($old->isEmpty()) {
+                $createdAt = $document->getCreatedAt();
+                $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+            } else {
+                $document['$createdAt'] = $old->getCreatedAt();
+            }
 
             if (!$updatesPermissions) {
                 $document->setAttribute('$permissions', $old->getPermissions());

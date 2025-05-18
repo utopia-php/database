@@ -3028,7 +3028,7 @@ class Database
          */
         if (!empty($selects)) {
             //$selects[] = Query::select('$id'); // Do we need this?
-            $selects[] = Query::select('$permissions', system: true);
+            $selects[] = Query::select('$permissions',  system: true);
         }
 
         $context = new QueryContext();
@@ -3164,9 +3164,11 @@ class Database
                 array_filter($selects, fn ($q) => $q->isSystem() === false)
             );
 
-            foreach ($this->getInternalAttributes() as $internalAttribute) {
-                if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
-                    $document->removeAttribute($internalAttribute['$id']);
+            if (!in_array('*', $selectedAttributes)){
+                foreach ($this->getInternalAttributes() as $internalAttribute) {
+                    if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
+                        $document->removeAttribute($internalAttribute['$id']);
+                    }
                 }
             }
         }
@@ -5909,9 +5911,14 @@ class Database
                     array_filter($selects, fn ($q) => $q->isSystem() === false)
                 );
 
-                foreach ($this->getInternalAttributes() as $internalAttribute) {
-                    if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
-                        $node->removeAttribute($internalAttribute['$id']);
+                var_dump($node);
+                var_dump($selectedAttributes);
+
+                if (!in_array('*', $selectedAttributes)){
+                    foreach ($this->getInternalAttributes() as $internalAttribute) {
+                        if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
+                            $node->removeAttribute($internalAttribute['$id']);
+                        }
                     }
                 }
             }
@@ -6241,10 +6248,20 @@ class Database
 
         foreach ($document as $key => $value) {
             $alias = Query::DEFAULT_ALIAS;
+            $attributeKey = '';
 
             foreach ($selects as $select) {
+                if ($select->getAs() === $key){
+                    $attributeKey = $key;
+                    $key = $select->getAttribute();
+                    $alias = $select->getAlias();
+
+                    break;
+                }
+
                 if ($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key) {
                     $alias = $select->getAlias();
+
                     break;
                 }
             }
@@ -6264,6 +6281,10 @@ class Database
                 continue;
             }
 
+            if (empty($attributeKey)){
+                $attributeKey = $attribute['$id'];
+            }
+
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
 
@@ -6278,7 +6299,7 @@ class Database
 
             $value = ($array) ? $value : $value[0];
 
-            $new->setAttribute($attribute['$id'], $value);
+            $new->setAttribute($attributeKey, $value);
         }
 
         return $new;
@@ -6318,10 +6339,20 @@ class Database
 
         foreach ($document as $key => $value) {
             $alias = Query::DEFAULT_ALIAS;
+            $attributeKey = '';
 
             foreach ($selects as $select) {
+                if ($select->getAs() === $key){
+                    $attributeKey = $key;
+                    $key = $select->getAttribute();
+                    $alias = $select->getAlias();
+
+                    break;
+                }
+
                 if ($select->getAttribute() == $key || $this->adapter->filter($select->getAttribute()) == $key) {
                     $alias = $select->getAlias();
+
                     break;
                 }
             }
@@ -6341,8 +6372,12 @@ class Database
                 continue;
             }
 
+            if (empty($attributeKey)){
+                $attributeKey = $attribute['$id'];
+            }
+
             if (is_null($value)) {
-                $new->setAttribute($attribute['$id'], null);
+                $new->setAttribute($attributeKey, null);
                 continue;
             }
 
@@ -6375,7 +6410,7 @@ class Database
 
             $value = ($array) ? $value : $value[0];
 
-            $new->setAttribute($attribute['$id'], $value);
+            $new->setAttribute($attributeKey, $value);
         }
 
         return $new;

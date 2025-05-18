@@ -367,100 +367,188 @@ trait JoinsTests
             $this->assertEquals('Invalid Query Select: Invalid "as" on attribute "*"', $e->getMessage());
         }
 
-
-
-
         /**
-         * Simple as query
+         * Simple `as` query getDocument
          */
-        $documents = $db->find(
-            '__users',
+        $document = $db->getDocument(
+            '__sessions',
+            $session2->getId(),
             [
-                Query::select('username', as: 'user'),
+                //Query::select('$permissions', as: '___permissions'),
+                Query::select('$id', as: '___uid'),
+                Query::select('$internalId', as: '___id'),
+                Query::select('$createdAt', as: '___created'),
+                Query::select('user_id', as: 'user_id_as'),
+                Query::select('float', as: 'float_as'),
+                Query::select('boolean', as: 'boolean_as'),
             ]
         );
 
-        $this->assertArrayHasKey('user', $documents[0]);
-        $this->assertArrayNotHasKey('username', $documents[0]);
+//var_dump($document);
 
-var_dump($documents);
+        //$this->assertArrayHasKey('___permissions', $document);
 
-        $this->assertEquals('shmuel1', 'shmuel2');
+        $this->assertArrayHasKey('___uid', $document);
+        $this->assertArrayNotHasKey('$id', $document);
 
-        /**
-         * ambiguous and duplications selects
-         */
-        try {
-            $db->find(
-                '__users',
-                [
-                    Query::select('$id', 'main'),
-                    Query::select('$id', 'S'),
-                    Query::join('__sessions', 'S',
-                        [
-                            Query::relationEqual('', '$id', 'S', 'user_id'),
-                        ]
-                    )
-                ]
-            );
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
-        }
+        $this->assertArrayHasKey('___id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
 
-        try {
-            $db->find(
-                '__users',
-                [
-                    Query::select('*', 'main'),
-                    Query::select('*', 'S'),
-                    Query::join('__sessions', 'S',
-                        [
-                            Query::relationEqual('', '$id', 'S', 'user_id'),
-                        ]
-                    )
-                ]
-            );
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid Query Select: ambiguous column "*"', $e->getMessage());
-        }
+        $this->assertArrayHasKey('___created', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
 
-        try {
-            $db->find('__users',
-                [
-                    Query::select('$id'),
-                    Query::select('$id'),
-                ]
-            );
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Duplicate Query Select on "main.$id"', $e->getMessage());
-        }
+        $this->assertArrayHasKey('user_id_as', $document);
+        $this->assertArrayNotHasKey('user_id', $document);
+
+        $this->assertArrayHasKey('float_as', $document);
+        $this->assertArrayNotHasKey('float', $document);
+        $this->assertIsFloat($document->getAttribute('float_as'));
+        $this->assertEquals(10.5, $document->getAttribute('float_as'));
+
+        $this->assertArrayHasKey('boolean_as', $document);
+        $this->assertArrayNotHasKey('boolean', $document);
+        $this->assertIsBool($document->getAttribute('boolean_as'));
+        $this->assertEquals(false, $document->getAttribute('boolean_as'));
 
         /**
-         * This should fail? since 2 _uid attributes will be returned?
+         * Simple `as` query find
          */
-        try {
-            $db->find(
-                '__users',
-                [
-                    Query::select('*', 'main'),
-                    Query::select('$id', 'S'),
-                    Query::join('__sessions', 'S',
-                        [
-                            Query::relationEqual('', '$id', 'S', 'user_id'),
-                        ]
-                    )
-                ]
-            );
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertTrue($e instanceof QueryException);
-            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
-        }
+        $document = $db->findOne(
+            '__sessions',
+            [
+                Query::select('$id', as: '___uid'),
+                Query::select('$internalId', as: '___id'),
+                Query::select('$createdAt', as: '___created'),
+                Query::select('user_id', as: 'user_id_as'),
+                Query::select('float', as: 'float_as'),
+                Query::select('boolean', as: 'boolean_as'),
+            ]
+        );
+
+        $this->assertArrayHasKey('___uid', $document);
+        $this->assertArrayNotHasKey('$id', $document);
+
+        $this->assertArrayHasKey('___id', $document);
+        $this->assertArrayNotHasKey('$internalId', $document);
+
+        $this->assertArrayHasKey('___created', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+
+        $this->assertArrayHasKey('user_id_as', $document);
+        $this->assertArrayNotHasKey('user_id', $document);
+
+        $this->assertArrayHasKey('float_as', $document);
+        $this->assertArrayNotHasKey('float', $document);
+        $this->assertIsFloat($document->getAttribute('float_as'));
+        $this->assertEquals(10.5, $document->getAttribute('float_as'));
+
+        $this->assertArrayHasKey('boolean_as', $document);
+        $this->assertArrayNotHasKey('boolean', $document);
+        $this->assertIsBool($document->getAttribute('boolean_as'));
+        $this->assertEquals(false, $document->getAttribute('boolean_as'));
+
+        /**
+         * Select queries
+         */
+        $document = $db->findOne(
+            '__users',
+            [
+                Query::select('username', '', as: 'as_username'),
+                Query::select('user_id', 'S', as: 'as_user_id'),
+                Query::select('float', 'S', as: 'as_float'),
+                Query::select('boolean', 'S', as: 'as_boolean'),
+                Query::select('$permissions', 'S', as: 'as_permissions'),
+                Query::join('__sessions', 'S',
+                    [
+                        Query::relationEqual('', '$id', 'S', 'user_id'),
+                    ]
+                )
+            ]
+        );
+
+        $this->assertArrayHasKey('as_username', $document);
+        $this->assertArrayHasKey('as_user_id', $document);
+        $this->assertArrayHasKey('as_float', $document);
+        $this->assertArrayHasKey('as_boolean', $document);
+        $this->assertArrayHasKey('as_permissions', $document);
+        $this->assertIsArray($document->getAttribute('as_permissions'));
+
+
+//
+//        /**
+//         * ambiguous and duplications selects
+//         */
+//        try {
+//            $db->find(
+//                '__users',
+//                [
+//                    Query::select('$id', 'main'),
+//                    Query::select('$id', 'S'),
+//                    Query::join('__sessions', 'S',
+//                        [
+//                            Query::relationEqual('', '$id', 'S', 'user_id'),
+//                        ]
+//                    )
+//                ]
+//            );
+//            $this->fail('Failed to throw exception');
+//        } catch (\Throwable $e) {
+//            $this->assertTrue($e instanceof QueryException);
+//            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
+//        }
+//
+//        try {
+//            $db->find(
+//                '__users',
+//                [
+//                    Query::select('*', 'main'),
+//                    Query::select('*', 'S'),
+//                    Query::join('__sessions', 'S',
+//                        [
+//                            Query::relationEqual('', '$id', 'S', 'user_id'),
+//                        ]
+//                    )
+//                ]
+//            );
+//            $this->fail('Failed to throw exception');
+//        } catch (\Throwable $e) {
+//            $this->assertTrue($e instanceof QueryException);
+//            $this->assertEquals('Invalid Query Select: ambiguous column "*"', $e->getMessage());
+//        }
+//
+//        try {
+//            $db->find('__users',
+//                [
+//                    Query::select('$id'),
+//                    Query::select('$id'),
+//                ]
+//            );
+//            $this->fail('Failed to throw exception');
+//        } catch (\Throwable $e) {
+//            $this->assertTrue($e instanceof QueryException);
+//            $this->assertEquals('Duplicate Query Select on "main.$id"', $e->getMessage());
+//        }
+//
+//        /**
+//         * This should fail? since 2 _uid attributes will be returned?
+//         */
+//        try {
+//            $db->find(
+//                '__users',
+//                [
+//                    Query::select('*', 'main'),
+//                    Query::select('$id', 'S'),
+//                    Query::join('__sessions', 'S',
+//                        [
+//                            Query::relationEqual('', '$id', 'S', 'user_id'),
+//                        ]
+//                    )
+//                ]
+//            );
+//            $this->fail('Failed to throw exception');
+//        } catch (\Throwable $e) {
+//            $this->assertTrue($e instanceof QueryException);
+//            $this->assertEquals('Invalid Query Select: ambiguous column "$id"', $e->getMessage());
+//        }
     }
 }

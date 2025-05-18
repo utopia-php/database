@@ -229,7 +229,7 @@ abstract class SQL extends Adapter
         if ($this->getSupportForUpdateLock()) {
             $sql .= " {$forUpdate}";
         }
-
+var_dump($sql);
         $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $id);

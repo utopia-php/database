@@ -334,6 +334,8 @@ class Database
 
     protected ?\DateTime $timestamp = null;
 
+    protected ?Document $cursor = null;
+
     protected bool $resolveRelationships = true;
 
     protected bool $checkRelationshipsExist = true;
@@ -610,6 +612,26 @@ class Database
             $result = $callback();
         } finally {
             $this->timestamp = $previous;
+        }
+        return $result;
+    }
+
+    /**
+     * Executes $callback with $timestamp set to $requestTimestamp
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function withCursor(Document $document, callable $callback): mixed
+    {
+        $previous = $this->cursor;
+        $this->cursor = $document;
+
+        try {
+            $result = $callback();
+        } finally {
+            $this->cursor = $previous;
         }
         return $result;
     }
@@ -4358,10 +4380,6 @@ class Database
         $limit = $grouped['limit'];
         $cursor = $grouped['cursor'];
 
-//        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-//            throw new DatabaseException("cursor Document must be from the same Collection.");
-//        }
-
         unset($updates['$id']);
         unset($updates['$createdAt']);
         unset($updates['$tenant']);
@@ -5757,7 +5775,6 @@ class Database
         $cursor = $grouped['cursor'];
 
         $originalLimit = $limit;
-        //$last = $cursor;
         $last = new Document();
         $modified = 0;
 
@@ -5773,17 +5790,19 @@ class Database
             ];
 
             if (!empty($cursor)) {
-                $new[] = Query::cursorAfter($cursor, cursor: $last);
+                $new[] = Query::cursorAfter($cursor);
             }
 
             /**
              * @var array<Document> $batch
              */
-            $batch = $this->silent(fn () => $this->find(
-                $collection->getId(),
-                array_merge($new, $queries),
-                forPermission: Database::PERMISSION_DELETE
-            ));
+
+            $batch = $this->silent(fn () =>
+                $this->withCursor($last, fn () => $this->find(
+                    $collection->getId(),
+                    array_merge($new, $queries),
+                    forPermission: Database::PERMISSION_DELETE
+            )));
 
             if (empty($batch)) {
                 break;
@@ -5960,18 +5979,14 @@ class Database
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
         $cursorId = $grouped['cursor'];
-        /**
-         * @var Document $cursorHardcoded
-         */
-        $cursorHardcoded = $grouped['cursorHardcoded'];
         $cursor = [];
         $cursorDirection = $grouped['cursorDirection'];
 
         if (!empty($cursorId)) {
-            if($cursorHardcoded->isEmpty()){
+            if (!is_null($this->cursor) && !$this->cursor->isEmpty()){
+                $cursor = $this->cursor;
+            } else {
                 $cursor = $this->getDocument($collection->getId(), $cursorId);
-            }else {
-                $cursor = $cursorHardcoded;
             }
 
             if ($cursor->isEmpty()){

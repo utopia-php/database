@@ -73,7 +73,6 @@ class Query
     protected string $method = '';
     protected string $attribute = '';
     protected bool $onArray = false;
-    protected Document $cursor;
 
     /**
      * @var array<mixed>
@@ -87,7 +86,7 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      */
-    public function __construct(string $method, string $attribute = '', array $values = [], Document $cursor = new Document)
+    public function __construct(string $method, string $attribute = '', array $values = [])
     {
         if ($attribute === '' && \in_array($method, [Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC])) {
             $attribute = '$internalId';
@@ -96,7 +95,6 @@ class Query
         $this->method = $method;
         $this->attribute = $attribute;
         $this->values = $values;
-        $this->cursor = $cursor;
     }
 
     public function __clone(): void
@@ -514,21 +512,21 @@ class Query
     /**
      * Helper method to create Query with cursorAfter method
      *
-     * @param string $value
+     * @param Document $value
      * @return Query
      */
-    public static function cursorAfter(string $value, Document $cursor = new Document): self
+    public static function cursorAfter(Document $value): self
     {
-        return new self(self::TYPE_CURSOR_AFTER, values: [$value], cursor: $cursor);
+        return new self(self::TYPE_CURSOR_AFTER, values: [$value]);
     }
 
     /**
      * Helper method to create Query with cursorBefore method
      *
-     * @param string $value
+     * @param Document $value
      * @return Query
      */
-    public static function cursorBefore(string $value): self
+    public static function cursorBefore(Document $value): self
     {
         return new self(self::TYPE_CURSOR_BEFORE, values: [$value]);
     }
@@ -627,7 +625,6 @@ class Query
         $orderAttributes = [];
         $orderTypes = [];
         $cursor = null;
-        $cursorHardcoded = new Document();
         $cursorDirection = null;
 
         foreach ($queries as $query) {
@@ -676,8 +673,6 @@ class Query
 
                     $cursor = $values[0] ?? $limit;
                     $cursorDirection = $method === Query::TYPE_CURSOR_AFTER ? Database::CURSOR_AFTER : Database::CURSOR_BEFORE;
-                    $cursorHardcoded = $query->getCursor();
-
                     break;
 
                 case Query::TYPE_SELECT:
@@ -698,7 +693,6 @@ class Query
             'orderAttributes' => $orderAttributes,
             'orderTypes' => $orderTypes,
             'cursor' => $cursor,
-            'cursorHardcoded' => $cursorHardcoded,
             'cursorDirection' => $cursorDirection,
         ];
     }
@@ -732,13 +726,5 @@ class Query
     public function setOnArray(bool $bool): void
     {
         $this->onArray = $bool;
-    }
-
-    /**
-     * @return Document
-     */
-    public function getCursor(): Document
-    {
-        return $this->cursor;
     }
 }

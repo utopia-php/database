@@ -512,10 +512,10 @@ class Query
     /**
      * Helper method to create Query with cursorAfter method
      *
-     * @param Document $value
+     * @param string $value
      * @return Query
      */
-    public static function cursorAfter(Document $value): self
+    public static function cursorAfter(string $value): self
     {
         return new self(self::TYPE_CURSOR_AFTER, values: [$value]);
     }
@@ -523,10 +523,10 @@ class Query
     /**
      * Helper method to create Query with cursorBefore method
      *
-     * @param Document $value
+     * @param string $value
      * @return Query
      */
-    public static function cursorBefore(Document $value): self
+    public static function cursorBefore(string $value): self
     {
         return new self(self::TYPE_CURSOR_BEFORE, values: [$value]);
     }

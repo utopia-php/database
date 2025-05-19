@@ -68,7 +68,7 @@ class QueryTest extends TestCase
         $this->assertEquals([10], $query->getValues());
 
         $cursor = new Document();
-        $query = Query::cursorAfter($cursor);
+        $query = Query::cursorAfter($cursor->getId());
 
         $this->assertEquals(Query::TYPE_CURSOR_AFTER, $query->getMethod());
         $this->assertEquals('', $query->getAttribute());

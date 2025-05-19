@@ -390,21 +390,16 @@ trait JoinsTests
 
         $this->assertArrayHasKey('___uid', $document);
         $this->assertArrayNotHasKey('$id', $document);
-
         $this->assertArrayHasKey('___id', $document);
         $this->assertArrayNotHasKey('$internalId', $document);
-
         $this->assertArrayHasKey('___created', $document);
         $this->assertArrayNotHasKey('$createdAt', $document);
-
         $this->assertArrayHasKey('user_id_as', $document);
         $this->assertArrayNotHasKey('user_id', $document);
-
         $this->assertArrayHasKey('float_as', $document);
         $this->assertArrayNotHasKey('float', $document);
         $this->assertIsFloat($document->getAttribute('float_as'));
         $this->assertEquals(10.5, $document->getAttribute('float_as'));
-
         $this->assertArrayHasKey('boolean_as', $document);
         $this->assertArrayNotHasKey('boolean', $document);
         $this->assertIsBool($document->getAttribute('boolean_as'));
@@ -427,21 +422,16 @@ trait JoinsTests
 
         $this->assertArrayHasKey('___uid', $document);
         $this->assertArrayNotHasKey('$id', $document);
-
         $this->assertArrayHasKey('___id', $document);
         $this->assertArrayNotHasKey('$internalId', $document);
-
         $this->assertArrayHasKey('___created', $document);
         $this->assertArrayNotHasKey('$createdAt', $document);
-
         $this->assertArrayHasKey('user_id_as', $document);
         $this->assertArrayNotHasKey('user_id', $document);
-
         $this->assertArrayHasKey('float_as', $document);
         $this->assertArrayNotHasKey('float', $document);
         $this->assertIsFloat($document->getAttribute('float_as'));
         $this->assertEquals(10.5, $document->getAttribute('float_as'));
-
         $this->assertArrayHasKey('boolean_as', $document);
         $this->assertArrayNotHasKey('boolean', $document);
         $this->assertIsBool($document->getAttribute('boolean_as'));
@@ -474,7 +464,6 @@ trait JoinsTests
         $this->assertIsArray($document->getAttribute('as_permissions'));
 
 
-//
 //        /**
 //         * ambiguous and duplications selects
 //         */

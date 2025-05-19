@@ -4358,9 +4358,9 @@ class Database
         $limit = $grouped['limit'];
         $cursor = $grouped['cursor'];
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
-        }
+//        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+//            throw new DatabaseException("cursor Document must be from the same Collection.");
+//        }
 
         unset($updates['$id']);
         unset($updates['$createdAt']);
@@ -4403,7 +4403,7 @@ class Database
             ];
 
             if (!empty($last)) {
-                $new[] = Query::cursorAfter($last);
+                $new[] = Query::cursorAfter($last->getId());
             }
 
             $batch = $this->silent(fn () => $this->find(
@@ -5756,12 +5756,13 @@ class Database
         $limit = $grouped['limit'];
         $cursor = $grouped['cursor'];
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("Cursor document must be from the same Collection.");
-        }
+//        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+//            throw new DatabaseException("Cursor document must be from the same Collection.");
+//        }
 
         $originalLimit = $limit;
-        $last = $cursor;
+        //$last = $cursor;
+        $last = new Document();
         $modified = 0;
 
         while (true) {
@@ -5775,8 +5776,8 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (!empty($last)) {
-                $new[] = Query::cursorAfter($last);
+            if (!empty($cursor)) {
+                $new[] = Query::cursorAfter($cursor, cursor: $last);
             }
 
             /**
@@ -5847,6 +5848,8 @@ class Database
             }
 
             $last = \end($batch);
+
+            $cursor = $last->getId();
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
@@ -5960,14 +5963,28 @@ class Database
         $offset = $grouped['offset'];
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
-        $cursor = $grouped['cursor'];
+        $cursorId = $grouped['cursor'];
+        /**
+         * @var Document $cursorHardcoded
+         */
+        $cursorHardcoded = $grouped['cursorHardcoded'];
+        $cursor = [];
         $cursorDirection = $grouped['cursorDirection'];
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
-        }
+        if (!empty($cursorId)) {
+            var_dump($cursorHardcoded);
+            if($cursorHardcoded->isEmpty()){
+                $cursor = $this->getDocument($collection->getId(), $cursorId);
+            }else {
+                $cursor = $cursorHardcoded;
+            }
 
-        $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
+            if ($cursor->isEmpty()){
+                throw new DatabaseException("Cursor not found");
+            }
+
+            $cursor = $this->encode($collection, $cursor)->getArrayCopy();
+        }
 
         /**  @var array<Query> $queries */
         $queries = \array_merge(
@@ -6105,7 +6122,7 @@ class Database
                     array_unshift($newQueries, Query::offset(0));
                 }
 
-                array_unshift($newQueries, Query::cursorAfter($latestDocument));
+                array_unshift($newQueries, Query::cursorAfter($latestDocument->getId()));
             }
             if (!$limitExists) {
                 $newQueries[] = Query::limit($limit);

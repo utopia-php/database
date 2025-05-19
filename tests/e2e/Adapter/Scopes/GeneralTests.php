@@ -274,7 +274,7 @@ trait GeneralTests
         static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorAfter($document)
+            Query::cursorAfter($document->getId())
         ]);
     }
 

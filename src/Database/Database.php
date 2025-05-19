@@ -5802,7 +5802,7 @@ class Database
                     $collection->getId(),
                     array_merge($new, $queries),
                     forPermission: Database::PERMISSION_DELETE
-            )));
+                )));
 
             if (empty($batch)) {
                 break;
@@ -5983,13 +5983,13 @@ class Database
         $cursorDirection = $grouped['cursorDirection'];
 
         if (!empty($cursorId)) {
-            if (!is_null($this->cursor) && !$this->cursor->isEmpty()){
+            if (!is_null($this->cursor) && !$this->cursor->isEmpty()) {
                 $cursor = $this->cursor;
             } else {
                 $cursor = $this->getDocument($collection->getId(), $cursorId);
             }
 
-            if ($cursor->isEmpty()){
+            if ($cursor->isEmpty()) {
                 throw new DatabaseException("Cursor not found");
             }
 

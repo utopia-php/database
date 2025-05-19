@@ -119,8 +119,8 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid([Query::lessThanEqual('price', 6)]));
         $this->assertEquals(true, $validator->isValid([Query::contains('tags', ['action1', 'action2'])]));
         $this->assertEquals(true, $validator->isValid([Query::contains('tags', ['action1'])]));
-        $this->assertEquals(true, $validator->isValid([Query::cursorAfter(new Document(['$id' => 'docId']))]));
-        $this->assertEquals(true, $validator->isValid([Query::cursorBefore(new Document(['$id' => 'docId']))]));
+        $this->assertEquals(true, $validator->isValid([Query::cursorAfter('docId')]));
+        $this->assertEquals(true, $validator->isValid([Query::cursorBefore('docId')]));
         $this->assertEquals(true, $validator->isValid([Query::orderAsc('title')]));
         $this->assertEquals(true, $validator->isValid([Query::orderDesc('title')]));
         $this->assertEquals(true, $validator->isValid([Query::isNull('title')]));
@@ -239,8 +239,8 @@ class QueryTest extends TestCase
         $queries = [
             Query::equal('key', ['value']),
             Query::select(['attr1', 'attr2']),
-            Query::cursorBefore(new Document([])),
-            Query::cursorAfter(new Document([])),
+            Query::cursorBefore('dsds'),
+            Query::cursorAfter('dsdsds'),
         ];
 
         $queries = Query::getByType($queries, [Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE]);

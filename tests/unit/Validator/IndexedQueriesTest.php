@@ -87,7 +87,7 @@ class IndexedQueriesTest extends TestCase
             ]
         );
 
-        $query = Query::cursorAfter(new Document(['$id' => 'abc']));
+        $query = Query::cursorAfter('abc');
         $this->assertEquals(true, $validator->isValid([$query]));
         $query = Query::parse('{"method":"cursorAfter","attribute":"","values":["abc"]}');
         $this->assertEquals(true, $validator->isValid([$query]));

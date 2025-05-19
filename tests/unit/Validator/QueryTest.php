@@ -227,7 +227,7 @@ class QueryTest extends TestCase
     {
         $validator = new Documents($this->attributes, []);
 
-        $response = $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]);
+        $response = $validator->isValid([Query::cursorAfter('asdf')]);
         $this->assertEquals(true, $response);
     }
 

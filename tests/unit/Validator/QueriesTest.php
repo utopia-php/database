@@ -70,7 +70,7 @@ class QueriesTest extends TestCase
             ]
         );
 
-        $this->assertEquals(true, $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]), $validator->getDescription());
+        $this->assertEquals(true, $validator->isValid([Query::cursorAfter('asdf')]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::equal('name', ['value'])]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::limit(10)]), $validator->getDescription());
         $this->assertEquals(true, $validator->isValid([Query::offset(10)]), $validator->getDescription());

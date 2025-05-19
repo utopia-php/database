@@ -5756,10 +5756,6 @@ class Database
         $limit = $grouped['limit'];
         $cursor = $grouped['cursor'];
 
-//        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-//            throw new DatabaseException("Cursor document must be from the same Collection.");
-//        }
-
         $originalLimit = $limit;
         //$last = $cursor;
         $last = new Document();
@@ -5972,7 +5968,6 @@ class Database
         $cursorDirection = $grouped['cursorDirection'];
 
         if (!empty($cursorId)) {
-            var_dump($cursorHardcoded);
             if($cursorHardcoded->isEmpty()){
                 $cursor = $this->getDocument($collection->getId(), $cursorId);
             }else {

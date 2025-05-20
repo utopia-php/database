@@ -5796,9 +5796,11 @@ class Database
              * @var array<Document> $batch
              */
 
-            $batch = $this->silent(fn () => $this->withCursor($last,
+            $batch = $this->silent(fn () => $this->withCursor(
+                $last,
                 fn () => $this->find(
-                    $collection->getId(), array_merge($new, $queries),
+                    $collection->getId(),
+                    array_merge($new, $queries),
                     forPermission: Database::PERMISSION_DELETE
                 )
             ));

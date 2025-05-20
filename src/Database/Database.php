@@ -5818,7 +5818,7 @@ class Database
 
                 $internalIds[] = $document->getInternalId();
 
-                if (!array_key_exists('$permissions', $document)) {
+                if (!isset($document['$permissions'])) {
                     throw new QueryException('$permissions key is missing');
                 }
 

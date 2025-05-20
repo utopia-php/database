@@ -5812,7 +5812,16 @@ class Database
             $internalIds = [];
             $permissionIds = [];
             foreach ($batch as $document) {
+                if (empty($document->getInternalId())){
+                    throw new QueryException('$internalId must not be empty');
+                }
+
                 $internalIds[] = $document->getInternalId();
+
+                if (!array_key_exists('$permissions', $document)) {
+                    throw new QueryException('$permissions key is missing');
+                }
+
                 if (!empty($document->getPermissions())) {
                     $permissionIds[] = $document->getId();
                 }
@@ -5825,6 +5834,10 @@ class Database
                 }
 
                 // Check if document was updated after the request timestamp
+                if (empty($document->getUpdatedAt())){
+                    throw new QueryException('$updatedAt must not be empty');
+                }
+
                 try {
                     $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
                 } catch (Exception $e) {

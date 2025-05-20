@@ -597,7 +597,7 @@ class Database
     }
 
     /**
-     * Executes $callback with $cursor Document
+     * Executes $callback with $cursor Document set to $requestTimestamp
      *
      * @template T
      * @param ?\DateTime $requestTimestamp
@@ -617,16 +617,16 @@ class Database
     }
 
     /**
-     * Executes $callback with $timestamp set to $requestTimestamp
+     * Executes $callback with $cursor Document
      *
      * @template T
      * @param callable(): T $callback
      * @return T
      */
-    public function withCursor(?Document $document, callable $callback): mixed
+    public function withCursor(?Document $cursor, callable $callback): mixed
     {
         $previous = $this->cursor;
-        $this->cursor = $document;
+        $this->cursor = $cursor;
 
         try {
             $result = $callback();

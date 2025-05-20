@@ -59,7 +59,7 @@ trait JoinsTests
             ],
         ]));
 
-        $session1 = $db->createDocument('__sessions', new Document([
+        $sessionNoPermissions = $db->createDocument('__sessions', new Document([
             'user_id' => $user1->getId(),
             '$permissions' => [],
         ]));

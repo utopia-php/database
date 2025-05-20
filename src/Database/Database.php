@@ -5993,6 +5993,9 @@ class Database
             if (!is_null($this->cursor) && !$this->cursor->isEmpty()) {
                 $cursor = $this->cursor;
             } else {
+                /**
+                 * todo: add specific select queries, Only what you need for the cursor
+                 */
                 $cursor = $this->getDocument($collection->getId(), $cursorId);
             }
 

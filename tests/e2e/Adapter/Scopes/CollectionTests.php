@@ -1461,7 +1461,7 @@ trait CollectionTests
         $this->assertNotEmpty($hashKey);
 
         if ($db->getSharedTables()) {
-            $this->assertStringNotContainsString($db->getAdapter()->getTenant(), $collectionKey);
+            $this->assertStringNotContainsString((string)$db->getAdapter()->getTenant(), $collectionKey);
         }
 
         // non global collection should containt tenant in the cache key
@@ -1471,7 +1471,7 @@ trait CollectionTests
             $nonGlobalCollectionId
         );
         if ($db->getSharedTables()) {
-            $this->assertStringContainsString($db->getAdapter()->getTenant(), $collectionKeyRegular);
+            $this->assertStringContainsString((string)$db->getAdapter()->getTenant(), $collectionKeyRegular);
         }
 
         // Non metadata collection should contain tenant in the cache key
@@ -1486,7 +1486,7 @@ trait CollectionTests
         $this->assertNotEmpty($hashKey);
 
         if ($db->getSharedTables()) {
-            $this->assertStringContainsString($db->getAdapter()->getTenant(), $collectionKey);
+            $this->assertStringContainsString((string)$db->getAdapter()->getTenant(), $collectionKey);
         }
 
     }

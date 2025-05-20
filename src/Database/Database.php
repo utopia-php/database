@@ -623,7 +623,7 @@ class Database
      * @param callable(): T $callback
      * @return T
      */
-    public function withCursor(Document $document, callable $callback): mixed
+    public function withCursor(?Document $document, callable $callback): mixed
     {
         $previous = $this->cursor;
         $this->cursor = $document;
@@ -5773,9 +5773,8 @@ class Database
         $grouped = Query::groupByType($queries);
         $limit = $grouped['limit'];
         $cursor = $grouped['cursor'];
-
         $originalLimit = $limit;
-        $last = new Document();
+        $last = null;
         $modified = 0;
 
         while (true) {
@@ -5862,7 +5861,7 @@ class Database
                 break;
             }
 
-            $last = \end($batch);
+            $last = $batch[array_key_last($batch)];
 
             $cursor = $last->getId();
         }

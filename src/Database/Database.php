@@ -597,7 +597,7 @@ class Database
     }
 
     /**
-     * Executes $callback with $timestamp set to $requestTimestamp
+     * Executes $callback with $cursor Document
      *
      * @template T
      * @param ?\DateTime $requestTimestamp

@@ -5797,11 +5797,13 @@ class Database
              */
 
             $batch = $this->silent(fn () =>
-                $this->withCursor($last, fn () => $this->find(
-                    $collection->getId(),
-                    array_merge($new, $queries),
-                    forPermission: Database::PERMISSION_DELETE
-                )));
+
+            $this->withCursor($last, fn () =>
+            $this->find(
+                $collection->getId(),
+                array_merge($new, $queries),
+                forPermission: Database::PERMISSION_DELETE
+            )));
 
             if (empty($batch)) {
                 break;
@@ -5834,6 +5836,15 @@ class Database
                 }
             }
 
+            $last = $batch[array_key_last($batch)];
+            $cursor = $last->getId();
+            /**
+             * Independent Cursor data.
+             * todo: add specific selects... (order by , $id, $internalId))
+             * Do we need silent here?
+             */
+            $last = $this->silent(fn () => $this->getDocument($collection->getId(), $cursor));
+
             $this->withTransaction(function () use ($collection, $internalIds, $permissionIds) {
                 $this->adapter->deleteDocuments(
                     $collection->getId(),
@@ -5860,10 +5871,6 @@ class Database
             } elseif ($originalLimit && $modified >= $originalLimit) {
                 break;
             }
-
-            $last = $batch[array_key_last($batch)];
-
-            $cursor = $last->getId();
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([

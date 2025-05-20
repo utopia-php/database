@@ -1550,7 +1550,7 @@ trait DocumentTests
         $documents = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorAfter($movies[1])
+            Query::cursorAfter($movies[1]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
@@ -1559,7 +1559,7 @@ trait DocumentTests
         $documents = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorAfter($movies[3])
+            Query::cursorAfter($movies[3]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
@@ -1568,7 +1568,7 @@ trait DocumentTests
         $documents = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorAfter($movies[4])
+            Query::cursorAfter($movies[4]->getId())
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
@@ -1576,7 +1576,7 @@ trait DocumentTests
         $documents = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorAfter($movies[5])
+            Query::cursorAfter($movies[5]->getId())
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -1595,7 +1595,7 @@ trait DocumentTests
         $documents = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorBefore($movies[5])
+            Query::cursorBefore($movies[5]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
@@ -1604,7 +1604,7 @@ trait DocumentTests
         $documents = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorBefore($movies[3])
+            Query::cursorBefore($movies[3]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
@@ -1613,7 +1613,7 @@ trait DocumentTests
         $documents = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorBefore($movies[2])
+            Query::cursorBefore($movies[2]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -1622,7 +1622,7 @@ trait DocumentTests
         $documents = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorBefore($movies[1])
+            Query::cursorBefore($movies[1]->getId())
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -1630,7 +1630,7 @@ trait DocumentTests
         $documents = static::getDatabase()->find('movies', [
             Query::limit(2),
             Query::offset(0),
-            Query::cursorBefore($movies[0])
+            Query::cursorBefore($movies[0]->getId())
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -1649,7 +1649,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorAfter($movies[1])
+            Query::cursorAfter($movies[1]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
@@ -1659,7 +1659,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorAfter($movies[3])
+            Query::cursorAfter($movies[3]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
@@ -1669,7 +1669,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorAfter($movies[4])
+            Query::cursorAfter($movies[4]->getId())
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
@@ -1678,7 +1678,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorAfter($movies[5])
+            Query::cursorAfter($movies[5]->getId())
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -1697,7 +1697,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorBefore($movies[5])
+            Query::cursorBefore($movies[5]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
@@ -1707,7 +1707,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorBefore($movies[3])
+            Query::cursorBefore($movies[3]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
@@ -1717,7 +1717,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorBefore($movies[2])
+            Query::cursorBefore($movies[2]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -1727,7 +1727,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorBefore($movies[1])
+            Query::cursorBefore($movies[1]->getId())
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -1736,7 +1736,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc(''),
-            Query::cursorBefore($movies[0])
+            Query::cursorBefore($movies[0]->getId())
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -1756,7 +1756,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorAfter($movies[1])
+            Query::cursorAfter($movies[1]->getId())
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -1767,7 +1767,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorAfter($movies[3])
+            Query::cursorAfter($movies[3]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
@@ -1777,7 +1777,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorAfter($movies[4])
+            Query::cursorAfter($movies[4]->getId())
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
@@ -1786,7 +1786,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorAfter($movies[5])
+            Query::cursorAfter($movies[5]->getId())
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -1807,7 +1807,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorBefore($movies[5])
+            Query::cursorBefore($movies[5]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[3]['name'], $documents[0]['name']);
@@ -1817,7 +1817,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorBefore($movies[3])
+            Query::cursorBefore($movies[3]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[1]['name'], $documents[0]['name']);
@@ -1827,7 +1827,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorBefore($movies[2])
+            Query::cursorBefore($movies[2]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -1837,7 +1837,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorBefore($movies[1])
+            Query::cursorBefore($movies[1]->getId())
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -1846,7 +1846,7 @@ trait DocumentTests
             Query::limit(2),
             Query::offset(0),
             Query::orderDesc('year'),
-            Query::cursorBefore($movies[0])
+            Query::cursorBefore($movies[0]->getId())
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -1868,7 +1868,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorAfter($movies[1])
+            Query::cursorAfter($movies[1]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
@@ -1879,7 +1879,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorAfter($movies[3])
+            Query::cursorAfter($movies[3]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[4]['name'], $documents[0]['name']);
@@ -1890,7 +1890,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorAfter($movies[4])
+            Query::cursorAfter($movies[4]->getId())
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[5]['name'], $documents[0]['name']);
@@ -1900,7 +1900,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorAfter($movies[5])
+            Query::cursorAfter($movies[5]->getId())
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -1922,7 +1922,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorBefore($movies[5])
+            Query::cursorBefore($movies[5]->getId())
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -1934,7 +1934,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorBefore($movies[4])
+            Query::cursorBefore($movies[4]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
@@ -1945,7 +1945,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorBefore($movies[2])
+            Query::cursorBefore($movies[2]->getId())
         ]);
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -1956,7 +1956,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorBefore($movies[1])
+            Query::cursorBefore($movies[1]->getId())
         ]);
         $this->assertEquals(1, count($documents));
         $this->assertEquals($movies[0]['name'], $documents[0]['name']);
@@ -1966,7 +1966,7 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc('price'),
             Query::orderAsc('year'),
-            Query::cursorBefore($movies[0])
+            Query::cursorBefore($movies[0]->getId())
         ]);
         $this->assertEmpty(count($documents));
     }
@@ -1984,7 +1984,7 @@ trait DocumentTests
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('price'),
-            Query::cursorAfter($documentsTest[0])
+            Query::cursorAfter($documentsTest[0]->getId())
         ]);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
@@ -2003,7 +2003,7 @@ trait DocumentTests
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('$id'),
-            Query::cursorAfter($documentsTest[0])
+            Query::cursorAfter($documentsTest[0]->getId())
         ]);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
@@ -2024,7 +2024,7 @@ trait DocumentTests
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('$createdAt'),
-            Query::cursorAfter($documentsTest[0])
+            Query::cursorAfter($documentsTest[0]->getId())
         ]);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
@@ -2044,7 +2044,7 @@ trait DocumentTests
             Query::limit(1),
             Query::offset(0),
             Query::orderDesc('$updatedAt'),
-            Query::cursorAfter($documentsTest[0])
+            Query::cursorAfter($documentsTest[0]->getId())
         ]);
 
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
@@ -2535,7 +2535,7 @@ trait DocumentTests
 
         $first = $documents[0];
         $documents = [];
-        static::getDatabase()->foreach('movies', queries: [Query::limit(2), Query::cursorAfter($first)], callback: function ($document) use (&$documents) {
+        static::getDatabase()->foreach('movies', queries: [Query::limit(2), Query::cursorAfter($first->getId())], callback: function ($document) use (&$documents) {
             $documents[] = $document;
         });
         $this->assertEquals(5, count($documents));
@@ -2554,7 +2554,7 @@ trait DocumentTests
          * Test, cursor before throws error
          */
         try {
-            static::getDatabase()->foreach('movies', queries: [Query::cursorBefore($documents[0]), Query::offset(2)], callback: function ($document) use (&$documents) {
+            static::getDatabase()->foreach('movies', queries: [Query::cursorBefore($documents[0]->getId()), Query::offset(2)], callback: function ($document) use (&$documents) {
                 $documents[] = $document;
             });
 
@@ -3467,7 +3467,7 @@ trait DocumentTests
             collection: 'bulk_delete',
             queries: [
                 Query::select([...$selects, '$createdAt']),
-                Query::cursorAfter($docs[6]),
+                Query::cursorAfter($docs[6]->getId()),
                 Query::greaterThan('$createdAt', '2000-01-01'),
                 Query::orderAsc('$createdAt'),
                 Query::orderAsc(),

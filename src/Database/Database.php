@@ -334,6 +334,8 @@ class Database
 
     protected ?\DateTime $timestamp = null;
 
+    protected ?Document $cursor = null;
+
     protected bool $resolveRelationships = true;
 
     protected bool $checkRelationshipsExist = true;
@@ -610,6 +612,26 @@ class Database
             $result = $callback();
         } finally {
             $this->timestamp = $previous;
+        }
+        return $result;
+    }
+
+    /**
+     * Executes $callback with $cursor Document
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function withCursor(?Document $cursor, callable $callback): mixed
+    {
+        $previous = $this->cursor;
+        $this->cursor = $cursor;
+
+        try {
+            $result = $callback();
+        } finally {
+            $this->cursor = $previous;
         }
         return $result;
     }
@@ -4358,10 +4380,6 @@ class Database
         $limit = $grouped['limit'];
         $cursor = $grouped['cursor'];
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
-        }
-
         unset($updates['$id']);
         unset($updates['$createdAt']);
         unset($updates['$tenant']);
@@ -4403,7 +4421,7 @@ class Database
             ];
 
             if (!empty($last)) {
-                $new[] = Query::cursorAfter($last);
+                $new[] = Query::cursorAfter($last->getId());
             }
 
             $batch = $this->silent(fn () => $this->find(
@@ -5755,13 +5773,8 @@ class Database
         $grouped = Query::groupByType($queries);
         $limit = $grouped['limit'];
         $cursor = $grouped['cursor'];
-
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("Cursor document must be from the same Collection.");
-        }
-
         $originalLimit = $limit;
-        $last = $cursor;
+        $last = null;
         $modified = 0;
 
         while (true) {
@@ -5775,17 +5788,21 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (!empty($last)) {
-                $new[] = Query::cursorAfter($last);
+            if (!empty($cursor)) {
+                $new[] = Query::cursorAfter($cursor);
             }
 
             /**
              * @var array<Document> $batch
              */
-            $batch = $this->silent(fn () => $this->find(
-                $collection->getId(),
-                array_merge($new, $queries),
-                forPermission: Database::PERMISSION_DELETE
+
+            $batch = $this->silent(fn () => $this->withCursor(
+                $last,
+                fn () => $this->find(
+                    $collection->getId(),
+                    array_merge($new, $queries),
+                    forPermission: Database::PERMISSION_DELETE
+                )
             ));
 
             if (empty($batch)) {
@@ -5795,7 +5812,16 @@ class Database
             $internalIds = [];
             $permissionIds = [];
             foreach ($batch as $document) {
+                if (empty($document->getInternalId())){
+                    throw new QueryException('$internalId must not be empty');
+                }
+
                 $internalIds[] = $document->getInternalId();
+
+                if (!isset($document['$permissions'])) {
+                    throw new QueryException('$permissions key is missing');
+                }
+
                 if (!empty($document->getPermissions())) {
                     $permissionIds[] = $document->getId();
                 }
@@ -5808,6 +5834,10 @@ class Database
                 }
 
                 // Check if document was updated after the request timestamp
+                if (empty($document->getUpdatedAt())){
+                    throw new QueryException('$updatedAt must not be empty');
+                }
+
                 try {
                     $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
                 } catch (Exception $e) {
@@ -5818,6 +5848,16 @@ class Database
                     throw new ConflictException('Document was updated after the request timestamp');
                 }
             }
+
+            $last = $batch[array_key_last($batch)];
+            $cursor = $last->getId();
+            /**
+             * Since we delete data, no cursor will be found later on so we need to assign a payload
+             * Independent Cursor data regardless to find selects queries
+             * todo: add specific selects... (order by , $id, $internalId))
+             * Do we need silent here?
+             */
+            $last = $this->silent(fn () => $this->getDocument($collection->getId(), $cursor));
 
             $this->withTransaction(function () use ($collection, $internalIds, $permissionIds) {
                 $this->adapter->deleteDocuments(
@@ -5845,8 +5885,6 @@ class Database
             } elseif ($originalLimit && $modified >= $originalLimit) {
                 break;
             }
-
-            $last = \end($batch);
         }
 
         $this->trigger(self::EVENT_DOCUMENTS_DELETE, new Document([
@@ -5960,14 +5998,26 @@ class Database
         $offset = $grouped['offset'];
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
-        $cursor = $grouped['cursor'];
+        $cursorId = $grouped['cursor'];
+        $cursor = [];
         $cursorDirection = $grouped['cursorDirection'];
 
-        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
-        }
+        if (!empty($cursorId)) {
+            if (!is_null($this->cursor) && !$this->cursor->isEmpty()) {
+                $cursor = $this->cursor;
+            } else {
+                /**
+                 * todo: add specific select queries, Only what you need for the cursor
+                 */
+                $cursor = $this->getDocument($collection->getId(), $cursorId);
+            }
 
-        $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
+            if ($cursor->isEmpty()) {
+                throw new DatabaseException("Cursor not found");
+            }
+
+            $cursor = $this->encode($collection, $cursor)->getArrayCopy();
+        }
 
         /**  @var array<Query> $queries */
         $queries = \array_merge(
@@ -6105,7 +6155,7 @@ class Database
                     array_unshift($newQueries, Query::offset(0));
                 }
 
-                array_unshift($newQueries, Query::cursorAfter($latestDocument));
+                array_unshift($newQueries, Query::cursorAfter($latestDocument->getId()));
             }
             if (!$limitExists) {
                 $newQueries[] = Query::limit($limit);

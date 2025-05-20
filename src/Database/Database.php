@@ -5839,7 +5839,7 @@ class Database
             $last = $batch[array_key_last($batch)];
             $cursor = $last->getId();
             /**
-             * Independent Cursor data.
+             * Independent Cursor data regardless to find selects queries
              * todo: add specific selects... (order by , $id, $internalId))
              * Do we need silent here?
              */

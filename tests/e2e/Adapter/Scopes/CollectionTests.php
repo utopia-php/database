@@ -1439,4 +1439,55 @@ trait CollectionTests
 
         $this->assertTrue($result->isEmpty());
     }
+
+    public function testSetGlobalCollection(): void
+    {
+        $db = static::getDatabase();
+
+        $collectionId = 'globalCollection';
+
+        // set collection as global
+        $db->setGlobalCollections([$collectionId]);
+
+        // metadata collection should not contain tenant in the cache key
+        [$collectionKey, $documentKey, $hashKey] = $db->getCacheKeys(
+            Database::METADATA,
+            $collectionId,
+            []
+        );
+
+        $this->assertNotEmpty($collectionKey);
+        $this->assertNotEmpty($documentKey);
+        $this->assertNotEmpty($hashKey);
+
+        if ($db->getSharedTables()) {
+            $this->assertStringNotContainsString($db->getAdapter()->getTenant(), $collectionKey);
+        }
+
+        // non global collection should containt tenant in the cache key
+        $nonGlobalCollectionId = 'nonGlobalCollection';
+        [$collectionKeyRegular] = $db->getCacheKeys(
+            Database::METADATA,
+            $nonGlobalCollectionId
+        );
+        if ($db->getSharedTables()) {
+            $this->assertStringContainsString($db->getAdapter()->getTenant(), $collectionKeyRegular);
+        }
+
+        // Non metadata collection should contain tenant in the cache key
+        [$collectionKey, $documentKey, $hashKey] = $db->getCacheKeys(
+            $collectionId,
+            ID::unique(),
+            []
+        );
+
+        $this->assertNotEmpty($collectionKey);
+        $this->assertNotEmpty($documentKey);
+        $this->assertNotEmpty($hashKey);
+
+        if ($db->getSharedTables()) {
+            $this->assertStringContainsString($db->getAdapter()->getTenant(), $collectionKey);
+        }
+
+    }
 }

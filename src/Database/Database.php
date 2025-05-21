@@ -4225,7 +4225,7 @@ class Database
             }
         }
 
-        $limit = Query::getLimitQueries($queries);
+        $limit = Query::getLimitQuery($queries);
 
         $cursor = new Document();
         $cursorQuery = Query::getCursorQueries($queries);
@@ -5624,7 +5624,7 @@ class Database
             }
         }
 
-        $limit = Query::getLimitQueries($queries);
+        $limit = Query::getLimitQuery($queries);
 
         $cursor = new Document();
         $cursorQuery = Query::getCursorQueries($queries);
@@ -5849,7 +5849,7 @@ class Database
 
         $filters = Query::getFilterQueries($queries);
         $selects = Query::getSelectQueries($queries);
-        $limit = Query::getLimitQueries($queries, 25);
+        $limit = Query::getLimitQuery($queries, 25);
         $offset = Query::getOffsetQueries($queries, 0);
         $orders = Query::getOrderQueries($queries);
 
@@ -5977,7 +5977,7 @@ class Database
         $offset = Query::getOffsetQueries($queries);
 
         $limitExists = true;
-        $limit = Query::getLimitQueries($queries);
+        $limit = Query::getLimitQuery($queries);
         if (is_null($limit)) {
             $limit = 25;
             $limitExists = false;

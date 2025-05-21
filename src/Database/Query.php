@@ -802,15 +802,28 @@ class Query
     }
 
     /**
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    public static function getLimitQueries(array $queries): array
+    {
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_LIMIT){
+                return [clone $query];
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * @param array<Query> $queries
      * @param int|null $default
      * @return int|null
      */
-    public static function getLimitQueries(array $queries, ?int $default = null): ?int
+    public static function getLimitQuery(array $queries, ?int $default = null): ?int
     {
-        $queries = self::getByType($queries, [
-            Query::TYPE_LIMIT,
-        ]);
+        $queries = self::getLimitQueries($queries);
 
         if (empty($queries)) {
             return $default;

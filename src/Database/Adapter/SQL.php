@@ -1690,30 +1690,18 @@ abstract class SQL extends Adapter
             return '*';
         }
 
-        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
+        $internalKeys = [
+            '$id',
+            '$internalId',
+            '$permissions',
+            '$createdAt',
+            '$updatedAt',
+        ];
 
-        $selections[] = $this->getInternalKeyForAttribute('$id');
-        $selections[] = $this->getInternalKeyForAttribute('$permissions');
+        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
 
-        if (\in_array('$internalId', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$internalId');
-            $selections = \array_diff($selections, ['$internalId']);
-        }
-        if (\in_array('$createdAt', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$createdAt');
-            $selections = \array_diff($selections, ['$createdAt']);
-        }
-        if (\in_array('$updatedAt', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$updatedAt');
-            $selections = \array_diff($selections, ['$updatedAt']);
-        }
-        if (\in_array('$collection', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$collection');
-            $selections = \array_diff($selections, ['$collection']);
-        }
-        if (\in_array('$tenant', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$tenant');
-            $selections = \array_diff($selections, ['$tenant']);
+        foreach ($internalKeys as $internalKey) {
+            $selections[] = $this->getInternalKeyForAttribute($internalKey);
         }
 
         if (!empty($prefix)) {
@@ -1726,7 +1714,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        return \implode(', ', $selections);
+        return \implode(',', $selections);
     }
 
     protected function getInternalKeyForAttribute(string $attribute): string

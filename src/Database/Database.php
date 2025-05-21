@@ -1047,6 +1047,16 @@ class Database
     }
 
     /**
+     * Clear global collections
+     *
+     * @return void
+     */
+    public function resetGlobalCollections(): void
+    {
+        $this->globalCollections = [];
+    }
+
+    /**
      * Get list of keywords that cannot be used
      *
      * @return string[]

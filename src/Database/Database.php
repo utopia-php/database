@@ -1046,6 +1046,11 @@ class Database
         return \array_keys($this->globalCollections);
     }
 
+    public function resetGlobalCollections(): void
+    {
+        $this->globalCollections = [];
+    }
+
     /**
      * Get list of keywords that cannot be used
      *

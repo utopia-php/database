@@ -1489,5 +1489,8 @@ trait CollectionTests
             $this->assertStringContainsString((string)$db->getAdapter()->getTenant(), $collectionKey);
         }
 
+        $db->resetGlobalCollections();
+        $this->assertEmpty($db->getGlobalCollections());
+
     }
 }

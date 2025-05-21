@@ -1046,6 +1046,11 @@ class Database
         return \array_keys($this->globalCollections);
     }
 
+    /**
+     * Clear global collections
+     *
+     * @return void
+     */
     public function resetGlobalCollections(): void
     {
         $this->globalCollections = [];

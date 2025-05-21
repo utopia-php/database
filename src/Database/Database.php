@@ -3026,10 +3026,10 @@ class Database
         /**
          * For security check
          */
-        if (!empty($selects)) {
-            //$selects[] = Query::select('$id'); // Do we need this?
-            $selects[] = Query::select('$permissions',  system: true);
-        }
+//        if (!empty($selects)) {
+//            //$selects[] = Query::select('$id'); // Do we need this?
+//            $selects[] = Query::select('$permissions',  system: true);
+//        }
 
         $context = new QueryContext();
         $context->add($collection);
@@ -3096,10 +3096,16 @@ class Database
         if ($cached) {
             $document = new Document($cached);
 
+            $permissions = new Document([
+                '$permissions' => $document->getAttribute('$perms')
+            ]);
+
+            $document->removeAttribute('$perms');
+
             if ($collection->getId() !== self::METADATA) {
                 if (!$validator->isValid([
                     ...$collection->getRead(),
-                    ...($documentSecurity ? $document->getRead() : [])
+                    ...($documentSecurity ? $permissions->getRead() : [])
                 ])) {
                     return new Document();
                 }
@@ -3117,6 +3123,10 @@ class Database
             $forUpdate
         );
 
+        $permissions = new Document([
+            '$permissions' => $document->getAttribute('$perms')
+        ]);
+
         if ($document->isEmpty()) {
             return $document;
         }
@@ -3126,7 +3136,7 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
                 ...$collection->getRead(),
-                ...($documentSecurity ? $document->getRead() : [])
+                ...($documentSecurity ? $permissions->getRead() : [])
             ])) {
                 return new Document();
             }
@@ -3158,22 +3168,35 @@ class Database
         // Remove internal attributes if not queried for select query
         // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
         // All internal attributes are default selected attributes for (MongoDB)
-        if (!empty($selects)) {
-            $selectedAttributes = array_map(
-                fn ($q) => $q->getAttribute(),
-                array_filter($selects, fn ($q) => $q->isSystem() === false)
-            );
 
-            if (!in_array('*', $selectedAttributes)){
-                foreach ($this->getInternalAttributes() as $internalAttribute) {
-                    if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
-                        $document->removeAttribute($internalAttribute['$id']);
-                    }
-                }
+//        if (!empty($selects)) {
+//            $selectedAttributes = array_map(
+//                fn ($q) => $q->getAttribute(),
+//                array_filter($selects, fn ($q) => $q->isSystem() === false)
+//            );
+//
+//            if (!in_array('*', $selectedAttributes)){
+//                foreach ($this->getInternalAttributes() as $internalAttribute) {
+//                    if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
+//                        $document->removeAttribute($internalAttribute['$id']);
+//                    }
+//                }
+//            }
+//        }
+
+        if (!empty($selects)){
+            $selectedAttributes = array_map(fn ($q) => $q->getAttribute(), $selects);
+
+            if (!in_array('*', $selectedAttributes) && !in_array('$collection', $selectedAttributes)) {
+                $document->removeAttribute('$collection');
             }
+
+            var_dump($selectedAttributes);
         }
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
+
+        $document->removeAttribute('$perms');
 
         return $document;
     }
@@ -6247,6 +6270,11 @@ class Database
         $new = new Document();
 
         foreach ($document as $key => $value) {
+            if($key === '$perms'){
+                $new->setAttribute($key, $value);
+                continue;
+            }
+
             $alias = Query::DEFAULT_ALIAS;
             $attributeKey = '';
 
@@ -6338,6 +6366,12 @@ class Database
         $new = new Document();
 
         foreach ($document as $key => $value) {
+
+            if($key === '$perms'){
+                $new->setAttribute($key, $value);
+                continue;
+            }
+
             $alias = Query::DEFAULT_ALIAS;
             $attributeKey = '';
 

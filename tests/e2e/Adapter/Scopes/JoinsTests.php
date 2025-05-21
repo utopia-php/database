@@ -374,7 +374,7 @@ trait JoinsTests
             '__sessions',
             $session2->getId(),
             [
-                //Query::select('$permissions', as: '___permissions'),
+                Query::select('$permissions', as: '___permissions'),
                 Query::select('$id', as: '___uid'),
                 Query::select('$internalId', as: '___id'),
                 Query::select('$createdAt', as: '___created'),
@@ -384,10 +384,7 @@ trait JoinsTests
             ]
         );
 
-//var_dump($document);
-
-        //$this->assertArrayHasKey('___permissions', $document);
-
+        $this->assertArrayHasKey('___permissions', $document);
         $this->assertArrayHasKey('___uid', $document);
         $this->assertArrayNotHasKey('$id', $document);
         $this->assertArrayHasKey('___id', $document);

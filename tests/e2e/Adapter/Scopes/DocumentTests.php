@@ -776,7 +776,7 @@ trait DocumentTests
             Query::select('string'),
             Query::select('integer_signed'),
         ]);
-
+var_dump($document);
         $this->assertEmpty($document->getId());
         $this->assertFalse($document->isEmpty());
         $this->assertIsString($document->getAttribute('string'));

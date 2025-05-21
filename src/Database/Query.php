@@ -833,15 +833,28 @@ class Query
     }
 
     /**
+     * @param  array<Query> $queries
+     * @return array<Query>
+     */
+    public static function getOffsetQueries(array $queries): array
+    {
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_OFFSET){
+                return [clone $query];
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * @param array<Query> $queries
      * @param int|null $default
      * @return int|null
      */
-    public static function getOffsetQueries(array $queries, ?int $default = null): ?int
+    public static function getOffsetQuery(array $queries, ?int $default = null): ?int
     {
-        $queries = self::getByType($queries, [
-            Query::TYPE_OFFSET,
-        ]);
+        $queries = self::getOffsetQueries($queries);
 
         if (empty($queries)) {
             return $default;

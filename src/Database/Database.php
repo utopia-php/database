@@ -5850,7 +5850,7 @@ class Database
         $filters = Query::getFilterQueries($queries);
         $selects = Query::getSelectQueries($queries);
         $limit = Query::getLimitQuery($queries, 25);
-        $offset = Query::getOffsetQueries($queries, 0);
+        $offset = Query::getOffsetQuery($queries, 0);
         $orders = Query::getOrderQueries($queries);
 
         //$grouped = Query::groupByType($queries);
@@ -5974,7 +5974,7 @@ class Database
             }
         }
 
-        $offset = Query::getOffsetQueries($queries);
+        $offset = Query::getOffsetQuery($queries);
 
         $limitExists = true;
         $limit = Query::getLimitQuery($queries);

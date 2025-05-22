@@ -543,7 +543,7 @@ class SQLite extends MariaDB
         }
 
         // Insert manual id if set
-        if (!empty($document->getInternalId())) {
+        if (!empty($document->getSequence())) {
             $values[] = '_id';
             $columns[] = "_id";
         }
@@ -560,8 +560,8 @@ class SQLite extends MariaDB
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
         // Bind internal id if set
-        if (!empty($document->getInternalId())) {
-            $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
+        if (!empty($document->getSequence())) {
+            $stmt->bindValue(':_id', $document->getSequence(), PDO::PARAM_STR);
         }
 
         $attributeIndex = 0;
@@ -609,7 +609,7 @@ class SQLite extends MariaDB
             $statment->execute();
             $last = $statment->fetch();
 
-            $document['$internalId'] = $last['id'];
+            $document['$sequence'] = $last['id'];
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();

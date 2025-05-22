@@ -564,7 +564,7 @@ class MariaDB extends SQL
                 $collection = $this->getDocument(Database::METADATA, $collection);
                 $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
 
-                $junction = $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
+                $junction = $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
 
                 if (!\is_null($newKey)) {
                     $sql = "ALTER TABLE {$junction} RENAME COLUMN `{$key}` TO `{$newKey}`;";
@@ -648,12 +648,12 @@ class MariaDB extends SQL
                 $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
 
                 $junction = $side === Database::RELATION_SIDE_PARENT
-                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId())
-                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId());
+                    ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence())
+                    : $this->getSQLTable('_' . $relatedCollection->getSequence() . '_' . $collection->getSequence());
 
                 $perms = $side === Database::RELATION_SIDE_PARENT
-                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId() . '_perms')
-                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId() . '_perms');
+                    ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence() . '_perms')
+                    : $this->getSQLTable('_' . $relatedCollection->getSequence() . '_' . $collection->getSequence() . '_perms');
 
                 $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
                 break;
@@ -718,7 +718,7 @@ class MariaDB extends SQL
         }
 
         /**
-         * We do not have internalId's added to list, since we check only for array field
+         * We do not have sequence's added to list, since we check only for array field
          */
         $collectionAttributes = \json_decode($collection->getAttribute('attributes', []), true);
 
@@ -843,7 +843,7 @@ class MariaDB extends SQL
             }
 
             // Insert internal ID if set
-            if (!empty($document->getInternalId())) {
+            if (!empty($document->getSequence())) {
                 $bindKey = '_id';
                 $columns .= "_id, ";
                 $columnNames .= ':' . $bindKey . ', ';
@@ -860,8 +860,8 @@ class MariaDB extends SQL
 
             $stmt->bindValue(':_uid', $document->getId());
 
-            if (!empty($document->getInternalId())) {
-                $stmt->bindValue(':_id', $document->getInternalId());
+            if (!empty($document->getSequence())) {
+                $stmt->bindValue(':_id', $document->getSequence());
             }
 
             $attributeIndex = 0;
@@ -905,10 +905,10 @@ class MariaDB extends SQL
 
             $stmt->execute();
 
-            $document['$internalId'] = $this->pdo->lastInsertId();
+            $document['$sequence'] = $this->pdo->lastInsertId();
 
-            if (empty($document['$internalId'])) {
-                throw new DatabaseException('Error creating document empty "$internalId"');
+            if (empty($document['$sequence'])) {
+                throw new DatabaseException('Error creating document empty "$sequence"');
             }
 
             if (isset($stmtPermissions)) {
@@ -943,15 +943,15 @@ class MariaDB extends SQL
 
             $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
 
-            $hasInternalId = null;
+            $hasSequence = null;
             foreach ($documents as $document) {
                 $attributes = $document->getAttributes();
                 $attributeKeys = [...$attributeKeys, ...\array_keys($attributes)];
 
-                if ($hasInternalId === null) {
-                    $hasInternalId = !empty($document->getInternalId());
-                } elseif ($hasInternalId == empty($document->getInternalId())) {
-                    throw new DatabaseException('All documents must have an internalId if one is set');
+                if ($hasSequence === null) {
+                    $hasSequence = !empty($document->getSequence());
+                } elseif ($hasSequence == empty($document->getSequence())) {
+                    throw new DatabaseException('All documents must have an sequence if one is set');
                 }
             }
             $attributeKeys = array_unique($attributeKeys);
@@ -980,8 +980,8 @@ class MariaDB extends SQL
                 $attributes['_updatedAt'] = $document->getUpdatedAt();
                 $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                if (!empty($document->getInternalId())) {
-                    $attributes['_id'] = $document->getInternalId();
+                if (!empty($document->getSequence())) {
+                    $attributes['_id'] = $document->getSequence();
                     $attributeKeys[] = '_id';
                 } else {
                     $documentIds[] = $document->getId();
@@ -1051,15 +1051,15 @@ class MariaDB extends SQL
                 $stmtPermissions?->execute();
             }
 
-            $internalIds = $this->getInternalIds(
+            $sequences = $this->getSequences(
                 $collection,
                 $documentIds,
                 $documentTenants
             );
 
             foreach ($documents as $document) {
-                if (isset($internalIds[$document->getId()])) {
-                    $document['$internalId'] = $internalIds[$document->getId()];
+                if (isset($sequences[$document->getId()])) {
+                    $document['$sequence'] = $sequences[$document->getId()];
                 }
             }
         } catch (PDOException $e) {
@@ -1253,7 +1253,7 @@ class MariaDB extends SQL
             $sql = "
                 UPDATE {$this->getSQLTable($name)}
                 SET {$columns} _uid = :_newUid
-                WHERE _id=:_internalId
+                WHERE _id=:_sequence
                 {$this->getTenantQuery($collection)}
 			";
 
@@ -1261,7 +1261,7 @@ class MariaDB extends SQL
 
             $stmt = $this->getPDO()->prepare($sql);
 
-            $stmt->bindValue(':_internalId', $document->getInternalId());
+            $stmt->bindValue(':_sequence', $document->getSequence());
             $stmt->bindValue(':_newUid', $document->getId());
 
             if ($this->sharedTables) {
@@ -1331,8 +1331,8 @@ class MariaDB extends SQL
                 $attributes['_updatedAt'] = $document->getUpdatedAt();
                 $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                if (!empty($document->getInternalId())) {
-                    $attributes['_id'] = $document->getInternalId();
+                if (!empty($document->getSequence())) {
+                    $attributes['_id'] = $document->getSequence();
                 } else {
                     $documentIds[] = $document->getId();
                 }
@@ -1495,15 +1495,15 @@ class MariaDB extends SQL
                 $stmtAddPermissions->execute();
             }
 
-            $internalIds = $this->getInternalIds(
+            $sequences = $this->getSequences(
                 $collection,
                 $documentIds,
                 $documentTenants
             );
 
             foreach ($changes as $change) {
-                if (isset($internalIds[$change->getNew()->getId()])) {
-                    $change->getNew()->setAttribute('$internalId', $internalIds[$change->getNew()->getId()]);
+                if (isset($sequences[$change->getNew()->getId()])) {
+                    $change->getNew()->setAttribute('$sequence', $sequences[$change->getNew()->getId()]);
                 }
             }
         } catch (PDOException $e) {
@@ -1663,12 +1663,12 @@ class MariaDB extends SQL
 
             // Get most dominant/first order attribute
             if ($i === 0 && !empty($cursor)) {
-                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
+                $orderMethodSequence = Query::TYPE_GREATER; // To preserve natural order
                 $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                    $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderMethodSequence = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                     $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                 }
 
@@ -1686,7 +1686,7 @@ class MariaDB extends SQL
                         OR (
                             {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
                             AND
-                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodSequence)} {$cursor['$sequence']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1710,7 +1710,7 @@ class MariaDB extends SQL
                     : Query::TYPE_LESSER;
             }
 
-            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
+            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$sequence']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1788,7 +1788,7 @@ class MariaDB extends SQL
                 unset($results[$index]['_uid']);
             }
             if (\array_key_exists('_id', $document)) {
-                $results[$index]['$internalId'] = $document['_id'];
+                $results[$index]['$sequence'] = $document['_id'];
                 unset($results[$index]['_id']);
             }
             if (\array_key_exists('_tenant', $document)) {

@@ -163,7 +163,7 @@ class Database
             'filters' => [],
         ],
         [
-            '$id' => '$internalId',
+            '$id' => '$sequence',
             'type' => self::VAR_STRING,
             'size' => Database::LENGTH_KEY,
             'required' => true,
@@ -2507,7 +2507,7 @@ class Database
         $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
 
         if ($type === self::RELATION_MANY_TO_MANY) {
-            $this->silent(fn () => $this->createCollection('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId(), [
+            $this->silent(fn () => $this->createCollection('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence(), [
                 new Document([
                     '$id' => $id,
                     'key' => $id,
@@ -4855,8 +4855,8 @@ class Database
     private function getJunctionCollection(Document $collection, Document $relatedCollection, string $side): string
     {
         return $side === Database::RELATION_SIDE_PARENT
-            ? '_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId()
-            : '_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId();
+            ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
+            : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
     }
 
     /**
@@ -5788,10 +5788,10 @@ class Database
                 break;
             }
 
-            $internalIds = [];
+            $sequences = [];
             $permissionIds = [];
             foreach ($batch as $document) {
-                $internalIds[] = $document->getInternalId();
+                $sequences[] = $document->getSequence();
                 if (!empty($document->getPermissions())) {
                     $permissionIds[] = $document->getId();
                 }
@@ -5815,10 +5815,10 @@ class Database
                 }
             }
 
-            $this->withTransaction(function () use ($collection, $internalIds, $permissionIds) {
+            $this->withTransaction(function () use ($collection, $sequences, $permissionIds) {
                 $this->adapter->deleteDocuments(
                     $collection->getId(),
-                    $internalIds,
+                    $sequences,
                     $permissionIds
                 );
             });
@@ -6539,7 +6539,7 @@ class Database
         $selections = \array_merge($selections, $relationshipSelections);
 
         $selections[] = '$id';
-        $selections[] = '$internalId';
+        $selections[] = '$sequence';
         $selections[] = '$collection';
         $selections[] = '$createdAt';
         $selections[] = '$updatedAt';

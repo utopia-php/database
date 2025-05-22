@@ -20,7 +20,7 @@ class Select extends Base
      */
     protected const INTERNAL_ATTRIBUTES = [
         '$id',
-        '$internalId',
+        '$sequence',
         '$createdAt',
         '$updatedAt',
         '$permissions',

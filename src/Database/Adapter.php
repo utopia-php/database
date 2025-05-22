@@ -747,12 +747,12 @@ abstract class Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $internalIds
+     * @param array<string> $sequences
      * @param array<string> $permissionIds
      *
      * @return int
      */
-    abstract public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int;
+    abstract public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int;
 
     /**
      * Find Documents

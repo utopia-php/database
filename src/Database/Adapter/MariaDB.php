@@ -905,10 +905,10 @@ class MariaDB extends SQL
 
             $stmt->execute();
 
-            $document['$internalId'] = $this->pdo->lastInsertId();
+            $document['$sequence'] = $this->pdo->lastInsertId();
 
-            if (empty($document['$internalId'])) {
-                throw new DatabaseException('Error creating document empty "$internalId"');
+            if (empty($document['$sequence'])) {
+                throw new DatabaseException('Error creating document empty "$sequence"');
             }
 
             if (isset($stmtPermissions)) {
@@ -1051,15 +1051,15 @@ class MariaDB extends SQL
                 $stmtPermissions?->execute();
             }
 
-            $internalIds = $this->getInternalIds(
+            $sequences = $this->getInternalIds(
                 $collection,
                 $documentIds,
                 $documentTenants
             );
 
             foreach ($documents as $document) {
-                if (isset($internalIds[$document->getId()])) {
-                    $document['$internalId'] = $internalIds[$document->getId()];
+                if (isset($sequences[$document->getId()])) {
+                    $document['$sequence'] = $sequences[$document->getId()];
                 }
             }
         } catch (PDOException $e) {
@@ -1495,15 +1495,15 @@ class MariaDB extends SQL
                 $stmtAddPermissions->execute();
             }
 
-            $internalIds = $this->getInternalIds(
+            $sequences = $this->getInternalIds(
                 $collection,
                 $documentIds,
                 $documentTenants
             );
 
             foreach ($changes as $change) {
-                if (isset($internalIds[$change->getNew()->getId()])) {
-                    $change->getNew()->setAttribute('$internalId', $internalIds[$change->getNew()->getId()]);
+                if (isset($sequences[$change->getNew()->getId()])) {
+                    $change->getNew()->setAttribute('$sequence', $sequences[$change->getNew()->getId()]);
                 }
             }
         } catch (PDOException $e) {
@@ -1686,7 +1686,7 @@ class MariaDB extends SQL
                         OR (
                             {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
                             AND
-                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$sequence']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1710,7 +1710,7 @@ class MariaDB extends SQL
                     : Query::TYPE_LESSER;
             }
 
-            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
+            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$sequence']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1788,7 +1788,7 @@ class MariaDB extends SQL
                 unset($results[$index]['_uid']);
             }
             if (\array_key_exists('_id', $document)) {
-                $results[$index]['$internalId'] = $document['_id'];
+                $results[$index]['$sequence'] = $document['_id'];
                 unset($results[$index]['_id']);
             }
             if (\array_key_exists('_tenant', $document)) {

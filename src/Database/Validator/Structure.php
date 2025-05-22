@@ -31,7 +31,7 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
-            '$id' => '$internalId',
+            '$id' => '$sequence',
             'type' => Database::VAR_STRING,
             'size' => 255,
             'required' => false,

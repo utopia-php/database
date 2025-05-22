@@ -1030,7 +1030,7 @@ class Postgres extends SQL
             $this->execute($stmt);
             $lastInsertedId = $this->getPDO()->lastInsertId();
             // internalId can be manually as well
-            $document['$internalId'] ??= $lastInsertedId;
+            $document['$sequence'] ??= $lastInsertedId;
 
             if (isset($stmtPermissions)) {
                 $this->execute($stmtPermissions);
@@ -1085,7 +1085,7 @@ class Postgres extends SQL
             }
             $columns = '(' . \implode(', ', $columns) . ')';
 
-            $internalIds = [];
+            $sequences = [];
 
             $bindIndex = 0;
             $batchKeys = [];
@@ -1100,7 +1100,7 @@ class Postgres extends SQL
                 $attributes['_permissions'] = \json_encode($document->getPermissions());
 
                 if (!empty($document->getInternalId())) {
-                    $internalIds[$document->getId()] = true;
+                    $sequences[$document->getId()] = true;
                     $attributes['_id'] = $document->getInternalId();
                     $attributeKeys[] = '_id';
                 }
@@ -1172,11 +1172,11 @@ class Postgres extends SQL
         }
 
         foreach ($documents as $document) {
-            if (!isset($internalIds[$document->getId()])) {
-                $document['$internalId'] = $this->getDocument(
+            if (!isset($sequences[$document->getId()])) {
+                $document['$sequence'] = $this->getDocument(
                     $collection,
                     $document->getId(),
-                    [Query::select(['$internalId'])]
+                    [Query::select(['$sequence'])]
                 )->getInternalId();
             }
         }
@@ -1578,7 +1578,7 @@ class Postgres extends SQL
                         OR (
                             {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
                             AND
-                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
+                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$sequence']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1602,7 +1602,7 @@ class Postgres extends SQL
                     : Query::TYPE_LESSER;
             }
 
-            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
+            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$sequence']})";
         }
 
         // Allow order type without any order attribute, fallback to the natural order (_id)
@@ -1683,7 +1683,7 @@ class Postgres extends SQL
                 unset($results[$index]['_uid']);
             }
             if (\array_key_exists('_id', $document)) {
-                $results[$index]['$internalId'] = $document['_id'];
+                $results[$index]['$sequence'] = $document['_id'];
                 unset($results[$index]['_id']);
             }
             if (\array_key_exists('_tenant', $document)) {

@@ -609,7 +609,7 @@ class SQLite extends MariaDB
             $statment->execute();
             $last = $statment->fetch();
 
-            $document['$internalId'] = $last['id'];
+            $document['$sequence'] = $last['id'];
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();

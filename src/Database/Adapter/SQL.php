@@ -367,7 +367,7 @@ abstract class SQL extends Adapter
         $document = $document[0];
 
         if (\array_key_exists('_id', $document)) {
-            $document['$internalId'] = $document['_id'];
+            $document['$sequence'] = $document['_id'];
             unset($document['_id']);
         }
         if (\array_key_exists('_uid', $document)) {
@@ -441,12 +441,12 @@ abstract class SQL extends Adapter
         }
 
         $name = $this->filter($collection);
-        $internalIds = \array_map(fn ($document) => $document->getInternalId(), $documents);
+        $sequences = \array_map(fn ($document) => $document->getInternalId(), $documents);
 
         $sql = "
             UPDATE {$this->getSQLTable($name)}
             SET {$columns}
-            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")
+            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($sequences))) . ")
             {$this->getTenantQuery($collection)}
         ";
 
@@ -457,7 +457,7 @@ abstract class SQL extends Adapter
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        foreach ($internalIds as $id => $value) {
+        foreach ($sequences as $id => $value) {
             $stmt->bindValue(":_id_{$id}", $value);
         }
 
@@ -640,15 +640,15 @@ abstract class SQL extends Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $internalIds
+     * @param array<string> $sequences
      * @param array<string> $permissionIds
      *
      * @return int
      * @throws DatabaseException
      */
-    public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int
+    public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
     {
-        if (empty($internalIds)) {
+        if (empty($sequences)) {
             return 0;
         }
 
@@ -657,7 +657,7 @@ abstract class SQL extends Adapter
 
             $sql = "
             DELETE FROM {$this->getSQLTable($name)} 
-            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")
+            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($sequences))) . ")
             {$this->getTenantQuery($collection)}
             ";
 
@@ -665,7 +665,7 @@ abstract class SQL extends Adapter
 
             $stmt = $this->getPDO()->prepare($sql);
 
-            foreach ($internalIds as $id => $value) {
+            foreach ($sequences as $id => $value) {
                 $stmt->bindValue(":_id_{$id}", $value);
             }
 
@@ -718,7 +718,7 @@ abstract class SQL extends Adapter
      */
     protected function getInternalIds(string $collection, array $documentIds, array $documentTenants = []): array
     {
-        $internalIds = [];
+        $sequences = [];
 
         /**
          * UID, _tenant bottleneck is ~ 5000 rows since we use _uid IN query
@@ -747,10 +747,10 @@ abstract class SQL extends Adapter
             $results = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
             $stmt->closeCursor();
 
-            $internalIds = [...$internalIds, ...$results];
+            $sequences = [...$sequences, ...$results];
         }
 
-        return $internalIds;
+        return $sequences;
     }
 
     /**
@@ -1692,7 +1692,7 @@ abstract class SQL extends Adapter
 
         $internalKeys = [
             '$id',
-            '$internalId',
+            '$sequence',
             '$permissions',
             '$createdAt',
             '$updatedAt',
@@ -1721,7 +1721,7 @@ abstract class SQL extends Adapter
     {
         return match ($attribute) {
             '$id' => '_uid',
-            '$internalId' => '_id',
+            '$sequence' => '_id',
             '$collection' => '_collection',
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',

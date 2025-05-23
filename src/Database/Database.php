@@ -163,7 +163,7 @@ class Database
             'filters' => [],
         ],
         [
-            '$id' => '$internalId',
+            '$id' => '$sequence',
             'type' => self::VAR_STRING,
             'size' => Database::LENGTH_KEY,
             'required' => true,
@@ -5788,10 +5788,10 @@ class Database
                 break;
             }
 
-            $internalIds = [];
+            $sequences = [];
             $permissionIds = [];
             foreach ($batch as $document) {
-                $internalIds[] = $document->getInternalId();
+                $sequences[] = $document->getInternalId();
                 if (!empty($document->getPermissions())) {
                     $permissionIds[] = $document->getId();
                 }
@@ -5815,10 +5815,10 @@ class Database
                 }
             }
 
-            $this->withTransaction(function () use ($collection, $internalIds, $permissionIds) {
+            $this->withTransaction(function () use ($collection, $sequences, $permissionIds) {
                 $this->adapter->deleteDocuments(
                     $collection->getId(),
-                    $internalIds,
+                    $sequences,
                     $permissionIds
                 );
             });
@@ -6539,7 +6539,7 @@ class Database
         $selections = \array_merge($selections, $relationshipSelections);
 
         $selections[] = '$id';
-        $selections[] = '$internalId';
+        $selections[] = '$sequence';
         $selections[] = '$collection';
         $selections[] = '$createdAt';
         $selections[] = '$updatedAt';

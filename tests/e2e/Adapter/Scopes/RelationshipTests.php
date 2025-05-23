@@ -962,7 +962,7 @@ trait RelationshipTests
         $this->assertArrayNotHasKey('year', $make['models'][0]);
         $this->assertArrayNotHasKey('year', $make['models'][1]);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$permissions', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
@@ -979,14 +979,14 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
         $this->assertArrayHasKey('$permissions', $make);
 
         $make = static::getDatabase()->findOne('make', [
-            Query::select(['name', '$internalId']),
+            Query::select(['name', '$sequence']),
         ]);
 
         if ($make->isEmpty()) {
@@ -995,7 +995,7 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
@@ -1011,7 +1011,7 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
@@ -1027,7 +1027,7 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
@@ -1043,7 +1043,7 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
@@ -1059,7 +1059,7 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);

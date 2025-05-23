@@ -89,7 +89,7 @@ trait DocumentTests
         // Test create document with manual internal id
         $manualIdDocument = static::getDatabase()->createDocument('documents', new Document([
             '$id' => '56000',
-            '$internalId' => '56000',
+            '$sequence' => '56000',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user(ID::custom('1'))),
@@ -297,7 +297,7 @@ trait DocumentTests
         $documents = [
             new Document([
                 '$id' => 'third',
-                '$internalId' => 'third',
+                '$sequence' => 'third',
                 'string' => 'text📝',
             ]),
             new Document([
@@ -788,7 +788,7 @@ trait DocumentTests
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
         $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
         $this->assertArrayHasKey('$id', $document);
-        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertArrayHasKey('$sequence', $document);
         $this->assertArrayHasKey('$createdAt', $document);
         $this->assertArrayHasKey('$updatedAt', $document);
         $this->assertArrayHasKey('$permissions', $document);
@@ -799,7 +799,7 @@ trait DocumentTests
         ]);
 
         $this->assertArrayHasKey('$id', $document);
-        $this->assertArrayHasKey('$internalId', $document);
+        $this->assertArrayHasKey('$sequence', $document);
         $this->assertArrayHasKey('$createdAt', $document);
         $this->assertArrayHasKey('$updatedAt', $document);
         $this->assertArrayHasKey('$permissions', $document);
@@ -984,7 +984,7 @@ trait DocumentTests
         ]));
 
         return [
-            '$internalId' => $document->getInternalId()
+            '$sequence' => $document->getInternalId()
         ];
     }
 
@@ -1387,7 +1387,7 @@ trait DocumentTests
          * Test that internal ID queries are handled correctly
          */
         $documents = static::getDatabase()->find('movies', [
-            Query::equal('$internalId', [$data['$internalId']]),
+            Query::equal('$sequence', [$data['$sequence']]),
         ]);
 
         $this->assertEquals(1, count($documents));
@@ -2321,7 +2321,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
             $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);
@@ -2339,7 +2339,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
             $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);
@@ -2347,7 +2347,7 @@ trait DocumentTests
         }
 
         $documents = static::getDatabase()->find('movies', [
-            Query::select(['name', 'year', '$internalId'])
+            Query::select(['name', 'year', '$sequence'])
         ]);
 
         foreach ($documents as $document) {
@@ -2357,7 +2357,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
             $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);
@@ -2375,7 +2375,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
             $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);
@@ -2393,7 +2393,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
             $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);
@@ -2411,7 +2411,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
             $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);
@@ -2429,7 +2429,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
             $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$internalId', $document);
+            $this->assertArrayHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
             $this->assertArrayHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);
@@ -3381,7 +3381,7 @@ trait DocumentTests
         /**
          * Test Short select query, test pagination as well, Add order to select
          */
-        $selects = ['$internalId', '$id', '$collection', '$permissions', '$updatedAt'];
+        $selects = ['$sequence', '$id', '$collection', '$permissions', '$updatedAt'];
 
         $count = static::getDatabase()->deleteDocuments(
             collection: 'bulk_delete',
@@ -3692,7 +3692,7 @@ trait DocumentTests
     public function testExceptionCaseInsensitiveDuplicate(Document $document): Document
     {
         $document->setAttribute('$id', 'caseSensitive');
-        $document->setAttribute('$internalId', '200');
+        $document->setAttribute('$sequence', '200');
         static::getDatabase()->createDocument($document->getCollection(), $document);
 
         $document->setAttribute('$id', 'CaseSensitive');

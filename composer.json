@@ -1,5 +1,5 @@
 {
-    "name": "utopia-php/database",
+    "name": "gaozuogg/database",
     "description": "A simple library to manage application persistence using multiple database adapters",
     "type": "library",
     "keywords": ["php","framework", "upf", "utopia", "database"],

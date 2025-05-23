@@ -7,6 +7,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Validator\Authorization;
 
 abstract class Adapter
 {
@@ -41,6 +42,35 @@ abstract class Adapter
      * @var array<string, mixed>
      */
     protected array $metadata = [];
+
+    /**
+     * @var Authorization
+     */
+    protected Authorization $authorization;
+
+    /**
+     * @param Authorization $authorization
+     *
+     * @return $this
+     */
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+
+        return $this;
+    }
+
+    /**
+     * @return $this
+     */
+    public function clearTransformations(): self
+    {
+        $this->transformations = [
+            '*' => [],
+        ];
+
+        return $this;
+    }
 
     /**
      * @param string $key

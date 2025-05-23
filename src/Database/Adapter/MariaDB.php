@@ -1648,7 +1648,7 @@ class MariaDB extends SQL
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $orders = [];
         $alias = Query::DEFAULT_ALIAS;
@@ -1739,7 +1739,7 @@ class MariaDB extends SQL
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
@@ -1838,7 +1838,7 @@ class MariaDB extends SQL
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $binds = [];
         $where = [];
         $alias = Query::DEFAULT_ALIAS;
@@ -1856,7 +1856,7 @@ class MariaDB extends SQL
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
@@ -1911,7 +1911,7 @@ class MariaDB extends SQL
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
@@ -1929,7 +1929,7 @@ class MariaDB extends SQL
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->status) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 

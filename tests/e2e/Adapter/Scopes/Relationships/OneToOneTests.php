@@ -2219,7 +2219,7 @@ trait OneToOneTests
 
         $drivers = static::getDatabase()->getCollection('drivers');
         $licenses = static::getDatabase()->getCollection('licenses');
-        $junction = static::getDatabase()->getCollection('_' . $licenses->getInternalId() . '_' . $drivers->getInternalId());
+        $junction = static::getDatabase()->getCollection('_' . $licenses->getSequence() . '_' . $drivers->getSequence());
 
         $this->assertEquals(1, \count($drivers->getAttribute('attributes')));
         $this->assertEquals(0, \count($drivers->getAttribute('indexes')));

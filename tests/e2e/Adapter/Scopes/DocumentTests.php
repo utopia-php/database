@@ -117,7 +117,7 @@ trait DocumentTests
             'with-dash' => 'Works',
         ]));
 
-        $this->assertEquals('56000', $manualIdDocument->getInternalId());
+        $this->assertEquals('56000', $manualIdDocument->getSequence());
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
@@ -142,7 +142,7 @@ trait DocumentTests
 
         $manualIdDocument = static::getDatabase()->getDocument('documents', '56000');
 
-        $this->assertEquals('56000', $manualIdDocument->getInternalId());
+        $this->assertEquals('56000', $manualIdDocument->getSequence());
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
@@ -292,7 +292,7 @@ trait DocumentTests
         $this->assertEquals('default', $results[1]->getAttribute('string_default'));
 
         /**
-         * Expect fail, mix of internalId and no internalId
+         * Expect fail, mix of sequence and no sequence
          */
         $documents = [
             new Document([
@@ -984,7 +984,7 @@ trait DocumentTests
         ]));
 
         return [
-            '$sequence' => $document->getInternalId()
+            '$sequence' => $document->getSequence()
         ];
     }
 

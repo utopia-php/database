@@ -441,7 +441,7 @@ abstract class SQL extends Adapter
         }
 
         $name = $this->filter($collection);
-        $sequences = \array_map(fn ($document) => $document->getInternalId(), $documents);
+        $sequences = \array_map(fn ($document) => $document->getSequence(), $documents);
 
         $sql = "
             UPDATE {$this->getSQLTable($name)}
@@ -716,7 +716,7 @@ abstract class SQL extends Adapter
      * @return array<string>
      * @throws DatabaseException
      */
-    protected function getInternalIds(string $collection, array $documentIds, array $documentTenants = []): array
+    protected function getSequences(string $collection, array $documentIds, array $documentTenants = []): array
     {
         $sequences = [];
 
@@ -744,7 +744,7 @@ abstract class SQL extends Adapter
             }
 
             $stmt->execute();
-            $results = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
+            $results = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
             $stmt->closeCursor();
 
             $sequences = [...$sequences, ...$results];

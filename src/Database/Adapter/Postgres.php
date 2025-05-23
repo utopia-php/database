@@ -710,7 +710,7 @@ class Postgres extends SQL
                 $collection = $this->getDocument(Database::METADATA, $collection);
                 $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
 
-                $junction = $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId());
+                $junction = $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
 
                 if (!\is_null($newKey)) {
                     $sql = "ALTER TABLE {$junction} RENAME COLUMN \"{$key}\" TO \"{$newKey}\";";
@@ -795,12 +795,12 @@ class Postgres extends SQL
                 $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
 
                 $junction = $side === Database::RELATION_SIDE_PARENT
-                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId())
-                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId());
+                    ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence())
+                    : $this->getSQLTable('_' . $relatedCollection->getSequence() . '_' . $collection->getSequence());
 
                 $perms = $side === Database::RELATION_SIDE_PARENT
-                    ? $this->getSQLTable('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId() . '_perms')
-                    : $this->getSQLTable('_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId() . '_perms');
+                    ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence() . '_perms')
+                    : $this->getSQLTable('_' . $relatedCollection->getSequence() . '_' . $collection->getSequence() . '_perms');
 
                 $sql = "DROP TABLE {$junction}; DROP TABLE {$perms}";
                 break;
@@ -957,7 +957,7 @@ class Postgres extends SQL
         $columnNames = '';
 
         // Insert internal id if set
-        if (!empty($document->getInternalId())) {
+        if (!empty($document->getSequence())) {
             $bindKey = '_id';
             $columns .= "\"_id\", ";
             $columnNames .= ':' . $bindKey . ', ';
@@ -983,8 +983,8 @@ class Postgres extends SQL
 
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
-        if (!empty($document->getInternalId())) {
-            $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
+        if (!empty($document->getSequence())) {
+            $stmt->bindValue(':_id', $document->getSequence(), PDO::PARAM_STR);
         }
 
         $attributeIndex = 0;
@@ -1029,7 +1029,7 @@ class Postgres extends SQL
         try {
             $this->execute($stmt);
             $lastInsertedId = $this->getPDO()->lastInsertId();
-            // internalId can be manually as well
+            // Sequence can be manually set as well
             $document['$sequence'] ??= $lastInsertedId;
 
             if (isset($stmtPermissions)) {
@@ -1062,15 +1062,15 @@ class Postgres extends SQL
             $name = $this->filter($collection);
             $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
 
-            $hasInternalId = null;
+            $hasSequence = null;
             foreach ($documents as $document) {
                 $attributes = $document->getAttributes();
                 $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
 
-                if ($hasInternalId === null) {
-                    $hasInternalId = !empty($document->getInternalId());
-                } elseif ($hasInternalId == empty($document->getInternalId())) {
-                    throw new DatabaseException('All documents must have an internalId if one is set');
+                if ($hasSequence === null) {
+                    $hasSequence = !empty($document->getSequence());
+                } elseif ($hasSequence == empty($document->getSequence())) {
+                    throw new DatabaseException('All documents must have an sequence if one is set');
                 }
             }
             $attributeKeys = array_unique($attributeKeys);
@@ -1099,9 +1099,9 @@ class Postgres extends SQL
                 $attributes['_updatedAt'] = $document->getUpdatedAt();
                 $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                if (!empty($document->getInternalId())) {
+                if (!empty($document->getSequence())) {
                     $sequences[$document->getId()] = true;
-                    $attributes['_id'] = $document->getInternalId();
+                    $attributes['_id'] = $document->getSequence();
                     $attributeKeys[] = '_id';
                 }
 
@@ -1177,7 +1177,7 @@ class Postgres extends SQL
                     $collection,
                     $document->getId(),
                     [Query::select(['$sequence'])]
-                )->getInternalId();
+                )->getSequence();
             }
         }
 
@@ -1352,7 +1352,7 @@ class Postgres extends SQL
         $sql = "
 			UPDATE {$this->getSQLTable($name)}
 			SET {$columns} _uid = :_newUid 
-			WHERE _id=:_internalId
+			WHERE _id=:_sequence
 			{$this->getTenantQuery($collection)}
 		";
 
@@ -1360,7 +1360,7 @@ class Postgres extends SQL
 
         $stmt = $this->getPDO()->prepare($sql);
 
-        $stmt->bindValue(':_internalId', $document->getInternalId());
+        $stmt->bindValue(':_sequence', $document->getSequence());
         $stmt->bindValue(':_newUid', $document->getId());
 
         if ($this->sharedTables) {
@@ -1555,12 +1555,12 @@ class Postgres extends SQL
 
             // Get most dominant/first order attribute
             if ($i === 0 && !empty($cursor)) {
-                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
+                $orderMethodSequence = Query::TYPE_GREATER; // To preserve natural order
                 $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
                 if ($cursorDirection === Database::CURSOR_BEFORE) {
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                    $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+                    $orderMethodSequence = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                     $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                 }
 
@@ -1578,7 +1578,7 @@ class Postgres extends SQL
                         OR (
                             {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
                             AND
-                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$sequence']}
+                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodSequence)} {$cursor['$sequence']}
                         )
                     )";
             } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1662,7 +1662,7 @@ class Postgres extends SQL
         try {
             $stmt = $this->getPDO()->prepare($sql);
             foreach ($binds as $key => $value) {
-                if ($key === ":internalId") {
+                if ($key === ":sequence") {
                     $stmt->bindValue($key, $value, PDO::PARAM_INT);
                 } else {
                     $stmt->bindValue($key, $value, $this->getPDOType($value));
@@ -1927,8 +1927,8 @@ class Postgres extends SQL
                         default => $value
                     };
                     if ($attribute === $this->quote("_id")) {
-                        $binds[":internalId"] = $value;
-                        $conditions[] = "{$alias}.{$attribute} {$operator} :internalId";
+                        $binds[":sequence"] = $value;
+                        $conditions[] = "{$alias}.{$attribute} {$operator} :sequence";
                     } else {
                         $binds[":{$placeholder}_{$key}"] = $value;
                         $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";

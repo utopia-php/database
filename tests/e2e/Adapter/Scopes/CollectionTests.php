@@ -1392,8 +1392,8 @@ trait CollectionTests
             ],
         ]));
 
-        $this->assertNotEmpty($document->getInternalId());
-        $this->assertNotNull($document->getInternalId());
+        $this->assertNotEmpty($document->getSequence());
+        $this->assertNotNull($document->getSequence());
     }
 
     /**

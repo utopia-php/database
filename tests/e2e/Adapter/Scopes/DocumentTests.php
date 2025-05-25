@@ -791,8 +791,8 @@ var_dump($document);
         $this->assertArrayNotHasKey('$internalId', $document);
         $this->assertArrayNotHasKey('$createdAt', $document);
         $this->assertArrayNotHasKey('$updatedAt', $document);
-        $this->assertArrayNotHasKey('$permissions', $document);
-        $this->assertArrayNotHasKey('$collection', $document);
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
             Query::select('string'),
@@ -804,8 +804,8 @@ var_dump($document);
         $this->assertArrayNotHasKey('$internalId', $document);
         $this->assertArrayNotHasKey('$createdAt', $document);
         $this->assertArrayNotHasKey('$updatedAt', $document);
-        $this->assertArrayNotHasKey('$permissions', $document);
-        $this->assertArrayNotHasKey('$collection', $document);
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
             Query::select('string'),
@@ -818,7 +818,7 @@ var_dump($document);
         $this->assertArrayNotHasKey('$createdAt', $document);
         $this->assertArrayNotHasKey('$updatedAt', $document);
         $this->assertArrayHasKey('$permissions', $document);
-        $this->assertArrayNotHasKey('$collection', $document);
+        $this->assertArrayHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
             Query::select('string'),
@@ -830,8 +830,8 @@ var_dump($document);
         $this->assertArrayHasKey('$internalId', $document);
         $this->assertArrayNotHasKey('$createdAt', $document);
         $this->assertArrayNotHasKey('$updatedAt', $document);
-        $this->assertArrayNotHasKey('$permissions', $document);
-        $this->assertArrayNotHasKey('$collection', $document);
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
             Query::select('string'),
@@ -843,7 +843,7 @@ var_dump($document);
         $this->assertArrayNotHasKey('$internalId', $document);
         $this->assertArrayNotHasKey('$createdAt', $document);
         $this->assertArrayNotHasKey('$updatedAt', $document);
-        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$permissions', $document);
         $this->assertArrayHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
@@ -856,8 +856,8 @@ var_dump($document);
         $this->assertArrayNotHasKey('$internalId', $document);
         $this->assertArrayHasKey('$createdAt', $document);
         $this->assertArrayNotHasKey('$updatedAt', $document);
-        $this->assertArrayNotHasKey('$permissions', $document);
-        $this->assertArrayNotHasKey('$collection', $document);
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$collection', $document);
 
         $document = static::getDatabase()->getDocument('documents', $documentId, [
             Query::select('string'),
@@ -869,8 +869,8 @@ var_dump($document);
         $this->assertArrayNotHasKey('$internalId', $document);
         $this->assertArrayNotHasKey('$createdAt', $document);
         $this->assertArrayHasKey('$updatedAt', $document);
-        $this->assertArrayNotHasKey('$permissions', $document);
-        $this->assertArrayNotHasKey('$collection', $document);
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$collection', $document);
 
         return $document;
     }
@@ -1070,8 +1070,8 @@ var_dump($document);
         $this->assertArrayHasKey('$internalId', $document);
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$permissions', $document);
-        $this->assertArrayNotHasKey('$collection', $document);
-        $this->assertCount(2, $document);
+        $this->assertArrayHasKey('$collection', $document);
+        $this->assertCount(3, $document);
 
         $document = static::getDatabase()->getDocument('movies', $document->getId(), [
             Query::select('$internalId'),
@@ -1079,9 +1079,9 @@ var_dump($document);
 
         $this->assertArrayHasKey('$internalId', $document);
         $this->assertArrayNotHasKey('$id', $document);
-        $this->assertArrayNotHasKey('$permissions', $document);
-        $this->assertArrayNotHasKey('$collection', $document);
-        $this->assertCount(1, $document);
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$collection', $document);
+        $this->assertCount(3, $document);
     }
 
 

@@ -5803,10 +5803,12 @@ class Database
     public function find(string $collection, array $queries = [], string $forPermission = Database::PERMISSION_READ): array
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
-var_dump($collection);
+
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
+
+
 
         $context = new QueryContext();
         $context->add($collection);

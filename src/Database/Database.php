@@ -3017,19 +3017,21 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
+        /**
+         * Auth requires $permissions
+         */
+        //$selects[] = Query::select('$id'); // Do we need this?
+        //$selects[] = Query::select('$permissions',  system: true);
+        $queries = Query::addSelect($queries, Query::select('$permissions',  system: true));
+//        $queries = Query::add($queries, Query::select('$id'));
+//        $queries = Query::add($queries, Query::select('$createdAt'));
+//        $queries = Query::add($queries, Query::select('$createdAt'));
+
         $selects = Query::getSelectQueries($queries);
         if (count($selects) !== count($queries)) {
             // Do we want this check?
             throw new QueryException('Only select queries are allowed');
         }
-
-        /**
-         * For security check
-         */
-//        if (!empty($selects)) {
-//            //$selects[] = Query::select('$id'); // Do we need this?
-//            $selects[] = Query::select('$permissions',  system: true);
-//        }
 
         $context = new QueryContext();
         $context->add($collection);
@@ -3096,16 +3098,16 @@ class Database
         if ($cached) {
             $document = new Document($cached);
 
-            $permissions = new Document([
-                '$permissions' => $document->getAttribute('$perms')
-            ]);
-
-            $document->removeAttribute('$perms');
+//            $permissions = new Document([
+//                '$permissions' => $document->getAttribute('$perms')
+//            ]);
+//
+//            $document->removeAttribute('$perms');
 
             if ($collection->getId() !== self::METADATA) {
                 if (!$validator->isValid([
                     ...$collection->getRead(),
-                    ...($documentSecurity ? $permissions->getRead() : [])
+                    ...($documentSecurity ? $document->getRead() : [])
                 ])) {
                     return new Document();
                 }
@@ -3123,9 +3125,9 @@ class Database
             $forUpdate
         );
 
-        $permissions = new Document([
-            '$permissions' => $document->getAttribute('$perms')
-        ]);
+//        $permissions = new Document([
+//            '$permissions' => $document->getAttribute('$perms')
+//        ]);
 
         if ($document->isEmpty()) {
             return $document;
@@ -3136,7 +3138,7 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
                 ...$collection->getRead(),
-                ...($documentSecurity ? $permissions->getRead() : [])
+                ...($documentSecurity ? $document->getRead() : [])
             ])) {
                 return new Document();
             }
@@ -3184,15 +3186,15 @@ class Database
 //            }
 //        }
 
-        if (!empty($selects)){
-            $selectedAttributes = array_map(fn ($q) => $q->getAttribute(), $selects);
-
-            if (!in_array('*', $selectedAttributes) && !in_array('$collection', $selectedAttributes)) {
-                $document->removeAttribute('$collection');
-            }
-
-            var_dump($selectedAttributes);
-        }
+//        if (!empty($selects)){
+//            $selectedAttributes = array_map(fn ($q) => $q->getAttribute(), $selects);
+//
+//            if (!in_array('*', $selectedAttributes) && !in_array('$collection', $selectedAttributes)) {
+//                $document->removeAttribute('$collection');
+//            }
+//
+//            var_dump($selectedAttributes);
+//        }
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
@@ -5611,6 +5613,12 @@ class Database
         $context = new QueryContext();
         $context->add($collection);
 
+        $queries = Query::addSelect($queries, Query::select('$id'));
+        $queries = Query::addSelect($queries, Query::select('$permissions'));
+        $queries = Query::addSelect($queries, Query::select('$internalId'));
+        $queries = Query::addSelect($queries, Query::select('$createdAt'));
+        $queries = Query::addSelect($queries, Query::select('$updatedAt'));
+
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
@@ -5618,6 +5626,7 @@ class Database
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime()
             );
+
 
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -5794,7 +5803,7 @@ class Database
     public function find(string $collection, array $queries = [], string $forPermission = Database::PERMISSION_READ): array
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
+var_dump($collection);
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
@@ -5928,23 +5937,23 @@ class Database
             }
 
             // Remove internal attributes which are not queried
-            if (!empty($selects)) {
-                $selectedAttributes = array_map(
-                    fn ($q) => $q->getAttribute(),
-                    array_filter($selects, fn ($q) => $q->isSystem() === false)
-                );
-
-                var_dump($node);
-                var_dump($selectedAttributes);
-
-                if (!in_array('*', $selectedAttributes)){
-                    foreach ($this->getInternalAttributes() as $internalAttribute) {
-                        if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
-                            $node->removeAttribute($internalAttribute['$id']);
-                        }
-                    }
-                }
-            }
+//            if (!empty($selects)) {
+//                $selectedAttributes = array_map(
+//                    fn ($q) => $q->getAttribute(),
+//                    array_filter($selects, fn ($q) => $q->isSystem() === false)
+//                );
+//
+//                var_dump($node);
+//                var_dump($selectedAttributes);
+//
+//                if (!in_array('*', $selectedAttributes)){
+//                    foreach ($this->getInternalAttributes() as $internalAttribute) {
+//                        if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
+//                            $node->removeAttribute($internalAttribute['$id']);
+//                        }
+//                    }
+//                }
+//            }
 
             $results[$index] = $node;
         }

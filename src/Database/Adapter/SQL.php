@@ -219,8 +219,9 @@ abstract class SQL extends Adapter
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
+        //, _permissions as {$this->quote('$perms')}
         $sql = "
-		    SELECT {$this->getAttributeProjection($queries)}, _permissions as {$this->quote('$perms')}
+		    SELECT {$this->getAttributeProjection($queries)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             WHERE {$this->quote($alias)}._uid = :_uid 
             {$this->getTenantQuery($collection, $alias)}
@@ -273,7 +274,7 @@ var_dump($sql);
             unset($document['_permissions']);
         }
 
-        $document['$perms'] = json_decode($document['$perms'], true);
+        //$document['$perms'] = json_decode($document['$perms'], true);
 
         return new Document($document);
     }
@@ -1560,21 +1561,11 @@ var_dump($sql);
             return Query::DEFAULT_ALIAS.'.*';
         }
 
-        $duplications = [];
-
         $string = '';
         foreach ($selects as $select) {
             if ($select->getAttribute() === '$collection') {
                 continue;
             }
-
-            $needle = $select->getAlias().':'.$select->getAttribute();
-
-            if (in_array($needle, $duplications)) {
-                continue;
-            }
-
-            $duplications[] = $needle;
 
             $alias = $select->getAlias();
             $alias = $this->filter($alias);

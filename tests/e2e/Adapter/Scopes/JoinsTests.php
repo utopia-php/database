@@ -384,6 +384,7 @@ trait JoinsTests
             ]
         );
 
+        $this->assertArrayHasKey('$permissions', $document);
         $this->assertArrayHasKey('___permissions', $document);
         $this->assertArrayHasKey('___uid', $document);
         $this->assertArrayNotHasKey('$id', $document);
@@ -401,6 +402,23 @@ trait JoinsTests
         $this->assertArrayNotHasKey('boolean', $document);
         $this->assertIsBool($document->getAttribute('boolean_as'));
         $this->assertEquals(false, $document->getAttribute('boolean_as'));
+
+        /**
+         * Simple `as` query getDocument
+         */
+        $document = $db->getDocument(
+            '__sessions',
+            $session2->getId(),
+            [
+                Query::select('$permissions', as: '___permissions'),
+            ]
+        );
+
+        var_dump($document);
+
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayHasKey('$collection', $document);
+        $this->assertArrayHasKey('___permissions', $document);
 
         /**
          * Simple `as` query find

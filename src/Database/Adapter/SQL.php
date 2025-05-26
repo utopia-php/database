@@ -334,14 +334,15 @@ abstract class SQL extends Adapter
     {
         $name = $this->filter($collection);
         $selections = $this->getAttributeSelections($queries);
+        $alias = Query::DEFAULT_ALIAS;
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections)}
-            FROM {$this->getSQLTable($name)}
+		    SELECT {$this->getAttributeProjection($selections, $alias)}
+            FROM {$this->getSQLTable($name)} as {$this->quote($alias)}
             WHERE _uid = :_uid 
-            {$this->getTenantQuery($collection)}
+            {$this->getTenantQuery($collection, $alias)}
 		";
 
         if ($this->getSupportForUpdateLock()) {
@@ -1549,6 +1550,7 @@ abstract class SQL extends Adapter
     public static function getPDOAttributes(): array
     {
         return [
+            \PDO::ATTR_FETCH_TABLE_NAMES => true,
             \PDO::ATTR_TIMEOUT => 3, // Specifies the timeout duration in seconds. Takes a value of type int.
             \PDO::ATTR_PERSISTENT => true, // Create a persistent connection
             \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC, // Fetch a result row as an associative array.

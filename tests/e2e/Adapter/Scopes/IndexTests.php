@@ -53,56 +53,59 @@ trait IndexTests
 
     public function testCreateDeleteIndex(): void
     {
-        static::getDatabase()->createCollection('indexes');
+        /** @var Database $database */
+        $database = static::getDatabase();
 
-        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'string', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'order', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'integer', Database::VAR_INTEGER, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'float', Database::VAR_FLOAT, 0, true));
-        $this->assertEquals(true, static::getDatabase()->createAttribute('indexes', 'boolean', Database::VAR_BOOLEAN, 0, true));
+        $database->createCollection('indexes');
+
+        $this->assertEquals(true, $database->createAttribute('indexes', 'string', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, $database->createAttribute('indexes', 'order', Database::VAR_STRING, 128, true));
+        $this->assertEquals(true, $database->createAttribute('indexes', 'integer', Database::VAR_INTEGER, 0, true));
+        $this->assertEquals(true, $database->createAttribute('indexes', 'float', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, $database->createAttribute('indexes', 'boolean', Database::VAR_BOOLEAN, 0, true));
 
         // Indexes
-        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
-        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
-        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
-        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
-        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index5', Database::INDEX_UNIQUE, ['$id', 'string'], [128], [Database::ORDER_ASC]));
-        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'order', Database::INDEX_UNIQUE, ['order'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, $database->createIndex('indexes', 'index2', Database::INDEX_KEY, ['float', 'integer'], [], [Database::ORDER_ASC, Database::ORDER_DESC]));
+        $this->assertEquals(true, $database->createIndex('indexes', 'index3', Database::INDEX_KEY, ['integer', 'boolean'], [], [Database::ORDER_ASC, Database::ORDER_DESC, Database::ORDER_DESC]));
+        $this->assertEquals(true, $database->createIndex('indexes', 'index4', Database::INDEX_UNIQUE, ['string'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, $database->createIndex('indexes', 'index5', Database::INDEX_UNIQUE, ['$id', 'string'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, $database->createIndex('indexes', 'order', Database::INDEX_UNIQUE, ['order'], [128], [Database::ORDER_ASC]));
 
-        $collection = static::getDatabase()->getCollection('indexes');
+        $collection = $database->getCollection('indexes');
         $this->assertCount(6, $collection->getAttribute('indexes'));
 
         // Delete Indexes
-        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
-        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index2'));
-        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index3'));
-        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index4'));
-        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index5'));
-        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'order'));
+        $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
+        $this->assertEquals(true, $database->deleteIndex('indexes', 'index2'));
+        $this->assertEquals(true, $database->deleteIndex('indexes', 'index3'));
+        $this->assertEquals(true, $database->deleteIndex('indexes', 'index4'));
+        $this->assertEquals(true, $database->deleteIndex('indexes', 'index5'));
+        $this->assertEquals(true, $database->deleteIndex('indexes', 'order'));
 
-        $collection = static::getDatabase()->getCollection('indexes');
+        $collection = $database->getCollection('indexes');
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
         // Test non-shared tables duplicates throw duplicate
-        static::getDatabase()->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
+        $database->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
         try {
-            static::getDatabase()->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
+            $database->createIndex('indexes', 'duplicate', Database::INDEX_KEY, ['string', 'boolean'], [128], [Database::ORDER_ASC]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
 
         // Test delete index when index does not exist
-        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
         $this->assertEquals(true, static::deleteIndex('indexes', 'index1'));
-        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
+        $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
 
         // Test delete index when attribute does not exist
-        $this->assertEquals(true, static::getDatabase()->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
-        $this->assertEquals(true, static::getDatabase()->deleteAttribute('indexes', 'string'));
-        $this->assertEquals(true, static::getDatabase()->deleteIndex('indexes', 'index1'));
+        $this->assertEquals(true, $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
+        $this->assertEquals(true, $database->deleteAttribute('indexes', 'string'));
+        $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
 
-        static::getDatabase()->deleteCollection('indexes');
+        $database->deleteCollection('indexes');
     }
 
 
@@ -154,10 +157,13 @@ trait IndexTests
             'indexes' => $indexes
         ]);
 
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $validator = new Index(
             $attributes,
-            static::getDatabase()->getAdapter()->getMaxIndexLength(),
-            static::getDatabase()->getAdapter()->getInternalIndexesKeys()
+            $database->getAdapter()->getMaxIndexLength(),
+            $database->getAdapter()->getInternalIndexesKeys()
         );
 
         $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
@@ -165,7 +171,7 @@ trait IndexTests
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
-            static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes, [
+            $database->createCollection($collection->getId(), $attributes, $indexes, [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
             ]);
@@ -186,13 +192,13 @@ trait IndexTests
 
         $collection->setAttribute('indexes', $indexes);
 
-        if (static::getDatabase()->getAdapter()->getMaxIndexLength() > 0) {
-            $errorMessage = 'Index length is longer than the maximum: ' . static::getDatabase()->getAdapter()->getMaxIndexLength();
+        if ($database->getAdapter()->getMaxIndexLength() > 0) {
+            $errorMessage = 'Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength();
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
 
             try {
-                static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
+                $database->createCollection($collection->getId(), $attributes, $indexes);
                 $this->fail('Failed to throw exception');
             } catch (Exception $e) {
                 $this->assertEquals($errorMessage, $e->getMessage());
@@ -230,15 +236,15 @@ trait IndexTests
 
         $validator = new Index(
             $attributes,
-            static::getDatabase()->getAdapter()->getMaxIndexLength(),
-            static::getDatabase()->getAdapter()->getInternalIndexesKeys()
+            $database->getAdapter()->getMaxIndexLength(),
+            $database->getAdapter()->getInternalIndexesKeys()
         );
         $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
         $this->assertFalse($validator->isValid($indexes[0]));
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
-            static::getDatabase()->createCollection($collection->getId(), $attributes, $indexes);
+            $database->createCollection($collection->getId(), $attributes, $indexes);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals($errorMessage, $e->getMessage());
@@ -260,7 +266,7 @@ trait IndexTests
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
-            static::getDatabase()->createCollection(ID::unique(), $attributes, $indexes);
+            $database->createCollection(ID::unique(), $attributes, $indexes);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals($errorMessage, $e->getMessage());
@@ -281,7 +287,7 @@ trait IndexTests
         $this->assertEquals($errorMessage, $validator->getDescription());
 
         try {
-            static::getDatabase()->createCollection(ID::unique(), $attributes, $indexes);
+            $database->createCollection(ID::unique(), $attributes, $indexes);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals($errorMessage, $e->getMessage());
@@ -336,22 +342,25 @@ trait IndexTests
 
     public function testExceptionIndexLimit(): void
     {
-        static::getDatabase()->createCollection('indexLimit');
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection('indexLimit');
 
         // add unique attributes for indexing
         for ($i = 0; $i < 64; $i++) {
-            $this->assertEquals(true, static::getDatabase()->createAttribute('indexLimit', "test{$i}", Database::VAR_STRING, 16, true));
+            $this->assertEquals(true, $database->createAttribute('indexLimit', "test{$i}", Database::VAR_STRING, 16, true));
         }
 
         // Testing for indexLimit
         // Add up to the limit, then check if the next index throws IndexLimitException
         for ($i = 0; $i < ($this->getDatabase()->getLimitForIndexes()); $i++) {
-            $this->assertEquals(true, static::getDatabase()->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
+            $this->assertEquals(true, $database->createIndex('indexLimit', "index{$i}", Database::INDEX_KEY, ["test{$i}"], [16]));
         }
         $this->expectException(LimitException::class);
-        $this->assertEquals(false, static::getDatabase()->createIndex('indexLimit', "index64", Database::INDEX_KEY, ["test64"], [16]));
+        $this->assertEquals(false, $database->createIndex('indexLimit', "index64", Database::INDEX_KEY, ["test64"], [16]));
 
-        static::getDatabase()->deleteCollection('indexLimit');
+        $database->deleteCollection('indexLimit');
     }
 
     public function testListDocumentSearch(): void
@@ -362,8 +371,11 @@ trait IndexTests
             return;
         }
 
-        static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
-        static::getDatabase()->createDocument('documents', new Document([
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
+        $database->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -385,7 +397,7 @@ trait IndexTests
         /**
          * Allow reserved keywords for search
          */
-        $documents = static::getDatabase()->find('documents', [
+        $documents = $database->find('documents', [
             Query::search('string', '*test+alias@email-provider.com'),
         ]);
 
@@ -394,12 +406,15 @@ trait IndexTests
 
     public function testMaxQueriesValues(): void
     {
-        $max = static::getDatabase()->getMaxQueryValues();
+        /** @var Database $database */
+        $database = static::getDatabase();
 
-        static::getDatabase()->setMaxQueryValues(5);
+        $max = $database->getMaxQueryValues();
+
+        $database->setMaxQueryValues(5);
 
         try {
-            static::getDatabase()->find(
+            $database->find(
                 'documents',
                 [Query::equal('$id', [1, 2, 3, 4, 5, 6])]
             );
@@ -409,7 +424,7 @@ trait IndexTests
             $this->assertEquals('Invalid query: Query on attribute has greater than 5 values: $id', $e->getMessage());
         }
 
-        static::getDatabase()->setMaxQueryValues($max);
+        $database->setMaxQueryValues($max);
     }
 
     public function testEmptySearch(): void
@@ -420,17 +435,20 @@ trait IndexTests
             return;
         }
 
-        $documents = static::getDatabase()->find('documents', [
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $documents = $database->find('documents', [
             Query::search('string', ''),
         ]);
         $this->assertEquals(0, count($documents));
 
-        $documents = static::getDatabase()->find('documents', [
+        $documents = $database->find('documents', [
             Query::search('string', '*'),
         ]);
         $this->assertEquals(0, count($documents));
 
-        $documents = static::getDatabase()->find('documents', [
+        $documents = $database->find('documents', [
             Query::search('string', '<>'),
         ]);
         $this->assertEquals(0, count($documents));

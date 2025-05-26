@@ -24,7 +24,6 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Validator\Range;
-use function _PHPStan_bc6352b8e\Symfony\Component\String\s;
 
 trait AttributeTests
 {
@@ -2061,7 +2060,7 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-        
+
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
             return;

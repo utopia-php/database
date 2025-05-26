@@ -20,7 +20,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
-use function _PHPStan_bc6352b8e\Symfony\Component\String\s;
 
 trait GeneralTests
 {

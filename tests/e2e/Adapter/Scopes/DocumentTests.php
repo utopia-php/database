@@ -1186,6 +1186,9 @@ trait DocumentTests
 
     public function testFindStringQueryEqual(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * String condition
          */
@@ -1205,6 +1208,9 @@ trait DocumentTests
 
     public function testFindNotEqual(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * Not Equal query
          */
@@ -1229,6 +1235,9 @@ trait DocumentTests
 
     public function testFindBetween(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $documents = $database->find('movies', [
             Query::between('price', 25.94, 25.99),
         ]);
@@ -1252,6 +1261,9 @@ trait DocumentTests
 
     public function testFindFloat(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * Float condition
          */
@@ -1265,7 +1277,10 @@ trait DocumentTests
 
     public function testFindContains(): void
     {
-        if (!$this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForQueryContains()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1304,6 +1319,9 @@ trait DocumentTests
 
     public function testFindFulltext(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * Fulltext search
          */
@@ -1337,6 +1355,9 @@ trait DocumentTests
     }
     public function testFindFulltextSpecialChars(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         if (!$database->getAdapter()->getSupportForFulltextIndex()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -1401,6 +1422,9 @@ trait DocumentTests
 
     public function testFindMultipleConditions(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * Multiple conditions
          */
@@ -1425,6 +1449,9 @@ trait DocumentTests
 
     public function testFindByID(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * $id condition
          */
@@ -1443,6 +1470,9 @@ trait DocumentTests
      */
     public function testFindByInternalID(array $data): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * Test that internal ID queries are handled correctly
          */
@@ -1455,6 +1485,9 @@ trait DocumentTests
 
     public function testFindOrderBy(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY
          */
@@ -1475,6 +1508,9 @@ trait DocumentTests
     }
     public function testFindOrderByNatural(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY natural
          */
@@ -1498,6 +1534,9 @@ trait DocumentTests
     }
     public function testFindOrderByMultipleAttributes(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY - Multiple attributes
          */
@@ -1519,6 +1558,9 @@ trait DocumentTests
 
     public function testFindOrderByCursorAfter(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY - After
          */
@@ -1564,6 +1606,9 @@ trait DocumentTests
 
     public function testFindOrderByCursorBefore(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY - Before
          */
@@ -1617,6 +1662,9 @@ trait DocumentTests
 
     public function testFindOrderByAfterNaturalOrder(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY - After by natural order
          */
@@ -1664,6 +1712,9 @@ trait DocumentTests
     }
     public function testFindOrderByBeforeNaturalOrder(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY - Before by natural order
          */
@@ -1723,6 +1774,9 @@ trait DocumentTests
 
     public function testFindOrderBySingleAttributeAfter(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY - Single Attribute After
          */
@@ -1774,6 +1828,9 @@ trait DocumentTests
 
     public function testFindOrderBySingleAttributeBefore(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY - Single Attribute Before
          */
@@ -1833,6 +1890,9 @@ trait DocumentTests
 
     public function testFindOrderByMultipleAttributeAfter(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY - Multiple Attribute After
          */
@@ -1887,6 +1947,9 @@ trait DocumentTests
 
     public function testFindOrderByMultipleAttributeBefore(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY - Multiple Attribute Before
          */
@@ -1952,6 +2015,9 @@ trait DocumentTests
     }
     public function testFindOrderByAndCursor(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY + CURSOR
          */
@@ -1971,6 +2037,9 @@ trait DocumentTests
     }
     public function testFindOrderByIdAndCursor(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY ID + CURSOR
          */
@@ -1991,6 +2060,9 @@ trait DocumentTests
 
     public function testFindOrderByCreateDateAndCursor(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY CREATE DATE + CURSOR
          */
@@ -2012,6 +2084,9 @@ trait DocumentTests
 
     public function testFindOrderByUpdateDateAndCursor(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * ORDER BY UPDATE DATE + CURSOR
          */
@@ -2032,6 +2107,9 @@ trait DocumentTests
 
     public function testFindLimit(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * Limit
          */
@@ -2051,6 +2129,9 @@ trait DocumentTests
 
     public function testFindLimitAndOffset(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * Limit + Offset
          */
@@ -2069,6 +2150,9 @@ trait DocumentTests
 
     public function testFindOrQueries(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * Test that OR queries are handled correctly
          */
@@ -2084,6 +2168,9 @@ trait DocumentTests
      */
     public function testFindEdgeCases(Document $document): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $collection = 'edgeCases';
 
         $database->createCollection($collection);
@@ -2147,6 +2234,9 @@ trait DocumentTests
 
     public function testOrSingleQuery(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         try {
             $database->find('movies', [
                 Query::or([
@@ -2161,6 +2251,9 @@ trait DocumentTests
 
     public function testOrMultipleQueries(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $queries = [
             Query::or([
                 Query::equal('active', [true]),
@@ -2185,6 +2278,9 @@ trait DocumentTests
 
     public function testOrNested(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $queries = [
             Query::select(['director']),
             Query::equal('director', ['Joe Johnston']),
@@ -2207,6 +2303,9 @@ trait DocumentTests
 
     public function testAndSingleQuery(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         try {
             $database->find('movies', [
                 Query::and([
@@ -2221,6 +2320,9 @@ trait DocumentTests
 
     public function testAndMultipleQueries(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $queries = [
             Query::and([
                 Query::equal('active', [true]),
@@ -2233,6 +2335,9 @@ trait DocumentTests
 
     public function testAndNested(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $queries = [
             Query::or([
                 Query::equal('active', [false]),
@@ -2252,6 +2357,9 @@ trait DocumentTests
 
     public function testNestedIDQueries(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         Authorization::setRole(Role::any()->toString());
 
         $database->createCollection('movies_nested_id', permissions: [
@@ -2313,6 +2421,9 @@ trait DocumentTests
 
     public function testFindNull(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $documents = $database->find('movies', [
             Query::isNull('nullable'),
         ]);
@@ -2322,6 +2433,9 @@ trait DocumentTests
 
     public function testFindNotNull(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $documents = $database->find('movies', [
             Query::isNotNull('nullable'),
         ]);
@@ -2331,6 +2445,9 @@ trait DocumentTests
 
     public function testFindStartsWith(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $documents = $database->find('movies', [
             Query::startsWith('name', 'Work'),
         ]);
@@ -2352,6 +2469,9 @@ trait DocumentTests
 
     public function testFindStartsWithWords(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $documents = $database->find('movies', [
             Query::startsWith('name', 'Work in Progress'),
         ]);
@@ -2361,6 +2481,9 @@ trait DocumentTests
 
     public function testFindEndsWith(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $documents = $database->find('movies', [
             Query::endsWith('name', 'Marvel'),
         ]);
@@ -2370,6 +2493,9 @@ trait DocumentTests
 
     public function testFindSelect(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $documents = $database->find('movies', [
             Query::select(['name', 'year'])
         ]);
@@ -2500,6 +2626,9 @@ trait DocumentTests
     /** @depends testFind */
     public function testForeach(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         /**
          * Test, foreach goes through all the documents
          */
@@ -2550,6 +2679,9 @@ trait DocumentTests
      */
     public function testCount(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $count = $database->count('movies');
         $this->assertEquals(6, $count);
         $count = $database->count('movies', [Query::equal('year', [2019])]);
@@ -2591,6 +2723,9 @@ trait DocumentTests
      */
     public function testSum(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         Authorization::setRole('user:x');
 
         $sum = $database->sum('movies', 'year', [Query::equal('year', [2019]),]);
@@ -2808,6 +2943,9 @@ trait DocumentTests
             ],
         ]);
 
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $result = $database->encode($collection, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
@@ -3012,6 +3150,9 @@ trait DocumentTests
 
     public function testUpdateDocuments(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         if (!$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -3113,7 +3254,7 @@ trait DocumentTests
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
 
         try {
-            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($collection) {
+            $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () use ($collection, $database) {
                 $database->updateDocuments($collection, new Document([
                     'string' => 'text📝 updated all',
                 ]));
@@ -3143,7 +3284,7 @@ trait DocumentTests
         // Check document level permissions
         $database->updateCollection($collection, permissions: [], documentSecurity: true);
 
-        Authorization::skip(function () use ($collection) {
+        Authorization::skip(function () use ($collection, $database) {
             $database->updateDocument($collection, 'doc0', new Document([
                 'string' => 'text📝 updated all',
                 '$permissions' => [
@@ -3167,7 +3308,7 @@ trait DocumentTests
 
         $this->assertCount(1, $documents);
 
-        Authorization::skip(function () use ($collection) {
+        Authorization::skip(function () use ($collection, $database) {
             $unmodifiedDocuments = $database->find($collection, [
                 Query::equal('string', ['text📝 updated all']),
             ]);
@@ -3175,7 +3316,7 @@ trait DocumentTests
             $this->assertCount(9, $unmodifiedDocuments);
         });
 
-        Authorization::skip(function () use ($collection) {
+        Authorization::skip(function () use ($collection, $database) {
             $database->updateDocuments($collection, new Document([
                 '$permissions' => [
                     Permission::read(Role::any()),
@@ -3207,6 +3348,9 @@ trait DocumentTests
     {
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
+
+        /** @var Database $database */
+        $database = static::getDatabase();
 
         $document = $database->createDocument('documents', new Document([
             '$permissions' => [
@@ -3245,6 +3389,9 @@ trait DocumentTests
     {
         Authorization::cleanRoles();
 
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $this->expectException(AuthorizationException::class);
         $database->createDocument('documents', new Document([
             '$permissions' => [
@@ -3274,6 +3421,9 @@ trait DocumentTests
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
+
+        /** @var Database $database */
+        $database = static::getDatabase();
 
         $document = $database->createDocument('documents', new Document([
             '$permissions' => [
@@ -3322,6 +3472,9 @@ trait DocumentTests
     {
         $this->expectException(DuplicateException::class);
 
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $this->assertEquals(true, $database->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
 
         $database->createDocument('movies', new Document([
@@ -3353,6 +3506,9 @@ trait DocumentTests
      */
     public function testUniqueIndexDuplicateUpdate(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         Authorization::setRole(Role::users()->toString());
         // create document then update to conflict with index
         $document = $database->createDocument('movies', new Document([
@@ -3386,6 +3542,9 @@ trait DocumentTests
 
     public function propagateBulkDocuments(string $collection, int $amount = 10, bool $documentSecurity = false): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         for ($i = 0; $i < $amount; $i++) {
             $database->createDocument($collection, new Document(
                 array_merge([
@@ -3404,6 +3563,9 @@ trait DocumentTests
 
     public function testDeleteBulkDocuments(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         if (!$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -3520,7 +3682,7 @@ trait DocumentTests
 
         $this->assertEquals(0, $database->deleteDocuments('bulk_delete'));
 
-        $documents = Authorization::skip(function () {
+        $documents = Authorization::skip(function () use ($database) {
             return $database->find('bulk_delete');
         });
 
@@ -3542,6 +3704,9 @@ trait DocumentTests
 
     public function testDeleteBulkDocumentsQueries(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         if (!$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -3604,6 +3769,9 @@ trait DocumentTests
 
     public function testUpdateDocumentsQueries(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         if (!$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -3665,6 +3833,9 @@ trait DocumentTests
      */
     public function testFulltextIndexWithInteger(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $this->expectException(Exception::class);
 
         if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
@@ -3740,6 +3911,9 @@ trait DocumentTests
      */
     public function testExceptionDuplicate(Document $document): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $document->setAttribute('$id', 'duplicated');
         $database->createDocument($document->getCollection(), $document);
         $this->expectException(DuplicateException::class);
@@ -3751,6 +3925,9 @@ trait DocumentTests
      */
     public function testExceptionCaseInsensitiveDuplicate(Document $document): Document
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         $document->setAttribute('$id', 'caseSensitive');
         $document->setAttribute('$sequence', '200');
         $database->createDocument($document->getCollection(), $document);
@@ -3765,6 +3942,9 @@ trait DocumentTests
 
     public function testEmptyTenant(): void
     {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
         if ($database->getAdapter()->getSharedTables()) {
             $this->expectNotToPerformAssertions();
             return;

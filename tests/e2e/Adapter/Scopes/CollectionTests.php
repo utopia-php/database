@@ -44,12 +44,18 @@ trait CollectionTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('actors', permissions: [
+        $collection = $database->createCollection('actors', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]));
-        $this->assertCount(1, $database->listCollections());
+        ]);
+        var_dump($collection);
+        $this->assertInstanceOf('Utopia\Database\Document', $collection);
+
+        $list = $database->listCollections();
+        $this->assertCount(1, $list);
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors'));
+
+        var_dump($list);
 
         // Collection names should not be unique
         $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('actors2', permissions: [

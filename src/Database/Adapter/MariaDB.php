@@ -1635,29 +1635,40 @@ class MariaDB extends SQL
         $stmt->closeCursor();
 
         foreach ($results as $index => $document) {
-            if (\array_key_exists('_uid', $document)) {
-                $results[$index]['$id'] = $document['_uid'];
-                unset($results[$index]['_uid']);
+            $key = $alias.'._uid';
+            if (\array_key_exists($key, $document)) {
+                $results[$index][$alias.'.$id'] = $document[$key];
+                unset($results[$index][$key]);
             }
-            if (\array_key_exists('_id', $document)) {
-                $results[$index]['$sequence'] = $document['_id'];
-                unset($results[$index]['_id']);
+
+            $key = $alias.'._id';
+            if (\array_key_exists($key, $document)) {
+                $results[$index][$alias.'.$sequence'] = $document[$key];
+                unset($results[$index][$key]);
             }
-            if (\array_key_exists('_tenant', $document)) {
-                $document['$tenant'] = $document['_tenant'] === null ? null : (int)$document['_tenant'];
-                unset($results[$index]['_tenant']);
+
+            $key = $alias.'._tenant';
+            if (\array_key_exists($key, $document)) {
+                $document[$alias.'.$tenant'] = $document[$key] === null ? null : (int)$document[$key];
+                unset($results[$index][$key]);
             }
-            if (\array_key_exists('_createdAt', $document)) {
-                $results[$index]['$createdAt'] = $document['_createdAt'];
-                unset($results[$index]['_createdAt']);
+
+            $key = $alias.'._createdAt';
+            if (\array_key_exists($key, $document)) {
+                $results[$index][$alias.'.$createdAt'] = $document[$key];
+                unset($results[$index][$key]);
             }
-            if (\array_key_exists('_updatedAt', $document)) {
-                $results[$index]['$updatedAt'] = $document['_updatedAt'];
-                unset($results[$index]['_updatedAt']);
+
+            $key = $alias.'._updatedAt';
+            if (\array_key_exists($key, $document)) {
+                $results[$index][$alias.'.$updatedAt'] = $document[$key];
+                unset($results[$index][$key]);
             }
-            if (\array_key_exists('_permissions', $document)) {
-                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
-                unset($results[$index]['_permissions']);
+
+            $key = $alias.'._permissions';
+            if (\array_key_exists($key, $document)) {
+                $results[$index][$alias.'.$permissions'] = \json_decode($document[$key] ?? '[]', true);
+                unset($results[$index][$key]);
             }
 
             $results[$index] = new Document($results[$index]);

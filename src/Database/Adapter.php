@@ -1186,4 +1186,10 @@ abstract class Adapter
      * @return string
      */
     abstract public function getTenantQuery(string $collection, string $alias = ''): string;
+
+    /**
+     * @param mixed $stmt
+     * @return bool
+     */
+    abstract protected function execute(mixed $stmt): bool;
 }

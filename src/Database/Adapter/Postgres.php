@@ -1155,7 +1155,7 @@ class Postgres extends SQL
                 $stmt->bindValue($key, $value, $this->getPDOType($value));
             }
 
-            $stmt->execute();
+            $this->execute($stmt);
 
             if (!empty($permissions)) {
                 $tenantColumn = $this->sharedTables ? ', _tenant' : '';
@@ -1175,7 +1175,7 @@ class Postgres extends SQL
                     }
                 }
 
-                $stmtPermissions?->execute();
+                $this->execute($stmtPermissions);
             }
 
             $sequences = $this->getSequences(

@@ -6705,7 +6705,8 @@ class Database
      * @return void
      * @throws QueryException
      */
-    public function checkQueriesType(array $queries){
+    public function checkQueriesType(array $queries)
+    {
         foreach ($queries as $query) {
             if (!$query instanceof Query) {
                 throw new QueryException('Invalid query type: "' . \gettype($query) . '". Expected instances of "' . Query::class . '"');

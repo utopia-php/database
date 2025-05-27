@@ -6072,8 +6072,6 @@ class Database
      */
     public function foreach(string $collection, callable $callback, array $queries = [], string $forPermission = Database::PERMISSION_READ): void
     {
-        $this->checkQueriesType($queries);
-
         $grouped = Query::groupByType($queries);
         $limitExists = $grouped['limit'] !== null;
         $limit = $grouped['limit'] ?? 25;

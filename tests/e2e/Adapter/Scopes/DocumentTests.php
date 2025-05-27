@@ -245,7 +245,7 @@ trait DocumentTests
 
         $results = [];
 
-        $count = $database->createDocuments($collection, $documents, 3,  onNext: function ($doc) use (&$results) {
+        $count = $database->createDocuments($collection, $documents, 3, onNext: function ($doc) use (&$results) {
             $results[] = $doc;
         });
 

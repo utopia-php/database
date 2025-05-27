@@ -431,7 +431,7 @@ abstract class SQL extends Adapter
 
             $attributeKeys = array_unique($attributeKeys);
 
-            if ($hasSequence){
+            if ($hasSequence) {
                 $attributeKeys[] = '_id';
             }
 

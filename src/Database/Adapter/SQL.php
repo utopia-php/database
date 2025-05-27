@@ -10,7 +10,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
 
@@ -1606,10 +1605,6 @@ abstract class SQL extends Adapter
     {
         $conditions = [];
         foreach ($queries as $query) {
-            if (!$query instanceof Query) {
-                throw new QueryException('Invalid query type: "' . \gettype($query) . '". Expected instances of "' . Query::class . '"');
-            }
-
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 continue;
             }

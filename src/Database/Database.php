@@ -3200,6 +3200,8 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
+        $this->checkQueriesType($queries);
+
         if ($this->validate) {
             $validator = new DocumentValidator($attributes);
             if (!$validator->isValid($queries)) {
@@ -4335,6 +4337,8 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
+
+        $this->checkQueriesType($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -5734,6 +5738,8 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
+        $this->checkQueriesType($queries);
+
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $attributes,
@@ -5922,6 +5928,8 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
+
+        $this->checkQueriesType($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -6152,6 +6160,8 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
+        $this->checkQueriesType($queries);
+
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $attributes,
@@ -6199,6 +6209,8 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
+
+        $this->checkQueriesType($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -6684,5 +6696,23 @@ class Database
             $documentKey ?? null,
             $documentHashKey ?? null
         ];
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return void
+     * @throws QueryException
+     */
+    public function checkQueriesType(array $queries)
+    {
+        foreach ($queries as $query) {
+            if (!$query instanceof Query) {
+                throw new QueryException('Invalid query type: "' . \gettype($query) . '". Expected instances of "' . Query::class . '"');
+            }
+
+            if ($query->isNested()) {
+                $this->checkQueriesType($query->getValues());
+            }
+        }
     }
 }

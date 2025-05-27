@@ -209,9 +209,6 @@ trait DocumentTests
         return $document;
     }
 
-    /**
-     * @return array<Document>
-     */
     public function testCreateDocuments(): void
     {
         $count = 3;

@@ -1605,10 +1605,6 @@ abstract class SQL extends Adapter
     {
         $conditions = [];
         foreach ($queries as $query) {
-            if (!$query instanceof Query) {
-                throw new QueryException('Invalid query type: "' . \gettype($query) . '". Expected instances of "' . Query::class . '"');
-            }
-
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 continue;
             }

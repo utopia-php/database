@@ -954,7 +954,12 @@ class MariaDB extends SQL
                     throw new DatabaseException('All documents must have an sequence if one is set');
                 }
             }
+
             $attributeKeys = array_unique($attributeKeys);
+
+            if ($hasSequence) {
+                $attributeKeys[] = '_id';
+            }
 
             if ($this->sharedTables) {
                 $attributeKeys[] = '_tenant';
@@ -962,8 +967,9 @@ class MariaDB extends SQL
 
             $columns = [];
             foreach ($attributeKeys as $key => $attribute) {
-                $columns[$key] = "`{$this->filter($attribute)}`";
+                $columns[$key] = $this->quote($this->filter($attribute));
             }
+
             $columns = '(' . \implode(', ', $columns) . ')';
 
             $bindIndex = 0;
@@ -982,7 +988,6 @@ class MariaDB extends SQL
 
                 if (!empty($document->getSequence())) {
                     $attributes['_id'] = $document->getSequence();
-                    $attributeKeys[] = '_id';
                 } else {
                     $documentIds[] = $document->getId();
                 }
@@ -1007,6 +1012,7 @@ class MariaDB extends SQL
                 }
 
                 $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+
                 foreach (Database::PERMISSIONS as $type) {
                     foreach ($document->getPermissionsByType($type) as $permission) {
                         $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';

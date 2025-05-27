@@ -208,10 +208,8 @@ trait DocumentTests
 
         return $document;
     }
-    /**
-     * @return array<Document>
-     */
-    public function testCreateDocuments(): array
+
+    public function testCreateDocuments(): void
     {
         $count = 3;
         $collection = 'testCreateDocuments';
@@ -242,7 +240,27 @@ trait DocumentTests
             ]);
         }
 
-        $count = $database->createDocuments($collection, $documents, 3);
+        $results = [];
+
+        $count = $database->createDocuments($collection, $documents, 3, onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
+
+        $this->assertEquals($count, \count($results));
+
+        foreach ($results as $document) {
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertIsString($document->getAttribute('string'));
+            $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
+            $this->assertIsInt($document->getAttribute('integer'));
+            $this->assertEquals(5, $document->getAttribute('integer'));
+            $this->assertIsInt($document->getAttribute('bigint'));
+            $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
+        }
+
+        $documents = $database->find($collection, [
+            Query::orderAsc()
+        ]);
 
         $this->assertEquals($count, \count($documents));
 
@@ -255,8 +273,46 @@ trait DocumentTests
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
         }
+    }
 
-        return $documents;
+    public function testCreateDocumentsWithAutoIncrement(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+
+        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true));
+
+        /** @var array<Document> $documents */
+        $documents = [];
+        $count = 10;
+        $sequence = 1_000_000;
+
+        for ($i = $sequence; $i <= ($sequence + $count); $i++) {
+            $documents[] = new Document([
+                '$sequence' => (string)$i,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'string' => 'text',
+            ]);
+        }
+
+        $count = $database->createDocuments(__FUNCTION__, $documents, 6);
+        $this->assertEquals($count, \count($documents));
+
+        $documents = $database->find(__FUNCTION__, [
+            Query::orderAsc()
+        ]);
+        foreach ($documents as $index => $document) {
+            $this->assertEquals($sequence + $index, $document->getSequence());
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertEquals('text', $document->getAttribute('string'));
+        }
     }
 
     public function testCreateDocumentsWithDifferentAttributes(): void

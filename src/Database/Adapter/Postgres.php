@@ -1051,6 +1051,7 @@ class Postgres extends SQL
      * @return array<Document>
      *
      * @throws DuplicateException
+     * @throws \Throwable
      */
     public function createDocuments(string $collection, array $documents): array
     {
@@ -1060,12 +1061,13 @@ class Postgres extends SQL
 
         try {
             $name = $this->filter($collection);
+
             $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
 
             $hasSequence = null;
             foreach ($documents as $document) {
                 $attributes = $document->getAttributes();
-                $attributeKeys = array_merge($attributeKeys, array_keys($attributes));
+                $attributeKeys = [...$attributeKeys, ...\array_keys($attributes)];
 
                 if ($hasSequence === null) {
                     $hasSequence = !empty($document->getSequence());
@@ -1073,7 +1075,12 @@ class Postgres extends SQL
                     throw new DatabaseException('All documents must have an sequence if one is set');
                 }
             }
+
             $attributeKeys = array_unique($attributeKeys);
+
+            if ($hasSequence) {
+                $attributeKeys[] = '_id';
+            }
 
             if ($this->sharedTables) {
                 $attributeKeys[] = '_tenant';
@@ -1081,16 +1088,17 @@ class Postgres extends SQL
 
             $columns = [];
             foreach ($attributeKeys as $key => $attribute) {
-                $columns[$key] = "\"{$this->filter($attribute)}\"";
+                $columns[$key] = $this->quote($this->filter($attribute));
             }
-            $columns = '(' . \implode(', ', $columns) . ')';
 
-            $sequences = [];
+            $columns = '(' . \implode(', ', $columns) . ')';
 
             $bindIndex = 0;
             $batchKeys = [];
             $bindValues = [];
             $permissions = [];
+            $documentIds = [];
+            $documentTenants = [];
 
             foreach ($documents as $index => $document) {
                 $attributes = $document->getAttributes();
@@ -1100,13 +1108,14 @@ class Postgres extends SQL
                 $attributes['_permissions'] = \json_encode($document->getPermissions());
 
                 if (!empty($document->getSequence())) {
-                    $sequences[$document->getId()] = true;
                     $attributes['_id'] = $document->getSequence();
-                    $attributeKeys[] = '_id';
+                } else {
+                    $documentIds[] = $document->getId();
                 }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();
+                    $documentTenants[] = $document->getTenant();
                 }
 
                 $bindKeys = [];
@@ -1124,6 +1133,7 @@ class Postgres extends SQL
                 }
 
                 $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+
                 foreach (Database::PERMISSIONS as $type) {
                     foreach ($document->getPermissionsByType($type) as $permission) {
                         $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';
@@ -1167,18 +1177,20 @@ class Postgres extends SQL
 
                 $this->execute($stmtPermissions);
             }
+
+            $sequences = $this->getSequences(
+                $collection,
+                $documentIds,
+                $documentTenants
+            );
+
+            foreach ($documents as $document) {
+                if (isset($sequences[$document->getId()])) {
+                    $document['$sequence'] = $sequences[$document->getId()];
+                }
+            }
         } catch (PDOException $e) {
             throw $this->processException($e);
-        }
-
-        foreach ($documents as $document) {
-            if (!isset($sequences[$document->getId()])) {
-                $document['$sequence'] = $this->getDocument(
-                    $collection,
-                    $document->getId(),
-                    [Query::select(['$sequence'])]
-                )->getSequence();
-            }
         }
 
         return $documents;

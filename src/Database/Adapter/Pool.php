@@ -484,4 +484,9 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
+
+    protected function execute(mixed $stmt): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
 }

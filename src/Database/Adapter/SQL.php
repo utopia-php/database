@@ -8,6 +8,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
@@ -1743,5 +1744,168 @@ abstract class SQL extends Adapter
     protected function processException(PDOException $e): \Exception
     {
         return $e;
+    }
+
+    /**
+     * @param mixed $stmt
+     * @return bool
+     */
+    protected function execute(mixed $stmt): bool
+    {
+        return $stmt->execute();
+    }
+
+    /**
+     * Create Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     *
+     * @return array<Document>
+     *
+     * @throws DuplicateException
+     * @throws \Throwable
+     */
+    public function createDocuments(string $collection, array $documents): array
+    {
+        if (empty($documents)) {
+            return $documents;
+        }
+
+        try {
+            $name = $this->filter($collection);
+
+            $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
+
+            $hasSequence = null;
+            foreach ($documents as $document) {
+                $attributes = $document->getAttributes();
+                $attributeKeys = [...$attributeKeys, ...\array_keys($attributes)];
+
+                if ($hasSequence === null) {
+                    $hasSequence = !empty($document->getSequence());
+                } elseif ($hasSequence == empty($document->getSequence())) {
+                    throw new DatabaseException('All documents must have an sequence if one is set');
+                }
+            }
+
+            $attributeKeys = array_unique($attributeKeys);
+
+            if ($hasSequence) {
+                $attributeKeys[] = '_id';
+            }
+
+            if ($this->sharedTables) {
+                $attributeKeys[] = '_tenant';
+            }
+
+            $columns = [];
+            foreach ($attributeKeys as $key => $attribute) {
+                $columns[$key] = $this->quote($this->filter($attribute));
+            }
+
+            $columns = '(' . \implode(', ', $columns) . ')';
+
+            $bindIndex = 0;
+            $batchKeys = [];
+            $bindValues = [];
+            $permissions = [];
+            $documentIds = [];
+            $documentTenants = [];
+
+            foreach ($documents as $index => $document) {
+                $attributes = $document->getAttributes();
+                $attributes['_uid'] = $document->getId();
+                $attributes['_createdAt'] = $document->getCreatedAt();
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+                if (!empty($document->getSequence())) {
+                    $attributes['_id'] = $document->getSequence();
+                } else {
+                    $documentIds[] = $document->getId();
+                }
+
+                if ($this->sharedTables) {
+                    $attributes['_tenant'] = $document->getTenant();
+                    $documentTenants[] = $document->getTenant();
+                }
+
+                $bindKeys = [];
+
+                foreach ($attributeKeys as $key) {
+                    $value = $attributes[$key] ?? null;
+                    if (\is_array($value)) {
+                        $value = \json_encode($value);
+                    }
+                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $bindKey = 'key_' . $bindIndex;
+                    $bindKeys[] = ':' . $bindKey;
+                    $bindValues[$bindKey] = $value;
+                    $bindIndex++;
+                }
+
+                $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+
+                foreach (Database::PERMISSIONS as $type) {
+                    foreach ($document->getPermissionsByType($type) as $permission) {
+                        $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';
+                        $permission = \str_replace('"', '', $permission);
+                        $permission = "('{$type}', '{$permission}', :_uid_{$index} {$tenantBind})";
+                        $permissions[] = $permission;
+                    }
+                }
+            }
+
+            $batchKeys = \implode(', ', $batchKeys);
+
+            $stmt = $this->getPDO()->prepare("
+                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                VALUES {$batchKeys}
+            ");
+
+            foreach ($bindValues as $key => $value) {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+
+            $this->execute($stmt);
+
+            if (!empty($permissions)) {
+                $tenantColumn = $this->sharedTables ? ', _tenant' : '';
+                $permissions = \implode(', ', $permissions);
+
+                $sqlPermissions = "
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions};
+                ";
+
+                $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
+
+                foreach ($documents as $index => $document) {
+                    $stmtPermissions->bindValue(":_uid_{$index}", $document->getId());
+                    if ($this->sharedTables) {
+                        $stmtPermissions->bindValue(":_tenant_{$index}", $document->getTenant());
+                    }
+                }
+
+                $this->execute($stmtPermissions);
+            }
+
+            $sequences = $this->getSequences(
+                $collection,
+                $documentIds,
+                $documentTenants
+            );
+
+            foreach ($documents as $document) {
+                if (isset($sequences[$document->getId()])) {
+                    $document['$sequence'] = $sequences[$document->getId()];
+                }
+            }
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return $documents;
     }
 }

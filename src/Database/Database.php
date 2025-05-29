@@ -4916,8 +4916,8 @@ class Database
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $collectionAttributes = $collection->getAttribute('attributes', []);
         $time = DateTime::now();
-
         $created = 0;
         $updated = 0;
 
@@ -4980,6 +4980,14 @@ class Database
             if ($old->isEmpty()) {
                 $createdAt = $document->getCreatedAt();
                 $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+
+                // Force matching optional parameter sets
+                // Doesn't use decode as that intentionally skips null defaults to reduce payload size
+                foreach ($collectionAttributes as $attr) {
+                    if (!$attr->getAttribute('required') && !$document->isSet($attr['$id'])) {
+                        $document->setAttribute($attr['$id'], $attr['default'] ?? null);
+                    }
+                }
             } else {
                 $document['$createdAt'] = $old->getCreatedAt();
             }

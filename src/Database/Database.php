@@ -4980,16 +4980,19 @@ class Database
             if ($old->isEmpty()) {
                 $createdAt = $document->getCreatedAt();
                 $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
-
-                // Force matching optional parameter sets
-                // Doesn't use decode as that intentionally skips null defaults to reduce payload size
-                foreach ($collectionAttributes as $attr) {
-                    if (!$attr->getAttribute('required') && !$document->isSet($attr['$id'])) {
-                        $document->setAttribute($attr['$id'], $attr['default'] ?? null);
-                    }
-                }
             } else {
                 $document['$createdAt'] = $old->getCreatedAt();
+            }
+
+            // Force matching optional parameter sets
+            // Doesn't use decode as that intentionally skips null defaults to reduce payload size
+            foreach ($collectionAttributes as $attr) {
+                if (!$attr->getAttribute('required') && !\array_key_exists($attr['$id'], (array)$document)) {
+                    $document->setAttribute(
+                        $attr['$id'],
+                        $old->getAttribute($attr['$id'], ($attr['default'] ?? null))
+                    );
+                }
             }
 
             if (!$updatesPermissions) {

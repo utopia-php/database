@@ -621,6 +621,7 @@ trait DocumentTests
             'first' => 'second',
         ]);
 
+        // Ensure missing optionals on new document is allowed
         $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
             $existingDocument->setAttribute('first', 'updated'),
             $newDocument,
@@ -628,6 +629,7 @@ trait DocumentTests
 
         $this->assertEquals(2, $docs);
         $this->assertEquals('updated', $existingDocument->getAttribute('first'));
+        $this->assertEquals('last', $existingDocument->getAttribute('last'));
         $this->assertEquals('second', $newDocument->getAttribute('first'));
         $this->assertEquals('', $newDocument->getAttribute('last'));
 
@@ -640,6 +642,36 @@ trait DocumentTests
         } catch (Throwable $e) {
             $this->assertTrue($e instanceof StructureException, $e->getMessage());
         }
+
+        // Ensure missing optionals on existing document is allowed
+        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+            $existingDocument
+                ->setAttribute('first', 'first')
+                ->removeAttribute('last'),
+            $newDocument
+                ->setAttribute('last', 'last')
+        ]);
+
+        $this->assertEquals(2, $docs);
+        $this->assertEquals('first', $existingDocument->getAttribute('first'));
+        $this->assertEquals('last', $existingDocument->getAttribute('last'));
+        $this->assertEquals('second', $newDocument->getAttribute('first'));
+        $this->assertEquals('last', $newDocument->getAttribute('last'));
+
+        // Ensure set null on existing document is allowed
+        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+            $existingDocument
+                ->setAttribute('first', 'first')
+                ->setAttribute('last', null),
+            $newDocument
+                ->setAttribute('last', 'last')
+        ]);
+
+        $this->assertEquals(1, $docs);
+        $this->assertEquals('first', $existingDocument->getAttribute('first'));
+        $this->assertEquals(null, $existingDocument->getAttribute('last'));
+        $this->assertEquals('second', $newDocument->getAttribute('first'));
+        $this->assertEquals('last', $newDocument->getAttribute('last'));
     }
 
     public function testUpsertDocumentsNoop(): void

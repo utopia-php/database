@@ -322,7 +322,7 @@ trait DocumentTests
         static::getDatabase()->deleteCollection($collection);
     }
 
-    public function testCreateOrUpdateDocuments(): void
+    public function testUpsertDocuments(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
             $this->expectNotToPerformAssertions();
@@ -362,9 +362,13 @@ trait DocumentTests
         ];
 
         $results = [];
-        $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
-            $results[] = $doc;
-        });
+        $count = static::getDatabase()->createOrUpdateDocuments(
+            __FUNCTION__,
+            $documents,
+            onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+            }
+        );
 
         $this->assertEquals(2, $count);
 
@@ -432,7 +436,7 @@ trait DocumentTests
         }
     }
 
-    public function testCreateOrUpdateDocumentsInc(): void
+    public function testUpsertDocumentsInc(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
             $this->expectNotToPerformAssertions();
@@ -501,7 +505,7 @@ trait DocumentTests
         }
     }
 
-    public function testCreateOrUpdateDocumentsPermissions(): void
+    public function testUpsertDocumentsPermissions(): void
     {
         if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
             $this->expectNotToPerformAssertions();
@@ -585,6 +589,86 @@ trait DocumentTests
         $document = static::getDatabase()->getDocument(__FUNCTION__, 'third');
 
         $this->assertEquals($newPermissions, $document->getPermissions());
+    }
+
+    public function testUpsertDocumentsAttributeMismatch(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ], documentSecurity: false);
+        $database->createAttribute(__FUNCTION__, 'first', Database::VAR_STRING, 128, true);
+        $database->createAttribute(__FUNCTION__, 'last', Database::VAR_STRING, 128, false);
+
+        $existingDocument = $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'first',
+            'first' => 'first',
+            'last' => 'last',
+        ]));
+
+        $newDocument = new Document([
+            '$id' => 'second',
+            'first' => 'second',
+        ]);
+
+        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+            $existingDocument->setAttribute('first', 'updated'),
+            $newDocument,
+        ]);
+
+        $this->assertEquals(2, $docs);
+        $this->assertEquals('updated', $existingDocument->getAttribute('first'));
+        $this->assertEquals('second', $newDocument->getAttribute('first'));
+        $this->assertEquals('', $newDocument->getAttribute('last'));
+
+        try {
+            $database->createOrUpdateDocuments(__FUNCTION__, [
+                $existingDocument->removeAttribute('first'),
+                $newDocument
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof StructureException, $e->getMessage());
+        }
+    }
+
+    public function testUpsertDocumentsNoop(): void
+    {
+        if (!static::getDatabase()->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        static::getDatabase()->createCollection(__FUNCTION__);
+        static::getDatabase()->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true);
+
+        $document = new Document([
+            '$id' => 'first',
+            'string' => 'text📝',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $this->assertEquals(1, $count);
+
+        // No changes, should return 0
+        $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $this->assertEquals(0, $count);
     }
 
     public function testRespectNulls(): Document

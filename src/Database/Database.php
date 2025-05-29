@@ -4916,8 +4916,8 @@ class Database
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $collectionAttributes = $collection->getAttribute('attributes', []);
         $time = DateTime::now();
-
         $created = 0;
         $updated = 0;
 
@@ -4974,13 +4974,25 @@ class Database
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt)
+                ->removeAttribute('$internalId');
 
             if ($old->isEmpty()) {
                 $createdAt = $document->getCreatedAt();
                 $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
             } else {
                 $document['$createdAt'] = $old->getCreatedAt();
+            }
+
+            // Force matching optional parameter sets
+            // Doesn't use decode as that intentionally skips null defaults to reduce payload size
+            foreach ($collectionAttributes as $attr) {
+                if (!$attr->getAttribute('required') && !\array_key_exists($attr['$id'], (array)$document)) {
+                    $document->setAttribute(
+                        $attr['$id'],
+                        $old->getAttribute($attr['$id'], ($attr['default'] ?? null))
+                    );
+                }
             }
 
             if (!$updatesPermissions) {

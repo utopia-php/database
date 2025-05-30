@@ -1350,7 +1350,6 @@ class MariaDB extends SQL
                         = $document->getTenant();
                 }
 
-                // Enforce deterministic order
                 \ksort($attributes);
 
                 $columns = [];

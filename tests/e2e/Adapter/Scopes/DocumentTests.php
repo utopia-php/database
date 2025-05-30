@@ -672,6 +672,38 @@ trait DocumentTests
         $this->assertEquals(null, $existingDocument->getAttribute('last'));
         $this->assertEquals('second', $newDocument->getAttribute('first'));
         $this->assertEquals('last', $newDocument->getAttribute('last'));
+
+        $doc3 = new Document([
+            '$id' => 'third',
+            'last' => 'last',
+            'first' => 'third',
+        ]);
+
+        $doc4 = new Document([
+            '$id' => 'fourth',
+            'first' => 'fourth',
+            'last' => 'last',
+        ]);
+
+        // Ensure mismatch of attribute orders is allowed
+        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+            $doc3,
+            $doc4
+        ]);
+
+        $this->assertEquals(2, $docs);
+        $this->assertEquals('third', $doc3->getAttribute('first'));
+        $this->assertEquals('last', $doc3->getAttribute('last'));
+        $this->assertEquals('fourth', $doc4->getAttribute('first'));
+        $this->assertEquals('last', $doc4->getAttribute('last'));
+
+        $doc3 = $database->getDocument(__FUNCTION__, 'third');
+        $doc4 = $database->getDocument(__FUNCTION__, 'fourth');
+
+        $this->assertEquals('third', $doc3->getAttribute('first'));
+        $this->assertEquals('last', $doc3->getAttribute('last'));
+        $this->assertEquals('fourth', $doc4->getAttribute('first'));
+        $this->assertEquals('last', $doc4->getAttribute('last'));
     }
 
     public function testUpsertDocumentsNoop(): void

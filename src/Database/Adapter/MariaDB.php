@@ -1350,6 +1350,8 @@ class MariaDB extends SQL
                         = $document->getTenant();
                 }
 
+                \ksort($attributes);
+
                 $columns = [];
                 foreach (\array_keys($attributes) as $key => $attr) {
                     /**

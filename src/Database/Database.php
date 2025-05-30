@@ -4920,7 +4920,7 @@ class Database
         $time = DateTime::now();
         $created = 0;
         $updated = 0;
-
+        $seenIds = [];
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                 $old = Authorization::skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
@@ -5028,10 +5028,17 @@ class Database
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
 
+            $seenIds[] = $document->getId();
+
             $documents[$key] = new Change(
                 old: $old,
                 new: $document
             );
+        }
+
+        // Required because *some* DBs will allow duplicate IDs for upsert
+        if (\count($seenIds) !== \count(\array_unique($seenIds))) {
+            throw new DuplicateException('Duplicate document IDs found in the input array.');
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {

@@ -1445,12 +1445,14 @@ class MariaDB extends SQL
                     if (!empty($toRemove)) {
                         $removeQueries[] = "(
                             _document = :_uid_{$index}
-                            {$this->getTenantQuery($collection, tenantCount: \count($toRemove))}
+                            " . ($this->sharedTables ? " AND _tenant = :_tenant_{$index}" : '') . "
                             AND _type = '{$type}'
                             AND _permission IN (" . \implode(',', \array_map(fn ($i) => ":remove_{$type}_{$index}_{$i}", \array_keys($toRemove))) . ")
                         )";
                         $removeBindValues[":_uid_{$index}"] = $document->getId();
-                        $removeBindValues[":_tenant_{$index}"] = $document->getTenant();
+                        if ($this->sharedTables) {
+                            $removeBindValues[":_tenant_{$index}"] = $document->getTenant();
+                        }
                         foreach ($toRemove as $i => $perm) {
                             $removeBindValues[":remove_{$type}_{$index}_{$i}"] = $perm;
                         }

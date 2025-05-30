@@ -735,6 +735,75 @@ trait DocumentTests
         $this->assertEquals(0, $count);
     }
 
+    public function testUpsertDuplicateIds(): void
+    {
+        $db = static::getDatabase();
+        if (!$db->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $db->createCollection(__FUNCTION__);
+        $db->createAttribute(__FUNCTION__, 'num', Database::VAR_INTEGER, 0, true);
+
+        $doc1 = new Document(['$id' => 'dup', 'num' => 1]);
+        $doc2 = new Document(['$id' => 'dup', 'num' => 2]);
+
+        try {
+            $db->createOrUpdateDocuments(__FUNCTION__, [$doc1, $doc2]);
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e, $e->getMessage());
+        }
+    }
+
+    public function testUpsertMixedPermissionDelta(): void
+    {
+        $db = static::getDatabase();
+        if (!$db->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $db->createCollection(__FUNCTION__);
+        $db->createAttribute(__FUNCTION__, 'v', Database::VAR_INTEGER, 0, true);
+
+        $d1 = $db->createDocument(__FUNCTION__, new Document([
+            '$id' => 'a',
+            'v' => 0,
+            '$permissions' => [
+                Permission::update(Role::any())
+            ]
+        ]));
+        $d2 = $db->createDocument(__FUNCTION__, new Document([
+            '$id' => 'b',
+            'v' => 0,
+            '$permissions' => [
+                Permission::update(Role::any())
+            ]
+        ]));
+
+        // d1 adds write, d2 removes update
+        $d1->setAttribute('$permissions', [
+            Permission::read(Role::any()),
+            Permission::update(Role::any())
+        ]);
+        $d2->setAttribute('$permissions', [
+            Permission::read(Role::any())
+        ]);
+
+        $db->createOrUpdateDocuments(__FUNCTION__, [$d1, $d2]);
+
+        $this->assertEquals([
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], $db->getDocument(__FUNCTION__, 'a')->getPermissions());
+
+        $this->assertEquals([
+            Permission::read(Role::any()),
+        ], $db->getDocument(__FUNCTION__, 'b')->getPermissions());
+    }
+
     public function testRespectNulls(): Document
     {
         static::getDatabase()->createCollection('documents_nulls');
@@ -3977,5 +4046,39 @@ trait DocumentTests
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
         }
+    }
+
+    public function testCrossTenantDuplicateId(): void
+    {
+        $db = static::getDatabase();
+        if (!$db->getAdapter()->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $db->createCollection(__FUNCTION__);
+        $db->createAttribute(__FUNCTION__, 'v', Database::VAR_STRING, 64, true);
+
+        // tenant A
+        $db->withTenant('A', fn () => $db->createDocument(
+            __FUNCTION__,
+            new Document([
+                '$id' => 'x',
+                'v' => 'A'
+            ])
+        ));
+        // tenant B
+        $db->withTenant('B', fn () => $db->createDocument(
+            __FUNCTION__,
+            new Document([
+                '$id' => 'x',
+                'v' => 'B'
+            ])
+        ));
+
+        $this->assertEquals('A', $db->withTenant('A', fn () =>
+            $db->getDocument(__FUNCTION__, 'x')->getAttribute('v')));
+        $this->assertEquals('B', $db->withTenant('B', fn () =>
+            $db->getDocument(__FUNCTION__, 'x')->getAttribute('v')));
     }
 }

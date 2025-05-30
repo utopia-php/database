@@ -4060,7 +4060,7 @@ trait DocumentTests
         $db->createAttribute(__FUNCTION__, 'v', Database::VAR_STRING, 64, true);
 
         // tenant A
-        $db->withTenant('A', fn () => $db->createDocument(
+        $db->withTenant(1, fn () => $db->createDocument(
             __FUNCTION__,
             new Document([
                 '$id' => 'x',
@@ -4068,7 +4068,7 @@ trait DocumentTests
             ])
         ));
         // tenant B
-        $db->withTenant('B', fn () => $db->createDocument(
+        $db->withTenant(2, fn () => $db->createDocument(
             __FUNCTION__,
             new Document([
                 '$id' => 'x',
@@ -4076,9 +4076,9 @@ trait DocumentTests
             ])
         ));
 
-        $this->assertEquals('A', $db->withTenant('A', fn () =>
+        $this->assertEquals('A', $db->withTenant(1, fn () =>
             $db->getDocument(__FUNCTION__, 'x')->getAttribute('v')));
-        $this->assertEquals('B', $db->withTenant('B', fn () =>
+        $this->assertEquals('B', $db->withTenant(2, fn () =>
             $db->getDocument(__FUNCTION__, 'x')->getAttribute('v')));
     }
 }

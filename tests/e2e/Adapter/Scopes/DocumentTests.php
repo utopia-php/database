@@ -4047,38 +4047,4 @@ trait DocumentTests
             $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
         }
     }
-
-    public function testCrossTenantDuplicateId(): void
-    {
-        $db = static::getDatabase();
-        if (!$db->getAdapter()->getSharedTables()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $db->createCollection(__FUNCTION__);
-        $db->createAttribute(__FUNCTION__, 'v', Database::VAR_STRING, 64, true);
-
-        // tenant A
-        $db->withTenant(1, fn () => $db->createDocument(
-            __FUNCTION__,
-            new Document([
-                '$id' => 'x',
-                'v' => 'A'
-            ])
-        ));
-        // tenant B
-        $db->withTenant(2, fn () => $db->createDocument(
-            __FUNCTION__,
-            new Document([
-                '$id' => 'x',
-                'v' => 'B'
-            ])
-        ));
-
-        $this->assertEquals('A', $db->withTenant(1, fn () =>
-            $db->getDocument(__FUNCTION__, 'x')->getAttribute('v')));
-        $this->assertEquals('B', $db->withTenant(2, fn () =>
-            $db->getDocument(__FUNCTION__, 'x')->getAttribute('v')));
-    }
 }

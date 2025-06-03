@@ -6,10 +6,10 @@ use Exception;
 use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -28,7 +28,14 @@ trait IndexTests
          * Check ticks sounding cast index for reserved words
          */
         $database->createAttribute('indexes', 'int', Database::VAR_INTEGER, 8, false, array:true);
-        $database->createIndex('indexes', 'indx8711', Database::INDEX_KEY, ['int'], [255]);
+
+        try {
+            $database->createIndex('indexes', 'indx8711', Database::INDEX_KEY, ['int'], [255]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof IndexException);
+            self::assertEquals($e->getMessage(), 'Index on array attributes is forbidden');
+        }
 
         $database->createAttribute('indexes', 'name', Database::VAR_STRING, 10, false);
 
@@ -37,14 +44,14 @@ trait IndexTests
         try {
             $database->createIndex('indexes', 'index3', Database::INDEX_KEY, ['$id', '$id']);
         } catch (Throwable $e) {
-            self::assertTrue($e instanceof DatabaseException);
+            self::assertTrue($e instanceof IndexException);
             self::assertEquals($e->getMessage(), 'Duplicate attributes provided');
         }
 
         try {
             $database->createIndex('indexes', 'index4', Database::INDEX_KEY, ['name', 'Name']);
         } catch (Throwable $e) {
-            self::assertTrue($e instanceof DatabaseException);
+            self::assertTrue($e instanceof IndexException);
             self::assertEquals($e->getMessage(), 'Duplicate attributes provided');
         }
 
@@ -361,6 +368,9 @@ trait IndexTests
             $this->expectNotToPerformAssertions();
             return;
         }
+
+
+        var_dump(static::getDatabase()->getCollection('documents'));
 
         static::getDatabase()->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
         static::getDatabase()->createDocument('documents', new Document([

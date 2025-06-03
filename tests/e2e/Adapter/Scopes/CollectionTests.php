@@ -8,6 +8,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -646,25 +647,20 @@ trait CollectionTests
             ]),
         ];
 
-        $collection = $database->createCollection(
-            'collection98',
-            $attributes,
-            $indexes,
-            permissions: [
-                Permission::create(Role::any()),
-            ]
-        );
-
-        $this->assertEquals($collection->getAttribute('indexes')[0]['attributes'][0], 'cards');
-        $this->assertEquals($collection->getAttribute('indexes')[0]['lengths'][0], Database::ARRAY_INDEX_LENGTH);
-        $this->assertEquals($collection->getAttribute('indexes')[0]['orders'][0], null);
-
-        $this->assertEquals($collection->getAttribute('indexes')[1]['attributes'][0], 'username');
-        $this->assertEquals($collection->getAttribute('indexes')[1]['lengths'][0], null);
-
-        $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'username');
-        $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], 99);
-        $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], Database::ORDER_DESC);
+        try {
+            $database->createCollection(
+                'collection98',
+                $attributes,
+                $indexes,
+                permissions: [
+                    Permission::create(Role::any()),
+                ]
+            );
+            $this->fail('Failed to throw exception');
+        } catch (\Throwable $e) {
+            self::assertTrue($e instanceof IndexException);
+            self::assertEquals($e->getMessage(), 'Index on array attributes is forbidden');
+        }
     }
 
     public function testCollectionUpdate(): Document

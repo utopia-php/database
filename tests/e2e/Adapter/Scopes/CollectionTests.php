@@ -52,10 +52,10 @@ trait CollectionTests
         $this->assertInstanceOf('Utopia\Database\Document', $collection);
 
         $list = $database->listCollections();
+        var_dump($list[0]);
+
         $this->assertCount(1, $list);
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors'));
-
-        var_dump($list);
 
         // Collection names should not be unique
         $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('actors2', permissions: [

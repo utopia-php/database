@@ -48,7 +48,7 @@ trait CollectionTests
             Permission::create(Role::any()),
             Permission::read(Role::any()),
         ]);
-        var_dump($collection);
+
         $this->assertInstanceOf('Utopia\Database\Document', $collection);
 
         $list = $database->listCollections();
@@ -64,7 +64,11 @@ trait CollectionTests
         ]));
         $this->assertCount(2, $database->listCollections());
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors2'));
+
+        $alias = Query::DEFAULT_ALIAS;
+
         $collection = $database->getCollection('actors2');
+
         $collection->setAttribute('name', 'actors'); // change name to one that exists
         $this->assertInstanceOf('Utopia\Database\Document', $database->updateDocument(
             $collection->getCollection(),

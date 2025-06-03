@@ -1316,7 +1316,7 @@ class Database
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
 
-        return $createdCollection;
+        return $createdCollection->addAlias();
     }
 
     /**

@@ -15,6 +15,8 @@ class Document extends ArrayObject
     public const SET_TYPE_PREPEND = 'prepend';
     public const SET_TYPE_APPEND = 'append';
 
+    protected bool $alias = false;
+
     /**
      * Construct.
      *
@@ -457,4 +459,17 @@ class Document extends ArrayObject
             }
         }
     }
+    public function addAlias(string $alias = Query::DEFAULT_ALIAS): Document
+    {
+        $document = new Document();
+
+        foreach ($this as $key => $value) {
+            $document->setAttribute($alias.'.'.$key, $value);
+        }
+
+        $document->alias = true;
+
+        return $document;
+    }
+
 }

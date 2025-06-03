@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -1349,7 +1350,13 @@ trait AttributeTests
         /**
          * functional index dependency cannot be dropped or rename
          */
-        $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
+
+        try {
+            $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
+        } catch (Throwable $e) {
+            self::assertTrue($e instanceof IndexException);
+            self::assertEquals($e->getMessage(), 'Index on array attributes is forbidden');
+        }
 
         if ($this->getDatabase()->getAdapter()->getSupportForCastIndexArray()) {
             /**
@@ -1395,9 +1402,9 @@ trait AttributeTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
-                $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
+                $this->assertEquals('Index on array attributes is forbidden', $e->getMessage());
             } else {
-                $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+                $this->assertEquals('Index on array attributes is forbidden', $e->getMessage());
             }
         }
 
@@ -1405,7 +1412,7 @@ trait AttributeTests
             $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+            $this->assertEquals('Index on array attributes is forbidden', $e->getMessage());
         }
 
         $this->assertEquals(true, $database->createAttribute(

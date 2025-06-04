@@ -367,32 +367,47 @@ abstract class SQL extends Adapter
 
         $document = $document[0];
 
-        if (\array_key_exists('_id', $document)) {
-            $document['$sequence'] = $document['_id'];
-            unset($document['_id']);
-        }
-        if (\array_key_exists('_uid', $document)) {
-            $document['$id'] = $document['_uid'];
-            unset($document['_uid']);
-        }
-        if (\array_key_exists('_tenant', $document)) {
-            $document['$tenant'] = $document['_tenant'] === null ? null : (int)$document['_tenant'];
-            unset($document['_tenant']);
-        }
-        if (\array_key_exists('_createdAt', $document)) {
-            $document['$createdAt'] = $document['_createdAt'];
-            unset($document['_createdAt']);
-        }
-        if (\array_key_exists('_updatedAt', $document)) {
-            $document['$updatedAt'] = $document['_updatedAt'];
-            unset($document['_updatedAt']);
-        }
-        if (\array_key_exists('_permissions', $document)) {
-            $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
-            unset($document['_permissions']);
+        $key = $alias.'._uid';
+        if (\array_key_exists($key, $document)) {
+            $document[$alias.'.$id'] = $document[$key];
+            unset($document[$key]);
         }
 
-        return new Document($document);
+        $key = $alias.'._id';
+        if (\array_key_exists($key, $document)) {
+            $document[$alias.'.$sequence'] = $document[$key];
+            unset($document[$key]);
+        }
+
+        $key = $alias.'._tenant';
+        if (\array_key_exists($key, $document)) {
+            $document[$alias.'.$tenant'] = $document[$key] === null ? null : (int)$document[$key];
+            unset($document[$key]);
+        }
+
+        $key = $alias.'._createdAt';
+        if (\array_key_exists($key, $document)) {
+            $document[$alias.'.$createdAt'] = $document[$key];
+            unset($document[$key]);
+        }
+
+        $key = $alias.'._updatedAt';
+        if (\array_key_exists($key, $document)) {
+            $document[$alias.'.$updatedAt'] = $document[$key];
+            unset($document[$key]);
+        }
+
+        $key = $alias.'._permissions';
+        if (\array_key_exists($key, $document)) {
+            $document[$alias.'.$permissions'] = \json_decode($document[$key] ?? '[]', true);
+            unset($document[$key]);
+        }
+
+        $document = new Document($document);
+
+        $document->setAlias(true);
+
+        return $document;
     }
 
     /**

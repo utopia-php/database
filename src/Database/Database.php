@@ -1315,7 +1315,6 @@ class Database
         $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
-
         return $createdCollection->addAlias();
     }
 
@@ -3192,6 +3191,8 @@ class Database
             return new Document();
         }
 
+        $alias = Query::DEFAULT_ALIAS;
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -3298,7 +3299,7 @@ class Database
             return $document;
         }
 
-        $document->setAttribute('$collection', $collection->getId());
+        $document->setAttribute($alias.'.$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
@@ -6390,6 +6391,9 @@ class Database
                 $document->setAttribute($key, ($array) ? $value : $value[0]);
             }
         }
+
+        $collection->addAlias();
+        $document->addAlias();
 
         return $document;
     }

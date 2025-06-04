@@ -461,6 +461,10 @@ class Document extends ArrayObject
     }
     public function addAlias(string $alias = Query::DEFAULT_ALIAS): Document
     {
+        if ($this->alias === true){
+            return $this;
+        }
+
         $document = new Document();
 
         foreach ($this as $key => $value) {
@@ -472,4 +476,22 @@ class Document extends ArrayObject
         return $document;
     }
 
+    public function removeAlias(string $alias = Query::DEFAULT_ALIAS): void
+    {
+        if ($this->alias === false){
+            return;
+        }
+
+        foreach ($this as $key => $value) {
+            if (str_starts_with($key, $alias.'.')) {
+                $new = str_replace($alias.'.', '', $key);
+                $this->setAttribute($new, $value);
+            }
+        }
+    }
+
+    public function setAlias(bool $bool): void
+    {
+        $this->alias = $bool;
+    }
 }

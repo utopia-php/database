@@ -1672,6 +1672,8 @@ class MariaDB extends SQL
             }
 
             $results[$index] = new Document($results[$index]);
+
+            $results[$index]->setAlias(true);
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {

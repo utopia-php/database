@@ -52,7 +52,6 @@ trait CollectionTests
         $this->assertInstanceOf('Utopia\Database\Document', $collection);
 
         $list = $database->listCollections();
-        var_dump($list[0]);
 
         $this->assertCount(1, $list);
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors'));
@@ -65,11 +64,13 @@ trait CollectionTests
         $this->assertCount(2, $database->listCollections());
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors2'));
 
-        $alias = Query::DEFAULT_ALIAS;
-
         $collection = $database->getCollection('actors2');
 
+        $collection->removeAlias();
+        var_dump($collection);
+
         $collection->setAttribute('name', 'actors'); // change name to one that exists
+
         $this->assertInstanceOf('Utopia\Database\Document', $database->updateDocument(
             $collection->getCollection(),
             $collection->getId(),

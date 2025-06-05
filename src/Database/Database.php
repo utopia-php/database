@@ -1309,13 +1309,18 @@ class Database
         }
 
         if ($id === self::METADATA) {
-            return new Document(self::COLLECTION);
+            $document = new Document(self::COLLECTION);
+            $document->addAlias();
+            return $document;
         }
 
         $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
 
         $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
-        return $createdCollection->addAlias();
+
+        $createdCollection->addAlias();
+
+        return $createdCollection;
     }
 
     /**
@@ -3180,7 +3185,9 @@ class Database
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         if ($collection === self::METADATA && $id === self::METADATA) {
-            return new Document(self::COLLECTION);
+            $document = new Document(self::COLLECTION);
+            $document->addAlias();
+            return $document;
         }
 
         if (empty($collection)) {
@@ -3585,6 +3592,10 @@ class Database
      */
     public function createDocument(string $collection, Document $document): Document
     {
+        if($document->getAlias()){
+
+        }
+
         if (
             $collection !== self::METADATA
             && $this->adapter->getSharedTables()
@@ -3642,7 +3653,7 @@ class Database
                 throw new DatabaseException($validator->getDescription());
             }
         }
-
+var_dump($collection);
         $structure = new Structure(
             $collection,
             $this->adapter->getMinDateTime(),
@@ -6391,9 +6402,6 @@ class Database
                 $document->setAttribute($key, ($array) ? $value : $value[0]);
             }
         }
-
-        $collection->addAlias();
-        $document->addAlias();
 
         return $document;
     }

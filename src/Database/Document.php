@@ -213,6 +213,9 @@ class Document extends ArrayObject
      */
     public function getAttribute(string $name, mixed $default = null): mixed
     {
+        $alias = $this->alias ? Query::DEFAULT_ALIAS.'.':'';
+        $name = $alias.$name;
+
         if (isset($this[$name])) {
             return $this[$name];
         }
@@ -459,21 +462,18 @@ class Document extends ArrayObject
             }
         }
     }
-    public function addAlias(string $alias = Query::DEFAULT_ALIAS): Document
+    public function addAlias(string $alias = Query::DEFAULT_ALIAS): void
     {
         if ($this->alias === true){
-            return $this;
+            return;
         }
-
-        $document = new Document();
 
         foreach ($this as $key => $value) {
-            $document->setAttribute($alias.'.'.$key, $value);
+            $this->setAttribute($alias.'.'.$key, $value);
+            $this->removeAttribute($key);
         }
 
-        $document->alias = true;
-
-        return $document;
+        $this->alias = true;
     }
 
     public function removeAlias(string $alias = Query::DEFAULT_ALIAS): void
@@ -483,15 +483,21 @@ class Document extends ArrayObject
         }
 
         foreach ($this as $key => $value) {
-            if (str_starts_with($key, $alias.'.')) {
-                $new = str_replace($alias.'.', '', $key);
-                $this->setAttribute($new, $value);
-            }
+            $new = str_replace($alias.'.', '', $key);
+            $this->setAttribute($new, $value);
+            $this->removeAttribute($key);
         }
+
+        $this->alias = false;
     }
 
     public function setAlias(bool $bool): void
     {
         $this->alias = $bool;
+    }
+
+    public function getAlias(bool $boo): bool
+    {
+        return $this->alias;
     }
 }

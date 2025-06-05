@@ -53,6 +53,8 @@ trait CollectionTests
 
         $list = $database->listCollections();
 
+        $this->assertEquals('dsdsds', 'dsd');
+
         $this->assertCount(1, $list);
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors'));
 
@@ -65,9 +67,6 @@ trait CollectionTests
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors2'));
 
         $collection = $database->getCollection('actors2');
-
-        $collection->removeAlias();
-        var_dump($collection);
 
         $collection->setAttribute('name', 'actors'); // change name to one that exists
 

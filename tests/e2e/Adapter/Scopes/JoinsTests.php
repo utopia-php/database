@@ -478,6 +478,8 @@ trait JoinsTests
         $this->assertArrayHasKey('as_permissions', $document);
         $this->assertIsArray($document->getAttribute('as_permissions'));
 
+        $this->assertEquals('dsdsd', 'ds');
+
 
 //        /**
 //         * ambiguous and duplications selects

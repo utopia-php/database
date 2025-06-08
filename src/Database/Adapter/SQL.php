@@ -1555,10 +1555,41 @@ var_dump($sql);
      * @return string
      * @throws Exception
      */
+    protected function addHiddenAttribute(array $selects): string
+    {
+        $hash = [Query::DEFAULT_ALIAS];
+
+        foreach ($selects as $select) {
+            if (!in_array($select->getAlias(), $hash)){
+                $hash[] = $select->getAlias();
+            }
+        }
+
+        $strings = [];
+
+        foreach ($hash as $alias) {
+            $strings[] = $alias.'._uid as '.$this->quote($alias.'::$id');
+            $strings[] = $alias.'._id as '.$this->quote($alias.'::$internalId');
+            $strings[] = $alias.'._tenant as '.$this->quote($alias.'::$tenant');
+            $strings[] = $alias.'._permissions as '.$this->quote($alias.'::$permissions');
+            $strings[] = $alias.'._createdAt as '.$this->quote($alias.'::$createdAt');
+            $strings[] = $alias.'._updatedAt as '.$this->quote($alias.'::$updatedAt');
+        }
+
+        return ', '.implode(', ', $strings);
+    }
+
+    /**
+     * Get the SQL projection given the selected attributes
+     *
+     * @param array<Query> $selects
+     * @return string
+     * @throws Exception
+     */
     protected function getAttributeProjection(array $selects): string
     {
         if (empty($selects)) {
-            return Query::DEFAULT_ALIAS.'.*';
+            return Query::DEFAULT_ALIAS.'.*'.$this->addHiddenAttribute($selects);
         }
 
         $string = '';
@@ -1599,7 +1630,7 @@ var_dump($sql);
             $string .= "{$this->quote($alias)}.{$attribute}{$as}";
         }
 
-        return $string;
+        return $string.$this->addHiddenAttribute($selects);
     }
 
     /**

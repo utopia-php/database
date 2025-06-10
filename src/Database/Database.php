@@ -5141,7 +5141,7 @@ class Database
             $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
             if ($document->isEmpty()) {
-                return false;
+                throw new NotFoundException('Document not found');
             }
 
             $validator = new Authorization(self::PERMISSION_UPDATE);
@@ -5237,7 +5237,7 @@ class Database
             $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
             if ($document->isEmpty()) {
-                return false;
+                throw new NotFoundException('Document not found');
             }
 
             $validator = new Authorization(self::PERMISSION_UPDATE);

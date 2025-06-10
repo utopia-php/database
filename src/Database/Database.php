@@ -18,6 +18,7 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -5143,11 +5144,11 @@ class Database
          */
         $attr = \end($attr);
         if (!in_array($attr->getAttribute('type'), $whiteList)) {
-            throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
+            throw new TypeException('Attribute type must be one of: ' . implode(',', $whiteList));
         }
 
         if ($max && ($document->getAttribute($attribute) + $value > $max)) {
-            throw new DatabaseException('Attribute value exceeds maximum limit: ' . $max);
+            throw new LimitException('Attribute value exceeds maximum limit: ' . $max);
         }
 
         $time = DateTime::now();
@@ -5234,11 +5235,11 @@ class Database
          */
         $attr = \end($attr);
         if (!in_array($attr->getAttribute('type'), $whiteList)) {
-            throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
+            throw new TypeException('Attribute type must be one of: ' . \implode(',', $whiteList));
         }
 
         if ($min && ($document->getAttribute($attribute) - $value < $min)) {
-            throw new DatabaseException('Attribute value Exceeds minimum limit ' . $min);
+            throw new LimitException('Attribute value exceeds minimum limit: ' . $min);
         }
 
         $time = DateTime::now();

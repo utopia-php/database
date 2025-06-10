@@ -1174,7 +1174,7 @@ trait AttributeTests
         try {
             $queries = [Query::equal('title', ['test'])];
             $database->find($col->getId(), $queries);
-        } catch (Throwable $e) {
+        } catch (Throwable) {
             $this->fail('Should not have thrown error');
         }
     }

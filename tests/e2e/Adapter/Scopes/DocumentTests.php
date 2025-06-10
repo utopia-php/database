@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -550,7 +551,7 @@ trait DocumentTests
 
         $database->createOrUpdateDocumentsWithIncrease(
             collection: __FUNCTION__,
-            attribute:'integer',
+            attribute: 'integer',
             documents: $documents
         );
 
@@ -565,7 +566,7 @@ trait DocumentTests
 
         $database->createOrUpdateDocumentsWithIncrease(
             collection: __FUNCTION__,
-            attribute:'integer',
+            attribute: 'integer',
             documents: $documents
         );
 
@@ -964,6 +965,7 @@ trait DocumentTests
         // cleanup collection
         $database->deleteCollection('defaults');
     }
+
     public function testIncreaseDecrease(): Document
     {
         /** @var Database $database */
@@ -976,12 +978,14 @@ trait DocumentTests
         $this->assertEquals(true, $database->createAttribute($collection, 'decrease', Database::VAR_INTEGER, 0, true));
         $this->assertEquals(true, $database->createAttribute($collection, 'increase_text', Database::VAR_STRING, 255, true));
         $this->assertEquals(true, $database->createAttribute($collection, 'increase_float', Database::VAR_FLOAT, 0, true));
+        $this->assertEquals(true, $database->createAttribute($collection, 'sizes', Database::VAR_INTEGER, 8, required: false, array: true));
 
         $document = $database->createDocument($collection, new Document([
             'increase' => 100,
             'decrease' => 100,
             'increase_float' => 100,
             'increase_text' => 'some text',
+            'sizes' => [10, 20, 30],
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -1016,6 +1020,7 @@ trait DocumentTests
 
         return $document;
     }
+
     /**
      * @depends testIncreaseDecrease
      */
@@ -1040,7 +1045,6 @@ trait DocumentTests
         $this->assertEquals(false, $database->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 10, 99));
     }
 
-
     /**
      * @depends testIncreaseDecrease
      */
@@ -1049,8 +1053,28 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        $this->expectException(Exception::class);
-        $this->assertEquals(false, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase_text'));
+        try {
+            $this->assertEquals(false, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase_text'));
+            $this->fail('Expected TypeException not thrown');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(TypeException::class, $e, $e->getMessage());
+        }
+    }
+
+    /**
+     * @depends testIncreaseDecrease
+     */
+    public function testIncreaseArrayAttribute(Document $document): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        try {
+            $this->assertEquals(false, $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'sizes'));
+            $this->fail('Expected TypeException not thrown');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(TypeException::class, $e);
+        }
     }
 
     /**
@@ -1080,8 +1104,6 @@ trait DocumentTests
 
         return $document;
     }
-
-
 
     /**
      * @depends testCreateDocument

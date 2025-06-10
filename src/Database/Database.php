@@ -5096,7 +5096,7 @@ class Database
      * @param string $attribute The attribute to increase
      * @param int|float $value The value to increase the attribute by, can be a float
      * @param int|float|null $max The maximum value the attribute can reach after the increase, null means no limit
-     * @return int The new value of the attribute after the increase
+     * @return Document
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws LimitException
@@ -5110,7 +5110,7 @@ class Database
         string $attribute,
         int|float $value = 1,
         int|float|null $max = null
-    ): int|float {
+    ): Document {
         if ($value <= 0) { // Can be a float
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
@@ -5174,14 +5174,17 @@ class Database
                 max: $max
             );
 
-            return $document;
+            return $document->setAttribute(
+                $attribute,
+                $document->getAttribute($attribute) - $value
+            );
         });
 
         $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
 
-        return $document->getAttribute($attribute) + $value;
+        return $document;
     }
 
 
@@ -5193,7 +5196,7 @@ class Database
      * @param string $attribute
      * @param int|float $value
      * @param int|float|null $min
-     * @return int|float
+     * @return Document
      *
      * @throws AuthorizationException
      * @throws DatabaseException
@@ -5204,7 +5207,7 @@ class Database
         string $attribute,
         int|float $value = 1,
         int|float|null $min = null
-    ): int|float {
+    ): Document {
         if ($value <= 0) { // Can be a float
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
@@ -5270,14 +5273,17 @@ class Database
                 min: $min
             );
 
-            return $document;
+            return $document->setAttribute(
+                $attribute,
+                $document->getAttribute($attribute) - $value
+            );
         });
 
         $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
-        return $document->getAttribute($attribute) - $value;
+        return $document;
     }
 
     /**

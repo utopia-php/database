@@ -5231,8 +5231,8 @@ class Database
          * @var Document $attr
          */
         $attr = \end($attr);
-        if (!in_array($attr->getAttribute('type'), $whiteList)) {
-            throw new TypeException('Attribute type must be one of: ' . \implode(',', $whiteList));
+        if (!\in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
+            throw new TypeException('Attribute must be an integer or float and can not be an array.');
         }
 
         $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $min) {

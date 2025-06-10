@@ -1382,8 +1382,15 @@ class MariaDB extends SQL
      * @return bool
      * @throws DatabaseException
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
-    {
+    public function increaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value,
+        string $updatedAt,
+        int|float|null $min = null,
+        int|float|null $max = null
+    ): bool {
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
@@ -1412,7 +1419,12 @@ class MariaDB extends SQL
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        $stmt->execute() || throw new DatabaseException('Failed to update attribute');
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
         return true;
     }
 

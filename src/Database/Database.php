@@ -5091,43 +5091,31 @@ class Database
     /**
      * Increase a document attribute by a value
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $attribute
-     * @param int|float $value
-     * @param int|float|null $max
-     * @return bool
-     *
+     * @param string $collection The collection ID
+     * @param string $id The document ID
+     * @param string $attribute The attribute to increase
+     * @param int|float $value The value to increase the attribute by, can be a float
+     * @param int|float|null $max The maximum value the attribute can reach after the increase, null means no limit
+     * @return int The new value of the attribute after the increase
      * @throws AuthorizationException
      * @throws DatabaseException
-     * @throws Exception
+     * @throws LimitException
+     * @throws NotFoundException
+     * @throws TypeException
+     * @throws \Throwable
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
-    {
+    public function increaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value = 1,
+        int|float|null $max = null
+    ): int|float {
         if ($value <= 0) { // Can be a float
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
 
-        $validator = new Authorization(self::PERMISSION_UPDATE);
-
-        /* @var $document Document */
-        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
-
-        if ($document->isEmpty()) {
-            return false;
-        }
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->getId() !== self::METADATA) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            if (!$validator->isValid([
-                ...$collection->getUpdate(),
-                ...($documentSecurity ? $document->getUpdate() : [])
-            ])) {
-                throw new AuthorizationException($validator->getDescription());
-            }
-        }
 
         $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
             return $a['$id'] === $attribute;
@@ -5137,46 +5125,63 @@ class Database
             throw new NotFoundException('Attribute not found');
         }
 
-        $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
+        $whiteList = [
+            self::VAR_INTEGER,
+            self::VAR_FLOAT
+        ];
 
-        /**
-         * @var Document $attr
-         */
+        /** @var Document $attr */
         $attr = \end($attr);
         if (!in_array($attr->getAttribute('type'), $whiteList)) {
             throw new TypeException('Attribute type must be one of: ' . implode(',', $whiteList));
         }
 
-        if ($max && ($document->getAttribute($attribute) + $value > $max)) {
-            throw new LimitException('Attribute value exceeds maximum limit: ' . $max);
-        }
+        $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $max) {
+            /* @var $document Document */
+            $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
-        $time = DateTime::now();
-        $updatedAt = $document->getUpdatedAt();
-        $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            if ($document->isEmpty()) {
+                return false;
+            }
 
-        // Check if document was updated after the request timestamp
-        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-            throw new ConflictException('Document was updated after the request timestamp');
-        }
+            $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        $max = $max ? $max - $value : null;
+            if ($collection->getId() !== self::METADATA) {
+                $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                if (!$validator->isValid([
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $document->getUpdate() : [])
+                ])) {
+                    throw new AuthorizationException($validator->getDescription());
+                }
+            }
 
-        $result = $this->adapter->increaseDocumentAttribute(
-            $collection->getId(),
-            $id,
-            $attribute,
-            $value,
-            $updatedAt,
-            max: $max
-        );
+            if ($max && ($document->getAttribute($attribute) + $value > $max)) {
+                throw new LimitException('Attribute value exceeds maximum limit: ' . $max);
+            }
+
+            $time = DateTime::now();
+            $updatedAt = $document->getUpdatedAt();
+            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $max = $max ? $max - $value : null;
+
+            $this->adapter->increaseDocumentAttribute(
+                $collection->getId(),
+                $id,
+                $attribute,
+                $value,
+                $updatedAt,
+                max: $max
+            );
+
+            return $document;
+        });
 
         $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
 
-        return $result;
+        return $document->getAttribute($attribute) + $value;
     }
 
 
@@ -5188,37 +5193,23 @@ class Database
      * @param string $attribute
      * @param int|float $value
      * @param int|float|null $min
-     * @return bool
+     * @return int|float
      *
      * @throws AuthorizationException
      * @throws DatabaseException
      */
-    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
-    {
+    public function decreaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value = 1,
+        int|float|null $min = null
+    ): int|float {
         if ($value <= 0) { // Can be a float
             throw new DatabaseException('Value must be numeric and greater than 0');
         }
 
-        $validator = new Authorization(self::PERMISSION_UPDATE);
-
-        /* @var $document Document */
-        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
-
-        if ($document->isEmpty()) {
-            return false;
-        }
-
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->getId() !== self::METADATA) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            if (!$validator->isValid([
-                ...$collection->getUpdate(),
-                ...($documentSecurity ? $document->getUpdate() : [])
-            ])) {
-                throw new AuthorizationException($validator->getDescription());
-            }
-        }
 
         $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
             return $a['$id'] === $attribute;
@@ -5228,7 +5219,10 @@ class Database
             throw new NotFoundException('Attribute not found');
         }
 
-        $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
+        $whiteList = [
+            self::VAR_INTEGER,
+            self::VAR_FLOAT
+        ];
 
         /**
          * @var Document $attr
@@ -5238,36 +5232,52 @@ class Database
             throw new TypeException('Attribute type must be one of: ' . \implode(',', $whiteList));
         }
 
-        if ($min && ($document->getAttribute($attribute) - $value < $min)) {
-            throw new LimitException('Attribute value exceeds minimum limit: ' . $min);
-        }
+        $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $min) {
+            /* @var $document Document */
+            $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
-        $time = DateTime::now();
-        $updatedAt = $document->getUpdatedAt();
-        $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            if ($document->isEmpty()) {
+                return false;
+            }
 
-        // Check if document was updated after the request timestamp
-        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-            throw new ConflictException('Document was updated after the request timestamp');
-        }
+            $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        $min = $min ? $min + $value : null;
+            if ($collection->getId() !== self::METADATA) {
+                $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                if (!$validator->isValid([
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $document->getUpdate() : [])
+                ])) {
+                    throw new AuthorizationException($validator->getDescription());
+                }
+            }
 
-        $result = $this->adapter->increaseDocumentAttribute(
-            $collection->getId(),
-            $id,
-            $attribute,
-            $value * -1,
-            $updatedAt,
-            min: $min
-        );
+            if ($min && ($document->getAttribute($attribute) - $value < $min)) {
+                throw new LimitException('Attribute value exceeds minimum limit: ' . $min);
+            }
+
+            $time = DateTime::now();
+            $updatedAt = $document->getUpdatedAt();
+            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $min = $min ? $min + $value : null;
+
+            $this->adapter->increaseDocumentAttribute(
+                $collection->getId(),
+                $id,
+                $attribute,
+                $value * -1,
+                $updatedAt,
+                min: $min
+            );
+
+            return $document;
+        });
 
         $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
-        return $result;
+        return $document->getAttribute($attribute) - $value;
     }
 
     /**

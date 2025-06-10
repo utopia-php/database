@@ -981,7 +981,7 @@ trait DocumentTests
             'increase' => 100,
             'decrease' => 100,
             'increase_float' => 100,
-            'increase_text' => "some text",
+            'increase_text' => 'some text',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -992,21 +992,25 @@ trait DocumentTests
 
         $updatedAt = $document->getUpdatedAt();
 
-        $this->assertEquals(true, $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101));
+        $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101);
+        $this->assertEquals(101, $doc->getAttribute('increase'));
 
         $document = $database->getDocument($collection, $document->getId());
         $this->assertEquals(101, $document->getAttribute('increase'));
         $this->assertNotEquals($updatedAt, $document->getUpdatedAt());
 
-        $this->assertEquals(true, $database->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98));
+        $doc = $database->decreaseDocumentAttribute($collection, $document->getId(), 'decrease', 1, 98);
+        $this->assertEquals(99, $doc->getAttribute('decrease'));
         $document = $database->getDocument($collection, $document->getId());
         $this->assertEquals(99, $document->getAttribute('decrease'));
 
-        $this->assertEquals(true, $database->increaseDocumentAttribute($collection, $document->getId(), 'increase_float', 5.5, 110));
+        $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'increase_float', 5.5, 110);
+        $this->assertEquals(105.5, $doc->getAttribute('increase_float'));
         $document = $database->getDocument($collection, $document->getId());
         $this->assertEquals(105.5, $document->getAttribute('increase_float'));
 
-        $this->assertEquals(true, $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100));
+        $doc = $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase_float', 1.1, 100);
+        $this->assertEquals(104.4, $doc->getAttribute('increase_float'));
         $document = $database->getDocument($collection, $document->getId());
         $this->assertEquals(104.4, $document->getAttribute('increase_float'));
 

@@ -1153,7 +1153,15 @@ abstract class Adapter
      * @return bool
      * @throws Exception
      */
-    abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool;
+    abstract public function increaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value,
+        string $updatedAt,
+        int|float|null $min = null,
+        int|float|null $max = null
+    ): bool;
 
     /**
      * Returns the connection ID identifier

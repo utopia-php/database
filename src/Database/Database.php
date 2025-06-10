@@ -4976,7 +4976,7 @@ class Database
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt)
-                ->removeAttribute('$internalId');
+                ->removeAttribute('$sequence');
 
             if ($old->isEmpty()) {
                 $createdAt = $document->getCreatedAt();

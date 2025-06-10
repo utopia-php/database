@@ -5176,7 +5176,7 @@ class Database
 
             return $document->setAttribute(
                 $attribute,
-                $document->getAttribute($attribute) - $value
+                $document->getAttribute($attribute) + $value
             );
         });
 

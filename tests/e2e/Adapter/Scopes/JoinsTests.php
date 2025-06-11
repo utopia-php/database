@@ -367,6 +367,14 @@ trait JoinsTests
             $this->assertEquals('Invalid Query Select: Invalid "as" on attribute "*"', $e->getMessage());
         }
 
+
+        $document = $db->getDocument(
+            '__sessions',
+            $session2->getId()
+        );
+        var_dump($document);
+        $this->assertEquals('dsdsd', 'ds');
+
         /**
          * Simple `as` query getDocument
          */
@@ -413,8 +421,6 @@ trait JoinsTests
                 Query::select('$permissions', as: '___permissions'),
             ]
         );
-
-        var_dump($document);
 
         $this->assertArrayHasKey('$permissions', $document);
         $this->assertArrayHasKey('$collection', $document);
@@ -478,7 +484,6 @@ trait JoinsTests
         $this->assertArrayHasKey('as_permissions', $document);
         $this->assertIsArray($document->getAttribute('as_permissions'));
 
-        $this->assertEquals('dsdsd', 'ds');
 
 
 //        /**

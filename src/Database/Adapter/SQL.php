@@ -337,11 +337,13 @@ abstract class SQL extends Adapter
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
+        $alias = Query::DEFAULT_ALIAS;
+
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections)}
-            FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid 
-            {$this->getTenantQuery($collection)}
+		    SELECT {$this->getAttributeProjection($selections, $alias)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
+            {$this->getTenantQuery($collection, $alias)}
 		";
 
         if ($this->getSupportForUpdateLock()) {
@@ -1680,13 +1682,10 @@ abstract class SQL extends Adapter
      * @return mixed
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         if (empty($selections) || \in_array('*', $selections)) {
-            if (!empty($prefix)) {
-                return "{$this->quote($prefix)}.*";
-            }
-            return '*';
+            return "{$this->quote($prefix)}.*";
         }
 
         $internalKeys = [
@@ -1703,14 +1702,8 @@ abstract class SQL extends Adapter
             $selections[] = $this->getInternalKeyForAttribute($internalKey);
         }
 
-        if (!empty($prefix)) {
-            foreach ($selections as &$selection) {
-                $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
-            }
-        } else {
-            foreach ($selections as &$selection) {
-                $selection = "{$this->quote($this->filter($selection))}";
-            }
+        foreach ($selections as &$selection) {
+            $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
         }
 
         return \implode(',', $selections);

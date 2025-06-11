@@ -1070,7 +1070,7 @@ abstract class Adapter
      * @param string $prefix
      * @return mixed
      */
-    abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
+    abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
 
     /**
      * Get all selected attributes from queries

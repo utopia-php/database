@@ -455,7 +455,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

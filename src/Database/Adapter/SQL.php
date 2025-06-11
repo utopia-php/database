@@ -337,11 +337,13 @@ abstract class SQL extends Adapter
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
+        $alias = Query::DEFAULT_ALIAS;
+
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections)}
-            FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid 
-            {$this->getTenantQuery($collection)}
+		    SELECT {$this->getAttributeProjection($selections, $alias)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
+            {$this->getTenantQuery($collection, $alias)}
 		";
 
         if ($this->getSupportForUpdateLock()) {
@@ -1675,18 +1677,52 @@ abstract class SQL extends Adapter
     /**
      * Get the SQL projection given the selected attributes
      *
+     * @param array<Query> $selects
+     * @return string
+     * @throws Exception
+     */
+    protected function addHiddenAttribute(array $selects): string
+    {
+        $hash = [Query::DEFAULT_ALIAS => true];
+
+        foreach ($selects as $select) {
+            $alias = $select->getAlias();
+            if (!isset($hash[$alias])){
+                $hash[$alias] = true;
+            }
+        }
+
+        $hash = array_keys($hash);
+
+        $strings = [];
+
+        foreach ($hash as $alias) {
+            $strings[] = $alias.'._uid as '.$this->quote($alias.'::$id');
+            $strings[] = $alias.'._id as '.$this->quote($alias.'::$internalId');
+            $strings[] = $alias.'._permissions as '.$this->quote($alias.'::$permissions');
+            $strings[] = $alias.'._createdAt as '.$this->quote($alias.'::$createdAt');
+            $strings[] = $alias.'._updatedAt as '.$this->quote($alias.'::$updatedAt');
+
+            if ($this->sharedTables) {
+                $strings[] = $alias.'._tenant as '.$this->quote($alias.'::$tenant');
+            }
+        }
+
+        return ', '.implode(', ', $strings);
+    }
+
+    /**
+     * Get the SQL projection given the selected attributes
+     *
      * @param array<string> $selections
      * @param string $prefix
      * @return mixed
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         if (empty($selections) || \in_array('*', $selections)) {
-            if (!empty($prefix)) {
-                return "{$this->quote($prefix)}.*";
-            }
-            return '*';
+            return "{$this->quote($prefix)}.*";
         }
 
         $internalKeys = [
@@ -1703,14 +1739,8 @@ abstract class SQL extends Adapter
             $selections[] = $this->getInternalKeyForAttribute($internalKey);
         }
 
-        if (!empty($prefix)) {
-            foreach ($selections as &$selection) {
-                $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
-            }
-        } else {
-            foreach ($selections as &$selection) {
-                $selection = "{$this->quote($this->filter($selection))}";
-            }
+        foreach ($selections as &$selection) {
+            $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
         }
 
         return \implode(',', $selections);

@@ -1677,43 +1677,6 @@ abstract class SQL extends Adapter
     /**
      * Get the SQL projection given the selected attributes
      *
-     * @param array<Query> $selects
-     * @return string
-     * @throws Exception
-     */
-    protected function addHiddenAttribute(array $selects): string
-    {
-        $hash = [Query::DEFAULT_ALIAS => true];
-
-        foreach ($selects as $select) {
-            $alias = $select->getAlias();
-            if (!isset($hash[$alias])){
-                $hash[$alias] = true;
-            }
-        }
-
-        $hash = array_keys($hash);
-
-        $strings = [];
-
-        foreach ($hash as $alias) {
-            $strings[] = $alias.'._uid as '.$this->quote($alias.'::$id');
-            $strings[] = $alias.'._id as '.$this->quote($alias.'::$internalId');
-            $strings[] = $alias.'._permissions as '.$this->quote($alias.'::$permissions');
-            $strings[] = $alias.'._createdAt as '.$this->quote($alias.'::$createdAt');
-            $strings[] = $alias.'._updatedAt as '.$this->quote($alias.'::$updatedAt');
-
-            if ($this->sharedTables) {
-                $strings[] = $alias.'._tenant as '.$this->quote($alias.'::$tenant');
-            }
-        }
-
-        return ', '.implode(', ', $strings);
-    }
-
-    /**
-     * Get the SQL projection given the selected attributes
-     *
      * @param array<string> $selections
      * @param string $prefix
      * @return mixed

@@ -741,8 +741,9 @@ trait DocumentTests
             $newDocument
                 ->setAttribute('last', 'last')
         ]);
-
+var_dump($docs);
         $this->assertEquals(1, $docs);
+
         $this->assertEquals('first', $existingDocument->getAttribute('first'));
         $this->assertEquals(null, $existingDocument->getAttribute('last'));
         $this->assertEquals('second', $newDocument->getAttribute('first'));

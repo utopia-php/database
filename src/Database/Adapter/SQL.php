@@ -350,6 +350,10 @@ abstract class SQL extends Adapter
             $sql .= " {$forUpdate}";
         }
 
+        if (!empty($selections)){
+            echo $sql.PHP_EOL;
+        }
+
         $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $id);
@@ -1677,35 +1681,26 @@ abstract class SQL extends Adapter
     /**
      * Get the SQL projection given the selected attributes
      *
-     * @param array<Query> $selects
+     * @param array<string> $selects
      * @return string
      * @throws Exception
      */
     protected function addHiddenAttribute(array $selects): string
     {
-        $hash = [Query::DEFAULT_ALIAS => true];
+        //return '';
 
-        foreach ($selects as $select) {
-            $alias = $select->getAlias();
-            if (!isset($hash[$alias])){
-                $hash[$alias] = true;
-            }
-        }
-
-        $hash = array_keys($hash);
+        $alias = Query::DEFAULT_ALIAS;
 
         $strings = [];
 
-        foreach ($hash as $alias) {
-            $strings[] = $alias.'._uid as '.$this->quote($alias.'::$id');
-            $strings[] = $alias.'._id as '.$this->quote($alias.'::$internalId');
-            $strings[] = $alias.'._permissions as '.$this->quote($alias.'::$permissions');
-            $strings[] = $alias.'._createdAt as '.$this->quote($alias.'::$createdAt');
-            $strings[] = $alias.'._updatedAt as '.$this->quote($alias.'::$updatedAt');
+        $strings[] = $alias.'._uid as '.$this->quote($alias.'::$id');
+        $strings[] = $alias.'._id as '.$this->quote($alias.'::$sequence');
+        $strings[] = $alias.'._permissions as '.$this->quote($alias.'::$permissions');
+        $strings[] = $alias.'._createdAt as '.$this->quote($alias.'::$createdAt');
+        $strings[] = $alias.'._updatedAt as '.$this->quote($alias.'::$updatedAt');
 
-            if ($this->sharedTables) {
-                $strings[] = $alias.'._tenant as '.$this->quote($alias.'::$tenant');
-            }
+        if ($this->sharedTables) {
+            $strings[] = $alias.'._tenant as '.$this->quote($alias.'::$tenant');
         }
 
         return ', '.implode(', ', $strings);
@@ -1722,7 +1717,7 @@ abstract class SQL extends Adapter
     protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         if (empty($selections) || \in_array('*', $selections)) {
-            return "{$this->quote($prefix)}.*";
+            return "{$this->quote($prefix)}.* {$this->addHiddenAttribute($selections)}";
         }
 
         $internalKeys = [
@@ -1743,7 +1738,7 @@ abstract class SQL extends Adapter
             $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
         }
 
-        return \implode(',', $selections);
+        return \implode(',', $selections).$this->addHiddenAttribute($selections);
     }
 
     protected function getInternalKeyForAttribute(string $attribute): string

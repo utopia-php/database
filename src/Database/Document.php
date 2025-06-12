@@ -183,13 +183,8 @@ class Document extends ArrayObject
     {
         $attributes = [];
 
-        $internalKeys = \array_map(
-            fn ($attr) => $attr['$id'],
-            Database::INTERNAL_ATTRIBUTES
-        );
-
         foreach ($this as $attribute => $value) {
-            if (\in_array($attribute, $internalKeys)) {
+            if (Database::isInternalAttribute($attribute)){
                 continue;
             }
 

@@ -527,6 +527,25 @@ class Database
     }
 
     /**
+     * Check if attribute is internal
+     *
+     * @param string $attribute
+     * @return bool
+     */
+    public static function isInternalAttribute(string $attribute): bool
+    {
+        if (str_contains($attribute, '$')) {
+            foreach (Database::INTERNAL_ATTRIBUTES as $attr) {
+                if (str_contains($attribute, $attr['$id'])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Get getConnection Id
      *
      * @return string
@@ -6298,6 +6317,21 @@ class Database
      */
     public function encode(Document $collection, Document $document): Document
     {
+        /**
+         * When iterating over an ArrayObject, foreach uses an internal iterator (like Iterator), and modifying the object during iteration doesn’t affect the iterator immediately.
+         */
+        $keysToRemove = [];
+
+        foreach ($document as $key => $value) {
+            if (strpos($key, '::$') !== false) {
+                $keysToRemove[] = $key;
+            }
+        }
+
+        foreach ($keysToRemove as $key) {
+            unset($document[$key]);
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
 
         $internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {

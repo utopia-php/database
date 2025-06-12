@@ -66,7 +66,7 @@ class Document extends ArrayObject
      */
     public function getSequence(): int
     {
-        return $this->getAttribute('$sequence', '');
+        return $this->getAttribute('$sequence', 0);
     }
 
     /**

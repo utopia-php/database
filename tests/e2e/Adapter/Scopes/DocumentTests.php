@@ -363,7 +363,7 @@ trait DocumentTests
         $documents = [
             new Document([
                 '$id' => 'third',
-                '$sequence' => 'third',
+                '$sequence' => 3,
                 'string' => 'text📝',
             ]),
             new Document([
@@ -1765,9 +1765,9 @@ trait DocumentTests
      * @depends testFind
      * @param array<string, mixed> $data
      * @return void
-     * @throws \Utopia\Database\Exception
+     * @throws DatabaseException
      */
-    public function testFindByInternalID(array $data): void
+    public function testFindBySequence(array $data): void
     {
         /** @var Database $database */
         $database = static::getDatabase();

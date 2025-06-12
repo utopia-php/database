@@ -32,8 +32,8 @@ class Structure extends Validator
         ],
         [
             '$id' => '$sequence',
-            'type' => Database::VAR_STRING,
-            'size' => 255,
+            'type' => Database::VAR_INTEGER,
+            'size' => 8,
             'required' => false,
             'signed' => true,
             'array' => false,

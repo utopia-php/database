@@ -751,10 +751,12 @@ trait RelationshipTests
         ]));
 
 var_dump($level1);
+
         //$level1 = $database->getDocument('level1', $level1->getId());
 
         $database->updateDocument('level1', $level1->getId(), new Document($level1->getArrayCopy()));
         $updatedLevel1 = $database->getDocument('level1', $level1->getId());
+
         $this->assertEquals($level1, $updatedLevel1);
 
         try {

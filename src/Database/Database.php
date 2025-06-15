@@ -3296,7 +3296,7 @@ class Database
             if ($collection->getId() !== self::METADATA) {
                 if (!$validator->isValid([
                     ...$collection->getRead(),
-                    ...($documentSecurity ? $document->getRead() : [])
+                    ...($documentSecurity ? $document->getRead('main::$permissions') : [])
                 ])) {
                     return new Document();
                 }
@@ -3323,7 +3323,7 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
                 ...$collection->getRead(),
-                ...($documentSecurity ? $document->getRead() : [])
+                ...($documentSecurity ? $document->getRead('main::$permissions') : [])
             ])) {
                 return new Document();
             }
@@ -3685,6 +3685,13 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
+
+        $document->setAttribute('main::$id', $document->getId());
+        $document->setAttribute('main::$sequence', $document->getSequence());
+        $document->setAttribute('main::$permissions', $document->getPermissions());
+        $document->setAttribute('main::$createdAt', $document->getCreatedAt());
+        $document->setAttribute('main::$updatedAt', $document->getUpdatedAt());
+        $document->setAttribute('main::$tenant', $document->getTenant());
 
         return $document;
     }
@@ -4133,6 +4140,10 @@ class Database
 
         $document = $this->withTransaction(function () use ($collection, $id, $document) {
             $time = DateTime::now();
+
+            /**
+             * @var $old Document
+             */
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
@@ -4162,8 +4173,14 @@ class Database
                     $relationships[$relationship->getAttribute('key')] = $relationship;
                 }
 
+                $alias = Query::DEFAULT_ALIAS;
+
                 // Compare if the document has any changes
                 foreach ($document as $key => $value) {
+                    if (str_starts_with($key, $alias.'::') && Database::isInternalAttribute($key)){
+                        continue;
+                    }
+
                     // Skip the nested documents as they will be checked later in recursions.
                     if (\array_key_exists($key, $relationships)) {
                         // No need to compare nested documents more than max depth.
@@ -4211,6 +4228,9 @@ class Database
 
                                 if (\count($old->getAttribute($key)) !== \count($value)) {
                                     $shouldUpdate = true;
+                                    var_dump('$shouldUpdate 1');
+                                    var_dump($shouldUpdate);
+
                                     break;
                                 }
 
@@ -4224,6 +4244,8 @@ class Database
                                         ($relation instanceof Document && $relation->getId() !== $oldValue)
                                     ) {
                                         $shouldUpdate = true;
+                                        var_dump('$shouldUpdate 2');
+                                        var_dump($shouldUpdate);
                                         break;
                                     }
                                 }
@@ -4306,6 +4328,16 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
+
+        /**
+         * Make this smarter
+         */
+        $document->setAttribute('main::$id', $document->getId());
+        $document->setAttribute('main::$sequence', $document->getSequence());
+        $document->setAttribute('main::$permissions', $document->getPermissions());
+        $document->setAttribute('main::$createdAt', $document->getCreatedAt());
+        $document->setAttribute('main::$updatedAt', $document->getUpdatedAt());
+        $document->setAttribute('main::$tenant', $document->getTenant());
 
         return $document;
     }

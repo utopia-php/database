@@ -80,17 +80,17 @@ class Document extends ArrayObject
     /**
      * @return array<string>
      */
-    public function getPermissions(): array
+    public function getPermissions(string $attribute = '$permissions'): array
     {
-        return \array_values(\array_unique($this->getAttribute('$permissions', [])));
+        return \array_values(\array_unique($this->getAttribute($attribute, [])));
     }
 
     /**
      * @return array<string>
      */
-    public function getRead(): array
+    public function getRead(string $attribute = '$permissions'): array
     {
-        return $this->getPermissionsByType(Database::PERMISSION_READ);
+        return $this->getPermissionsByType(Database::PERMISSION_READ, $attribute);
     }
 
     /**
@@ -132,11 +132,11 @@ class Document extends ArrayObject
     /**
      * @return array<string>
      */
-    public function getPermissionsByType(string $type): array
+    public function getPermissionsByType(string $type, string $attribute = '$permissions'): array
     {
         $typePermissions = [];
 
-        foreach ($this->getPermissions() as $permission) {
+        foreach ($this->getPermissions($attribute) as $permission) {
             if (!\str_starts_with($permission, $type)) {
                 continue;
             }

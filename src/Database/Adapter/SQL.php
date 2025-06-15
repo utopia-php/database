@@ -397,6 +397,12 @@ abstract class SQL extends Adapter
             unset($document['_permissions']);
         }
 
+        $document['main::$permissions'] = json_decode($document['main::$permissions'], true);
+
+        if ($this->sharedTables) {
+            $document['main::$tenant'] = $document['main::$tenant'] === null ? null : (int)$document['main::$tenant'];
+        }
+
         return new Document($document);
     }
 
@@ -1720,21 +1726,10 @@ abstract class SQL extends Adapter
             return "{$this->quote($prefix)}.* {$this->addHiddenAttribute($selections)}";
         }
 
-        $internalKeys = [
-            '$id',
-            '$sequence',
-            '$permissions',
-            '$createdAt',
-            '$updatedAt',
-        ];
-
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
-
-        foreach ($internalKeys as $internalKey) {
-            $selections[] = $this->getInternalKeyForAttribute($internalKey);
-        }
+        $selections = array_diff($selections, ['$collection']);
 
         foreach ($selections as &$selection) {
+            $selection = $this->getInternalKeyForAttribute($selection);
             $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
         }
 

@@ -93,7 +93,7 @@ trait DocumentTests
         // Test create document with manual internal id
         $manualIdDocument = $database->createDocument('documents', new Document([
             '$id' => '56000',
-            '$sequence' => '56000',
+            '$sequence' => 56000,
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user(ID::custom('1'))),
@@ -292,7 +292,7 @@ trait DocumentTests
 
         for ($i = $sequence; $i <= ($sequence + $count); $i++) {
             $documents[] = new Document([
-                '$sequence' => (string)$i,
+                '$sequence' => $i,
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::create(Role::any()),
@@ -363,7 +363,7 @@ trait DocumentTests
         $documents = [
             new Document([
                 '$id' => 'third',
-                '$sequence' => 'third',
+                '$sequence' => 3,
                 'string' => 'text📝',
             ]),
             new Document([
@@ -1778,9 +1778,9 @@ trait DocumentTests
      * @depends testFind
      * @param array<string, mixed> $data
      * @return void
-     * @throws \Utopia\Database\Exception
+     * @throws DatabaseException
      */
-    public function testFindByInternalID(array $data): void
+    public function testFindBySequence(array $data): void
     {
         /** @var Database $database */
         $database = static::getDatabase();
@@ -4279,7 +4279,7 @@ trait DocumentTests
         $database = static::getDatabase();
 
         $document->setAttribute('$id', 'caseSensitive');
-        $document->setAttribute('$sequence', '200');
+        $document->setAttribute('$sequence', 200);
         $database->createDocument($document->getCollection(), $document);
 
         $document->setAttribute('$id', 'CaseSensitive');

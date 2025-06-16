@@ -1028,7 +1028,7 @@ class Postgres extends SQL
 
         try {
             $this->execute($stmt);
-            $lastInsertedId = $this->getPDO()->lastInsertId();
+            $lastInsertedId = (int) $this->getPDO()->lastInsertId();
             // Sequence can be manually set as well
             $document['$sequence'] ??= $lastInsertedId;
 
@@ -1541,7 +1541,7 @@ class Postgres extends SQL
                 unset($results[$index]['_uid']);
             }
             if (\array_key_exists('_id', $document)) {
-                $results[$index]['$sequence'] = $document['_id'];
+                $results[$index]['$sequence'] = (int) $document['_id'];
                 unset($results[$index]['_id']);
             }
             if (\array_key_exists('_tenant', $document)) {

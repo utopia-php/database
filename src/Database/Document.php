@@ -62,11 +62,11 @@ class Document extends ArrayObject
     }
 
     /**
-     * @return string
+     * @return int
      */
-    public function getSequence(): string
+    public function getSequence(): int
     {
-        return $this->getAttribute('$sequence', '');
+        return $this->getAttribute('$sequence', 0);
     }
 
     /**

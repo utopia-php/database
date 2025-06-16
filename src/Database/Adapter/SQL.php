@@ -369,7 +369,7 @@ abstract class SQL extends Adapter
         $document = $document[0];
 
         if (\array_key_exists('_id', $document)) {
-            $document['$sequence'] = $document['_id'];
+            $document['$sequence'] = (int) $document['_id'];
             unset($document['_id']);
         }
         if (\array_key_exists('_uid', $document)) {
@@ -466,7 +466,7 @@ abstract class SQL extends Adapter
         }
 
         foreach ($sequences as $id => $value) {
-            $stmt->bindValue(":_id_{$id}", $value);
+            $stmt->bindValue(":_id_{$id}", $value, \PDO::PARAM_INT);
         }
 
         $attributeIndex = 0;
@@ -648,7 +648,7 @@ abstract class SQL extends Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $sequences
+     * @param array<int> $sequences
      * @param array<string> $permissionIds
      *
      * @return int
@@ -1913,7 +1913,7 @@ abstract class SQL extends Adapter
 
             foreach ($documents as $document) {
                 if (isset($sequences[$document->getId()])) {
-                    $document['$sequence'] = $sequences[$document->getId()];
+                    $document['$sequence'] = (int) $sequences[$document->getId()];
                 }
             }
         } catch (PDOException $e) {

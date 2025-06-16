@@ -988,6 +988,11 @@ trait RelationshipTests
         $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('main::$id', $make);
+        $this->assertArrayHasKey('main::$sequence', $make);
+        $this->assertArrayHasKey('main::$collection', $make);
+        $this->assertArrayHasKey('main::$createdAt', $make);
+        $this->assertArrayHasKey('main::$updatedAt', $make);
 
         // Select internal attributes
         $make = $database->findOne('make', [
@@ -1000,11 +1005,16 @@ trait RelationshipTests
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$sequence', $make);
+        //$this->assertArrayNotHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
+        $this->assertArrayHasKey('main::$id', $make);
         $this->assertArrayHasKey('main::$sequence', $make);
         $this->assertArrayHasKey('main::$collection', $make);
         $this->assertArrayHasKey('main::$createdAt', $make);
         $this->assertArrayHasKey('main::$updatedAt', $make);
-        $this->assertArrayHasKey('main::$permissions', $make);
 
         $make = $database->findOne('make', [
             Query::select(['name', '$sequence']),
@@ -1015,12 +1025,17 @@ trait RelationshipTests
         }
 
         $this->assertArrayHasKey('name', $make);
+        $this->assertArrayNotHasKey('$id', $make);
         $this->assertArrayHasKey('$sequence', $make);
+        //$this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
         $this->assertArrayHasKey('main::$id', $make);
+        $this->assertArrayHasKey('main::$sequence', $make);
         $this->assertArrayHasKey('main::$collection', $make);
         $this->assertArrayHasKey('main::$createdAt', $make);
         $this->assertArrayHasKey('main::$updatedAt', $make);
-        $this->assertArrayHasKey('main::$permissions', $make);
 
         $make = $database->findOne('make', [
             Query::select(['name', '$collection']),
@@ -1031,12 +1046,17 @@ trait RelationshipTests
         }
 
         $this->assertArrayHasKey('name', $make);
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
         $this->assertArrayHasKey('main::$id', $make);
         $this->assertArrayHasKey('main::$sequence', $make);
+        $this->assertArrayHasKey('main::$collection', $make);
         $this->assertArrayHasKey('main::$createdAt', $make);
         $this->assertArrayHasKey('main::$updatedAt', $make);
-        $this->assertArrayHasKey('main::$permissions', $make);
 
         $make = $database->findOne('make', [
             Query::select(['name', '$createdAt']),
@@ -1047,12 +1067,17 @@ trait RelationshipTests
         }
 
         $this->assertArrayHasKey('name', $make);
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$sequence', $make);
+        //$this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
         $this->assertArrayHasKey('main::$id', $make);
         $this->assertArrayHasKey('main::$sequence', $make);
         $this->assertArrayHasKey('main::$collection', $make);
+        $this->assertArrayHasKey('main::$createdAt', $make);
         $this->assertArrayHasKey('main::$updatedAt', $make);
-        $this->assertArrayHasKey('main::$permissions', $make);
 
         $make = $database->findOne('make', [
             Query::select(['name', '$updatedAt']),
@@ -1063,12 +1088,17 @@ trait RelationshipTests
         }
 
         $this->assertArrayHasKey('name', $make);
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$sequence', $make);
+        //$this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayNotHasKey('$permissions', $make);
         $this->assertArrayHasKey('main::$id', $make);
         $this->assertArrayHasKey('main::$sequence', $make);
         $this->assertArrayHasKey('main::$collection', $make);
         $this->assertArrayHasKey('main::$createdAt', $make);
-        $this->assertArrayHasKey('main::$permissions', $make);
+        $this->assertArrayHasKey('main::$updatedAt', $make);
 
         $make = $database->findOne('make', [
             Query::select(['name', '$permissions']),
@@ -1079,6 +1109,11 @@ trait RelationshipTests
         }
 
         $this->assertArrayHasKey('name', $make);
+        $this->assertArrayNotHasKey('$id', $make);
+        $this->assertArrayNotHasKey('$sequence', $make);
+       // $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayNotHasKey('$createdAt', $make);
+        $this->assertArrayNotHasKey('$updatedAt', $make);
         $this->assertArrayHasKey('$permissions', $make);
         $this->assertArrayHasKey('main::$id', $make);
         $this->assertArrayHasKey('main::$sequence', $make);

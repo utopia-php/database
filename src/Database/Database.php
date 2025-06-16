@@ -6134,7 +6134,7 @@ class Database
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
-                $node->setAttribute('main::$collection', DateTime::formatTz($node->getAttribute('main::$collection')));
+                $node->setAttribute('main::$collection', $collection->getId());
                 $node->setAttribute('main::$createdAt', DateTime::formatTz($node->getAttribute('main::$createdAt')));
                 $node->setAttribute('main::$updatedAt', DateTime::formatTz($node->getAttribute('main::$updatedAt')));
             }

@@ -905,7 +905,7 @@ class MariaDB extends SQL
 
             $stmt->execute();
 
-            $document['$sequence'] = (int) $this->pdo->lastInsertId();
+            $document['$sequence'] = $this->pdo->lastInsertId();
 
             if (empty($document['$sequence'])) {
                 throw new DatabaseException('Error creating document empty "$sequence"');
@@ -1656,7 +1656,7 @@ class MariaDB extends SQL
                 unset($results[$index]['_uid']);
             }
             if (\array_key_exists('_id', $document)) {
-                $results[$index]['$sequence'] = (int) $document['_id'];
+                $results[$index]['$sequence'] = $document['_id'];
                 unset($results[$index]['_id']);
             }
             if (\array_key_exists('_tenant', $document)) {

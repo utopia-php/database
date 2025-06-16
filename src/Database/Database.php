@@ -4613,7 +4613,7 @@ class Database
                                 $related = $this->skipRelationships(
                                     fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])])
                                 );
-                                var_dump($related);
+
                                 if ($related->isEmpty()) {
                                     // If no such document exists in related collection
                                     // For one-one we need to update the related key to null if no relation exists
@@ -4636,13 +4636,7 @@ class Database
                                     $related->getId(),
                                     $related->setAttribute($twoWayKey, $document->getId())
                                 ));
-                                var_dump($relatedCollection->getId());
-                                var_dump($value);
-                                var_dump(\gettype($value));
-                                var_dump($twoWay);
-                                var_dump($twoWayKey);
-                                var_dump($related);
-                                var_dump($document->getId());
+
                                 break;
                             case 'object':
                                 if ($value instanceof Document) {

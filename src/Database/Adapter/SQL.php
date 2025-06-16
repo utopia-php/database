@@ -350,10 +350,6 @@ abstract class SQL extends Adapter
             $sql .= " {$forUpdate}";
         }
 
-        if (!empty($selections)){
-            echo $sql.PHP_EOL;
-        }
-
         $stmt = $this->getPDO()->prepare($sql);
 
         $stmt->bindValue(':_uid', $id);
@@ -1693,8 +1689,6 @@ abstract class SQL extends Adapter
      */
     protected function addHiddenAttribute(array $selects): string
     {
-        //return '';
-
         $alias = Query::DEFAULT_ALIAS;
 
         $strings = [];

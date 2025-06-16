@@ -749,7 +749,6 @@ trait RelationshipTests
                 ],
             ],
         ]));
-
         $database->updateDocument('level1', $level1->getId(), new Document($level1->getArrayCopy()));
         $updatedLevel1 = $database->getDocument('level1', $level1->getId());
         $this->assertEquals($level1, $updatedLevel1);
@@ -899,9 +898,6 @@ trait RelationshipTests
                 ]
             ]
         ]));
-
-        //$species = $database->getDocument('species', $species->getId());
-
         $database->updateDocument('species', $species->getId(), new Document([
             '$id' => ID::custom('1'),
             '$collection' => 'species',

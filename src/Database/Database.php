@@ -3313,12 +3313,12 @@ class Database
             $queries,
             $forUpdate
         );
-
         if ($document->isEmpty()) {
             return $document;
         }
 
         $document->setAttribute('$collection', $collection->getId());
+        $document->setAttribute('main::$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
@@ -3353,6 +3353,9 @@ class Database
         }
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
+
+        $document->setAttribute('main::$createdAt', DateTime::formatTz($document->getAttribute('main::$createdAt')));
+        $document->setAttribute('main::$updatedAt', DateTime::formatTz($document->getAttribute('main::$updatedAt')));
 
         return $document;
     }
@@ -3692,6 +3695,7 @@ class Database
         $document->setAttribute('main::$createdAt', $document->getCreatedAt());
         $document->setAttribute('main::$updatedAt', $document->getUpdatedAt());
         $document->setAttribute('main::$tenant', $document->getTenant());
+        $document->setAttribute('main::$collection', $document->getCollection());
 
         return $document;
     }
@@ -4015,7 +4019,7 @@ class Database
 
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it, inheriting permissions if none are set
-            if (!isset($relation['$permissions'])) {
+            if (!isset($relation['$permissions'])) { // todo: Should this be main::$permissions
                 $relation->setAttribute('$permissions', $document->getPermissions());
             }
 
@@ -4228,9 +4232,6 @@ class Database
 
                                 if (\count($old->getAttribute($key)) !== \count($value)) {
                                     $shouldUpdate = true;
-                                    var_dump('$shouldUpdate 1');
-                                    var_dump($shouldUpdate);
-
                                     break;
                                 }
 
@@ -4244,8 +4245,6 @@ class Database
                                         ($relation instanceof Document && $relation->getId() !== $oldValue)
                                     ) {
                                         $shouldUpdate = true;
-                                        var_dump('$shouldUpdate 2');
-                                        var_dump($shouldUpdate);
                                         break;
                                     }
                                 }
@@ -4329,15 +4328,13 @@ class Database
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
-        /**
-         * Make this smarter
-         */
         $document->setAttribute('main::$id', $document->getId());
         $document->setAttribute('main::$sequence', $document->getSequence());
         $document->setAttribute('main::$permissions', $document->getPermissions());
         $document->setAttribute('main::$createdAt', $document->getCreatedAt());
         $document->setAttribute('main::$updatedAt', $document->getUpdatedAt());
         $document->setAttribute('main::$tenant', $document->getTenant());
+        $document->setAttribute('main::$collection', $document->getCollection());
 
         return $document;
     }
@@ -4616,7 +4613,7 @@ class Database
                                 $related = $this->skipRelationships(
                                     fn () => $this->getDocument($relatedCollection->getId(), $value, [Query::select(['$id'])])
                                 );
-
+                                var_dump($related);
                                 if ($related->isEmpty()) {
                                     // If no such document exists in related collection
                                     // For one-one we need to update the related key to null if no relation exists
@@ -4639,6 +4636,13 @@ class Database
                                     $related->getId(),
                                     $related->setAttribute($twoWayKey, $document->getId())
                                 ));
+                                var_dump($relatedCollection->getId());
+                                var_dump($value);
+                                var_dump(\gettype($value));
+                                var_dump($twoWay);
+                                var_dump($twoWayKey);
+                                var_dump($related);
+                                var_dump($document->getId());
                                 break;
                             case 'object':
                                 if ($value instanceof Document) {
@@ -4657,7 +4661,7 @@ class Database
 
                                     $this->relationshipWriteStack[] = $relatedCollection->getId();
                                     if ($related->isEmpty()) {
-                                        if (!isset($value['$permissions'])) {
+                                        if (!isset($value['$permissions'])) {// todo check if should be main::$permissions
                                             $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                         }
                                         $related = $this->createDocument(
@@ -4746,7 +4750,7 @@ class Database
                                     );
 
                                     if ($related->isEmpty()) {
-                                        if (!isset($relation['$permissions'])) {
+                                        if (!isset($relation['$permissions'])) { // todo check if should be main::$permissions
                                             $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                         }
                                         $this->createDocument(
@@ -4786,7 +4790,7 @@ class Database
                             );
 
                             if ($related->isEmpty()) {
-                                if (!isset($value['$permissions'])) {
+                                if (!isset($value['$permissions'])) { // todo check if should be main::$permissions
                                     $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                 }
                                 $this->createDocument(
@@ -4859,7 +4863,7 @@ class Database
                                 $related = $this->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select(['$id'])]);
 
                                 if ($related->isEmpty()) {
-                                    if (!isset($value['$permissions'])) {
+                                    if (!isset($value['$permissions'])) {// todo check if should be main::$permissions
                                         $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                     }
                                     $related = $this->createDocument(
@@ -6136,6 +6140,9 @@ class Database
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
+                $node->setAttribute('main::$collection', DateTime::formatTz($node->getAttribute('main::$collection')));
+                $node->setAttribute('main::$createdAt', DateTime::formatTz($node->getAttribute('main::$createdAt')));
+                $node->setAttribute('main::$updatedAt', DateTime::formatTz($node->getAttribute('main::$updatedAt')));
             }
         }
 
@@ -6652,12 +6659,12 @@ class Database
 
         $selections = \array_merge($selections, $relationshipSelections);
 
-        $selections[] = '$id';
-        $selections[] = '$sequence';
-        $selections[] = '$collection';
-        $selections[] = '$createdAt';
-        $selections[] = '$updatedAt';
-        $selections[] = '$permissions';
+//        $selections[] = '$id';
+//        $selections[] = '$sequence';
+//        $selections[] = '$collection';
+//        $selections[] = '$createdAt';
+//        $selections[] = '$updatedAt';
+//        $selections[] = '$permissions';
 
         return \array_values(\array_unique($selections));
     }

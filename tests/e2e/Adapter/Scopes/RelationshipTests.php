@@ -750,13 +750,8 @@ trait RelationshipTests
             ],
         ]));
 
-var_dump($level1);
-
-        //$level1 = $database->getDocument('level1', $level1->getId());
-
         $database->updateDocument('level1', $level1->getId(), new Document($level1->getArrayCopy()));
         $updatedLevel1 = $database->getDocument('level1', $level1->getId());
-
         $this->assertEquals($level1, $updatedLevel1);
 
         try {
@@ -978,7 +973,7 @@ var_dump($level1);
 
         // Select some parent attributes, some child attributes
         $make = $database->findOne('make', [
-            Query::select(['name', 'models.name']),
+            Query::select(['name', 'models.name', '*']),
         ]);
 
         if ($make->isEmpty()) {
@@ -1009,11 +1004,11 @@ var_dump($level1);
 
         $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
-        $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayHasKey('main::$sequence', $make);
+        $this->assertArrayHasKey('main::$collection', $make);
+        $this->assertArrayHasKey('main::$createdAt', $make);
+        $this->assertArrayHasKey('main::$updatedAt', $make);
+        $this->assertArrayHasKey('main::$permissions', $make);
 
         $make = $database->findOne('make', [
             Query::select(['name', '$sequence']),
@@ -1024,12 +1019,12 @@ var_dump($level1);
         }
 
         $this->assertArrayHasKey('name', $make);
-        $this->assertArrayHasKey('$id', $make);
         $this->assertArrayHasKey('$sequence', $make);
-        $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayHasKey('main::$id', $make);
+        $this->assertArrayHasKey('main::$collection', $make);
+        $this->assertArrayHasKey('main::$createdAt', $make);
+        $this->assertArrayHasKey('main::$updatedAt', $make);
+        $this->assertArrayHasKey('main::$permissions', $make);
 
         $make = $database->findOne('make', [
             Query::select(['name', '$collection']),
@@ -1040,12 +1035,12 @@ var_dump($level1);
         }
 
         $this->assertArrayHasKey('name', $make);
-        $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayHasKey('main::$id', $make);
+        $this->assertArrayHasKey('main::$sequence', $make);
+        $this->assertArrayHasKey('main::$createdAt', $make);
+        $this->assertArrayHasKey('main::$updatedAt', $make);
+        $this->assertArrayHasKey('main::$permissions', $make);
 
         $make = $database->findOne('make', [
             Query::select(['name', '$createdAt']),
@@ -1056,12 +1051,12 @@ var_dump($level1);
         }
 
         $this->assertArrayHasKey('name', $make);
-        $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
-        $this->assertArrayHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayHasKey('main::$id', $make);
+        $this->assertArrayHasKey('main::$sequence', $make);
+        $this->assertArrayHasKey('main::$collection', $make);
+        $this->assertArrayHasKey('main::$updatedAt', $make);
+        $this->assertArrayHasKey('main::$permissions', $make);
 
         $make = $database->findOne('make', [
             Query::select(['name', '$updatedAt']),
@@ -1072,12 +1067,12 @@ var_dump($level1);
         }
 
         $this->assertArrayHasKey('name', $make);
-        $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
-        $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayHasKey('main::$id', $make);
+        $this->assertArrayHasKey('main::$sequence', $make);
+        $this->assertArrayHasKey('main::$collection', $make);
+        $this->assertArrayHasKey('main::$createdAt', $make);
+        $this->assertArrayHasKey('main::$permissions', $make);
 
         $make = $database->findOne('make', [
             Query::select(['name', '$permissions']),
@@ -1088,12 +1083,12 @@ var_dump($level1);
         }
 
         $this->assertArrayHasKey('name', $make);
-        $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayHasKey('$sequence', $make);
-        $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayHasKey('$updatedAt', $make);
         $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayHasKey('main::$id', $make);
+        $this->assertArrayHasKey('main::$sequence', $make);
+        $this->assertArrayHasKey('main::$collection', $make);
+        $this->assertArrayHasKey('main::$createdAt', $make);
+        $this->assertArrayHasKey('main::$updatedAt', $make);
 
         // Select all parent attributes, some child attributes
         $make = $database->findOne('make', [

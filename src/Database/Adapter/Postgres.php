@@ -1026,7 +1026,6 @@ class Postgres extends SQL
 
         try {
             $this->execute($stmt);
-            $lastInsertedId = $this->getPDO()->lastInsertId();
 
             if (!empty($document->getSequence())) {
                 $this->getPDO()->exec("
@@ -1037,7 +1036,8 @@ class Postgres extends SQL
                     );
                 ");
             }
-
+            
+            $lastInsertedId = $this->getPDO()->lastInsertId();
             // Sequence can be manually set as well
             $document['$sequence'] ??= $lastInsertedId;
 

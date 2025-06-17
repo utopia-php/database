@@ -17,8 +17,10 @@ use Utopia\Database\Validator\Authorization;
 
 abstract class Base extends TestCase
 {
-    use CollectionTests;
     use DocumentTests;
+
+    use CollectionTests;
+
     use AttributeTests;
     use IndexTests;
     use PermissionTests;

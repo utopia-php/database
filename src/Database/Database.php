@@ -5025,6 +5025,19 @@ class Database
                 throw new StructureException($validator->getDescription());
             }
 
+            if (!$old->isEmpty()) {
+                // Check if document was updated after the request timestamp
+                try {
+                    $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
+                } catch (Exception $e) {
+                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                }
+
+                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    throw new ConflictException('Document was updated after the request timestamp');
+                }
+            }
+
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }

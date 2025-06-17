@@ -165,8 +165,8 @@ class Database
         ],
         [
             '$id' => '$sequence',
-            'type' => self::VAR_INTEGER,
-            'size' => 8,
+            'type' => self::VAR_STRING,
+            'size' => Database::LENGTH_KEY,
             'required' => true,
             'signed' => true,
             'array' => false,

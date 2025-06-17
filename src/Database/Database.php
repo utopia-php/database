@@ -4146,10 +4146,6 @@ class Database
 
         $document = $this->withTransaction(function () use ($collection, $id, $document) {
             $time = DateTime::now();
-
-            /**
-             * @var $old Document
-             */
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));

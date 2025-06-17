@@ -3694,8 +3694,10 @@ class Database
         $document->setAttribute('main::$permissions', $document->getPermissions());
         $document->setAttribute('main::$createdAt', $document->getCreatedAt());
         $document->setAttribute('main::$updatedAt', $document->getUpdatedAt());
-        $document->setAttribute('main::$tenant', $document->getTenant());
         $document->setAttribute('main::$collection', $document->getCollection());
+        if ($this->adapter->getSharedTables()) {
+            $document->setAttribute('main::$tenant', $document->getTenant());
+        }
 
         return $document;
     }
@@ -4333,8 +4335,10 @@ class Database
         $document->setAttribute('main::$permissions', $document->getPermissions());
         $document->setAttribute('main::$createdAt', $document->getCreatedAt());
         $document->setAttribute('main::$updatedAt', $document->getUpdatedAt());
-        $document->setAttribute('main::$tenant', $document->getTenant());
         $document->setAttribute('main::$collection', $document->getCollection());
+        if ($this->adapter->getSharedTables()) {
+            $document->setAttribute('main::$tenant', $document->getTenant());
+        }
 
         return $document;
     }

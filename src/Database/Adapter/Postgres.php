@@ -1036,7 +1036,7 @@ class Postgres extends SQL
                     );
                 ");
             }
-            
+
             $lastInsertedId = $this->getPDO()->lastInsertId();
             // Sequence can be manually set as well
             $document['$sequence'] ??= $lastInsertedId;

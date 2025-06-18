@@ -626,16 +626,15 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Update Document
-     *
      * @param string $collection
+     * @param string $id
      * @param Document $document
+     * @param bool $skipPermissions
      * @return Document
-     * @throws Exception
-     * @throws PDOException
-     * @throws Duplicate
+     * @throws DatabaseException
+     * @throws DuplicateException
      */
-    public function updateDocument(string $collection, string $id, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();

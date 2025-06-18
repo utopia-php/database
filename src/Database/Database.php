@@ -4118,6 +4118,15 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
+            $skipPermissionsUpdate = $old->getPermissions() === $document->getPermissions();
+
+            if(!$skipPermissionsUpdate){
+                var_dump('check permissiosnss permissiosnss permissiosnss permissiosnss');
+                var_dump($skipPermissionsUpdate);
+                var_dump($old->getPermissions());
+                var_dump($document->getPermissions());
+            }
+
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -4274,7 +4283,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $id, $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document, $skipPermissionsUpdate);
             $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;

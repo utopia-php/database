@@ -21,8 +21,6 @@ abstract class Adapter
 
     protected bool $tenantPerDocument = false;
 
-    protected bool $skipPermissions = false;
-
     protected int $timeout = 0;
 
     protected int $inTransaction = 0;
@@ -230,19 +228,6 @@ abstract class Adapter
 
         return true;
     }
-
-    /**
-     * Set whether to skip permissions logic
-     *
-     * @param bool $tenantPerDocument
-     *
-     */
-    public function setSkipPermissions(bool $skipPermissions): void
-    {
-        $this->skipPermissions = $skipPermissions;
-    }
-
-
 
     /**
      * Get Tenant Per Document.
@@ -713,6 +698,7 @@ abstract class Adapter
      * @param string $id
      * @param Document $document
      * @param bool $skipPermissions
+     *
      * @return Document
      */
     abstract public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document;

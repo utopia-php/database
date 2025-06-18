@@ -4120,13 +4120,6 @@ class Database
 
             $skipPermissionsUpdate = $old->getPermissions() === $document->getPermissions();
 
-            if(!$skipPermissionsUpdate){
-                var_dump('check permissiosnss permissiosnss permissiosnss permissiosnss');
-                var_dump($skipPermissionsUpdate);
-                var_dump($old->getPermissions());
-                var_dump($document->getPermissions());
-            }
-
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt

@@ -952,7 +952,7 @@ class MariaDB extends SQL
 			    WHERE _document = :_uid
 			    {$this->getTenantQuery($collection)}
 			";
-var_dump($sql);
+
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_READ, $sql);
 
                 /**

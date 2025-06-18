@@ -1064,7 +1064,7 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $columns = '';
 
-        if (!$skipPermissions){
+        if (!$skipPermissions) {
             $sql = "
 			SELECT _type, _permission
 			FROM {$this->getSQLTable($name . '_perms')}

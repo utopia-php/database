@@ -1045,7 +1045,6 @@ class Postgres extends SQL
     /**
      * Update Document
      *
-     *
      * @param string $collection
      * @param string $id
      * @param Document $document

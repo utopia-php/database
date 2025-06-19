@@ -4118,7 +4118,13 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
-            $skipPermissionsUpdate = $old->getPermissions() === $document->getPermissions();
+            $originalPermissions = $old->getPermissions();
+            $currentPermissions  = $document->getPermissions();
+
+            sort($originalPermissions);
+            sort($currentPermissions);
+
+            $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID

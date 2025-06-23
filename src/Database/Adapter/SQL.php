@@ -1399,7 +1399,7 @@ abstract class SQL extends Adapter
      * @param string $tableName
      * @param string $columns
      * @param array<string> $batchKeys
-     * @param array<mixed> $bindValues,
+     * @param array<mixed> $bindValues
      * @param array<string> $attributes
      * @param string $attribute
      * @return mixed

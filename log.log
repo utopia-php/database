@@ -1,0 +1,174 @@
+PHPUnit 9.6.23 by Sebastian Bergmann and contributors.
+
+E/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(1230) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocuments" ("_createdAt", "_permissions", "_uid", "_updatedAt", "bigint", "integer", "string")
+                VALUES (:'2025-06-23 05:41:05.082', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.082', :9223372036854775807, :5, :'text📝'), (:'2025-06-23 05:41:05.082', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'second', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'0, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'1, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'2, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'3)
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "bigint" = VALUES("bigint"), "integer" = VALUES("integer"), "string" = VALUES("string")"
+/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(1230) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocuments" ("_createdAt", "_permissions", "_uid", "_updatedAt", "bigint", "integer", "string")
+                VALUES (:'2025-06-23 05:41:05.082', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.082', :9223372036854775807, :5, :'text📝'), (:'2025-06-23 05:41:05.082', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'second', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'0, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'1, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'2, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'3)
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "bigint" = VALUES("bigint"), "integer" = VALUES("integer"), "string" = VALUES("string")"
+/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(1230) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocuments" ("_createdAt", "_permissions", "_uid", "_updatedAt", "bigint", "integer", "string")
+                VALUES (:'2025-06-23 05:41:05.082', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.082', :9223372036854775807, :5, :'text📝'), (:'2025-06-23 05:41:05.082', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'second', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'0, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'1, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'2, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'3)
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "bigint" = VALUES("bigint"), "integer" = VALUES("integer"), "string" = VALUES("string")"
+E/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(878) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsInc" ("_createdAt", "_permissions", "_uid", "_updatedAt", "integer", "string")
+                VALUES (:'2025-06-23 05:41:05.219', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.226', :1, :'text📝'), (:'2025-06-23 05:41:05.219', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'second', :'2025-06-23 05:41:05.226', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'0, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'1)
+                ON DUPLICATE KEY UPDATE
+                    "integer" = "integer" + VALUES("integer"), "_updatedAt" = VALUES("_updatedAt")"
+/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(878) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsInc" ("_createdAt", "_permissions", "_uid", "_updatedAt", "integer", "string")
+                VALUES (:'2025-06-23 05:41:05.219', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.226', :1, :'text📝'), (:'2025-06-23 05:41:05.219', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'second', :'2025-06-23 05:41:05.226', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'0, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'1)
+                ON DUPLICATE KEY UPDATE
+                    "integer" = "integer" + VALUES("integer"), "_updatedAt" = VALUES("_updatedAt")"
+/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(878) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsInc" ("_createdAt", "_permissions", "_uid", "_updatedAt", "integer", "string")
+                VALUES (:'2025-06-23 05:41:05.219', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.226', :1, :'text📝'), (:'2025-06-23 05:41:05.219', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'second', :'2025-06-23 05:41:05.226', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'0, :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]'1)
+                ON DUPLICATE KEY UPDATE
+                    "integer" = "integer" + VALUES("integer"), "_updatedAt" = VALUES("_updatedAt")"
+E/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(541) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsPermissions" ("_createdAt", "_permissions", "_uid", "_updatedAt", "string")
+                VALUES (:'2025-06-23 05:41:05.337', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.337', :'text📝')
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "string" = VALUES("string")"
+/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(541) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsPermissions" ("_createdAt", "_permissions", "_uid", "_updatedAt", "string")
+                VALUES (:'2025-06-23 05:41:05.337', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.337', :'text📝')
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "string" = VALUES("string")"
+/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(541) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsPermissions" ("_createdAt", "_permissions", "_uid", "_updatedAt", "string")
+                VALUES (:'2025-06-23 05:41:05.337', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.337', :'text📝')
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "string" = VALUES("string")"
+E/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(632) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsAttributeMismatch" ("_createdAt", "_permissions", "_uid", "_updatedAt", "first", "last")
+                VALUES (:'2025-06-23 05:41:05.461', :'[]', :'first', :'2025-06-23 05:41:05.466', :'updated', :'last'), (:'2025-06-23 05:41:05.466', :'[]', :'second', :'2025-06-23 05:41:05.466', :'[]'0, :'[]'1)
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "first" = VALUES("first"), "last" = VALUES("last")"
+/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(632) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsAttributeMismatch" ("_createdAt", "_permissions", "_uid", "_updatedAt", "first", "last")
+                VALUES (:'2025-06-23 05:41:05.461', :'[]', :'first', :'2025-06-23 05:41:05.466', :'updated', :'last'), (:'2025-06-23 05:41:05.466', :'[]', :'second', :'2025-06-23 05:41:05.466', :'[]'0, :'[]'1)
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "first" = VALUES("first"), "last" = VALUES("last")"
+/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(632) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsAttributeMismatch" ("_createdAt", "_permissions", "_uid", "_updatedAt", "first", "last")
+                VALUES (:'2025-06-23 05:41:05.461', :'[]', :'first', :'2025-06-23 05:41:05.466', :'updated', :'last'), (:'2025-06-23 05:41:05.466', :'[]', :'second', :'2025-06-23 05:41:05.466', :'[]'0, :'[]'1)
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "first" = VALUES("first"), "last" = VALUES("last")"
+E                                                               5 / 5 (100%)/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(582) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsNoop" ("_createdAt", "_permissions", "_uid", "_updatedAt", "string")
+                VALUES (:'2025-06-23 05:41:05.585', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.585', :'text📝')
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "string" = VALUES("string")"
+/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(582) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsNoop" ("_createdAt", "_permissions", "_uid", "_updatedAt", "string")
+                VALUES (:'2025-06-23 05:41:05.585', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.585', :'text📝')
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "string" = VALUES("string")"
+/usr/src/code/src/Database/Adapter/SQL.php:2025:
+string(582) "
+                INSERT INTO "utopiaTests"."myapp_6858e8f0ee0e6_testUpsertDocumentsNoop" ("_createdAt", "_permissions", "_uid", "_updatedAt", "string")
+                VALUES (:'2025-06-23 05:41:05.585', :'[\"read(\\\"any\\\")\",\"create(\\\"any\\\")\",\"update(\\\"any\\\")\",\"delete(\\\"any\\\")\"]', :'first', :'2025-06-23 05:41:05.585', :'text📝')
+                ON DUPLICATE KEY UPDATE
+                    "_createdAt" = VALUES("_createdAt"), "_permissions" = VALUES("_permissions"), "_uid" = VALUES("_uid"), "_updatedAt" = VALUES("_updatedAt"), "string" = VALUES("string")"
+
+
+Time: 00:00.776, Memory: 8.00 MB
+
+There were 5 errors:
+
+1) Tests\E2E\Adapter\PostgresTest::testUpsertDocuments
+PDOException: SQLSTATE[42601]: Syntax error: 7 ERROR:  syntax error at or near "DUPLICATE"
+LINE 4:                 ON DUPLICATE KEY UPDATE
+                           ^
+
+/usr/src/code/src/Database/Adapter/SQL.php:2027
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Validator/Authorization.php:166
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Adapter.php:377
+/usr/src/code/src/Database/Database.php:1090
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Database.php:4884
+/usr/src/code/tests/e2e/Adapter/Scopes/DocumentTests.php:434
+
+2) Tests\E2E\Adapter\PostgresTest::testUpsertDocumentsInc
+PDOException: SQLSTATE[42601]: Syntax error: 7 ERROR:  syntax error at or near "DUPLICATE"
+LINE 4:                 ON DUPLICATE KEY UPDATE
+                           ^
+
+/usr/src/code/src/Database/Adapter/SQL.php:2027
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Validator/Authorization.php:166
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Adapter.php:377
+/usr/src/code/src/Database/Database.php:1090
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/tests/e2e/Adapter/Scopes/DocumentTests.php:552
+
+3) Tests\E2E\Adapter\PostgresTest::testUpsertDocumentsPermissions
+PDOException: SQLSTATE[42601]: Syntax error: 7 ERROR:  syntax error at or near "DUPLICATE"
+LINE 4:                 ON DUPLICATE KEY UPDATE
+                           ^
+
+/usr/src/code/src/Database/Adapter/SQL.php:2027
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Validator/Authorization.php:166
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Adapter.php:377
+/usr/src/code/src/Database/Database.php:1090
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Database.php:4884
+/usr/src/code/tests/e2e/Adapter/Scopes/DocumentTests.php:602
+
+4) Tests\E2E\Adapter\PostgresTest::testUpsertDocumentsAttributeMismatch
+PDOException: SQLSTATE[42601]: Syntax error: 7 ERROR:  syntax error at or near "DUPLICATE"
+LINE 4:                 ON DUPLICATE KEY UPDATE
+                           ^
+
+/usr/src/code/src/Database/Adapter/SQL.php:2027
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Validator/Authorization.php:166
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Adapter.php:377
+/usr/src/code/src/Database/Database.php:1090
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Database.php:4884
+/usr/src/code/tests/e2e/Adapter/Scopes/DocumentTests.php:700
+
+5) Tests\E2E\Adapter\PostgresTest::testUpsertDocumentsNoop
+PDOException: SQLSTATE[42601]: Syntax error: 7 ERROR:  syntax error at or near "DUPLICATE"
+LINE 4:                 ON DUPLICATE KEY UPDATE
+                           ^
+
+/usr/src/code/src/Database/Adapter/SQL.php:2027
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Validator/Authorization.php:166
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Adapter.php:377
+/usr/src/code/src/Database/Database.php:1090
+/usr/src/code/src/Database/Database.php:5062
+/usr/src/code/src/Database/Database.php:4884
+/usr/src/code/tests/e2e/Adapter/Scopes/DocumentTests.php:805
+
+ERRORS!
+Tests: 5, Assertions: 0, Errors: 5.

@@ -1278,7 +1278,7 @@ class Postgres extends SQL
             }
 
             if ($this->sharedTables) {
-                return "{$attribute} = CASE WHEN _tenant = EXCLUDED._tenant THEN {$new} ELSE {$attribute} END";
+                return "{$attribute} = CASE WHEN target._tenant = EXCLUDED._tenant THEN {$new} ELSE target.{$attribute} END";
             }
 
             return "{$attribute} = {$new}";

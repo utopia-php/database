@@ -232,26 +232,26 @@ class Postgres extends SQL
             CREATE TABLE {$this->getSQLTable($id)} (
                 _id SERIAL NOT NULL,
                 _uid VARCHAR(255) NOT NULL,
-                ". $sqlTenant ."
+                " . $sqlTenant . "
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 _permissions TEXT DEFAULT NULL,
                 " . \implode(' ', $attributeStrings) . "
                 PRIMARY KEY (_id),
-                UNIQUE (\"_uid\")
+                UNIQUE(_uid)
             );
         ";
 
         if ($this->sharedTables) {
             $collection .= "
-				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid), _tenant);
+				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\", \"_tenant\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_updated\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_tenant_id\" ON {$this->getSQLTable($id)} (_tenant, _id);
 			";
         } else {
             $collection .= "
-				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (LOWER(_uid));
+				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\");
             	CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
 			";
@@ -1303,13 +1303,14 @@ class Postgres extends SQL
             }
         }
 
+        $conflictKeys = $this->sharedTables ? '("_uid", _tenant)' : '("_uid")';
+
         $stmt = $this->getPDO()->prepare(
             "
             INSERT INTO {$this->getSQLTable($tableName)} AS target {$columns}
             VALUES " . implode(', ', $batchKeys) . "
-            ON CONFLICT (\"_uid\") DO UPDATE
-                SET
-                    " . implode(', ', $updateColumns)
+            ON CONFLICT {$conflictKeys} DO UPDATE
+                SET " . implode(', ', $updateColumns)
         );
 
         foreach ($bindValues as $key => $binding) {

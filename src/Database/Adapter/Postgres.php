@@ -5,7 +5,6 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
-use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -147,8 +146,8 @@ class Postgres extends SQL
         $sql = $this->trigger(Database::EVENT_DATABASE_CREATE, $sql);
 
         $dbCreation = $this->getPDO()
-        ->prepare($sql)
-        ->execute();
+            ->prepare($sql)
+            ->execute();
 
         $collation = "
             CREATE COLLATION IF NOT EXISTS utf8_ci (
@@ -274,16 +273,16 @@ class Postgres extends SQL
         if ($this->sharedTables) {
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_ukey\" 
-                    ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_document,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission);
                 CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_permission\" 
-                    ON {$this->getSQLTable($id. '_perms')} USING btree (_tenant,_permission,_type); 
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_permission,_type); 
             ";
         } else {
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$namespace}_{$id}_ukey\" 
-                    ON {$this->getSQLTable($id. '_perms')} USING btree (_document,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document,_type,_permission);
                 CREATE INDEX \"{$namespace}_{$id}_permission\" 
-                    ON {$this->getSQLTable($id. '_perms')} USING btree (_permission,_type); 
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_permission,_type); 
             ";
         }
 
@@ -576,7 +575,7 @@ class Postgres extends SQL
 
         try {
             $result = $this->execute($this->getPDO()
-            ->prepare($sql));
+                ->prepare($sql));
 
             return $result;
         } catch (PDOException $e) {
@@ -1248,21 +1247,75 @@ class Postgres extends SQL
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
-
         }
 
         return $document;
     }
 
     /**
-     * @param string $collection
+     * @param string $tableName
+     * @param string $columns
+     * @param array<string> $batchKeys
+     * @param array<string> $attributes
+     * @param array<mixed> $bindValues
      * @param string $attribute
-     * @param array<Change> $changes
-     * @return array<Document>
+     * @return mixed
      */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
-    {
-        return \array_map(fn ($change) => $change->getNew(), $changes);
+    protected function getUpsertStatement(
+        string $tableName,
+        string $columns,
+        array $batchKeys,
+        array $attributes,
+        array $bindValues,
+        string $attribute = '',
+    ): mixed {
+        $getUpdateClause = function (string $attribute, bool $increment = false): string {
+            $attribute = $this->quote($this->filter($attribute));
+            if ($increment) {
+                $new = "target.{$attribute} + EXCLUDED.{$attribute}";
+            } else {
+                $new = "EXCLUDED.{$attribute}";
+            }
+
+            if ($this->sharedTables) {
+                return "{$attribute} = CASE WHEN _tenant = EXCLUDED._tenant THEN {$new} ELSE {$attribute} END";
+            }
+
+            return "{$attribute} = {$new}";
+        };
+
+
+
+        if (!empty($attribute)) {
+            // Increment specific column by its new value in place
+            $updateColumns = [
+                $getUpdateClause($attribute, increment: true),
+                $getUpdateClause('_updatedAt'),
+            ];
+        } else {
+            // Update all columns
+            $updateColumns = [];
+            foreach (array_keys($attributes) as $attr) {
+                /**
+                 * @var string $attr
+                 */
+                $updateColumns[] = $getUpdateClause($this->filter($attr));
+            }
+        }
+
+        $stmt = $this->getPDO()->prepare(
+            "
+            INSERT INTO {$this->getSQLTable($tableName)} AS target {$columns}
+            VALUES " . implode(', ', $batchKeys) . "
+            ON CONFLICT (\"_uid\") DO UPDATE
+                SET
+                    " . implode(', ', $updateColumns)
+        );
+
+        foreach ($bindValues as $key => $binding) {
+            $stmt->bindValue($key, $binding, $this->getPDOType($binding));
+        }
+        return $stmt;
     }
 
     /**
@@ -1472,7 +1525,7 @@ class Postgres extends SQL
                     $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                 }
 
-                $orders[] = "{$this->quote($alias)}._id ".$this->filter($order);
+                $orders[] = "{$this->quote($alias)}._id " . $this->filter($order);
             } else {
                 $orders[] = "{$this->quote($alias)}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
             }
@@ -1755,7 +1808,7 @@ class Postgres extends SQL
                 }
 
                 $method = strtoupper($query->getMethod());
-                return empty($conditions) ? '' : ' '. $method .' (' . implode(' AND ', $conditions) . ')';
+                return empty($conditions) ? '' : ' ' . $method . ' (' . implode(' AND ', $conditions) . ')';
 
             case Query::TYPE_SEARCH:
                 $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
@@ -1792,7 +1845,6 @@ class Postgres extends SQL
                         $binds[":{$placeholder}_{$key}"] = $value;
                         $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";
                     }
-
                 }
 
                 return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
@@ -1984,7 +2036,7 @@ class Postgres extends SQL
 
     public function getSupportForUpserts(): bool
     {
-        return false;
+        return true;
     }
 
     /**

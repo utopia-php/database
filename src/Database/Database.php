@@ -1217,7 +1217,7 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($id));
 
         if (!$collection->isEmpty() && $id !== self::METADATA) {
-            throw new DuplicateException('Collection ' . $id . ' already exists');
+          DuplicateException('Collection ' . $id . ' already exists');
         }
 
         /**
@@ -1299,9 +1299,12 @@ class Database
                 throw new LimitException('Document size limit of ' . $this->adapter->getDocumentSizeLimit() . ' exceeded. Cannot create collection.');
             }
         }
-
         try {
+
             $this->adapter->createCollection($id, $attributes, $indexes);
+
+
+
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
@@ -1312,6 +1315,7 @@ class Database
         if ($id === self::METADATA) {
             return new Document(self::COLLECTION);
         }
+
 
         $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
 
@@ -3612,6 +3616,9 @@ class Database
 
         $time = DateTime::now();
 
+
+
+
         $createdAt = $document->getCreatedAt();
         $updatedAt = $document->getUpdatedAt();
 
@@ -3786,6 +3793,7 @@ class Database
 
         $stackCount = count($this->relationshipWriteStack);
 
+
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
@@ -3802,7 +3810,6 @@ class Database
             }
 
             $this->relationshipWriteStack[] = $collection->getId();
-
             try {
                 switch (\gettype($value)) {
                     case 'array':

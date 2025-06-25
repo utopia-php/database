@@ -20,9 +20,7 @@ ENV PHP_REDIS_VERSION="6.0.2" \
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-RUN \
-  apk update \
-  && apk add --no-cache \
+RUN apk update && apk add --no-cache \
     postgresql-libs \
     postgresql-dev \
     make \
@@ -35,9 +33,11 @@ RUN \
     linux-headers \
     docker-cli \
     docker-cli-compose \
-  && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
-  && apk del postgresql-dev \
-  && rm -rf /var/cache/apk/*
+ && pecl install mongodb-1.17.0 \
+ && docker-php-ext-enable mongodb \
+ && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
+ && apk del postgresql-dev \
+ && rm -rf /var/cache/apk/*
 
 # Redis Extension
 FROM compile AS redis

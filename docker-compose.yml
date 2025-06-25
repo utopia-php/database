@@ -17,6 +17,7 @@ services:
       - ./dev/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
+      - ./vendor/utopia-php/mongo/src/Client.php:/usr/src/code/vendor/utopia-php/mongo/src/Client.php
 
   adminer:
     image: adminer
@@ -70,6 +71,32 @@ services:
       - "8704:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=password
+
+  mongo:
+    image: mongo:latest
+    container_name: utopia-mongo
+    networks:
+      - database
+    ports:
+      - "9706:27017"
+    environment:
+      MONGO_INITDB_DATABASE: utopia_testing
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+
+  mongo-express:
+    image: mongo-express
+    container_name: mongo-express
+    networks:
+      - database
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongo
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
 
   mysql:
     image: mysql:8.0.41

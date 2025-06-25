@@ -4253,7 +4253,6 @@ trait DocumentTests
             $document = $documents[0];
             $doc = $database->getDocument($document->getCollection(), $document->getId());
             $this->assertEquals($document->getTenant(), $doc->getTenant());
-            $this->expectNotToPerformAssertions();
             return;
         }
 

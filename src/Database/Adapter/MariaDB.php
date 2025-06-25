@@ -1661,6 +1661,7 @@ class MariaDB extends SQL
             }
             if (\array_key_exists('_tenant', $document)) {
                 $document['$tenant'] = $document['_tenant'] === null ? null : (int)$document['_tenant'];
+                $results[$index]['$tenant'] = $document['$tenant'];
                 unset($results[$index]['_tenant']);
             }
             if (\array_key_exists('_createdAt', $document)) {

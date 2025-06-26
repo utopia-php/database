@@ -22,7 +22,7 @@ class Permissions extends Roles
      * @param int $length maximum amount of permissions. 0 means unlimited.
      * @param array<string> $allowed allowed permissions. Defaults to all available.
      */
-    public function __construct(int $length = 0, array $allowed = [...Database::PERMISSIONS, Database::PERMISSION_WRITE])
+    public function __construct(int $length = 0, array $allowed = Database::PERMISSIONS)
     {
         $this->length = $length;
         $this->allowed = $allowed;

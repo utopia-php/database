@@ -1517,15 +1517,11 @@ class MariaDB extends SQL
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $hasIdAttribute = false;
         foreach ($orderAttributes as $i => $attribute) {
             $originalAttribute = $attribute;
 
             $attribute = $this->getInternalKeyForAttribute($attribute);
             $attribute = $this->filter($attribute);
-            if (\in_array($attribute, ['_uid', '_id'])) {
-                $hasIdAttribute = true;
-            }
 
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
 
@@ -1538,13 +1534,6 @@ class MariaDB extends SQL
                     $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
                     $orderMethodSequence = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
                     $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                }
-
-                if (\is_null($cursor[$originalAttribute] ?? null)) {
-                    throw new OrderException(
-                        message: "Order attribute '{$originalAttribute}' is empty",
-                        attribute: $originalAttribute
-                    );
                 }
 
                 $binds[':cursor'] = $cursor[$originalAttribute];
@@ -1562,37 +1551,6 @@ class MariaDB extends SQL
             }
 
             $orders[] = "{$this->quote($attribute)} {$orderType}";
-        }
-
-        // Allow after pagination without any order
-        if (empty($orderAttributes) && !empty($cursor)) {
-            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-
-            if ($cursorDirection === Database::CURSOR_AFTER) {
-                $orderMethod = $orderType === Database::ORDER_DESC
-                    ? Query::TYPE_LESSER
-                    : Query::TYPE_GREATER;
-            } else {
-                $orderMethod = $orderType === Database::ORDER_DESC
-                    ? Query::TYPE_GREATER
-                    : Query::TYPE_LESSER;
-            }
-
-            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$sequence']})";
-        }
-
-        // Allow order type without any order attribute, fallback to the natural order (_id)
-        if (!$hasIdAttribute) {
-            if (empty($orderAttributes) && !empty($orderTypes)) {
-                $order = $orderTypes[0] ?? Database::ORDER_ASC;
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                }
-
-                $orders[] = "{$this->quote($alias)}._id ".$this->filter($order);
-            } else {
-                $orders[] = "{$this->quote($alias)}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
-            }
         }
 
         $conditions = $this->getSQLConditions($queries, $binds);
@@ -1632,7 +1590,7 @@ class MariaDB extends SQL
             {$sqlOrder}
             {$sqlLimit};
         ";
-
+var_dump($sql);
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         try {

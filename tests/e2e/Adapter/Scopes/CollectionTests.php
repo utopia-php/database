@@ -41,8 +41,6 @@ trait CollectionTests
      */
     public function testCreateListExistsDeleteCollection(): void
     {
-
-
         /** @var Database $database */
         $database = static::getDatabase();
 
@@ -50,11 +48,7 @@ trait CollectionTests
             Permission::create(Role::any()),
             Permission::read(Role::any()),
         ]));
-
         $this->assertCount(1, $database->listCollections());
-
-
-
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors'));
 
         // Collection names should not be unique
@@ -655,12 +649,15 @@ trait CollectionTests
             ]),
         ];
 
+        /**
+         *  Update array length check to 255
+         */
         $indexes = [
             new Document([
                 '$id' => ID::custom('idx_cards'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['cards'],
-                'lengths' => [500], // Will be changed to Database::ARRAY_INDEX_LENGTH (255)
+                'lengths' => [500],
                 'orders' => [Database::ORDER_DESC],
             ]),
             new Document([
@@ -674,7 +671,7 @@ trait CollectionTests
                 '$id' => ID::custom('idx_username_created_at'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['username', 'cards'],
-                'lengths' => [99,200], // Length not equal to attributes length
+                'lengths' => [99, 255], // Length not equal to attributes length
                 'orders' => [Database::ORDER_DESC],
             ]),
         ];

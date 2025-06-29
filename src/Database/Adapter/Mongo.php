@@ -11,6 +11,7 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
@@ -618,6 +619,13 @@ class Mongo extends Adapter
             }
         }
 
+        /**
+         * Collation
+         *  .1  Moved under $indexes.
+         *  .2  Updated format.
+         *  .3  Avoid adding collation to fulltext index
+         */
+
         if (!empty($collation) &&
             $type !== Database::INDEX_FULLTEXT) {
             //$options['collation'] = $collation;
@@ -728,7 +736,7 @@ class Mongo extends Adapter
 
         return new Document($result);
     }
-public static $count = 0;
+//public static $count = 0;
     /**
      * Create Document
      *
@@ -748,7 +756,7 @@ public static $count = 0;
             //var_dump($backtrace[2]['function']);
             //var_dump(self::$count);
             //var_dump($document);
-            self::$count++;
+            //self::$count++;
         }
 
         $sequence = $document->getSequence();
@@ -1079,6 +1087,26 @@ public static $count = 0;
     }
 
     /**
+     * TODO Consider moving this to adapter.php
+     * @param string $attribute
+     * @return string
+     */
+    protected function getInternalKeyForAttribute(string $attribute): string
+    {
+        return match ($attribute) {
+            '$id' => '_uid',
+            '$sequence' => '_id',
+            '$collection' => '_collection',
+            '$tenant' => '_tenant',
+            '$createdAt' => '_createdAt',
+            '$updatedAt' => '_updatedAt',
+            '$permissions' => '_permissions',
+            default => $attribute
+        };
+    }
+
+
+    /**
      * Find Documents
      *
      * Find data sets using chosen queries
@@ -1099,6 +1127,7 @@ public static $count = 0;
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
+
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $queries = array_map(fn ($query) => clone $query, $queries);
 
@@ -1132,24 +1161,31 @@ public static $count = 0;
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
+        $hasIdAttribute = false;
+
         // orders
         foreach ($orderAttributes as $i => $attribute) {
+            $originalAttribute = $attribute;
+            $attribute = $this->getInternalKeyForAttribute($attribute);
             $attribute = $this->filter($attribute);
+
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+
+            if (\in_array($attribute, ['_uid', '_id'])) {
+                $hasIdAttribute = true;
+            }
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            $attribute = $attribute == 'id' ? '_uid' : $attribute;
-            $attribute = $attribute == 'sequence' ? '_id' : $attribute;
-            $attribute = $attribute == 'createdAt' ? '_createdAt' : $attribute;
-            $attribute = $attribute == 'updatedAt' ? '_updatedAt' : $attribute;
-
             $options['sort'][$attribute] = $this->getOrder($orderType);
+
         }
 
-        $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
+        if(!$hasIdAttribute) {
+            $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
+        }
 
         // queries
 
@@ -1167,6 +1203,7 @@ public static $count = 0;
                     ]
                 ]);
             }
+
             // Allow order type without any order attribute, fallback to the natural order (_id)
             if (!empty($orderTypes)) {
                 $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
@@ -1175,15 +1212,19 @@ public static $count = 0;
                 }
 
                 $options['sort']['_id'] = $this->getOrder($orderType);
+
             }
         }
 
-        if (!empty($cursor) && !empty($orderAttributes) && array_key_exists(0, $orderAttributes)) {
+        if (!empty($cursor) && !empty($orderAttributes)) {
             $attribute = $orderAttributes[0];
 
             if (is_null($cursor[$attribute] ?? null)) {
                 throw new DatabaseException("Order attribute '{$attribute}' is empty");
             }
+
+            $attribute = $this->getInternalKeyForAttribute($attribute);
+            $attribute = $this->filter($attribute);
 
             $orderOperatorSequence = Query::TYPE_GREATER;
             $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
@@ -1198,11 +1239,11 @@ public static $count = 0;
             $cursorFilters = [
                 [
                     $attribute => [
-                        $this->getQueryOperator($orderOperator) => $cursor[$attribute]
+                        $this->getQueryOperator($orderOperator) => $cursor[$originalAttribute]
                     ]
                 ],
                 [
-                    $attribute => $cursor[$attribute],
+                    $attribute => $cursor[$originalAttribute],
                     '_id' => [
                         $this->getQueryOperator($orderOperatorSequence) => new ObjectId($cursor['$sequence'])
                     ]
@@ -1222,7 +1263,9 @@ public static $count = 0;
         $found = [];
 
         try {
+
             $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
@@ -2056,7 +2099,7 @@ public static $count = 0;
      */
     public function getMaxIndexLength(): int
     {
-        return 0;
+        return 1024;
     }
 
     public function getConnectionId(): string

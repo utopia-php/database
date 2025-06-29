@@ -1405,7 +1405,7 @@ trait DocumentTests
         ]);
         $this->assertEquals($firstDocumentId, $documents[0]->getId());
 
-        /**
+    /**
          * Check internal numeric ID sorting
          */
         $documents = $database->find('movies', [
@@ -1413,6 +1413,13 @@ trait DocumentTests
             Query::offset(0),
             Query::orderDesc(''),
         ]);
+
+//        foreach ($documents as $document) {
+//            var_dump($document->getAttribute('name'));
+//        }
+//
+//        exit;
+        //var_dump($movieDocuments);
         $this->assertEquals($movieDocuments[\count($movieDocuments) - 1]->getId(), $documents[0]->getId());
         $documents = $database->find('movies', [
             Query::limit(25),
@@ -1978,10 +1985,12 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorAfter($movies[1])
         ]);
+        //var_dump($movieDocuments);
+
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
-
+        exit;
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),

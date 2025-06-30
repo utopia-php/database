@@ -11,7 +11,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
@@ -1604,7 +1603,7 @@ class MariaDB extends SQL
             {$sqlOrder}
             {$sqlLimit};
         ";
-var_dump($sql);
+        var_dump($sql);
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         try {

@@ -1517,40 +1517,54 @@ class MariaDB extends SQL
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        foreach ($orderAttributes as $i => $attribute) {
-            $originalAttribute = $attribute;
+        $cursorWhere = [];
 
-            $attribute = $this->getInternalKeyForAttribute($attribute);
+        foreach ($orderAttributes as $i => $originalAttribute) {
+            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
 
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $direction = $orderType;
 
-            // Get most dominant/first order attribute
-            if ($i === 0 && !empty($cursor)) {
-                $orderMethodSequence = Query::TYPE_GREATER; // To preserve natural order
-                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                    $orderMethodSequence = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                    $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                }
-
-                $binds[':cursor'] = $cursor[$originalAttribute];
-
-                $where[] = "(
-                        {$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
-                        OR (
-                            {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
-                            AND
-                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodSequence)} {$cursor['$sequence']}
-                        )
-                    )";
-            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
-                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $direction = ($direction === Database::ORDER_ASC)
+                    ? Database::ORDER_DESC
+                    : Database::ORDER_ASC;
             }
 
-            $orders[] = "{$this->quote($attribute)} {$orderType}";
+            $orders[] = "{$this->quote($attribute)} {$direction}";
+
+            // Build pagination WHERE clause only if we have a cursor
+            if (!empty($cursor)) {
+                $conditions = [];
+
+                // Add equality conditions for previous attributes
+                for ($j = 0; $j < $i; $j++) {
+                    $prevOriginal = $orderAttributes[$j];
+                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
+
+                    $bindName = ":cursor_j_{$j}";
+                    $binds[$bindName] = $cursor[$prevOriginal];
+
+                    $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
+                }
+
+                // Add comparison for current attribute
+                $operator = ($direction === Database::ORDER_DESC)
+                    ? Query::TYPE_LESSER
+                    : Query::TYPE_GREATER;
+
+                $bindName = ":cursor_i_{$i}";
+                $binds[$bindName] = $cursor[$originalAttribute];
+
+                $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+
+                $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
+            }
+        }
+
+        if (!empty($cursorWhere)) {
+            $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
         $conditions = $this->getSQLConditions($queries, $binds);

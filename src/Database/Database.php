@@ -6015,18 +6015,17 @@ class Database
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
         $cursor = $grouped['cursor'];
-        $cursorDirection = $grouped['cursorDirection'];
+        $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
 
         $uniqueOrderBy = false;
         foreach ($orderAttributes as $order){
-            if($order === '$id'|| $order === '$sequence'){
+            if($order === '$id' || $order === '$sequence'){
                 $uniqueOrderBy = true;
             }
         }
 
         if ($uniqueOrderBy === false){
             $orderAttributes[] = '$sequence';
-            $orderTypes[] = 'ASC'; // There is no way to know the direction since we do not check the index direction
         }
 
         if (!empty($cursor)){
@@ -6106,7 +6105,7 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER,
+            $cursorDirection,
             $forPermission
         );
 

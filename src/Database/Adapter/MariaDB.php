@@ -1542,7 +1542,7 @@ class MariaDB extends SQL
                     $prevOriginal = $orderAttributes[$j];
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
 
-                    $bindName = ":cursor_j_{$j}";
+                    $bindName = ":cursor_{$j}";
                     $binds[$bindName] = $cursor[$prevOriginal];
 
                     $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
@@ -1553,7 +1553,7 @@ class MariaDB extends SQL
                     ? Query::TYPE_LESSER
                     : Query::TYPE_GREATER;
 
-                $bindName = ":cursor_i_{$i}";
+                $bindName = ":cursor_{$i}";
                 $binds[$bindName] = $cursor[$originalAttribute];
 
                 $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
@@ -1603,7 +1603,7 @@ class MariaDB extends SQL
             {$sqlOrder}
             {$sqlLimit};
         ";
-        var_dump($sql);
+
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         try {

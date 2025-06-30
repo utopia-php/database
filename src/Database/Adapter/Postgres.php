@@ -1417,6 +1417,19 @@ class Postgres extends SQL
 
             // Build pagination WHERE clause only if we have a cursor
             if (!empty($cursor)) {
+                // Special case: only 1 attribute and it's a unique primary key
+                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
+                    $operator = ($direction === Database::ORDER_DESC)
+                        ? Query::TYPE_LESSER
+                        : Query::TYPE_GREATER;
+
+                    $bindName = ":cursor_pk";
+                    $binds[$bindName] = $cursor[$originalAttribute];
+
+                    $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                    break;
+                }
+
                 $conditions = [];
 
                 // Add equality conditions for previous attributes
@@ -1424,7 +1437,7 @@ class Postgres extends SQL
                     $prevOriginal = $orderAttributes[$j];
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
 
-                    $bindName = ":cursor_j_{$j}";
+                    $bindName = ":cursor_{$j}";
                     $binds[$bindName] = $cursor[$prevOriginal];
 
                     $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
@@ -1435,7 +1448,7 @@ class Postgres extends SQL
                     ? Query::TYPE_LESSER
                     : Query::TYPE_GREATER;
 
-                $bindName = ":cursor_i_{$i}";
+                $bindName = ":cursor_{$i}";
                 $binds[$bindName] = $cursor[$originalAttribute];
 
                 $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";

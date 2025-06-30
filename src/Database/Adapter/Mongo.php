@@ -1168,46 +1168,57 @@ class Mongo extends Adapter
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
             $direction = $orderType;
 
+            /** Get sort direction  ASC || DESC**/
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $direction = ($direction === Database::ORDER_ASC)
                     ? Database::ORDER_DESC
                     : Database::ORDER_ASC;
             }
 
+
             $options['sort'][$attribute] = $this->getOrder($direction);
 
-            if (!empty($cursor)) {
-                /**
-                 * todo: make special case If we have a single order by $sequnce no need for $or
-                 */
-                $andConditions = [];
+            /** Get operator sign  '$lt' ? '$gt' **/
+            $operator = $cursorDirection === Database::CURSOR_AFTER
+                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
-                // Equality conditions for previous fields
+            $operator = $this->getQueryOperator($operator);
+
+            if (!empty($cursor)) {
+
+                $andConditions = [];
                 for ($j = 0; $j < $i; $j++) {
                     $originalPrev = $orderAttributes[$j];
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
 
-                    $kaka = $cursor[$originalPrev];
+                    $tmp = $cursor[$originalPrev];
                     if($originalPrev === '$sequence'){
-                        $kaka = new ObjectId($kaka);
+                        $tmp = new ObjectId($tmp);
                     }
 
                     $andConditions[] = [
-                        $prevAttr => $kaka
+                        $prevAttr => $tmp
                     ];
                 }
 
-                // Comparison for current attribute
-                $operator = ($direction === Database::ORDER_DESC) ? '$lt' : '$gt';
+                $tmp = $cursor[$originalAttribute];
 
-                $kaka = $cursor[$originalAttribute];
                 if($originalAttribute === '$sequence'){
-                    $kaka = new ObjectId($kaka);
+                    $tmp = new ObjectId($tmp);
+
+                    /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
+                    if(count($orderAttributes) === 1){
+                        $filters[$attribute] = [
+                            $operator => $tmp
+                        ];
+                        break;
+                    }
                 }
 
                 $andConditions[] = [
                     $attribute => [
-                        $operator => $kaka
+                        $operator => $tmp
                     ]
                 ];
 
@@ -1587,10 +1598,12 @@ class Mongo extends Adapter
     {
         $filters = [];
         $queries = Query::groupByType($queries)['filters'];
+
         foreach ($queries as $query) {
             /* @var $query Query */
             if ($query->isNested()) {
                 $operator = $this->getQueryOperator($query->getMethod());
+
                 $filters[$separator][] = $this->buildFilters($query->getValues(), $operator);
             } else {
                 $filters[$separator][] = $this->buildFilter($query);

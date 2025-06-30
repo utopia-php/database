@@ -2016,8 +2016,7 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorAfter($movies[5])
         ]);
-        var_dump(count($documents));
-        //exit;
+
         $this->assertEmpty(count($documents));
     }
     public function testFindOrderByBeforeNaturalOrder(): void

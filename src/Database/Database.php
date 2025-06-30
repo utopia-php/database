@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -6014,7 +6015,29 @@ class Database
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
         $cursor = $grouped['cursor'];
-        $cursorDirection = $grouped['cursorDirection'];
+        $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
+
+        $uniqueOrderBy = false;
+        foreach ($orderAttributes as $order) {
+            if ($order === '$id' || $order === '$sequence') {
+                $uniqueOrderBy = true;
+            }
+        }
+
+        if ($uniqueOrderBy === false) {
+            $orderAttributes[] = '$sequence';
+        }
+
+        if (!empty($cursor)) {
+            foreach ($orderAttributes as $order) {
+                if ($cursor->getAttribute($order) === null) {
+                    throw new OrderException(
+                        message: "Order attribute '{$order}' is empty",
+                        attribute: $order
+                    );
+                }
+            }
+        }
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException("cursor Document must be from the same Collection.");
@@ -6082,7 +6105,7 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER,
+            $cursorDirection,
             $forPermission
         );
 

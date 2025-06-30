@@ -4256,7 +4256,14 @@ trait DocumentTests
         $database = static::getDatabase();
 
         if ($database->getAdapter()->getSharedTables()) {
-            $this->expectNotToPerformAssertions();
+            $documents = $database->find(
+                'documents',
+                [Query::select(['*'])] // Mongo bug with Integer UID
+            );
+
+            $document = $documents[0];
+            $doc = $database->getDocument($document->getCollection(), $document->getId());
+            $this->assertEquals($document->getTenant(), $doc->getTenant());
             return;
         }
 

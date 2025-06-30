@@ -1990,7 +1990,7 @@ trait DocumentTests
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
-        exit;
+
         $documents = $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
@@ -2016,6 +2016,8 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorAfter($movies[5])
         ]);
+        var_dump(count($documents));
+        exit;
         $this->assertEmpty(count($documents));
     }
     public function testFindOrderByBeforeNaturalOrder(): void

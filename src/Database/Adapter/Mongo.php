@@ -1127,7 +1127,6 @@ class Mongo extends Adapter
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $queries = array_map(fn ($query) => clone $query, $queries);
 
@@ -1140,7 +1139,7 @@ class Mongo extends Adapter
         // permissions
         if (Authorization::$status) {
             $roles = \implode('|', Authorization::getRoles());
-            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\(\".*(?:{$roles}).*\"\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
         $options = [];
@@ -1156,19 +1155,16 @@ class Mongo extends Adapter
         }
 
         $selections = $this->getAttributeSelections($queries);
-
         if (!empty($selections) && !\in_array('*', $selections)) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
         $hasIdAttribute = false;
 
-        // orders
         foreach ($orderAttributes as $i => $attribute) {
             $originalAttribute = $attribute;
             $attribute = $this->getInternalKeyForAttribute($attribute);
             $attribute = $this->filter($attribute);
-
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
 
             if (\in_array($attribute, ['_uid', '_id'])) {
@@ -1180,92 +1176,58 @@ class Mongo extends Adapter
             }
 
             $options['sort'][$attribute] = $this->getOrder($orderType);
-
         }
 
-        if(!$hasIdAttribute) {
+        if (!$hasIdAttribute) {
             $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
         }
 
-        // queries
-
-        if (empty($orderAttributes)) {
-            // Allow after pagination without any order
-            if (!empty($cursor)) {
-                $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-                $orderOperator = $cursorDirection === Database::CURSOR_AFTER
-                    ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-                    : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
-
-                $filters = array_merge($filters, [
-                    '_id' => [
-                        $this->getQueryOperator($orderOperator) => new ObjectId($cursor['$sequence'])
-                    ]
-                ]);
-            }
-
-            // Allow order type without any order attribute, fallback to the natural order (_id)
-            if (!empty($orderTypes)) {
-                $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                }
-
-                $options['sort']['_id'] = $this->getOrder($orderType);
-
-            }
-        }
-
+        // Compound cursor logic
         if (!empty($cursor) && !empty($orderAttributes)) {
-            $attribute = $orderAttributes[0];
-
-            if (is_null($cursor[$attribute] ?? null)) {
-                throw new DatabaseException("Order attribute '{$attribute}' is empty");
-            }
-
-            $attribute = $this->getInternalKeyForAttribute($attribute);
+            $attribute = $this->getInternalKeyForAttribute($orderAttributes[0]);
             $attribute = $this->filter($attribute);
+            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
 
-            $orderOperatorSequence = Query::TYPE_GREATER;
-            $orderType = $this->filter($orderTypes[0] ?? Database::ORDER_ASC);
-            $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+            $orderOperator = $cursorDirection === Database::CURSOR_AFTER
+                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
-            if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                $orderOperatorSequence = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                $orderOperator = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-            }
+            $sequenceOperator = $cursorDirection === Database::CURSOR_AFTER
+                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
-            $cursorFilters = [
+            $filters['$or'] = [
                 [
                     $attribute => [
-                        $this->getQueryOperator($orderOperator) => $cursor[$originalAttribute]
+                        $this->getQueryOperator($orderOperator) => $cursor[$orderAttributes[0]]
                     ]
                 ],
                 [
-                    $attribute => $cursor[$originalAttribute],
+                    $attribute => $cursor[$orderAttributes[0]],
                     '_id' => [
-                        $this->getQueryOperator($orderOperatorSequence) => new ObjectId($cursor['$sequence'])
+                        $this->getQueryOperator($sequenceOperator) => new ObjectId($cursor['$sequence'])
                     ]
-                ],
+                ]
             ];
+        } elseif (!empty($cursor)) {
+            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
+            $orderOperator = $cursorDirection === Database::CURSOR_AFTER
+                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
-            $filters = [
-                '$and' => [$filters, ['$or' => $cursorFilters]]
+            $filters['_id'] = [
+                $this->getQueryOperator($orderOperator) => new ObjectId($cursor['$sequence'])
             ];
         }
 
+        // Translate operators and handle time filters
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
         $filters = $this->timeFilter($filters);
-        /**
-         * @var array<Document>
-         */
+
         $found = [];
 
         try {
-
             $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
-
         } catch (MongoException $e) {
             throw $this->processException($e);
         }

@@ -64,9 +64,9 @@ class Document extends ArrayObject
     /**
      * @return string
      */
-    public function getInternalId(): string
+    public function getSequence(): string
     {
-        return $this->getAttribute('$internalId', '');
+        return $this->getAttribute('$sequence', '');
     }
 
     /**

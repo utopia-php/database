@@ -8,9 +8,9 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Transaction as TransactionException;
-use Utopia\Database\PDO;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
@@ -337,11 +337,13 @@ abstract class SQL extends Adapter
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
+        $alias = Query::DEFAULT_ALIAS;
+
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections)}
-            FROM {$this->getSQLTable($name)}
-            WHERE _uid = :_uid 
-            {$this->getTenantQuery($collection)}
+		    SELECT {$this->getAttributeProjection($selections, $alias)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
+            {$this->getTenantQuery($collection, $alias)}
 		";
 
         if ($this->getSupportForUpdateLock()) {
@@ -367,7 +369,7 @@ abstract class SQL extends Adapter
         $document = $document[0];
 
         if (\array_key_exists('_id', $document)) {
-            $document['$internalId'] = $document['_id'];
+            $document['$sequence'] = $document['_id'];
             unset($document['_id']);
         }
         if (\array_key_exists('_uid', $document)) {
@@ -441,12 +443,12 @@ abstract class SQL extends Adapter
         }
 
         $name = $this->filter($collection);
-        $internalIds = \array_map(fn ($document) => $document->getInternalId(), $documents);
+        $sequences = \array_map(fn ($document) => $document->getSequence(), $documents);
 
         $sql = "
             UPDATE {$this->getSQLTable($name)}
             SET {$columns}
-            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")
+            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($sequences))) . ")
             {$this->getTenantQuery($collection)}
         ";
 
@@ -457,7 +459,7 @@ abstract class SQL extends Adapter
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        foreach ($internalIds as $id => $value) {
+        foreach ($sequences as $id => $value) {
             $stmt->bindValue(":_id_{$id}", $value);
         }
 
@@ -640,15 +642,15 @@ abstract class SQL extends Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $internalIds
+     * @param array<string> $sequences
      * @param array<string> $permissionIds
      *
      * @return int
      * @throws DatabaseException
      */
-    public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int
+    public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
     {
-        if (empty($internalIds)) {
+        if (empty($sequences)) {
             return 0;
         }
 
@@ -657,7 +659,7 @@ abstract class SQL extends Adapter
 
             $sql = "
             DELETE FROM {$this->getSQLTable($name)} 
-            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")
+            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($sequences))) . ")
             {$this->getTenantQuery($collection)}
             ";
 
@@ -665,7 +667,7 @@ abstract class SQL extends Adapter
 
             $stmt = $this->getPDO()->prepare($sql);
 
-            foreach ($internalIds as $id => $value) {
+            foreach ($sequences as $id => $value) {
                 $stmt->bindValue(":_id_{$id}", $value);
             }
 
@@ -716,9 +718,9 @@ abstract class SQL extends Adapter
      * @return array<string>
      * @throws DatabaseException
      */
-    protected function getInternalIds(string $collection, array $documentIds, array $documentTenants = []): array
+    protected function getSequences(string $collection, array $documentIds, array $documentTenants = []): array
     {
-        $internalIds = [];
+        $sequences = [];
 
         /**
          * UID, _tenant bottleneck is ~ 5000 rows since we use _uid IN query
@@ -744,13 +746,13 @@ abstract class SQL extends Adapter
             }
 
             $stmt->execute();
-            $results = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
+            $results = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
             $stmt->closeCursor();
 
-            $internalIds = [...$internalIds, ...$results];
+            $sequences = [...$sequences, ...$results];
         }
 
-        return $internalIds;
+        return $sequences;
     }
 
     /**
@@ -1349,6 +1351,12 @@ abstract class SQL extends Adapter
         return false;
     }
 
+    public function getSupportForNumericCasting(): bool
+    {
+        return false;
+    }
+
+
     /**
      * Does the adapter handle Query Array Contains?
      *
@@ -1601,7 +1609,6 @@ abstract class SQL extends Adapter
     {
         $conditions = [];
         foreach ($queries as $query) {
-
             if ($query->getMethod() === Query::TYPE_SELECT) {
                 continue;
             }
@@ -1677,59 +1684,38 @@ abstract class SQL extends Adapter
      * @return mixed
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         if (empty($selections) || \in_array('*', $selections)) {
-            if (!empty($prefix)) {
-                return "{$this->quote($prefix)}.*";
-            }
-            return '*';
+            return "{$this->quote($prefix)}.*";
         }
 
-        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
+        $internalKeys = [
+            '$id',
+            '$sequence',
+            '$permissions',
+            '$createdAt',
+            '$updatedAt',
+        ];
 
-        $selections[] = $this->getInternalKeyForAttribute('$id');
-        $selections[] = $this->getInternalKeyForAttribute('$permissions');
+        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
 
-        if (\in_array('$internalId', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$internalId');
-            $selections = \array_diff($selections, ['$internalId']);
-        }
-        if (\in_array('$createdAt', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$createdAt');
-            $selections = \array_diff($selections, ['$createdAt']);
-        }
-        if (\in_array('$updatedAt', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$updatedAt');
-            $selections = \array_diff($selections, ['$updatedAt']);
-        }
-        if (\in_array('$collection', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$collection');
-            $selections = \array_diff($selections, ['$collection']);
-        }
-        if (\in_array('$tenant', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$tenant');
-            $selections = \array_diff($selections, ['$tenant']);
+        foreach ($internalKeys as $internalKey) {
+            $selections[] = $this->getInternalKeyForAttribute($internalKey);
         }
 
-        if (!empty($prefix)) {
-            foreach ($selections as &$selection) {
-                $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
-            }
-        } else {
-            foreach ($selections as &$selection) {
-                $selection = "{$this->quote($this->filter($selection))}";
-            }
+        foreach ($selections as &$selection) {
+            $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
         }
 
-        return \implode(', ', $selections);
+        return \implode(',', $selections);
     }
 
     protected function getInternalKeyForAttribute(string $attribute): string
     {
         return match ($attribute) {
             '$id' => '_uid',
-            '$internalId' => '_id',
+            '$sequence' => '_id',
             '$collection' => '_collection',
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
@@ -1753,5 +1739,168 @@ abstract class SQL extends Adapter
     protected function processException(PDOException $e): \Exception
     {
         return $e;
+    }
+
+    /**
+     * @param mixed $stmt
+     * @return bool
+     */
+    protected function execute(mixed $stmt): bool
+    {
+        return $stmt->execute();
+    }
+
+    /**
+     * Create Documents in batches
+     *
+     * @param string $collection
+     * @param array<Document> $documents
+     *
+     * @return array<Document>
+     *
+     * @throws DuplicateException
+     * @throws \Throwable
+     */
+    public function createDocuments(string $collection, array $documents): array
+    {
+        if (empty($documents)) {
+            return $documents;
+        }
+
+        try {
+            $name = $this->filter($collection);
+
+            $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
+
+            $hasSequence = null;
+            foreach ($documents as $document) {
+                $attributes = $document->getAttributes();
+                $attributeKeys = [...$attributeKeys, ...\array_keys($attributes)];
+
+                if ($hasSequence === null) {
+                    $hasSequence = !empty($document->getSequence());
+                } elseif ($hasSequence == empty($document->getSequence())) {
+                    throw new DatabaseException('All documents must have an sequence if one is set');
+                }
+            }
+
+            $attributeKeys = array_unique($attributeKeys);
+
+            if ($hasSequence) {
+                $attributeKeys[] = '_id';
+            }
+
+            if ($this->sharedTables) {
+                $attributeKeys[] = '_tenant';
+            }
+
+            $columns = [];
+            foreach ($attributeKeys as $key => $attribute) {
+                $columns[$key] = $this->quote($this->filter($attribute));
+            }
+
+            $columns = '(' . \implode(', ', $columns) . ')';
+
+            $bindIndex = 0;
+            $batchKeys = [];
+            $bindValues = [];
+            $permissions = [];
+            $documentIds = [];
+            $documentTenants = [];
+
+            foreach ($documents as $index => $document) {
+                $attributes = $document->getAttributes();
+                $attributes['_uid'] = $document->getId();
+                $attributes['_createdAt'] = $document->getCreatedAt();
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+                if (!empty($document->getSequence())) {
+                    $attributes['_id'] = $document->getSequence();
+                } else {
+                    $documentIds[] = $document->getId();
+                }
+
+                if ($this->sharedTables) {
+                    $attributes['_tenant'] = $document->getTenant();
+                    $documentTenants[] = $document->getTenant();
+                }
+
+                $bindKeys = [];
+
+                foreach ($attributeKeys as $key) {
+                    $value = $attributes[$key] ?? null;
+                    if (\is_array($value)) {
+                        $value = \json_encode($value);
+                    }
+                    $value = (\is_bool($value)) ? (int)$value : $value;
+                    $bindKey = 'key_' . $bindIndex;
+                    $bindKeys[] = ':' . $bindKey;
+                    $bindValues[$bindKey] = $value;
+                    $bindIndex++;
+                }
+
+                $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+
+                foreach (Database::PERMISSIONS as $type) {
+                    foreach ($document->getPermissionsByType($type) as $permission) {
+                        $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';
+                        $permission = \str_replace('"', '', $permission);
+                        $permission = "('{$type}', '{$permission}', :_uid_{$index} {$tenantBind})";
+                        $permissions[] = $permission;
+                    }
+                }
+            }
+
+            $batchKeys = \implode(', ', $batchKeys);
+
+            $stmt = $this->getPDO()->prepare("
+                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                VALUES {$batchKeys}
+            ");
+
+            foreach ($bindValues as $key => $value) {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+
+            $this->execute($stmt);
+
+            if (!empty($permissions)) {
+                $tenantColumn = $this->sharedTables ? ', _tenant' : '';
+                $permissions = \implode(', ', $permissions);
+
+                $sqlPermissions = "
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions};
+                ";
+
+                $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
+
+                foreach ($documents as $index => $document) {
+                    $stmtPermissions->bindValue(":_uid_{$index}", $document->getId());
+                    if ($this->sharedTables) {
+                        $stmtPermissions->bindValue(":_tenant_{$index}", $document->getTenant());
+                    }
+                }
+
+                $this->execute($stmtPermissions);
+            }
+
+            $sequences = $this->getSequences(
+                $collection,
+                $documentIds,
+                $documentTenants
+            );
+
+            foreach ($documents as $document) {
+                if (isset($sequences[$document->getId()])) {
+                    $document['$sequence'] = $sequences[$document->getId()];
+                }
+            }
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return $documents;
     }
 }

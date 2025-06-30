@@ -444,11 +444,12 @@ class SQLite extends MariaDB
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
+     * @param array<string,string> $indexAttributeTypes
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
@@ -542,7 +543,7 @@ class SQLite extends MariaDB
         }
 
         // Insert manual id if set
-        if (!empty($document->getInternalId())) {
+        if (!empty($document->getSequence())) {
             $values[] = '_id';
             $columns[] = "_id";
         }
@@ -559,8 +560,8 @@ class SQLite extends MariaDB
         $stmt->bindValue(':_uid', $document->getId(), PDO::PARAM_STR);
 
         // Bind internal id if set
-        if (!empty($document->getInternalId())) {
-            $stmt->bindValue(':_id', $document->getInternalId(), PDO::PARAM_STR);
+        if (!empty($document->getSequence())) {
+            $stmt->bindValue(':_id', $document->getSequence(), PDO::PARAM_STR);
         }
 
         $attributeIndex = 0;
@@ -608,7 +609,7 @@ class SQLite extends MariaDB
             $statment->execute();
             $last = $statment->fetch();
 
-            $document['$internalId'] = $last['id'];
+            $document['$sequence'] = $last['id'];
 
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();

@@ -642,10 +642,11 @@ abstract class Adapter
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
+     * @param array<string,string> $indexAttributeTypes
      *
      * @return bool
      */
-    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool;
+    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool;
 
     /**
      * Delete Index
@@ -746,12 +747,12 @@ abstract class Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $internalIds
+     * @param array<string> $sequences
      * @param array<string> $permissionIds
      *
      * @return int
      */
-    abstract public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int;
+    abstract public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int;
 
     /**
      * Find Documents
@@ -1069,7 +1070,7 @@ abstract class Adapter
      * @param string $prefix
      * @return mixed
      */
-    abstract protected function getAttributeProjection(array $selections, string $prefix = ''): mixed;
+    abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
 
     /**
      * Get all selected attributes from queries
@@ -1152,7 +1153,15 @@ abstract class Adapter
      * @return bool
      * @throws Exception
      */
-    abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool;
+    abstract public function increaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value,
+        string $updatedAt,
+        int|float|null $min = null,
+        int|float|null $max = null
+    ): bool;
 
     /**
      * Returns the connection ID identifier
@@ -1185,4 +1194,10 @@ abstract class Adapter
      * @return string
      */
     abstract public function getTenantQuery(string $collection, string $alias = ''): string;
+
+    /**
+     * @param mixed $stmt
+     * @return bool
+     */
+    abstract protected function execute(mixed $stmt): bool;
 }

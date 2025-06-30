@@ -948,12 +948,12 @@ class Mirror extends Database
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
+    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

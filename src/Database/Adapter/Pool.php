@@ -210,7 +210,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -255,7 +255,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int
+    public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -455,7 +455,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -481,6 +481,11 @@ class Pool extends Adapter
     }
 
     public function getTenantQuery(string $collection, string $alias = ''): string
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    protected function execute(mixed $stmt): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

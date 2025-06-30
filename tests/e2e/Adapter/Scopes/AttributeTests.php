@@ -1473,6 +1473,7 @@ trait AttributeTests
         if ($database->getAdapter()->getMaxIndexLength() > 0) {
             // If getMaxIndexLength() > 0 We clear length for array attributes
             $database->createIndex($collection, 'indx1', Database::INDEX_KEY, ['long_size'], [], []);
+            $database->deleteIndex($collection, 'indx1');
             $database->createIndex($collection, 'indx2', Database::INDEX_KEY, ['long_size'], [1000], []);
 
             try {

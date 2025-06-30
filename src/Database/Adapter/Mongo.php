@@ -1159,66 +1159,128 @@ class Mongo extends Adapter
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
-        $hasIdAttribute = false;
+        $orFilters = [];
 
-        foreach ($orderAttributes as $i => $attribute) {
-            $originalAttribute = $attribute;
-            $attribute = $this->getInternalKeyForAttribute($attribute);
+        foreach ($orderAttributes as $i => $originalAttribute) {
+            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
 
-            if (\in_array($attribute, ['_uid', '_id'])) {
-                $hasIdAttribute = true;
-            }
+            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $direction = $orderType;
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                $direction = ($direction === Database::ORDER_ASC)
+                    ? Database::ORDER_DESC
+                    : Database::ORDER_ASC;
             }
 
-            $options['sort'][$attribute] = $this->getOrder($orderType);
-        }
+            $options['sort'][$attribute] = $this->getOrder($direction);
 
-        if (!$hasIdAttribute) {
-            $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
-        }
+            if (!empty($cursor)) {
+                /**
+                 * todo: make special case If we have a single order by $sequnce no need for $or
+                 */
+                $andConditions = [];
 
-        // Compound cursor logic
-        if (!empty($cursor) && !empty($orderAttributes)) {
-            $attribute = $this->getInternalKeyForAttribute($orderAttributes[0]);
-            $attribute = $this->filter($attribute);
-            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
+                // Equality conditions for previous fields
+                for ($j = 0; $j < $i; $j++) {
+                    $originalPrev = $orderAttributes[$j];
+                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
 
-            $orderOperator = $cursorDirection === Database::CURSOR_AFTER
-                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
+                    $kaka = $cursor[$originalPrev];
+                    if($originalPrev === '$sequence'){
+                        $kaka = new ObjectId($kaka);
+                    }
 
-            $sequenceOperator = $cursorDirection === Database::CURSOR_AFTER
-                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
+                    $andConditions[] = [
+                        $prevAttr => $kaka
+                    ];
+                }
 
-            $filters['$or'] = [
-                [
+                // Comparison for current attribute
+                $operator = ($direction === Database::ORDER_DESC) ? '$lt' : '$gt';
+
+                $kaka = $cursor[$originalAttribute];
+                if($originalAttribute === '$sequence'){
+                    $kaka = new ObjectId($kaka);
+                }
+
+                $andConditions[] = [
                     $attribute => [
-                        $this->getQueryOperator($orderOperator) => $cursor[$orderAttributes[0]]
+                        $operator => $kaka
                     ]
-                ],
-                [
-                    $attribute => $cursor[$orderAttributes[0]],
-                    '_id' => [
-                        $this->getQueryOperator($sequenceOperator) => new ObjectId($cursor['$sequence'])
-                    ]
-                ]
-            ];
-        } elseif (!empty($cursor)) {
-            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-            $orderOperator = $cursorDirection === Database::CURSOR_AFTER
-                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
+                ];
 
-            $filters['_id'] = [
-                $this->getQueryOperator($orderOperator) => new ObjectId($cursor['$sequence'])
-            ];
+                $orFilters[] = [
+                    '$and' => $andConditions
+                ];
+            }
         }
+
+        if (!empty($orFilters)) {
+            $filters['$or'] = $orFilters;
+        }
+
+//        $hasIdAttribute = false;
+//
+//        foreach ($orderAttributes as $i => $attribute) {
+//            $originalAttribute = $attribute;
+//            $attribute = $this->getInternalKeyForAttribute($attribute);
+//            $attribute = $this->filter($attribute);
+//            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+//
+//            if (\in_array($attribute, ['_uid', '_id'])) {
+//                $hasIdAttribute = true;
+//            }
+//
+//            if ($cursorDirection === Database::CURSOR_BEFORE) {
+//                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+//            }
+//
+//            $options['sort'][$attribute] = $this->getOrder($orderType);
+//        }
+//
+//        if (!$hasIdAttribute) {
+//            $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
+//        }
+//
+//        // Compound cursor logic
+//        if (!empty($cursor) && !empty($orderAttributes)) {
+//            $attribute = $this->getInternalKeyForAttribute($orderAttributes[0]);
+//            $attribute = $this->filter($attribute);
+//            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
+//
+//            $orderOperator = $cursorDirection === Database::CURSOR_AFTER
+//                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+//                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
+//
+//            $sequenceOperator = $cursorDirection === Database::CURSOR_AFTER
+//                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+//                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
+//
+//            $filters['$or'] = [
+//                [
+//                    $attribute => [
+//                        $this->getQueryOperator($orderOperator) => $cursor[$orderAttributes[0]]
+//                    ]
+//                ],
+//                [
+//                    $attribute => $cursor[$orderAttributes[0]],
+//                    '_id' => [
+//                        $this->getQueryOperator($sequenceOperator) => new ObjectId($cursor['$sequence'])
+//                    ]
+//                ]
+//            ];
+//        } elseif (!empty($cursor)) {
+//            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
+//            $orderOperator = $cursorDirection === Database::CURSOR_AFTER
+//                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+//                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
+//
+//            $filters['_id'] = [
+//                $this->getQueryOperator($orderOperator) => new ObjectId($cursor['$sequence'])
+//            ];
+//        }
 
         // Translate operators and handle time filters
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);

@@ -237,8 +237,7 @@ class Postgres extends SQL
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 _permissions TEXT DEFAULT NULL,
                 " . \implode(' ', $attributeStrings) . "
-                PRIMARY KEY (_id),
-                UNIQUE(_uid)
+                PRIMARY KEY (_id)
             );
         ";
 

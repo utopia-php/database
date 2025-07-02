@@ -1910,7 +1910,7 @@ trait DocumentTests
         ]);
 
         $this->assertEquals(6, count($movies));
-        var_dump($movies);
+
         $this->assertEquals($movies[0]['name'], 'Captain America: The First Avenger');
         $this->assertEquals($movies[0]['year'], 2011);
         $this->assertEquals($movies[0]['price'], 25.94);

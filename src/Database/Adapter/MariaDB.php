@@ -1616,7 +1616,7 @@ class MariaDB extends SQL
             {$sqlOrder}
             {$sqlLimit};
         ";
-var_dump($sql);
+
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         try {

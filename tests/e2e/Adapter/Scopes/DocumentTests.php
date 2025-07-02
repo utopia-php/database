@@ -1900,6 +1900,55 @@ trait DocumentTests
             Query::cursorAfter($movies[5])
         ]);
         $this->assertEmpty(count($documents));
+
+        /**
+         * Multiple order by, Test tie-break on year 2019
+         */
+        $movies = $database->find('movies', [
+            Query::orderAsc('year'),
+            Query::orderAsc('price'),
+        ]);
+
+        $this->assertEquals(6, count($movies));
+        var_dump($movies);
+        $this->assertEquals($movies[0]['name'], 'Captain America: The First Avenger');
+        $this->assertEquals($movies[0]['year'], 2011);
+        $this->assertEquals($movies[0]['price'], 25.94);
+
+        $this->assertEquals($movies[1]['name'], 'Frozen');
+        $this->assertEquals($movies[1]['year'], 2013);
+        $this->assertEquals($movies[1]['price'], 39.5);
+
+        $this->assertEquals($movies[2]['name'], 'Captain Marvel');
+        $this->assertEquals($movies[2]['year'], 2019);
+        $this->assertEquals($movies[2]['price'], 25.99);
+
+        $this->assertEquals($movies[3]['name'], 'Frozen II');
+        $this->assertEquals($movies[3]['year'], 2019);
+        $this->assertEquals($movies[3]['price'], 39.5);
+
+        $this->assertEquals($movies[4]['name'], 'Work in Progress');
+        $this->assertEquals($movies[4]['year'], 2025);
+        $this->assertEquals($movies[4]['price'], 0);
+
+        $this->assertEquals($movies[5]['name'], 'Work in Progress 2');
+        $this->assertEquals($movies[5]['year'], 2026);
+        $this->assertEquals($movies[5]['price'], 0);
+
+        $pos = 2;
+        $documents = $database->find('movies', [
+            Query::orderAsc('year'),
+            Query::orderAsc('price'),
+            Query::cursorAfter($movies[$pos])
+        ]);
+
+        $this->assertEquals(3, count($documents));
+
+        foreach ($documents as $i => $document) {
+            $this->assertEquals($document['name'], $movies[$i + 1 + $pos]['name']);
+            $this->assertEquals($document['price'], $movies[$i + 1 + $pos]['price']);
+            $this->assertEquals($document['year'], $movies[$i + 1 + $pos]['year']);
+        }
     }
 
 

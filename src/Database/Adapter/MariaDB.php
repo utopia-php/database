@@ -1535,13 +1535,13 @@ class MariaDB extends SQL
 
             // Build pagination WHERE clause only if we have a cursor
             if (!empty($cursor)) {
-                // Special case: only 1 attribute and it's a unique primary key
+                // Special case: No tie breaks. only 1 attribute and it's a unique primary key
                 if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
                     $operator = ($direction === Database::ORDER_DESC)
                         ? Query::TYPE_LESSER
                         : Query::TYPE_GREATER;
 
-                    $bindName = "cursor_pk";
+                    $bindName = ":cursor_pk";
                     $binds[$bindName] = $cursor[$originalAttribute];
 
                     $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";

@@ -1527,7 +1527,6 @@ class MariaDB extends SQL
 
             $operator = ($orderType === Database::ORDER_DESC) ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
-            // Build pagination WHERE clause only if we have a cursor
             if (!empty($cursor)) {
                 // Special case: No tie breaks. only 1 attribute and it's a unique primary key
                 if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {

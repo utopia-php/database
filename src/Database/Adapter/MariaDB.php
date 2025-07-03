@@ -1533,6 +1533,7 @@ class MariaDB extends SQL
                 if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
                     $bindName = ":cursor_pk";
                     $binds[$bindName] = $cursor[$originalAttribute];
+
                     $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
                     break;
                 }

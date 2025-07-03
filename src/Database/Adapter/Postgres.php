@@ -1532,10 +1532,6 @@ class Postgres extends SQL
             $results[$index] = new Document($results[$index]);
         }
 
-        if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $results = \array_reverse($results);
-        }
-
         return $results;
     }
 

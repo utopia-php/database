@@ -6017,14 +6017,7 @@ class Database
         $cursor = $grouped['cursor'];
         $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
 
-        $uniqueOrderBy = false;
-        foreach ($orderAttributes as $order) {
-            if ($order === '$id' || $order === '$sequence') {
-                $uniqueOrderBy = true;
-            }
-        }
-
-        if ($uniqueOrderBy === false) {
+        if (!in_array('$id', $orderAttributes) && !in_array('$sequence', $orderAttributes)) {
             $orderAttributes[] = '$sequence';
         }
 

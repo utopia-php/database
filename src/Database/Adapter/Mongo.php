@@ -71,7 +71,7 @@ class Mongo extends Adapter
     {
         parent::clearTimeout($event);
 
-        $this->timeout = null;
+        $this->timeout = 0;
     }
 
     public function startTransaction(): bool
@@ -232,6 +232,7 @@ class Mongo extends Adapter
 
             // using $i and $j as counters to distinguish from $key
             foreach ($indexes as $i => $index) {
+
                 $key = [];
                 $unique = false;
                 $attributes = $index->getAttribute('attributes');
@@ -714,7 +715,7 @@ class Mongo extends Adapter
         $filters = ['_uid' => $id];
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = (string)$this->getTenant();
+            $filters['_tenant'] = $this->getTenant();
         }
 
         $options = [];
@@ -751,20 +752,12 @@ class Mongo extends Adapter
 
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        if($collection === "_metadata" && $document->getId() === "actors"){
-            //$backtrace = debug_backtrace();
-            //var_dump($backtrace[2]['function']);
-            //var_dump(self::$count);
-            //var_dump($document);
-            //self::$count++;
-        }
-
         $sequence = $document->getSequence();
 
         $document->removeAttribute('$sequence');
 
         if ($this->sharedTables) {
-            $document->setAttribute('$tenant', (string)$this->getTenant());
+            $document->setAttribute('$tenant', $this->getTenant());
         }
 
         $record = $this->replaceChars('$', '_', (array)$document);
@@ -813,7 +806,7 @@ class Mongo extends Adapter
             $document->removeAttribute('$sequence');
 
             if ($this->sharedTables) {
-                $document->setAttribute('$tenant', (string)$this->getTenant());
+                $document->setAttribute('$tenant', $this->getTenant());
             }
 
             $record = $this->replaceChars('$', '_', (array)$document);
@@ -856,7 +849,7 @@ class Mongo extends Adapter
             $filters['_uid'] = $document['_uid'];
 
             if ($this->sharedTables) {
-                $filters['_tenant'] = (string)$this->getTenant();
+                $filters['_tenant'] = $this->getTenant();
             }
 
             $result = $this->client->find(
@@ -894,7 +887,7 @@ class Mongo extends Adapter
         $filters = [];
         $filters['_uid'] = $id;
         if ($this->sharedTables) {
-            $filters['_tenant'] = (string)$this->getTenant();
+            $filters['_tenant'] = $this->getTenant();
         }
 
         try {
@@ -924,12 +917,13 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $queries = [
-            Query::equal('$id', array_map(fn ($document) => $document->getId(), $documents))
+            Query::equal('$sequence', \array_map(fn ($document) => $document->getSequence(), $documents))
         ];
 
         $filters = $this->buildFilters($queries);
+
         if ($this->sharedTables) {
-            $filters['_tenant'] = (string)$this->getTenant();
+            $filters['_tenant'] = $this->getTenant();
         }
 
         $record = $updates->getArrayCopy();
@@ -981,7 +975,7 @@ class Mongo extends Adapter
         $filters = ['_uid' => $id];
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = (string)$this->getTenant();
+            $filters['_tenant'] = $this->getTenant();
         }
 
         if ($max) {
@@ -1020,7 +1014,7 @@ class Mongo extends Adapter
         $filters = [];
         $filters['_uid'] = $id;
         if ($this->sharedTables) {
-            $filters['_tenant'] = (string)$this->getTenant();
+            $filters['_tenant'] = $this->getTenant();
         }
 
         $result = $this->client->delete($name, $filters);
@@ -1043,7 +1037,7 @@ class Mongo extends Adapter
         $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_id', $sequences)]);
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = (string)$this->getTenant();
+            $filters['_tenant'] = $this->getTenant();
         }
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
@@ -1133,7 +1127,7 @@ class Mongo extends Adapter
         $filters = $this->buildFilters($queries);
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = (string)$this->getTenant();
+            $filters['_tenant'] = $this->getTenant();
         }
 
         // permissions
@@ -1174,7 +1168,6 @@ class Mongo extends Adapter
                     ? Database::ORDER_DESC
                     : Database::ORDER_ASC;
             }
-
 
             $options['sort'][$attribute] = $this->getOrder($direction);
 
@@ -1231,67 +1224,6 @@ class Mongo extends Adapter
         if (!empty($orFilters)) {
             $filters['$or'] = $orFilters;
         }
-
-//        $hasIdAttribute = false;
-//
-//        foreach ($orderAttributes as $i => $attribute) {
-//            $originalAttribute = $attribute;
-//            $attribute = $this->getInternalKeyForAttribute($attribute);
-//            $attribute = $this->filter($attribute);
-//            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-//
-//            if (\in_array($attribute, ['_uid', '_id'])) {
-//                $hasIdAttribute = true;
-//            }
-//
-//            if ($cursorDirection === Database::CURSOR_BEFORE) {
-//                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-//            }
-//
-//            $options['sort'][$attribute] = $this->getOrder($orderType);
-//        }
-//
-//        if (!$hasIdAttribute) {
-//            $options['sort']['_id'] = $this->getOrder($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC);
-//        }
-//
-//        // Compound cursor logic
-//        if (!empty($cursor) && !empty($orderAttributes)) {
-//            $attribute = $this->getInternalKeyForAttribute($orderAttributes[0]);
-//            $attribute = $this->filter($attribute);
-//            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-//
-//            $orderOperator = $cursorDirection === Database::CURSOR_AFTER
-//                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-//                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
-//
-//            $sequenceOperator = $cursorDirection === Database::CURSOR_AFTER
-//                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-//                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
-//
-//            $filters['$or'] = [
-//                [
-//                    $attribute => [
-//                        $this->getQueryOperator($orderOperator) => $cursor[$orderAttributes[0]]
-//                    ]
-//                ],
-//                [
-//                    $attribute => $cursor[$orderAttributes[0]],
-//                    '_id' => [
-//                        $this->getQueryOperator($sequenceOperator) => new ObjectId($cursor['$sequence'])
-//                    ]
-//                ]
-//            ];
-//        } elseif (!empty($cursor)) {
-//            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
-//            $orderOperator = $cursorDirection === Database::CURSOR_AFTER
-//                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-//                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
-//
-//            $filters['_id'] = [
-//                $this->getQueryOperator($orderOperator) => new ObjectId($cursor['$sequence'])
-//            ];
-//        }
 
         // Translate operators and handle time filters
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
@@ -1567,7 +1499,7 @@ class Mongo extends Adapter
                 unset($result['_uid']);
             }
             if (array_key_exists('_tenant', $array)) {
-                $result['$tenant'] = (string)$array['_tenant'];
+                $result['$tenant'] = $array['_tenant'];
                 unset($result['_tenant']);
             }
         } elseif ($from === '$') {
@@ -1580,7 +1512,7 @@ class Mongo extends Adapter
                 unset($result['$sequence']);
             }
             if (array_key_exists('$tenant', $array)) {
-                $result['_tenant'] = (string)$array['$tenant'];
+                $result['_tenant'] = $array['$tenant'];
                 unset($result['$tenant']);
             }
         }
@@ -2156,6 +2088,6 @@ class Mongo extends Adapter
 
     public function getTenantQuery(string $collection, string $parentAlias = ''): string
     {
-        return (string)$this->getTenant();
+        return $this->getTenant();
     }
 }

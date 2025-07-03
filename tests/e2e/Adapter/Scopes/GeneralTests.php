@@ -120,6 +120,9 @@ trait GeneralTests
             'attr1' => 'value3',
         ]));
 
+
+
+
         $newDate = '2000-01-01T10:00:00.000+00:00';
 
         $doc1->setAttribute('$updatedAt', $newDate);
@@ -128,12 +131,16 @@ trait GeneralTests
         $doc1 = $database->getDocument('preserve_update_dates', 'doc1');
         $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
 
+//        var_dump([
+//            '$doc2' => $doc2->getAttribute('$updatedAt'),
+//            '$doc3' => $doc3->getAttribute('$updatedAt'),
+//        ]);
+
         $this->getDatabase()->updateDocuments(
             'preserve_update_dates',
             new Document([
                 '$updatedAt' => $newDate
-            ]),
-            [
+            ]), [
                 Query::equal('$id', [
                     $doc2->getId(),
                     $doc3->getId()

@@ -686,6 +686,10 @@ trait CollectionTests
         );
 
         $this->assertEquals($collection->getAttribute('indexes')[0]['attributes'][0], 'cards');
+        /**
+         * If we set getMaxIndexLength to 1024 then this tests pass but other tests that depend on index length fail
+         */
+
         $this->assertEquals($collection->getAttribute('indexes')[0]['lengths'][0], Database::ARRAY_INDEX_LENGTH);
         $this->assertEquals($collection->getAttribute('indexes')[0]['orders'][0], null);
 

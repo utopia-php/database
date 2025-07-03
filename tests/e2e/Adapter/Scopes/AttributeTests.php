@@ -1293,12 +1293,12 @@ trait AttributeTests
             required: false,
             signed: false
         ));
-
+        /** Is this hack valid? */
         $this->assertEquals(true, $database->createAttribute(
             $collection,
             'tv_show',
             Database::VAR_STRING,
-            size: 700,
+            size: $database->getAdapter()->getMaxIndexLength() - 68, /** Verify with Jake if this solution is valid?  */
             required: false,
             signed: false,
         ));

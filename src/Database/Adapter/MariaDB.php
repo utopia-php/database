@@ -11,7 +11,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
@@ -1703,7 +1702,7 @@ class MariaDB extends SQL
         array $joins = [],
         array $orderQueries = []
     ): array {
-        unset($queries);
+        unset($queries); // remove this since we pass explicit queries
 
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
@@ -1714,85 +1713,71 @@ class MariaDB extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
-        $hasIdAttribute = false;
 
-        //$queries = array_map(fn ($query) => clone $query, $queries);
         $filters = array_map(fn ($query) => clone $query, $filters);
-        //$filters = Query::getFilterQueries($filters); // for cloning if needed
+
+        $cursorWhere = [];
 
         foreach ($orderQueries as $i => $order) {
             $orderAlias = $order->getAlias();
             $attribute  = $order->getAttribute();
             $originalAttribute = $attribute;
-            $attribute = $this->getInternalKeyForAttribute($attribute);
+            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
-            if ($attribute === '_uid' || $attribute === '_id') {
-                $hasIdAttribute = true;
-            }
 
-            $orderType = $order->getOrderDirection();
-
-            // Get most dominant/first order attribute
-            if ($i === 0 && !empty($cursor)) {
-                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
-                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                    $orderMethodInternalId = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                    $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                }
-
-                if (\is_null($cursor[$originalAttribute] ?? null)) {
-                    throw new OrderException(
-                        message: "Order attribute '{$originalAttribute}' is empty",
-                        attribute: $originalAttribute
-                    );
-                }
-
-                $binds[':cursor'] = $cursor[$originalAttribute];
-
-                $where[] = "(
-                        {$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
-                        OR (
-                            {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
-                            AND
-                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodInternalId)} {$cursor['$internalId']}
-                        )
-                    )";
-            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
-                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-            }
-
-            $orders[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$orderType}";
-        }
-
-        // Allow after pagination without any order
-        if (empty($orderQueries) && !empty($cursor)) {
-            if ($cursorDirection === Database::CURSOR_AFTER) {
-                $orderMethod = Query::TYPE_GREATER;
-            } else {
-                $orderMethod = Query::TYPE_LESSER;
-            }
-
-            $where[] = "({$this->quote($alias)}.{$this->quote('_id')} {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
-        }
-
-        // Allow order type without any order attribute, fallback to the natural order (_id)
-        // Because if we have 2 movies with same year 2000 order by year, _id for pagination
-
-        if (!$hasIdAttribute) {
-            $order = Database::ORDER_ASC;
+            $direction = $order->getOrderDirection();
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $order = Database::ORDER_DESC;
+                $direction = ($direction === Database::ORDER_ASC) ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
-            /**
-             * Reminder to when releasing joins we do not add _id any more
-             * We can validate a cursor has an order by query
-             */
-            $orders[] = "{$this->quote($alias)}.{$this->quote('_id')} ".$order;
+            $orders[] = "{$this->quote($attribute)} {$direction}";
+
+            // Build pagination WHERE clause only if we have a cursor
+            if (!empty($cursor)) {
+                // Special case: No tie breaks. only 1 attribute and it's a unique primary key
+                if (count($orderQueries) === 1 && $i === 0 && $originalAttribute === '$sequence') {
+                    $operator = ($direction === Database::ORDER_DESC)
+                        ? Query::TYPE_LESSER
+                        : Query::TYPE_GREATER;
+
+                    $bindName = ":cursor_pk";
+                    $binds[$bindName] = $cursor[$originalAttribute];
+
+                    $cursorWhere[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                    break;
+                }
+
+                $conditions = [];
+
+                // Add equality conditions for previous attributes
+                for ($j = 0; $j < $i; $j++) {
+                    $prevQuery = $orderQueries[$j];
+                    $prevOriginal = $prevQuery->getAttribute();
+                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
+
+                    $bindName = ":cursor_{$j}";
+                    $binds[$bindName] = $cursor[$prevOriginal];
+
+                    $conditions[] = "{$this->quote($orderAlias)}.{$this->quote($prevAttr)} = {$bindName}";
+                }
+
+                // Add comparison for current attribute
+                $operator = ($direction === Database::ORDER_DESC)
+                    ? Query::TYPE_LESSER
+                    : Query::TYPE_GREATER;
+
+                $bindName = ":cursor_{$i}";
+                $binds[$bindName] = $cursor[$originalAttribute];
+
+                $conditions[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+
+                $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
+            }
+        }
+
+        if (!empty($cursorWhere)) {
+            $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
         $sqlJoin = '';

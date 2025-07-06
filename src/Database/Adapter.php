@@ -776,25 +776,6 @@ abstract class Adapter
     ): array;
 
     /**
-     * Find Documents
-     *
-     * Find data sets using chosen queries
-     *
-     * @param string $collection
-     * @param array<Query> $queries
-     * @param int|null $limit
-     * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
-     * @param array<string, mixed> $cursor
-     * @param string $cursorDirection
-     * @param string $forPermission
-     *
-     * @return array<Document>
-     */
-    // abstract public function find_org(QueryContext $context, string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
-
-    /**
      * Sum an attribute
      *
      * @param string $collection

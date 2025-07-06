@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -5808,8 +5809,6 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-
-
         $context = new QueryContext();
         $context->add($collection);
 
@@ -5864,10 +5863,6 @@ class Database
         $offset = Query::getOffsetQuery($queries, 0);
         $orders = Query::getOrderQueries($queries);
 
-        //$grouped = Query::groupByType($queries);
-        //$orderAttributes = $grouped['orderAttributes'];
-        //$orderTypes = $grouped['orderTypes'];
-
         $cursor = [];
         $cursorDirection = Database::CURSOR_AFTER;
         $cursorQuery = Query::getCursorQueries($queries);
@@ -5880,6 +5875,26 @@ class Database
             }
 
             $cursor = $this->encode($collection, $cursor)->getArrayCopy();
+        }
+
+        $uniqueOrderBy = false;
+        foreach ($orders as $order) {
+            if ($order->getAttribute() === '$id' || $order->getAttribute() === '$sequence') {
+                $uniqueOrderBy = true;
+            }
+        }
+
+        if ($uniqueOrderBy === false) {
+            $orders[] = Query::orderAsc();
+        }
+
+        foreach ($orders as $order) {
+            if (!empty($cursor) && ($cursor[$order->getAttribute()] ?? null)  === null) {
+                throw new OrderException(
+                    message: "Order attribute '{$order->getAttribute()}' is empty",
+                    attribute: $order->getAttribute()
+                );
+            }
         }
 
         $nestedSelections = [];
@@ -5937,25 +5952,6 @@ class Database
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
             }
-
-            // Remove internal attributes which are not queried
-//            if (!empty($selects)) {
-//                $selectedAttributes = array_map(
-//                    fn ($q) => $q->getAttribute(),
-//                    array_filter($selects, fn ($q) => $q->isSystem() === false)
-//                );
-//
-//                var_dump($node);
-//                var_dump($selectedAttributes);
-//
-//                if (!in_array('*', $selectedAttributes)){
-//                    foreach ($this->getInternalAttributes() as $internalAttribute) {
-//                        if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
-//                            $node->removeAttribute($internalAttribute['$id']);
-//                        }
-//                    }
-//                }
-//            }
 
             $results[$index] = $node;
         }

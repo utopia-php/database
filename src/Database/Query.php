@@ -930,7 +930,7 @@ class Query
      *     cursorDirection: string|null
      * }
      */
-    public static function groupByType_deprecated(array $queries): array
+    public static function groupByType(array $queries): array
     {
         $filters = [];
         $joins = [];
@@ -994,12 +994,6 @@ class Query
                     $selections[] = clone $query;
                     break;
 
-                case Query::TYPE_INNER_JOIN:
-                case Query::TYPE_LEFT_JOIN:
-                case Query::TYPE_RIGHT_JOIN:
-                    $joins[] = clone $query;
-                    break;
-
                 default:
                     $filters[] = clone $query;
                     break;
@@ -1015,7 +1009,6 @@ class Query
             'orderTypes' => $orderTypes,
             'cursor' => $cursor,
             'cursorDirection' => $cursorDirection,
-            'join' => $joins,
         ];
     }
 

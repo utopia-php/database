@@ -1403,7 +1403,7 @@ class Postgres extends SQL
         array $joins = [],
         array $orderQueries = []
     ): array {
-        unset($queries);
+        unset($queries); // remove this since we pass explicit queries
 
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
@@ -1414,67 +1414,66 @@ class Postgres extends SQL
         $roles = Authorization::getRoles();
         $where = [];
         $orders = [];
-        $alias = Query::DEFAULT_ALIAS;
-        $binds = [];
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
+        $filters = array_map(fn ($query) => clone $query, $filters);
 
-        $hasIdAttribute = false;
-        foreach ($orderAttributes as $i => $attribute) {
+        $cursorWhere = [];
+
+        foreach ($orderQueries as $i => $order) {
+            $orderAlias = $order->getAlias();
+            $attribute  = $order->getAttribute();
             $originalAttribute = $attribute;
-
-            $attribute = $this->getInternalKeyForAttribute($attribute);
+            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
-            if (\in_array($attribute, ['_uid', '_id'])) {
-                $hasIdAttribute = true;
-            }
 
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-
-            // Get most dominant/first order attribute
-            if ($i === 0 && !empty($cursor)) {
-                $orderMethodInternalId = Query::TYPE_GREATER; // To preserve natural order
-                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
+            $direction = $order->getOrderDirection();
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $direction = ($direction === Database::ORDER_ASC)
-                    ? Database::ORDER_DESC
-                    : Database::ORDER_ASC;
+                $direction = ($direction === Database::ORDER_ASC) ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
             $orders[] = "{$this->quote($attribute)} {$direction}";
 
-            $orders[] = "{$this->quote($attribute)} {$orderType}";
-        }
+            // Build pagination WHERE clause only if we have a cursor
+            if (!empty($cursor)) {
+                // Special case: No tie breaks. only 1 attribute and it's a unique primary key
+                if (count($orderQueries) === 1 && $i === 0 && $originalAttribute === '$sequence') {
+                    $operator = ($direction === Database::ORDER_DESC)
+                        ? Query::TYPE_LESSER
+                        : Query::TYPE_GREATER;
 
-        // Allow after pagination without any order
-        if (empty($orderAttributes) && !empty($cursor)) {
-            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
+                    $bindName = ":cursor_pk";
+                    $binds[$bindName] = $cursor[$originalAttribute];
 
-            if ($cursorDirection === Database::CURSOR_AFTER) {
-                $orderMethod = $orderType === Database::ORDER_DESC
-                    ? Query::TYPE_LESSER
-                    : Query::TYPE_GREATER;
-            } else {
-                $orderMethod = $orderType === Database::ORDER_DESC
-                    ? Query::TYPE_GREATER
-                    : Query::TYPE_LESSER;
-            }
-
-            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$internalId']})";
-        }
-
-        // Allow order type without any order attribute, fallback to the natural order (_id)
-        if (!$hasIdAttribute) {
-            if (empty($orderAttributes) && !empty($orderTypes)) {
-                $order = $orderTypes[0] ?? Database::ORDER_ASC;
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+                    $cursorWhere[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                    break;
                 }
 
-                $orders[] = "{$this->quote($alias)}._id ".$this->filter($order);
-            } else {
-                $orders[] = "{$this->quote($alias)}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
+                $conditions = [];
+
+                // Add equality conditions for previous attributes
+                for ($j = 0; $j < $i; $j++) {
+                    $prevQuery = $orderQueries[$j];
+                    $prevOriginal = $prevQuery->getAttribute();
+                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
+
+                    $bindName = ":cursor_{$j}";
+                    $binds[$bindName] = $cursor[$prevOriginal];
+
+                    $conditions[] = "{$this->quote($orderAlias)}.{$this->quote($prevAttr)} = {$bindName}";
+                }
+
+                // Add comparison for current attribute
+                $operator = ($direction === Database::ORDER_DESC)
+                    ? Query::TYPE_LESSER
+                    : Query::TYPE_GREATER;
+
+                $bindName = ":cursor_{$i}";
+                $binds[$bindName] = $cursor[$originalAttribute];
+
+                $conditions[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+
+                $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
             }
         }
 
@@ -1482,18 +1481,41 @@ class Postgres extends SQL
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $sqlJoin = '';
+        foreach ($joins as $join) {
+            $permissions = '';
+            $collection = $join->getCollection();
+            $collection = $this->filter($collection);
+
+            $skipAuth = $context->skipAuth($collection, $forPermission);
+            if (! $skipAuth) {
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias(), $forPermission);
+            }
+
+            $sqlJoin .= "INNER JOIN {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
+            ON {$this->getSQLConditions($join->getValues(), $binds)}
+            {$permissions}
+            {$this->getTenantQuery($collection, $join->getAlias())}
+            ";
+        }
+
+        if (!empty($cursorWhere)) {
+            $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
+        }
+
+        $conditions = $this->getSQLConditions($filters, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        $skipAuth = $context->skipAuth($name, $forPermission);
+        if (! $skipAuth) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($name, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -1510,11 +1532,10 @@ class Postgres extends SQL
             $sqlLimit .= ' OFFSET :offset';
         }
 
-        $selections = $this->getAttributeSelections($queries);
-
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias)}
+            SELECT {$this->getAttributeProjection($selects)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            {$sqlJoin}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
@@ -1532,13 +1553,10 @@ class Postgres extends SQL
                 }
             }
 
-            $stmt->execute();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
+            $this->execute($stmt);
 
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
 
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -1641,7 +1659,7 @@ class Postgres extends SQL
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
-        $this->execute($stmt);
+        $stmt->execute();
 
         $result = $stmt->fetchAll();
         $stmt->closeCursor();
@@ -1715,7 +1733,7 @@ class Postgres extends SQL
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
-        $this->execute($stmt);
+        $stmt->execute();
 
         $result = $stmt->fetchAll();
         $stmt->closeCursor();

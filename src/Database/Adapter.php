@@ -537,6 +537,17 @@ abstract class Adapter
     abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
 
     /**
+     * Create Attributes
+     *
+     * @param string $collection
+     * @param array<array<string, mixed>> $attributes
+     * @return bool
+     * @throws TimeoutException
+     * @throws DuplicateException
+     */
+    abstract public function createAttributes(string $collection, array $attributes): bool;
+
+    /**
      * Update Attribute
      *
      * @param string $collection
@@ -631,10 +642,11 @@ abstract class Adapter
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
+     * @param array<string,string> $indexAttributeTypes
      *
      * @return bool
      */
-    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders): bool;
+    abstract public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool;
 
     /**
      * Delete Index
@@ -735,12 +747,12 @@ abstract class Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $internalIds
+     * @param array<string> $sequences
      * @param array<string> $permissionIds
      *
      * @return int
      */
-    abstract public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int;
+    abstract public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int;
 
     /**
      * Find Documents
@@ -1003,6 +1015,13 @@ abstract class Adapter
     abstract public function getSupportForHostname(): bool;
 
     /**
+     * Is creating multiple attributes in a single query supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForBatchCreateAttributes(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1105,7 +1124,7 @@ abstract class Adapter
         return $value;
     }
 
-    public function escapeWildcards(string $value): string
+    protected function escapeWildcards(string $value): string
     {
         $wildcards = [
             '%',
@@ -1145,7 +1164,15 @@ abstract class Adapter
      * @return bool
      * @throws Exception
      */
-    abstract public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool;
+    abstract public function increaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value,
+        string $updatedAt,
+        int|float|null $min = null,
+        int|float|null $max = null
+    ): bool;
 
     /**
      * Returns the connection ID identifier
@@ -1178,4 +1205,10 @@ abstract class Adapter
      * @return string
      */
     abstract public function getTenantQuery(string $collection, string $alias = ''): string;
+
+    /**
+     * @param mixed $stmt
+     * @return bool
+     */
+    abstract protected function execute(mixed $stmt): bool;
 }

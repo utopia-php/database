@@ -5889,7 +5889,7 @@ class Database
         }
 
         foreach ($orders as $order) {
-            if (!empty($cursor) && ($cursor[$order->getAttribute()] ?? null)  === null) {
+            if (!empty($cursor) && !isset($cursor[$order->getAttribute()])) {
                 throw new OrderException(
                     message: "Order attribute '{$order->getAttribute()}' is empty",
                     attribute: $order->getAttribute()

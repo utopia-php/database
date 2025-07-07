@@ -6013,6 +6013,8 @@ class Database
         $context = new QueryContext();
         $context->add($collection);
 
+        $queries = self::convertQueries($context, $queries);
+
         $joins = Query::getJoinQueries($queries);
 
         foreach ($joins as $join) {
@@ -6048,11 +6050,6 @@ class Database
                 throw new QueryException($validator->getDescription());
             }
         }
-
-        /**
-         * Convert Queries
-         */
-        $queries = self::convertQueries($context, $queries);
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),

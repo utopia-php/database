@@ -1617,10 +1617,6 @@ class MariaDB extends SQL
             ";
         }
 
-        if (!empty($cursorWhere)) {
-            $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
-        }
-
         $conditions = $this->getSQLConditions($filters, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
@@ -1802,7 +1798,6 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
-        $alias = Query::DEFAULT_ALIAS;
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 

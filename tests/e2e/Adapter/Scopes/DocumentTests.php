@@ -1786,9 +1786,10 @@ trait DocumentTests
          * We should not use this fix and use structure validations, or change using not querying on empty string
          */
         $empty = new Document();
+        $this->assertEquals('0', $empty->getSequence());
 
         /**
-         * Check no exceptions are thrown as a temporary fix
+         * Check no exceptions is thrown
          */
         $database->find('movies', [
             Query::equal('$sequence', [$empty->getSequence()]),

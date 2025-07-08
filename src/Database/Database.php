@@ -6675,19 +6675,19 @@ class Database
         foreach ($attributes as $attribute) {
             foreach ($queries as $index => $query) {
                 if ($query->getAttribute() === $attribute->getId()) {
-                    if($query->getAttribute() === '$sequence'){
-                        /**
-                         * Hack for Postgres, since bindParam does not convert '' on int attribute
-                         */
-                        $values = $query->getValues();
-                        foreach ($values as $valueIndex => $value) {
-                            if($value === ''){
-                                $values[$valueIndex] = '0';
-                            }
-                        }
-                        $query->setValues($values);
-                        $queries[$index] = $query;
-                    }
+//                    if($query->getAttribute() === '$sequence'){
+//                        /**
+//                         * Hack for Postgres, since bindParam does not convert '' on int attribute
+//                         */
+//                        $values = $query->getValues();
+//                        foreach ($values as $valueIndex => $value) {
+//                            if($value === ''){
+//                                $values[$valueIndex] = '0';
+//                            }
+//                        }
+//                        $query->setValues($values);
+//                        $queries[$index] = $query;
+//                    }
 
                     $query->setOnArray($attribute->getAttribute('array', false));
                 }

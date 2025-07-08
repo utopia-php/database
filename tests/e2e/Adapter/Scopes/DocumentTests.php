@@ -1778,8 +1778,21 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::equal('$sequence', [$data['$sequence']]),
         ]);
-
         $this->assertEquals(1, count($documents));
+
+        /**
+         * Test getSequence returns '' Postgres bindParam issue on empty string
+         * Hack in convertQueries to change $sequence empty string from '' => '0'
+         * We should not use this fix and use structure validations, or change using not querying on empty string
+         */
+        $empty = new Document();
+
+        /**
+         * Check no exceptions are thrown as a temporary fix
+         */
+        $database->find('movies', [
+            Query::equal('$sequence', [$empty->getSequence()]),
+        ]);
     }
 
     public function testFindOrderBy(): void

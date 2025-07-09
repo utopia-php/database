@@ -56,7 +56,7 @@ class MongoDBTest extends Base
             ->setDatabase($schema)
             ->setSharedTables(true)
             ->setTenant(999)
-            ->setNamespace(static::$namespace = '');
+            ->setNamespace(static::$namespace = 'my_shared_tables');
 
         if ($database->exists()) {
             $database->delete();

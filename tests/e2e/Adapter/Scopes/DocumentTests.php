@@ -431,6 +431,7 @@ trait DocumentTests
         ];
 
         $results = [];
+        
         $count = $database->createOrUpdateDocuments(
             __FUNCTION__,
             $documents,
@@ -438,9 +439,10 @@ trait DocumentTests
                 $results[] = $doc;
             }
         );
+        
 
         $this->assertEquals(2, $count);
-
+       
         $createdAt = [];
         foreach ($results as $index => $document) {
             $createdAt[$index] = $document->getCreatedAt();
@@ -453,8 +455,8 @@ trait DocumentTests
             $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
         }
 
+    
         $documents = $database->find(__FUNCTION__);
-
         $this->assertEquals(2, count($documents));
 
         foreach ($documents as $document) {
@@ -563,7 +565,7 @@ trait DocumentTests
 
         $documents[0]->setAttribute('integer', -1);
         $documents[1]->setAttribute('integer', -1);
-
+        
         $database->createOrUpdateDocumentsWithIncrease(
             collection: __FUNCTION__,
             attribute: 'integer',
@@ -571,7 +573,7 @@ trait DocumentTests
         );
 
         $documents = $database->find(__FUNCTION__);
-
+        
         foreach ($documents as $document) {
             $this->assertEquals(5, $document->getAttribute('integer'));
         }
@@ -1405,21 +1407,16 @@ trait DocumentTests
         ]);
         $this->assertEquals($firstDocumentId, $documents[0]->getId());
 
-    /**
-         * Check internal numeric ID sorting
-         */
+        /**
+             * Check internal numeric ID sorting
+             */
         $documents = $database->find('movies', [
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc(''),
         ]);
 
-//        foreach ($documents as $document) {
-//            var_dump($document->getAttribute('name'));
-//        }
-//
-//        exit;
-        //var_dump($movieDocuments);
+
         $this->assertEquals($movieDocuments[\count($movieDocuments) - 1]->getId(), $documents[0]->getId());
         $documents = $database->find('movies', [
             Query::limit(25),
@@ -4238,7 +4235,9 @@ trait DocumentTests
         $database = static::getDatabase();
 
         $document->setAttribute('$id', 'caseSensitive');
-        $document->setAttribute('$sequence', '200');
+        // Todo 200 van not be ObjectId
+        //$document->setAttribute('$sequence', '200');
+        $document->setAttribute('$sequence', '507f1f77bcf86cd799439011');
         $database->createDocument($document->getCollection(), $document);
 
         $document->setAttribute('$id', 'CaseSensitive');
@@ -4278,7 +4277,7 @@ trait DocumentTests
         $document = $database->getDocument('documents', $document->getId());
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
-
+  
         $document = $database->updateDocument('documents', $document->getId(), $document);
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);

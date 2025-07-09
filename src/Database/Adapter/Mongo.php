@@ -727,7 +727,7 @@ class Mongo extends Adapter
         }
 
         $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
-        //var_dump($result);
+   
         if (empty($result)) {
             return new Document([]);
         }
@@ -737,7 +737,7 @@ class Mongo extends Adapter
 
         return new Document($result);
     }
-//public static $count = 0;
+
     /**
      * Create Document
      *
@@ -857,9 +857,7 @@ class Mongo extends Adapter
                 $filters,
                 ['limit' => 1]
             )->cursor->firstBatch[0];
-            //var_dump($name);
-            //var_dump($filters);
-            //var_dump($result);
+    
             return $this->client->toArray($result);
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
@@ -889,8 +887,9 @@ class Mongo extends Adapter
         if ($this->sharedTables) {
             $filters['_tenant'] = $this->getTenant();
         }
-
         try {
+            unset($record['_id']); // Don't update _id
+
             $this->client->update($name, $filters, $record);
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
@@ -946,12 +945,133 @@ class Mongo extends Adapter
     /**
      * @param string $collection
      * @param string $attribute
-     * @param array<Document> $documents
+     * @param array<Change> $changes
      * @return array<Document>
      */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $documents): array
+    public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
     {
-        return $documents;
+        if (empty($changes)) {
+            return $changes;
+        }
+       
+        try {
+            $name = $this->getNamespace() . '_' . $this->filter($collection);
+            $attribute = $this->filter($attribute);
+
+            $documentIds = [];
+            $documentTenants = [];
+
+            $operations = [];
+            foreach ($changes as $change) {
+                $document = $change->getNew();
+                $attributes = $document->getAttributes();
+
+                $attributes['_uid'] = $document->getId();
+                $attributes['_createdAt'] = $document->getCreatedAt();
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_permissions'] = $document->getPermissions();
+          
+                if (!empty($document->getSequence())) {
+                    $attributes['_id'] = new ObjectId($document->getSequence());
+                } else {
+                    $documentIds[] = $document->getId();
+                }
+
+                if ($this->sharedTables) {
+                    $attributes['_tenant'] = $document->getTenant();
+                    $documentTenants[] = $document->getTenant();
+                }
+
+                $record = $this->replaceChars('$', '_', $attributes);
+                $record = $this->timeToMongo($record);
+                $record = $this->removeNullKeys($record);
+               
+
+                // Build filter for upsert
+                $filter = ['_uid' => $document->getId()];
+                if ($this->sharedTables) {
+                    $filter['_tenant'] = $document->getTenant();
+                }
+
+                if (!empty($attribute)) {
+                    // Increment specific attribute
+                    $update = [
+                        '$inc' => [$attribute => $record[$attribute] ?? 0],
+                        '$set' => ['_updatedAt' => $record['_updatedAt']]
+                    ];
+                } else {
+                    // Update all fields
+                    unset($record['_id']); // Don't update _id
+                    $update = ['$set' => $record];
+                }
+
+                $operations[] = [
+                    'filter' => $filter,
+                    'update' => $update,
+                ];
+            }   
+            
+            // Use the new bulkUpsert method
+            $this->client->bulkUpsert(
+                $name,
+                $operations,
+                ["ordered" => false] // TODO Do we want to continue if an error is thrown? 
+            );
+
+            // Get sequences for documents that were created
+            if (!empty($documentIds)) {
+                $sequences = $this->getSequences($collection, $documentIds, $documentTenants);
+                
+                foreach ($changes as $change) {
+                    if (isset($sequences[$change->getNew()->getId()])) {
+                        $change->getNew()->setAttribute('$sequence', $sequences[$change->getNew()->getId()]);
+                    }
+                }
+            }
+
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
+      
+        return \array_map(fn ($change) => $change->getNew(), $changes);
+    }
+
+    /**
+     * Get sequences for documents that were created
+     *
+     * @param string $collection
+     * @param array<string> $documentIds
+     * @param array<int> $documentTenants
+     * @return array<string, string>
+     */
+    protected function getSequences(string $collection, array $documentIds, array $documentTenants = []): array
+    {
+        $sequences = [];
+        $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+        // Process in chunks to avoid large queries
+        foreach (\array_chunk($documentIds, 1000) as $documentIdsChunk) {
+            $filters = ['_uid' => ['$in' => $documentIdsChunk]];
+
+            if ($this->sharedTables) {
+                $tenantChunk = \array_slice($documentTenants, 0, \count($documentIdsChunk));
+                $filters['_tenant'] = ['$in' => $tenantChunk];
+                $documentTenants = \array_slice($documentTenants, \count($documentIdsChunk));
+            }
+
+            try {
+                $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
+                
+                foreach ($results->cursor->firstBatch as $result) {
+                    $sequences[$result->_uid] = (string)$result->_id;
+                }
+            } catch (MongoException $e) {
+                // If query fails, continue with empty sequences
+                continue;
+            }
+        }
+
+        return $sequences;
     }
 
     /**
@@ -1129,7 +1249,7 @@ class Mongo extends Adapter
         if ($this->sharedTables) {
             $filters['_tenant'] = $this->getTenant();
         }
-
+     
         // permissions
         if (Authorization::$status) {
             $roles = \implode('|', Authorization::getRoles());
@@ -1236,13 +1356,16 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
+       
 
         if (empty($results)) {
             return $found;
         }
+        
 
         foreach ($this->client->toArray($results) as $result) {
             $record = $this->replaceChars('_', '$', (array)$result);
+        
             $record = $this->timeToDocument($record);
 
             $found[] = new Document($record);
@@ -1898,7 +2021,7 @@ class Mongo extends Adapter
 
     public function getSupportForUpserts(): bool
     {
-        return false;
+        return true;
     }
 
     public function getSupportForReconnection(): bool

@@ -710,11 +710,11 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Get internal IDs for the given documents
+     * Assign internal IDs for the given documents
      *
      * @param string $collection
      * @param array<Document> $documents
-     * @return array<string>
+     * @return array<Document>
      * @throws DatabaseException
      */
     public function getSequences(string $collection, array $documents): array

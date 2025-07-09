@@ -738,6 +738,10 @@ abstract class SQL extends Adapter
             }
         }
 
+        if (empty($documentIds)) {
+            return $documents;
+        }
+
         $placeholders = implode(',', array_values($keys));
 
         $sql = "
@@ -747,8 +751,6 @@ abstract class SQL extends Adapter
             {$this->getTenantQuery($collection, tenantCount: \count($documentIds))}
             ";
 
-var_dump($sql);
-var_dump($binds);
         $stmt = $this->getPDO()->prepare($sql);
 
         foreach ($binds as $key => $value) {
@@ -764,8 +766,6 @@ var_dump($binds);
                 $document['$sequence'] = $sequences[$document->getId()];
             }
         }
-
-        var_dump($sequences);
 
         return $documents;
     }

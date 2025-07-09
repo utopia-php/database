@@ -537,7 +537,6 @@ trait GeneralTests
 
     public function testCacheFallback(): void
     {
- 
         /** @var Database $database */
         $database = static::getDatabase();
 

@@ -4228,7 +4228,9 @@ trait DocumentTests
         $database = static::getDatabase();
 
         $document->setAttribute('$id', 'caseSensitive');
-        $document->setAttribute('$sequence', '200');
+        // Todo 200 van not be ObjectId
+        //$document->setAttribute('$sequence', '200');
+        $document->setAttribute('$sequence', '507f1f77bcf86cd799439011');
         $database->createDocument($document->getCollection(), $document);
 
         $document->setAttribute('$id', 'CaseSensitive');

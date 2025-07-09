@@ -438,13 +438,15 @@ trait DocumentTests
                 $results[] = $doc;
             }
         );
-
+var_dump($results);
         $this->assertEquals(2, $count);
+        $this->assertEquals('shmuel', 'shmuel2');
 
         $createdAt = [];
         foreach ($results as $index => $document) {
             $createdAt[$index] = $document->getCreatedAt();
             $this->assertNotEmpty(true, $document->getId());
+            $this->assertArrayHasKey('$sequence', $document);
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));

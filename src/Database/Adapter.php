@@ -733,6 +733,8 @@ abstract class Adapter
         array $changes
     ): array;
 
+    abstract public function getSequences(string $collection, array $documents): array;
+
     /**
      * Delete Document
      *

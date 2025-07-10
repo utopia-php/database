@@ -3560,12 +3560,8 @@ trait DocumentTests
                 throw new Exception("Error thrown to test update doesn't stopped and error is caught");
             });
         } catch (Exception $e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
         }
         $count = $database->updateDocuments($collection, new Document([
             'string' => 'text📝 updated',
@@ -3575,12 +3571,8 @@ trait DocumentTests
             $results[] = $doc;
             throw new Exception("Error thrown to test update doesn't stopped and error is caught");
         }, onError:function ($e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
         });
 
         $this->assertEquals(5, $count);

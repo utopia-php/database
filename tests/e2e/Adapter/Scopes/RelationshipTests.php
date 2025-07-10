@@ -1794,12 +1794,8 @@ trait RelationshipTests
         ]), onNext: function () {
             throw new Exception("Error thrown to test update doesn't stopped and error is caught");
         }, onError:function ($e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
         });
 
         $document = $this->getDatabase()->findOne('testUpdateDocumentsRelationships1');
@@ -1841,12 +1837,8 @@ trait RelationshipTests
         ]), onNext: function () {
             throw new Exception("Error thrown to test update doesn't stopped and error is caught");
         }, onError:function ($e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
         });
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships2', new Document([
@@ -1854,12 +1846,8 @@ trait RelationshipTests
         ]), onNext: function () {
             throw new Exception("Error thrown to test update doesn't stopped and error is caught");
         }, onError:function ($e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
         });
 
         $documents = $this->getDatabase()->find('testUpdateDocumentsRelationships2');

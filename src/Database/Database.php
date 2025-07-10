@@ -4378,6 +4378,9 @@ class Database
 
         $updates = $this->encode($collection, $updates);
 
+        var_dump('=====================');
+        var_dump($updates);
+
         // Check new document structure
         $validator = new PartialStructure(
             $collection,

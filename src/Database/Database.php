@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
@@ -5892,8 +5893,8 @@ class Database
                 }
                 try {
                     $onNext && $onNext($document);
-                } catch (Exception $e) {
-                    $onError ? $onError($e) : throw $e;
+                } catch (Throwable $th) {
+                    $onError ? $onError($th) : throw $th;
                 }
                 $modified++;
             }

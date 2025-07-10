@@ -3556,6 +3556,14 @@ trait DocumentTests
             Query::greaterThanEqual('integer', 5),
         ], onNext: function ($doc) use (&$results) {
             $results[] = $doc;
+            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+        }, onError:function ($e) {
+            if ($e instanceof Exception) {
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+            } else {
+                $this->fail("Caught value is not an Exception.");
+            }
         });
 
         $this->assertEquals(5, $count);
@@ -3588,7 +3596,16 @@ trait DocumentTests
         // Test Update all documents
         $this->assertEquals(10, $database->updateDocuments($collection, new Document([
             'string' => 'text📝 updated all',
-        ])));
+        ]), onNext: function () {
+            throw new DatabaseException("Error thrown to test update doesn't stopped and error is caught");
+        }, onError:function ($e) {
+            if ($e instanceof DatabaseException) {
+                $this->assertInstanceOf(DatabaseException::class, $e);
+                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+            } else {
+                $this->fail("Caught value is not an Exception.");
+            }
+        }));
 
         $updatedDocuments = $database->find($collection);
 

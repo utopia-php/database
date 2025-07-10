@@ -4318,6 +4318,7 @@ class Database
         array $queries = [],
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         if ($updates->isEmpty()) {
             return 0;
@@ -4421,10 +4422,6 @@ class Database
             foreach ($batch as &$document) {
                 $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
 
-                if ($this->resolveRelationships) {
-                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
-                }
-
                 $document = $new;
 
                 // Check if document was updated after the request timestamp
@@ -4441,7 +4438,14 @@ class Database
                 $document = $this->encode($collection, $document);
             }
 
-            $this->withTransaction(function () use ($collection, $updates, $batch) {
+            $this->withTransaction(function () use ($collection, $updates, &$batch) {
+                foreach ($batch as $i => &$document) {
+                    if ($this->resolveRelationships) {
+                        $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $document));
+                    }
+                }
+                // deleting the reference of the last document
+                unset($document);
                 $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
@@ -4452,7 +4456,11 @@ class Database
             foreach ($batch as $doc) {
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
-                $onNext && $onNext($doc);
+                try {
+                    $onNext && $onNext($doc);
+                } catch (Exception $e) {
+                    $onError && $onError($e);
+                }
                 $modified++;
             }
 

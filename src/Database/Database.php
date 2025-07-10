@@ -4456,7 +4456,7 @@ class Database
                 try {
                     $onNext && $onNext($doc);
                 } catch (Exception $e) {
-                    $onError && $onError($e);
+                    $onError ? $onError($e) : throw $e;
                 }
                 $modified++;
             }

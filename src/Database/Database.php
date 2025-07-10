@@ -5893,7 +5893,7 @@ class Database
                 try {
                     $onNext && $onNext($document);
                 } catch (Exception $e) {
-                    $onError && $onError($e);
+                    $onError ? $onError($e) : throw $e;
                 }
                 $modified++;
             }

@@ -3953,6 +3953,31 @@ trait DocumentTests
          */
         $selects = ['$sequence', '$id', '$collection', '$permissions', '$updatedAt'];
 
+        try {
+            // a non existent document to test the error thrown
+            $database->deleteDocuments(
+                collection: 'bulk_delete',
+                queries: [
+                    Query::select([...$selects, '$createdAt']),
+                    Query::lessThan('$createdAt', '1800-01-01'),
+                    Query::orderAsc('$createdAt'),
+                    Query::orderAsc(),
+                    Query::limit(1),
+                ],
+                batchSize: 1,
+                onNext: function () {
+                    throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
+                }
+            );
+        } catch (Exception $e) {
+            if ($e instanceof Exception) {
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+            } else {
+                $this->fail("Caught value is not an Exception.");
+            }
+        }
+
         $count = $database->deleteDocuments(
             collection: 'bulk_delete',
             queries: [

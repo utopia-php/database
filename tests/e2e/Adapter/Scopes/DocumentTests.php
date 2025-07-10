@@ -3970,12 +3970,8 @@ trait DocumentTests
                 }
             );
         } catch (Exception $e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         }
 
         $count = $database->deleteDocuments(
@@ -3993,12 +3989,8 @@ trait DocumentTests
                 throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
             },
             onError:function ($e) {
-                if ($e instanceof Exception) {
-                    $this->assertInstanceOf(Exception::class, $e);
-                    $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-                } else {
-                    $this->fail("Caught value is not an Exception.");
-                }
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
             }
         );
 
@@ -4008,12 +4000,8 @@ trait DocumentTests
         $this->assertEquals(8, $database->deleteDocuments('bulk_delete', onNext: function () {
             throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
         }, onError:function ($e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         }));
 
         $docs = $database->find('bulk_delete');
@@ -4029,12 +4017,8 @@ trait DocumentTests
             $results[] = $doc;
             throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
         }, onError:function ($e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         });
 
         $this->assertEquals(5, $count);
@@ -4107,12 +4091,8 @@ trait DocumentTests
         $database->deleteDocuments('bulk_delete', onNext: function () {
             throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
         }, onError:function ($e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         });
 
         $this->assertEquals(0, \count($this->getDatabase()->find('bulk_delete')));
@@ -4161,24 +4141,16 @@ trait DocumentTests
         $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)], onNext: function () {
             throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
         }, onError:function ($e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         }));
         $this->assertEquals(5, \count($database->find('bulk_delete_queries')));
 
         $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)], onNext: function () {
             throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
         }, onError:function ($e) {
-            if ($e instanceof Exception) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         }));
         $this->assertEquals(0, \count($database->find('bulk_delete_queries')));
 

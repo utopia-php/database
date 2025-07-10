@@ -1582,11 +1582,11 @@ trait ManyToManyTests
         // Delete person
         try {
             $this->getDatabase()->deleteDocuments('bulk_delete_person_m2m', onNext: function () {
-                throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+                throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
             }, onError:function ($e) {
                 if ($e instanceof Exception) {
                     $this->assertInstanceOf(Exception::class, $e);
-                    $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+                    $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
                 } else {
                     $this->fail("Caught value is not an Exception.");
                 }
@@ -1599,11 +1599,11 @@ trait ManyToManyTests
         // Restrict Cleanup
         $this->getDatabase()->deleteRelationship('bulk_delete_person_m2m', 'bulk_delete_library_m2m');
         $this->getDatabase()->deleteDocuments('bulk_delete_library_m2m', onNext: function () {
-            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
         }, onError:function ($e) {
             if ($e instanceof Exception) {
                 $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
             } else {
                 $this->fail("Caught value is not an Exception.");
             }
@@ -1611,11 +1611,11 @@ trait ManyToManyTests
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library_m2m'));
 
         $this->getDatabase()->deleteDocuments('bulk_delete_person_m2m', onNext: function () {
-            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
         }, onError:function ($e) {
             if ($e instanceof Exception) {
                 $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
             } else {
                 $this->fail("Caught value is not an Exception.");
             }

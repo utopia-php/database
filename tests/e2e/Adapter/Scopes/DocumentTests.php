@@ -3963,13 +3963,33 @@ trait DocumentTests
                 Query::orderAsc(),
                 Query::limit(2),
             ],
-            batchSize: 1
+            batchSize: 1,
+            onNext: function () {
+                throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+            },
+            onError:function ($e) {
+                if ($e instanceof Exception) {
+                    $this->assertInstanceOf(Exception::class, $e);
+                    $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+                } else {
+                    $this->fail("Caught value is not an Exception.");
+                }
+            }
         );
 
         $this->assertEquals(2, $count);
 
         // TEST: Bulk Delete All Documents
-        $this->assertEquals(8, $database->deleteDocuments('bulk_delete'));
+        $this->assertEquals(8, $database->deleteDocuments('bulk_delete', onNext: function () {
+            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+        }, onError:function ($e) {
+            if ($e instanceof Exception) {
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+            } else {
+                $this->fail("Caught value is not an Exception.");
+            }
+        }));
 
         $docs = $database->find('bulk_delete');
         $this->assertCount(0, $docs);
@@ -3982,6 +4002,14 @@ trait DocumentTests
             Query::greaterThanEqual('integer', 5)
         ], onNext: function ($doc) use (&$results) {
             $results[] = $doc;
+            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+        }, onError:function ($e) {
+            if ($e instanceof Exception) {
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+            } else {
+                $this->fail("Caught value is not an Exception.");
+            }
         });
 
         $this->assertEquals(5, $count);
@@ -3998,7 +4026,16 @@ trait DocumentTests
 
         try {
             $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () {
-                return $this->getDatabase()->deleteDocuments('bulk_delete');
+                return $this->getDatabase()->deleteDocuments('bulk_delete', onNext: function () {
+                    throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+                }, onError:function ($e) {
+                    if ($e instanceof Exception) {
+                        $this->assertInstanceOf(Exception::class, $e);
+                        $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+                    } else {
+                        $this->fail("Caught value is not an Exception.");
+                    }
+                });
             });
             $this->fail('Failed to throw exception');
         } catch (ConflictException $e) {
@@ -4042,7 +4079,16 @@ trait DocumentTests
             Permission::delete(Role::any())
         ], false);
 
-        $database->deleteDocuments('bulk_delete');
+        $database->deleteDocuments('bulk_delete', onNext: function () {
+            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+        }, onError:function ($e) {
+            if ($e instanceof Exception) {
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+            } else {
+                $this->fail("Caught value is not an Exception.");
+            }
+        });
 
         $this->assertEquals(0, \count($this->getDatabase()->find('bulk_delete')));
 
@@ -4087,10 +4133,28 @@ trait DocumentTests
         // Test limit
         $this->propagateBulkDocuments('bulk_delete_queries');
 
-        $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
+        $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)], onNext: function () {
+            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+        }, onError:function ($e) {
+            if ($e instanceof Exception) {
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+            } else {
+                $this->fail("Caught value is not an Exception.");
+            }
+        }));
         $this->assertEquals(5, \count($database->find('bulk_delete_queries')));
 
-        $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
+        $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)], onNext: function () {
+            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+        }, onError:function ($e) {
+            if ($e instanceof Exception) {
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+            } else {
+                $this->fail("Caught value is not an Exception.");
+            }
+        }));
         $this->assertEquals(0, \count($database->find('bulk_delete_queries')));
 
         // Test Limit more than batchSize

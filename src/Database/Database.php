@@ -5755,6 +5755,7 @@ class Database
      * @param array<Query> $queries
      * @param int $batchSize
      * @param callable|null $onNext
+     * @param callable|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws DatabaseException
@@ -5766,6 +5767,7 @@ class Database
         array $queries = [],
         int $batchSize = self::DELETE_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -5846,32 +5848,33 @@ class Database
 
             $sequences = [];
             $permissionIds = [];
-            foreach ($batch as $document) {
-                $sequences[] = $document->getSequence();
-                if (!empty($document->getPermissions())) {
-                    $permissionIds[] = $document->getId();
+
+            $this->withTransaction(function () use ($collection, $sequences, $permissionIds, $batch) {
+                foreach ($batch as $document) {
+                    $sequences[] = $document->getSequence();
+                    if (!empty($document->getPermissions())) {
+                        $permissionIds[] = $document->getId();
+                    }
+
+                    if ($this->resolveRelationships) {
+                        $document = $this->silent(fn () => $this->deleteDocumentRelationships(
+                            $collection,
+                            $document
+                        ));
+                    }
+
+                    // Check if document was updated after the request timestamp
+                    try {
+                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    } catch (Exception $e) {
+                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                    }
+
+                    if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                        throw new ConflictException('Document was updated after the request timestamp');
+                    }
                 }
 
-                if ($this->resolveRelationships) {
-                    $document = $this->silent(fn () => $this->deleteDocumentRelationships(
-                        $collection,
-                        $document
-                    ));
-                }
-
-                // Check if document was updated after the request timestamp
-                try {
-                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-                } catch (Exception $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                }
-
-                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                    throw new ConflictException('Document was updated after the request timestamp');
-                }
-            }
-
-            $this->withTransaction(function () use ($collection, $sequences, $permissionIds) {
                 $this->adapter->deleteDocuments(
                     $collection->getId(),
                     $sequences,
@@ -5887,8 +5890,11 @@ class Database
                 } else {
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
-
-                $onNext && $onNext($document);
+                try {
+                    $onNext && $onNext($document);
+                } catch (Exception $e) {
+                    $onError && $onError($e);
+                }
                 $modified++;
             }
 

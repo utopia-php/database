@@ -3574,7 +3574,7 @@ trait DocumentTests
 
         foreach ($results as $document) {
             $this->assertEquals('text📝 updated', $document->getAttribute('string'));
-            $this->assertEquals(false, $document->getAttribute('boolean'));
+            $this->assertEquals(true, $document->getAttribute('boolean'));
         }
 
         $updatedDocuments = $database->find($collection, [

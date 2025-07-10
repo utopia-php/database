@@ -4302,6 +4302,7 @@ class Database
      * @param array<Query> $queries
      * @param int $batchSize
      * @param callable|null $onNext
+     * @param callable|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws ConflictException
@@ -4419,33 +4420,29 @@ class Database
                 break;
             }
 
-            foreach ($batch as &$document) {
-                $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
-
-                $document = $new;
-
-                // Check if document was updated after the request timestamp
-                try {
-                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-                } catch (Exception $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                }
-
-                if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                    throw new ConflictException('Document was updated after the request timestamp');
-                }
-
-                $document = $this->encode($collection, $document);
-            }
-
             $this->withTransaction(function () use ($collection, $updates, &$batch) {
-                foreach ($batch as $i => &$document) {
+                foreach ($batch as &$document) {
+                    $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+
                     if ($this->resolveRelationships) {
-                        $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $document));
+                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
                     }
+
+                    $document = $new;
+
+                    // Check if document was updated after the request timestamp
+                    try {
+                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    } catch (Exception $e) {
+                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                    }
+
+                    if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                        throw new ConflictException('Document was updated after the request timestamp');
+                    }
+
+                    $document = $this->encode($collection, $document);
                 }
-                // deleting the reference of the last document
-                unset($document);
                 $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,

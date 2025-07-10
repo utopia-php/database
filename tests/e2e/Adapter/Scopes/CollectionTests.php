@@ -667,8 +667,8 @@ trait CollectionTests
             new Document([
                 '$id' => ID::custom('idx_username_created_at'),
                 'type' => Database::INDEX_KEY,
-                'attributes' => ['username'],
-                'lengths' => [99], // Length not equal to attributes length
+                'attributes' => ['username', 'cards'],
+                'lengths' => [99, 255], // Length not equal to attributes length
                 'orders' => [Database::ORDER_DESC],
             ]),
         ];

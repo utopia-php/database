@@ -33,7 +33,7 @@ class Sequence extends Validator
 
     public function getType(): string
     {
-        if($this->idAttributeType === 'string'){
+        if ($this->idAttributeType === 'string') {
             return self::TYPE_STRING;
         }
 
@@ -48,25 +48,22 @@ class Sequence extends Validator
 
         $type = gettype($value);
 
-        if ($type !== 'string'){
+        if ($type !== 'string') {
             return false;
         }
 
         if ($this->idAttributeType === 'string') {
             return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
-        }
-        else if ($this->idAttributeType === 'int') {
-            $value = (int)$value;
-
-            $validator = new Integer();
-            if (!$validator->isValid($value)){
+        } elseif ($this->idAttributeType === 'int') {
+            $validator = new Integer(loose: true);
+            if (!$validator->isValid($value)) {
                 return false;
             }
 
-            $start = ($this->primary) ? 1:0;
+            $start = ($this->primary) ? 1 : 0;
 
             $validator = new Range($start, Database::BIG_INT_MAX, Database::VAR_INTEGER);
-            if (!$validator->isValid($value)){
+            if (!$validator->isValid($value)) {
                 return false;
             }
 

@@ -48,10 +48,7 @@ class Sequence extends Validator
 
         $type = gettype($value);
 
-var_dump('========');
-var_dump($type);
-var_dump($value);
-        if($type !== 'string'){
+        if ($type !== 'string'){
             return false;
         }
 

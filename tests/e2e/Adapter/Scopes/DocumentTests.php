@@ -253,17 +253,16 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => '',
         ]));
+        $this->assertNotEmpty(true, $documentIdNull->getSequence());
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $documentIdNull = $database->getDocument('documents', $documentIdNull->getId());
         $this->assertNotEmpty(true, $documentIdNull->getId());
         $this->assertNull($documentIdNull->getAttribute('id'));
-        var_dump($documentIdNull);
 
         $documentIdNull = $database->findOne('documents', [
             query::isNull('id')
         ]);
-        var_dump($documentIdNull);
         $this->assertNotEmpty(true, $documentIdNull->getId());
         $this->assertNull($documentIdNull->getAttribute('id'));
 
@@ -285,19 +284,19 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => '',
         ]));
+        $this->assertNotEmpty(true, $documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
         $this->assertEquals('0', $documentId0->getAttribute('id'));
 
         $documentId0 = $database->getDocument('documents', $documentId0->getId());
-        $this->assertNotEmpty(true, $documentId0->getId());
+        $this->assertNotEmpty(true, $documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
         $this->assertEquals('0', $documentId0->getAttribute('id'));
 
         $documentId0 = $database->findOne('documents', [
             query::equal('id', ['0'])
         ]);
-var_dump($documentId0);
-        $this->assertNotEmpty(true, $documentId0->getId());
+        $this->assertNotEmpty(true, $documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
         $this->assertEquals('0', $documentId0->getAttribute('id'));
 

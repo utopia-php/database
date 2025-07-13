@@ -2,7 +2,10 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Database;
 use Utopia\Validator;
+use Utopia\Validator\Integer;
+use Utopia\Validator\Range;
 
 class Sequence extends Validator
 {
@@ -37,6 +40,25 @@ class Sequence extends Validator
 
     public function isValid($value): bool
     {
-        return true;
+        if ($this->idAttributeType === 'string') {
+            return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
+        }
+        else if ($this->idAttributeType === 'int') {
+            $value = (int)$value;
+
+            $validator = new Integer();
+            if (!$validator->isValid($value)){
+                return false;
+            }
+
+            $validator = new Range(1, Database::BIG_INT_MAX, Database::VAR_INTEGER);
+            if (!$validator->isValid($value)){
+                return false;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 }

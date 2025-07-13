@@ -1586,7 +1586,7 @@ abstract class SQL extends Adapter
      */
     public function getIdAttributeType(): string
     {
-        return 'string';
+        return 'int';
     }
 
     /**

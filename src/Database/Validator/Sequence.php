@@ -10,6 +10,7 @@ use Utopia\Validator\Range;
 class Sequence extends Validator
 {
     private string $idAttributeType;
+    private bool $primary;
 
     public function getDescription(): string
     {
@@ -19,8 +20,9 @@ class Sequence extends Validator
     /**
      * Expression constructor
      */
-    public function __construct(string $idAttributeType)
+    public function __construct(string $idAttributeType, bool $primary)
     {
+        $this->primary = $primary;
         $this->idAttributeType = $idAttributeType;
     }
 
@@ -40,6 +42,19 @@ class Sequence extends Validator
 
     public function isValid($value): bool
     {
+        if ($this->primary && empty($value)) {
+            return false;
+        }
+
+        $type = gettype($value);
+
+var_dump('========');
+var_dump($type);
+var_dump($value);
+        if($type !== 'string'){
+            return false;
+        }
+
         if ($this->idAttributeType === 'string') {
             return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
         }
@@ -51,7 +66,9 @@ class Sequence extends Validator
                 return false;
             }
 
-            $validator = new Range(1, Database::BIG_INT_MAX, Database::VAR_INTEGER);
+            $start = ($this->primary) ? 1:0;
+
+            $validator = new Range($start, Database::BIG_INT_MAX, Database::VAR_INTEGER);
             if (!$validator->isValid($value)){
                 return false;
             }

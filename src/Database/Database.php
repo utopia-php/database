@@ -41,6 +41,7 @@ class Database
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
     public const VAR_ID = 'id';
+    public const VAR_SEQUENCE = 'sequence';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
@@ -167,8 +168,8 @@ class Database
         ],
         [
             '$id' => '$sequence',
-            'type' => self::VAR_STRING,
-            'size' => Database::LENGTH_KEY,
+            'type' => self::VAR_SEQUENCE,
+            'size' => 0,
             'required' => true,
             'signed' => true,
             'array' => false,
@@ -1789,6 +1790,7 @@ class Database
 
         switch ($type) {
             case self::VAR_ID:
+
                 break;
             case self::VAR_STRING:
                 if ($size > $this->adapter->getLimitForString()) {

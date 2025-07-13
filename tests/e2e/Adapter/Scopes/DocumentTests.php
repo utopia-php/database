@@ -70,8 +70,6 @@ trait DocumentTests
             'id' => '1000000',
         ]));
 
-        $this->assertIsString($document->getAttribute('id'));
-        $this->assertEquals('1000000', $document->getAttribute('id'));
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
@@ -93,6 +91,8 @@ trait DocumentTests
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
         $this->assertEquals([], $document->getAttribute('empty'));
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
+        $this->assertIsString($document->getAttribute('id'));
+        $this->assertEquals('1000000', $document->getAttribute('id'));
 
         // Test create document with manual internal id
         $manualIdDocument = $database->createDocument('documents', new Document([
@@ -147,6 +147,7 @@ trait DocumentTests
         $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
         $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
         $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
+        $this->assertEquals(null, $manualIdDocument->getAttribute('id'));
 
         $manualIdDocument = $database->getDocument('documents', '56000');
 
@@ -210,6 +211,96 @@ trait DocumentTests
             $this->assertTrue($e instanceof StructureException);
             $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
         }
+
+        try {
+            $database->createDocument('documents', new Document([
+                '$sequence' => '0',
+                '$permissions' => [],
+                'string' => '',
+                'integer_signed' => 1,
+                'integer_unsigned' => 1,
+                'bigint_signed' => 1,
+                'bigint_unsigned' => 1,
+                'float_signed' => 1,
+                'float_unsigned' => 1,
+                'boolean' => true,
+                'colors' => [],
+                'empty' => [],
+                'with-dash' => '',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
+        }
+
+        /**
+         * Insert ID attribute with NULL
+         */
+
+        $documentIdNull = $database->createDocument('documents', new Document([
+            'id' => null,
+            '$permissions' => [Permission::read(Role::any())],
+            'string' => '',
+            'integer_signed' => 1,
+            'integer_unsigned' => 1,
+            'bigint_signed' => 1,
+            'bigint_unsigned' => 1,
+            'float_signed' => 1,
+            'float_unsigned' => 1,
+            'boolean' => true,
+            'colors' => [],
+            'empty' => [],
+            'with-dash' => '',
+        ]));
+        $this->assertNull($documentIdNull->getAttribute('id'));
+
+        $documentIdNull = $database->getDocument('documents', $documentIdNull->getId());
+        $this->assertNotEmpty(true, $documentIdNull->getId());
+        $this->assertNull($documentIdNull->getAttribute('id'));
+        var_dump($documentIdNull);
+
+        $documentIdNull = $database->findOne('documents', [
+            query::isNull('id')
+        ]);
+        var_dump($documentIdNull);
+        $this->assertNotEmpty(true, $documentIdNull->getId());
+        $this->assertNull($documentIdNull->getAttribute('id'));
+
+        /**
+         * Insert ID attribute with '0'
+         */
+        $documentId0 = $database->createDocument('documents', new Document([
+            'id' => '0',
+            '$permissions' => [Permission::read(Role::any())],
+            'string' => '',
+            'integer_signed' => 1,
+            'integer_unsigned' => 1,
+            'bigint_signed' => 1,
+            'bigint_unsigned' => 1,
+            'float_signed' => 1,
+            'float_unsigned' => 1,
+            'boolean' => true,
+            'colors' => [],
+            'empty' => [],
+            'with-dash' => '',
+        ]));
+        $this->assertIsString($documentId0->getAttribute('id'));
+        $this->assertEquals('0', $documentId0->getAttribute('id'));
+
+        $documentId0 = $database->getDocument('documents', $documentId0->getId());
+        $this->assertNotEmpty(true, $documentId0->getId());
+        $this->assertIsString($documentId0->getAttribute('id'));
+        $this->assertEquals('0', $documentId0->getAttribute('id'));
+
+        $documentId0 = $database->findOne('documents', [
+            query::equal('id', ['0'])
+        ]);
+var_dump($documentId0);
+        $this->assertNotEmpty(true, $documentId0->getId());
+        $this->assertIsString($documentId0->getAttribute('id'));
+        $this->assertEquals('0', $documentId0->getAttribute('id'));
+
 
         return $document;
     }

@@ -6,6 +6,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Sequence;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
@@ -106,6 +107,14 @@ class Filter extends Base
             $validator = null;
 
             switch ($attributeType) {
+                case Database::VAR_SEQUENCE:
+                    $validator = new Sequence('int', true);
+                    break;
+
+                case Database::VAR_ID:
+                    $validator = new Sequence('int', false);
+                    break;
+
                 case Database::VAR_STRING:
                     $validator = new Text(0, 0);
                     break;

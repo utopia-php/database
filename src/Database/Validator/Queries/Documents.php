@@ -38,7 +38,7 @@ class Documents extends IndexedQueries
         $attributes[] = new Document([
             '$id' => '$sequence',
             'key' => '$sequence',
-            'type' => Database::VAR_STRING,
+            'type' => Database::VAR_SEQUENCE,
             'array' => false,
         ]);
         $attributes[] = new Document([

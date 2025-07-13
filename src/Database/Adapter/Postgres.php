@@ -1817,6 +1817,9 @@ class Postgres extends SQL
         }
 
         switch ($type) {
+            case Database::VAR_ID:
+                return 'bigint';
+
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
                 if ($size > $this->getMaxVarcharLength()) {

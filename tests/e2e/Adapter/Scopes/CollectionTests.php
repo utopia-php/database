@@ -145,7 +145,7 @@ trait CollectionTests
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute4'],
                 'lengths' => [],
-                'orders' => ['DESC', 'ASC'],
+                'orders' => ['DESC'],
             ]),
         ];
 

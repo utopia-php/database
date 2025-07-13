@@ -39,6 +39,7 @@ trait DocumentTests
         $this->assertEquals(true, $database->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, $database->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
         $this->assertEquals(true, $database->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
+        $this->assertEquals(true, $database->createAttribute('documents', 'id', Database::VAR_ID, 0, false, null));
 
         $document = $database->createDocument('documents', new Document([
             '$permissions' => [
@@ -66,8 +67,11 @@ trait DocumentTests
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
             'with-dash' => 'Works',
+            'id' => '1000000',
         ]));
 
+        $this->assertIsString($document->getAttribute('id'));
+        $this->assertEquals('1000000', $document->getAttribute('id'));
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working

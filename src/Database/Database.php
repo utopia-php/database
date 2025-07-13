@@ -40,6 +40,7 @@ class Database
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
+    public const VAR_ID = 'id';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
@@ -1787,6 +1788,8 @@ class Database
         $this->checkAttribute($collection, $attribute);
 
         switch ($type) {
+            case self::VAR_ID:
+                break;
             case self::VAR_STRING:
                 if ($size > $this->adapter->getLimitForString()) {
                     throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
@@ -3646,6 +3649,7 @@ class Database
 
         $structure = new Structure(
             $collection,
+            $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
         );
@@ -3734,6 +3738,7 @@ class Database
 
             $validator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -4264,6 +4269,7 @@ class Database
 
             $structureValidator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -4381,6 +4387,7 @@ class Database
         // Check new document structure
         $validator = new PartialStructure(
             $collection,
+            $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
         );
@@ -5018,6 +5025,7 @@ class Database
 
             $validator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );

@@ -130,7 +130,7 @@ class DocumentsQueriesTest extends TestCase
         );
 
         $queries = [
-            Query::notEqual('id', '1000000'),
+            Query::notEqual('id', 1000000),
             Query::equal('description', ['Best movie ever']),
             Query::equal('description', ['']),
             Query::equal('is_bool', [false]),

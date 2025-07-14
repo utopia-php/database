@@ -19,8 +19,8 @@ class Documents extends IndexedQueries
      * Expression constructor
      *
      * @param array<mixed> $attributes
-     * @param string $idAttributeType
      * @param array<mixed> $indexes
+     * @param string $idAttributeType
      * @throws Exception
      */
     public function __construct(

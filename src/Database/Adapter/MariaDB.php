@@ -1173,7 +1173,6 @@ class MariaDB extends SQL
             $bindValues = [];
             $documentIds = [];
             $documentTenants = [];
-
             foreach ($changes as $change) {
                 $document = $change->getNew();
                 $attributes = $document->getAttributes();

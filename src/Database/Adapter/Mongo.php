@@ -44,6 +44,14 @@ class Mongo extends Adapter
     //protected ?int $timeout = null;
 
     /**
+     * Transaction/session state for MongoDB transactions
+     */
+    private ?object $sessionId = null; // Store raw BSON id object
+    private ?int $txnNumber = null;
+    protected int $inTransaction = 0;
+    private bool $firstOpInTransaction = false;
+
+    /**
      * Constructor.
      *
      * Set connection and settings
@@ -73,19 +81,153 @@ class Mongo extends Adapter
         $this->timeout = 0;
     }
 
+    /**
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     * @throws \Throwable
+     */
+    public function withTransaction(callable $callback): mixed
+    {
+        // We removed the attmpts to retry the transaction.
+        // Since if it's rolling back the second time, it will fail
+       //becouse we already run one abortTransaction.
+        try {
+            $this->startTransaction();
+            $result = $callback();
+            $this->commitTransaction();
+            return $result;
+        } catch (\Throwable $action) {
+            try {
+                $this->rollbackTransaction();
+            } catch (\Throwable $rollback) {
+                $this->inTransaction = 0;
+                // Throw the original exception, not the rollback one
+                // Since if it's a duplicate key error, the rollback will fail
+                //and we want to throw the original exception.
+            }
+            $this->inTransaction = 0;
+            throw $action;
+        }
+    }
+
+
     public function startTransaction(): bool
     {
-        return true;
+        try {
+            if ($this->inTransaction === 0) {
+                if (!$this->sessionId) {
+                    $this->sessionId = $this->client->startSession(); // Store raw id object
+                }
+                $this->txnNumber = ($this->txnNumber ?? 0) + 1;
+                $this->firstOpInTransaction = true;
+
+                // Initialize the transaction on MongoDB's side with a dummy find operation
+                // This ensures the transaction is active even if validation fails later.
+                $this->client->query([
+                    'find' => 'system.version',
+                    'filter' => $this->client->toObject([]),
+                    'limit' => 1,
+                    'lsid' => ['id' => $this->sessionId],
+                    'txnNumber' => new \MongoDB\BSON\Int64($this->txnNumber), // Long type for txnNumber
+                    'autocommit' => false,
+                    'startTransaction' => true
+                ], 'admin');
+
+                $this->firstOpInTransaction = false;
+            }
+            $this->inTransaction++;
+            return true;
+        } catch (\Throwable $e) {
+            throw new DatabaseException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
     }
 
     public function commitTransaction(): bool
     {
-        return true;
+        try {
+            if ($this->inTransaction === 0) {
+                throw new DatabaseException('No transaction in progress');
+            }
+            $this->inTransaction--;
+            if ($this->inTransaction === 0) {
+                if (!$this->sessionId) {
+                    throw new DatabaseException('No session in progress');
+                }
+                $result = $this->client->commitTransaction(
+                    ['id' => $this->sessionId], // Pass raw id object
+                    $this->txnNumber,
+                    false
+                );
+                if (($result->ok ?? 0) !== 1.0) {
+                    throw new DatabaseException('Failed to commit transaction');
+                }
+
+                // Session is now closed by the client using endSessions, reset our state
+                $this->sessionId = null;
+                $this->txnNumber = null;
+
+                return true;
+            }
+            return true;
+        } catch (\Throwable $e) {
+            throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
     }
 
     public function rollbackTransaction(): bool
     {
-        return true;
+
+        try {
+            if ($this->inTransaction === 0) {
+                throw new DatabaseException('No transaction in progress');
+            }
+            $this->inTransaction--;
+            if ($this->inTransaction === 0) {
+                if (!$this->sessionId) {
+                    throw new DatabaseException('No session in progress');
+                }
+
+                $result = $this->client->abortTransaction(
+                    ['id' => $this->sessionId], // Pass raw id object
+                    $this->txnNumber,
+                    false
+                );
+                if (($result->ok ?? 0) !== 1.0) {
+                    throw new DatabaseException('Failed to rollback transaction');
+                }
+
+                // Session is now closed by the client using endSessions, reset our state
+                $this->sessionId = null;
+                $this->txnNumber = null;
+
+                return true;
+            }
+            return true;
+        } catch (\Throwable $e) {
+            throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+    }
+
+    /**
+     * Helper to add transaction/session context to command options if in transaction
+     */
+    private function addTransactionContext(array $options = []): array
+    {
+
+        if ($this->inTransaction) {
+            $options['lsid'] = ['id' => $this->sessionId];
+            $options['txnNumber'] = new \MongoDB\BSON\Int64($this->txnNumber);
+            $options['autocommit'] = false;
+
+            if ($this->firstOpInTransaction) {
+                // For MongoDB, the first operation in a transaction should include startTransaction
+                $options['startTransaction'] = true;
+                $this->firstOpInTransaction = false;
+            }
+
+        }
+        return $options;
     }
 
     /**
@@ -766,9 +908,8 @@ class Mongo extends Adapter
         if (!empty($sequence)) {
             $record['_id'] = $sequence;
         }
-
-        $result = $this->insertDocument($name, $this->removeNullKeys($record));
-
+        $options = $this->addTransactionContext([]);
+        $result = $this->insertDocument($name, $this->removeNullKeys($record), $options);
         $result = $this->replaceChars('_', '$', $result);
         $result = $this->timeToDocument($result);
 
@@ -788,6 +929,8 @@ class Mongo extends Adapter
     public function createDocuments(string $collection, array $documents): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+
+        $options = $this->addTransactionContext([]);
 
         $records = [];
         $hasSequence = null;
@@ -818,7 +961,7 @@ class Mongo extends Adapter
             $records[] = $this->removeNullKeys($record);
         }
 
-        $documents = $this->client->insertMany($name, $records);
+        $documents = $this->client->insertMany($name, $records, $options);
 
         foreach ($documents as $index => $document) {
             $documents[$index] = $this->replaceChars('_', '$', $this->client->toArray($document));
@@ -838,26 +981,12 @@ class Mongo extends Adapter
      * @return array<string, mixed>
      * @throws Duplicate
      */
-    private function insertDocument(string $name, array $document): array
+    private function insertDocument(string $name, array $document, array $options = []): array
     {
 
         try {
-            $bla = $this->client->insert($name, $document);
-
-            $filters = [];
-            $filters['_uid'] = $document['_uid'];
-
-            if ($this->sharedTables) {
-                $filters['_tenant'] = $this->getTenant();
-            }
-
-            $result = $this->client->find(
-                $name,
-                $filters,
-                ['limit' => 1]
-            )->cursor->firstBatch[0];
-
-            return $this->client->toArray($result);
+            $result = $this->client->insert($name, $document, $options);
+            return $result;
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
         }
@@ -889,7 +1018,8 @@ class Mongo extends Adapter
         try {
             unset($record['_id']); // Don't update _id
 
-            $this->client->update($name, $filters, $record);
+            $options = $this->addTransactionContext([]);
+            $this->client->update($name, $filters, $record, $options);
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
         }
@@ -933,7 +1063,8 @@ class Mongo extends Adapter
         ];
 
         try {
-            $this->client->update($name, $filters, $updateQuery, multi: true);
+            $options = $this->addTransactionContext([]);
+            $this->client->update($name, $filters, $updateQuery, multi: true, options: $options);
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
         }
@@ -1010,11 +1141,11 @@ class Mongo extends Adapter
                 ];
             }
 
-            // Use the new bulkUpsert method
+            $options = $this->addTransactionContext([]);
             $this->client->bulkUpsert(
                 $name,
                 $operations,
-                ["ordered" => false] // TODO Do we want to continue if an error is thrown?
+                options: $options
             );
 
             // Get sequences for documents that were created
@@ -1105,6 +1236,7 @@ class Mongo extends Adapter
             $filters[$attribute] = ['$gte' => $min];
         }
 
+        $options = $this->addTransactionContext([]);
         $this->client->update(
             $this->getNamespace() . '_' . $this->filter($collection),
             $filters,
@@ -1112,6 +1244,7 @@ class Mongo extends Adapter
                 '$inc' => [$attribute => $value],
                 '$set' => ['_updatedAt' => $this->toMongoDatetime($updatedAt)],
             ],
+            options: $options
         );
 
         return true;
@@ -1136,7 +1269,8 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenant();
         }
 
-        $result = $this->client->delete($name, $filters);
+        $options = $this->addTransactionContext([]);
+        $result = $this->client->delete($name, $filters, 1, [], $options);
 
         return (!!$result);
     }
@@ -1161,15 +1295,15 @@ class Mongo extends Adapter
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
         $filters = $this->timeFilter($filters);
-
-        $options = [];
+        $options = $this->addTransactionContext([]);
 
         try {
             $count = $this->client->delete(
                 collection: $name,
                 filters: $filters,
-                options: $options,
-                limit: 0
+                limit: 0,
+                deleteOptions: [],
+                options: $options
             );
         } catch (MongoException $e) {
             $this->processException($e);

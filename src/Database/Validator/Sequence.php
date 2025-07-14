@@ -46,9 +46,7 @@ class Sequence extends Validator
             return false;
         }
 
-        $type = gettype($value);
-
-        if ($type !== 'string') {
+        if (gettype($value) !== 'string') {
             return false;
         }
 

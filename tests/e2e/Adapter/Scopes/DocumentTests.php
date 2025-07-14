@@ -67,7 +67,7 @@ trait DocumentTests
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
             'with-dash' => 'Works',
-            'id' => '1000000',
+            'id' => 1000000,
         ]));
 
         $this->assertNotEmpty(true, $document->getId());
@@ -91,8 +91,8 @@ trait DocumentTests
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
         $this->assertEquals([], $document->getAttribute('empty'));
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
-        $this->assertIsString($document->getAttribute('id'));
-        $this->assertEquals('1000000', $document->getAttribute('id'));
+        $this->assertIsInt($document->getAttribute('id'));
+        $this->assertEquals(1000000, $document->getAttribute('id'));
 
         // Test create document with manual internal id
         $manualIdDocument = $database->createDocument('documents', new Document([
@@ -270,7 +270,7 @@ trait DocumentTests
          * Insert ID attribute with '0'
          */
         $documentId0 = $database->createDocument('documents', new Document([
-            'id' => '0',
+            'id' => 0,
             '$permissions' => [Permission::read(Role::any())],
             'string' => '',
             'integer_signed' => 1,
@@ -285,21 +285,20 @@ trait DocumentTests
             'with-dash' => '',
         ]));
         $this->assertNotEmpty(true, $documentId0->getSequence());
-        $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals('0', $documentId0->getAttribute('id'));
+        $this->assertIsInt($documentId0->getAttribute('id'));
+        $this->assertEquals(0, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->getDocument('documents', $documentId0->getId());
         $this->assertNotEmpty(true, $documentId0->getSequence());
-        $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals('0', $documentId0->getAttribute('id'));
+        $this->assertIsInt($documentId0->getAttribute('id'));
+        $this->assertEquals(0, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->findOne('documents', [
-            query::equal('id', ['0'])
+            query::equal('id', [0])
         ]);
         $this->assertNotEmpty(true, $documentId0->getSequence());
-        $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals('0', $documentId0->getAttribute('id'));
-
+        $this->assertIsInt($documentId0->getAttribute('id'));
+        $this->assertEquals(0, $documentId0->getAttribute('id'));
 
         return $document;
     }

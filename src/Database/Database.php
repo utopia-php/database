@@ -6508,6 +6508,8 @@ class Database
                         $node = (bool)$node;
                         break;
                     case self::VAR_INTEGER:
+                    case self::VAR_ID:
+                    case self::VAR_ID:
                         $node = (int)$node;
                         break;
                     case self::VAR_FLOAT:

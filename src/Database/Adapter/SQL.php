@@ -369,7 +369,7 @@ abstract class SQL extends Adapter
         $document = $document[0];
 
         if (\array_key_exists('_id', $document)) {
-            $document['$sequence'] = $document['_id'];
+            $document['$sequence'] = (int)$document['_id'];
             unset($document['_id']);
         }
         if (\array_key_exists('_uid', $document)) {

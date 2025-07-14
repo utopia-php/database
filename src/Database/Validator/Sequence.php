@@ -46,14 +46,15 @@ class Sequence extends Validator
             return false;
         }
 
-        if (gettype($value) !== 'string') {
-            return false;
-        }
-
         if ($this->idAttributeType === 'string') {
             return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
         } elseif ($this->idAttributeType === 'int') {
-            $validator = new Integer(loose: true);
+
+            if (gettype($value) !== 'integer') {
+                return false;
+            }
+
+            $validator = new Integer();
             if (!$validator->isValid($value)) {
                 return false;
             }

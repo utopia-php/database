@@ -44,7 +44,7 @@ class FilterTest extends TestCase
                 'array' => false,
             ]),
         ];
-        
+
         $this->validator = new Filter($attributes, 'int');
     }
 

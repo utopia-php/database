@@ -43,6 +43,10 @@ class Database
     public const VAR_ID = 'id';
     public const VAR_SEQUENCE = 'sequence';
 
+    // VAR_ID types
+    public const VAR_ID_INT = 'int';
+    public const VAR_ID_MONGO = 'mongo';
+
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
     public const DOUBLE_MAX = PHP_FLOAT_MAX;

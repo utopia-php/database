@@ -33,11 +33,7 @@ class Sequence extends Validator
 
     public function getType(): string
     {
-        if ($this->idAttributeType === 'string') {
-            return self::TYPE_STRING;
-        }
-
-        return self::TYPE_INTEGER;
+        return self::TYPE_STRING;
     }
 
     public function isValid($value): bool
@@ -50,9 +46,9 @@ class Sequence extends Validator
             return false;
         }
 
-        if ($this->idAttributeType === 'string') {
+        if ($this->idAttributeType === Database::VAR_ID_MONGO) {
             return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
-        } elseif ($this->idAttributeType === 'int') {
+        } elseif ($this->idAttributeType === Database::VAR_ID_INT) {
             $validator = new Integer(loose: true);
             if (!$validator->isValid($value)) {
                 return false;

@@ -133,7 +133,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid('string'));
@@ -148,7 +148,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document()));
@@ -160,7 +160,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document(),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -181,7 +181,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -201,7 +201,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -232,7 +232,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -254,7 +254,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -275,7 +275,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -294,7 +294,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -315,7 +315,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -376,7 +376,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -395,7 +395,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -414,7 +414,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -448,7 +448,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -506,7 +506,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -540,7 +540,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -574,7 +574,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -595,7 +595,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -616,7 +616,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -637,7 +637,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -656,7 +656,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            'int'
+            Database::VAR_ID_INT
         );
 
         $id = '1000';
@@ -695,7 +695,7 @@ class StructureTest extends TestCase
          */
         $validator = new Structure(
             new Document($this->collection),
-            'string'
+            Database::VAR_ID_MONGO
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([

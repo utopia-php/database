@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "cd1babfd7f7750ad399c915edd6209ad",
+    "content-hash": "a3b0ff08e6addea30a6380a0b19a0529",
     "packages": [
         {
             "name": "brick/math",
@@ -1993,16 +1993,16 @@
         },
         {
             "name": "utopia-php/mongo",
-            "version": "dev-feat-bulk-writes",
+            "version": "dev-feat-mongo-transactions",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "414d4d099386ba742d1620fe2a75afd6105ad611"
+                "reference": "71c062c42bca6a4f709ddb86670089d5d4a5d7d5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/414d4d099386ba742d1620fe2a75afd6105ad611",
-                "reference": "414d4d099386ba742d1620fe2a75afd6105ad611",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/71c062c42bca6a4f709ddb86670089d5d4a5d7d5",
+                "reference": "71c062c42bca6a4f709ddb86670089d5d4a5d7d5",
                 "shasum": ""
             },
             "require": {
@@ -2047,9 +2047,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/feat-bulk-writes"
+                "source": "https://github.com/utopia-php/mongo/tree/feat-mongo-transactions"
             },
-            "time": "2025-07-08T17:47:22+00:00"
+            "time": "2025-07-14T08:20:00+00:00"
         },
         {
             "name": "utopia-php/pools",
@@ -2290,16 +2290,16 @@
         },
         {
             "name": "laravel/pint",
-            "version": "v1.23.0",
+            "version": "v1.24.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/laravel/pint.git",
-                "reference": "9ab851dba4faa51a3c3223dd3d07044129021024"
+                "reference": "0345f3b05f136801af8c339f9d16ef29e6b4df8a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/laravel/pint/zipball/9ab851dba4faa51a3c3223dd3d07044129021024",
-                "reference": "9ab851dba4faa51a3c3223dd3d07044129021024",
+                "url": "https://api.github.com/repos/laravel/pint/zipball/0345f3b05f136801af8c339f9d16ef29e6b4df8a",
+                "reference": "0345f3b05f136801af8c339f9d16ef29e6b4df8a",
                 "shasum": ""
             },
             "require": {
@@ -2310,7 +2310,7 @@
                 "php": "^8.2.0"
             },
             "require-dev": {
-                "friendsofphp/php-cs-fixer": "^3.76.0",
+                "friendsofphp/php-cs-fixer": "^3.82.2",
                 "illuminate/view": "^11.45.1",
                 "larastan/larastan": "^3.5.0",
                 "laravel-zero/framework": "^11.45.0",
@@ -2355,7 +2355,7 @@
                 "issues": "https://github.com/laravel/pint/issues",
                 "source": "https://github.com/laravel/pint"
             },
-            "time": "2025-07-03T10:37:47+00:00"
+            "time": "2025-07-10T18:09:32+00:00"
         },
         {
             "name": "myclabs/deep-copy",
@@ -4261,7 +4261,7 @@
     "aliases": [
         {
             "package": "utopia-php/mongo",
-            "version": "dev-feat-bulk-writes",
+            "version": "dev-feat-mongo-transactions",
             "alias": "0.3.1",
             "alias_normalized": "0.3.1.0"
         }

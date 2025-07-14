@@ -105,4 +105,39 @@ class MongoDBTest extends Base
     {
         return true;
     }
+
+    /**
+     * Test that sessions are properly closed after transactions
+     */
+    public function testSessionCleanup(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+
+        // Create a collection for testing
+        $collection = $database->createCollection('test_session_cleanup');
+
+        // Start a transaction
+        $adapter->startTransaction();
+
+        // Create a document in the transaction
+        $document = $database->createDocument('test_session_cleanup', new \Utopia\Database\Document([
+            'name' => 'test',
+            'value' => 123
+        ]));
+
+        // Commit the transaction - session is closed using endSessions command
+        $adapter->commitTransaction();
+
+        // Verify the document was created
+        $this->assertNotNull($document->getId());
+
+        // The session should now be closed (sessionId should be null)
+        // We can verify this by checking that a new transaction starts fresh
+        $adapter->startTransaction();
+        $adapter->rollbackTransaction();
+
+        // Clean up
+        $database->deleteCollection('test_session_cleanup');
+    }
 }

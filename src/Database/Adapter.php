@@ -374,10 +374,7 @@ abstract class Adapter
         for ($attempts = 0; $attempts < 3; $attempts++) {
             try {
                 $this->startTransaction();
-                //var_dump($attempts);
                 $result = $callback();
-                //var_dump($result);
-
                 $this->commitTransaction();
 
                 return $result;

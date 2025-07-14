@@ -26,7 +26,8 @@ class Filter extends Base
      * @param \DateTime $maxAllowedDate
      */
     public function __construct(
-        array $attributes = [],
+        array $attributes,
+        private readonly string $idAttributeType,
         private readonly int $maxValuesCount = 100,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
@@ -108,11 +109,11 @@ class Filter extends Base
 
             switch ($attributeType) {
                 case Database::VAR_SEQUENCE:
-                    $validator = new Sequence('int', true);
+                    $validator = new Sequence($this->idAttributeType, true);
                     break;
 
                 case Database::VAR_ID:
-                    $validator = new Sequence('int', false);
+                    $validator = new Sequence($this->idAttributeType, false);
                     break;
 
                 case Database::VAR_STRING:

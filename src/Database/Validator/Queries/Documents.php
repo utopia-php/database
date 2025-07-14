@@ -19,12 +19,14 @@ class Documents extends IndexedQueries
      * Expression constructor
      *
      * @param array<mixed> $attributes
+     * @param string $idAttributeType
      * @param array<mixed> $indexes
      * @throws Exception
      */
     public function __construct(
         array $attributes,
         array $indexes,
+        string $idAttributeType,
         int $maxValuesCount = 100,
         \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
@@ -60,6 +62,7 @@ class Documents extends IndexedQueries
             new Cursor(),
             new Filter(
                 $attributes,
+                $idAttributeType,
                 $maxValuesCount,
                 $minAllowedDate,
                 $maxAllowedDate,

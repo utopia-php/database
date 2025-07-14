@@ -80,7 +80,7 @@ class IndexedQueriesTest extends TestCase
             $indexes,
             [
                 new Cursor(),
-                new Filter($attributes),
+                new Filter($attributes, 'int'),
                 new Limit(),
                 new Offset(),
                 new Order($attributes)
@@ -143,7 +143,7 @@ class IndexedQueriesTest extends TestCase
             $indexes,
             [
                 new Cursor(),
-                new Filter($attributes),
+                new Filter($attributes, 'int'),
                 new Limit(),
                 new Offset(),
                 new Order($attributes)
@@ -196,7 +196,7 @@ class IndexedQueriesTest extends TestCase
             $indexes,
             [
                 new Cursor(),
-                new Filter($attributes),
+                new Filter($attributes, 'int'),
                 new Limit(),
                 new Offset(),
                 new Order($attributes)

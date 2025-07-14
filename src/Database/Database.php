@@ -4354,6 +4354,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -5804,6 +5805,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime()
@@ -5995,6 +5997,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -6248,6 +6251,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -6298,6 +6302,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),

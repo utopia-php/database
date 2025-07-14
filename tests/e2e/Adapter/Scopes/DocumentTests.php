@@ -431,7 +431,6 @@ trait DocumentTests
         ];
 
         $results = [];
-        
         $count = $database->createOrUpdateDocuments(
             __FUNCTION__,
             $documents,
@@ -439,10 +438,9 @@ trait DocumentTests
                 $results[] = $doc;
             }
         );
-        
 
         $this->assertEquals(2, $count);
-       
+
         $createdAt = [];
         foreach ($results as $index => $document) {
             $createdAt[$index] = $document->getCreatedAt();
@@ -455,8 +453,8 @@ trait DocumentTests
             $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
         }
 
-    
         $documents = $database->find(__FUNCTION__);
+
         $this->assertEquals(2, count($documents));
 
         foreach ($documents as $document) {
@@ -565,7 +563,7 @@ trait DocumentTests
 
         $documents[0]->setAttribute('integer', -1);
         $documents[1]->setAttribute('integer', -1);
-        
+
         $database->createOrUpdateDocumentsWithIncrease(
             collection: __FUNCTION__,
             attribute: 'integer',
@@ -573,7 +571,7 @@ trait DocumentTests
         );
 
         $documents = $database->find(__FUNCTION__);
-        
+
         foreach ($documents as $document) {
             $this->assertEquals(5, $document->getAttribute('integer'));
         }
@@ -1408,15 +1406,13 @@ trait DocumentTests
         $this->assertEquals($firstDocumentId, $documents[0]->getId());
 
         /**
-             * Check internal numeric ID sorting
-             */
+         * Check internal numeric ID sorting
+         */
         $documents = $database->find('movies', [
             Query::limit(25),
             Query::offset(0),
             Query::orderDesc(''),
         ]);
-
-
         $this->assertEquals($movieDocuments[\count($movieDocuments) - 1]->getId(), $documents[0]->getId());
         $documents = $database->find('movies', [
             Query::limit(25),
@@ -1982,8 +1978,6 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorAfter($movies[1])
         ]);
-        //var_dump($movieDocuments);
-
         $this->assertEquals(2, count($documents));
         $this->assertEquals($movies[2]['name'], $documents[0]['name']);
         $this->assertEquals($movies[3]['name'], $documents[1]['name']);
@@ -2013,7 +2007,6 @@ trait DocumentTests
             Query::orderDesc(''),
             Query::cursorAfter($movies[5])
         ]);
-
         $this->assertEmpty(count($documents));
     }
     public function testFindOrderByBeforeNaturalOrder(): void
@@ -4277,7 +4270,7 @@ trait DocumentTests
         $document = $database->getDocument('documents', $document->getId());
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);
-  
+
         $document = $database->updateDocument('documents', $document->getId(), $document);
         $this->assertArrayHasKey('$id', $document);
         $this->assertArrayNotHasKey('$tenant', $document);

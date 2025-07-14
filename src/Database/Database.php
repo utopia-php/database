@@ -6507,9 +6507,12 @@ class Database
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;
                         break;
+                    case self::VAR_ID:
+                        if ($this->adapter->getIdAttributeType() === 'int'){
+                            $node = (int)$node;
+                        }
+                        break;
                     case self::VAR_INTEGER:
-                    case self::VAR_ID:
-                    case self::VAR_ID:
                         $node = (int)$node;
                         break;
                     case self::VAR_FLOAT:

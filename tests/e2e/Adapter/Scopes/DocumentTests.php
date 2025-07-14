@@ -97,7 +97,7 @@ trait DocumentTests
         // Test create document with manual internal id
         $manualIdDocument = $database->createDocument('documents', new Document([
             '$id' => '56000',
-            '$sequence' => '56000',
+            '$sequence' => 56000,
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user(ID::custom('1'))),
@@ -214,7 +214,7 @@ trait DocumentTests
 
         try {
             $database->createDocument('documents', new Document([
-                '$sequence' => '0',
+                '$sequence' => 0,
                 '$permissions' => [],
                 'string' => '',
                 'integer_signed' => 1,
@@ -385,7 +385,7 @@ trait DocumentTests
 
         for ($i = $sequence; $i <= ($sequence + $count); $i++) {
             $documents[] = new Document([
-                '$sequence' => (string)$i,
+                '$sequence' => $i,
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::create(Role::any()),
@@ -4370,7 +4370,7 @@ trait DocumentTests
         $database = static::getDatabase();
 
         $document->setAttribute('$id', 'caseSensitive');
-        $document->setAttribute('$sequence', '200');
+        $document->setAttribute('$sequence', 200);
         $database->createDocument($document->getCollection(), $document);
 
         $document->setAttribute('$id', 'CaseSensitive');

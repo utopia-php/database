@@ -189,7 +189,7 @@ class Database
         ],
         [
             '$id' => '$tenant',
-            'type' => self::VAR_INTEGER,
+            'type' => self::VAR_ID,
             'size' => 0,
             'required' => false,
             'default' => null,

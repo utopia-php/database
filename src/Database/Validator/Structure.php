@@ -32,7 +32,7 @@ class Structure extends Validator
         ],
         [
             '$id' => '$sequence',
-            'type' => Database::VAR_SEQUENCE,
+            'type' => Database::VAR_ID,
             'size' => 0,
             'required' => false,
             'signed' => true,
@@ -316,12 +316,8 @@ class Structure extends Validator
             $validators = [];
 
             switch ($type) {
-                case Database::VAR_SEQUENCE:
-                    $validators[] = new Sequence($this->idAttributeType, true);
-                    break;
-
                 case Database::VAR_ID:
-                    $validators[] = new Sequence($this->idAttributeType, false);
+                    $validators[] = new Sequence($this->idAttributeType, $attribute['$id'] === '$sequence');
                     break;
 
                 case Database::VAR_STRING:

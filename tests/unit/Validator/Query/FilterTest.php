@@ -45,7 +45,7 @@ class FilterTest extends TestCase
             ]),
         ];
 
-        $this->validator = new Filter($attributes, 'int');
+        $this->validator = new Filter($attributes, Database::VAR_ID_INT);
     }
 
     public function testSuccess(): void

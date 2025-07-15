@@ -33,11 +33,7 @@ class Sequence extends Validator
 
     public function getType(): string
     {
-        if ($this->idAttributeType === 'string') {
-            return self::TYPE_STRING;
-        }
-
-        return self::TYPE_INTEGER;
+        return self::TYPE_STRING;
     }
 
     public function isValid($value): bool
@@ -46,29 +42,26 @@ class Sequence extends Validator
             return false;
         }
 
-        if ($this->idAttributeType === 'string') {
-            return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
-        } elseif ($this->idAttributeType === 'int') {
+        switch ($this->idAttributeType) {
+            case Database::VAR_ID_MONGO:
+                return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
 
-            if (gettype($value) !== 'integer') {
+            case Database::VAR_ID_INT:
+                if (gettype($value) !== 'integer') {
+                    return false;
+                }
+
+                $validator = new Integer(loose: true);
+                if (!$validator->isValid($value)) {
+                    return false;
+                }
+
+                $start = ($this->primary) ? 1 : 0;
+                $validator = new Range($start, Database::BIG_INT_MAX, Database::VAR_INTEGER);
+                return $validator->isValid($value);
+
+            default:
                 return false;
-            }
-
-            $validator = new Integer();
-            if (!$validator->isValid($value)) {
-                return false;
-            }
-
-            $start = ($this->primary) ? 1 : 0;
-
-            $validator = new Range($start, Database::BIG_INT_MAX, Database::VAR_INTEGER);
-            if (!$validator->isValid($value)) {
-                return false;
-            }
-
-            return true;
         }
-
-        return false;
     }
 }

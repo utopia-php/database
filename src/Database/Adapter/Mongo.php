@@ -89,9 +89,10 @@ class Mongo extends Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        // We removed the attmpts to retry the transaction.
-        // Since if it's rolling back the second time, it will fail
-       //becouse we already run one abortTransaction.
+        // Removed the attmpts to retry the transaction.
+        //Unlike pdo if we run theabortTransaction more then once (same transactioId),
+        // it will throw an error the there is no transaction in progress.
+
         try {
             $this->startTransaction();
             $result = $callback();
@@ -163,7 +164,8 @@ class Mongo extends Adapter
                     throw new DatabaseException('Failed to commit transaction');
                 }
 
-                // Session is now closed by the client using endSessions, reset our state
+                // Session is now closed by the client using endSessions,  state is reseted
+                // TODO  do we want  session per transaction or to manage it on the connection level?
                 $this->sessionId = null;
                 $this->txnNumber = null;
 
@@ -225,7 +227,6 @@ class Mongo extends Adapter
                 $options['startTransaction'] = true;
                 $this->firstOpInTransaction = false;
             }
-
         }
         return $options;
     }
@@ -865,14 +866,14 @@ class Mongo extends Adapter
         }
 
         $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
-   
+      
         if (empty($result)) {
             return new Document([]);
         }
 
         $result = $this->replaceChars('_', '$', (array)$result[0]);
         $result = $this->timeToDocument($result);
-
+       
         return new Document($result);
     }
 
@@ -981,10 +982,31 @@ class Mongo extends Adapter
      */
     private function insertDocument(string $name, array $document, array $options = []): array
     {
-
+       
         try {
             $result = $this->client->insert($name, $document, $options);
-            return $result;
+           
+          
+            $filters = [];
+            $filters['_uid'] = $document['_uid'];
+           
+            if ($this->sharedTables) {
+                $filters['_tenant'] = $this->getTenant();
+            }
+
+            // in order to get the document we need to pass  the transaction context to the find.
+            $this->client->find(
+                $name,
+                $filters,
+                array_merge($options, ['limit' => 1])
+                )->cursor->firstBatch[0];
+           
+                /**
+                 * TODO Do we even need this find?
+                 * We can just return the result from the insertDocument.
+                 */
+
+            return $this->client->toArray($result);
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
         }

@@ -213,7 +213,7 @@ class StructureTest extends TestCase
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
-            'id' => '1000',
+            'id' => 1000,
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -659,7 +659,7 @@ class StructureTest extends TestCase
             Database::VAR_ID_INT
         );
 
-        $id = '1000';
+        $id = 1000;
         $mongoid = '507f1f77bcf86cd799439011';
 
         /**

@@ -108,12 +108,8 @@ class Filter extends Base
             $validator = null;
 
             switch ($attributeType) {
-                case Database::VAR_SEQUENCE:
-                    $validator = new Sequence($this->idAttributeType, true);
-                    break;
-
                 case Database::VAR_ID:
-                    $validator = new Sequence($this->idAttributeType, false);
+                    $validator = new Sequence($this->idAttributeType, $attribute === '$sequence');
                     break;
 
                 case Database::VAR_STRING:

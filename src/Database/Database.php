@@ -41,11 +41,10 @@ class Database
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
     public const VAR_ID = 'id';
-    public const VAR_SEQUENCE = 'sequence';
 
     // VAR_ID types
-    public const VAR_ID_INT = 'integer_';
-    public const VAR_ID_MONGO = 'mongo_';
+    public const VAR_ID_INT = '_integer';
+    public const VAR_ID_MONGO = '_mongo';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
@@ -172,7 +171,7 @@ class Database
         ],
         [
             '$id' => '$sequence',
-            'type' => self::VAR_SEQUENCE,
+            'type' => self::VAR_ID,
             'size' => 0,
             'required' => true,
             'signed' => true,

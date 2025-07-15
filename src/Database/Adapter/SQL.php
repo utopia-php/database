@@ -1003,7 +1003,6 @@ abstract class SQL extends Adapter
             }
 
             switch ($attribute['type']) {
-                case Database::VAR_SEQUENCE:
                 case Database::VAR_ID:
                     $total += 8; //  BIGINT 8 bytes
                     break;

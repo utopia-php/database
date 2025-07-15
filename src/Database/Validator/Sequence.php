@@ -46,24 +46,22 @@ class Sequence extends Validator
             return false;
         }
 
-        if ($this->idAttributeType === Database::VAR_ID_MONGO) {
-            return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
-        } elseif ($this->idAttributeType === Database::VAR_ID_INT) {
-            $validator = new Integer(loose: true);
-            if (!$validator->isValid($value)) {
+        switch ($this->idAttributeType) {
+            case Database::VAR_ID_MONGO:
+                return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
+
+            case Database::VAR_ID_INT:
+                $validator = new Integer(loose: true);
+                if (!$validator->isValid($value)) {
+                    return false;
+                }
+
+                $start = ($this->primary) ? 1 : 0;
+                $validator = new Range($start, Database::BIG_INT_MAX, Database::VAR_INTEGER);
+                return $validator->isValid($value);
+
+            default:
                 return false;
-            }
-
-            $start = ($this->primary) ? 1 : 0;
-
-            $validator = new Range($start, Database::BIG_INT_MAX, Database::VAR_INTEGER);
-            if (!$validator->isValid($value)) {
-                return false;
-            }
-
-            return true;
         }
-
-        return false;
     }
 }

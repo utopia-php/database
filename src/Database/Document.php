@@ -62,9 +62,9 @@ class Document extends ArrayObject
     }
 
     /**
-     * @return mixed
+     * @return int|string|null
      */
-    public function getSequence(): mixed
+    public function getSequence(): int|string|null
     {
         return $this->getAttribute('$sequence');
     }

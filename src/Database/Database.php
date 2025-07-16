@@ -6510,6 +6510,10 @@ class Database
 
             foreach ($value as &$node) {
                 switch ($type) {
+                    case self::VAR_ID:
+                        $node = (string)$node;
+                        break;
+
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;
                         break;

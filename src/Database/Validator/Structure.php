@@ -50,7 +50,7 @@ class Structure extends Validator
         ],
         [
             '$id' => '$tenant',
-            'type' => Database::VAR_INTEGER, // ?????
+            'type' => Database::VAR_INTEGER, // ? VAR_ID
             'size' => 8,
             'required' => false,
             'default' => null,

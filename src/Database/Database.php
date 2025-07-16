@@ -6489,6 +6489,8 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
+        $attributes = \array_merge($attributes, $this->getInternalAttributes());
+
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';

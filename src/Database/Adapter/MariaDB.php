@@ -910,8 +910,6 @@ class MariaDB extends SQL
                 throw new DatabaseException('Error creating document empty "$sequence"');
             }
 
-            $document['$sequence'] = (int)$document['$sequence'];
-
             if (isset($stmtPermissions)) {
                 $stmtPermissions->execute();
             }

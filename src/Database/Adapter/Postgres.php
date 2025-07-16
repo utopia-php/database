@@ -1030,7 +1030,6 @@ class Postgres extends SQL
             $lastInsertedId = $this->getPDO()->lastInsertId();
             // Sequence can be manually set as well
             $document['$sequence'] ??= $lastInsertedId;
-            $document['$sequence'] = (int)$document['$sequence'];
 
             if (isset($stmtPermissions)) {
                 $this->execute($stmtPermissions);

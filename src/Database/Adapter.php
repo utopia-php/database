@@ -747,7 +747,7 @@ abstract class Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $sequences
+     * @param array<int|string|null> $sequences
      * @param array<string> $permissionIds
      *
      * @return int
@@ -853,6 +853,13 @@ abstract class Adapter
      * @return \DateTime
      */
     abstract public function getMinDateTime(): \DateTime;
+
+    /**
+     * Get Id's attribute primitive type int or string
+     *
+     * @return string
+     */
+    abstract public function getIdAttributeType(): string;
 
     /**
      * Get the maximum supported DateTime value

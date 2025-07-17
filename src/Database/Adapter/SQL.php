@@ -369,7 +369,7 @@ abstract class SQL extends Adapter
         $document = $document[0];
 
         if (\array_key_exists('_id', $document)) {
-            $document['$sequence'] = $document['_id'];
+            $document['$sequence'] = (int)$document['_id'];
             unset($document['_id']);
         }
         if (\array_key_exists('_uid', $document)) {
@@ -377,7 +377,7 @@ abstract class SQL extends Adapter
             unset($document['_uid']);
         }
         if (\array_key_exists('_tenant', $document)) {
-            $document['$tenant'] = $document['_tenant'] === null ? null : (int)$document['_tenant'];
+            $document['$tenant'] = $document['_tenant'];
             unset($document['_tenant']);
         }
         if (\array_key_exists('_createdAt', $document)) {
@@ -642,7 +642,7 @@ abstract class SQL extends Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $sequences
+     * @param array<int|string|null> $sequences
      * @param array<string> $permissionIds
      *
      * @return int
@@ -1003,6 +1003,10 @@ abstract class SQL extends Adapter
             }
 
             switch ($attribute['type']) {
+                case Database::VAR_ID:
+                    $total += 8; //  BIGINT 8 bytes
+                    break;
+
                 case Database::VAR_STRING:
                     /**
                      * Text / Mediumtext / Longtext
@@ -1575,6 +1579,14 @@ abstract class SQL extends Adapter
     public function getMaxVarcharLength(): int
     {
         return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
+    }
+
+    /**
+     * @return string
+     */
+    public function getIdAttributeType(): string
+    {
+        return Database::VAR_ID_INT;
     }
 
     /**

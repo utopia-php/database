@@ -71,14 +71,16 @@ trait AttributeTests
         $this->assertEquals(true, $database->createAttribute('attributes', 'bigint', Database::VAR_INTEGER, 8, true));
         $this->assertEquals(true, $database->createAttribute('attributes', 'float', Database::VAR_FLOAT, 0, true));
         $this->assertEquals(true, $database->createAttribute('attributes', 'boolean', Database::VAR_BOOLEAN, 0, true));
+        $this->assertEquals(true, $database->createAttribute('attributes', 'id', Database::VAR_ID, 0, true));
 
+        $this->assertEquals(true, $database->createIndex('attributes', 'id_index', Database::INDEX_KEY, ['id']));
         $this->assertEquals(true, $database->createIndex('attributes', 'string1_index', Database::INDEX_KEY, ['string1']));
         $this->assertEquals(true, $database->createIndex('attributes', 'string2_index', Database::INDEX_KEY, ['string2'], [255]));
         $this->assertEquals(true, $database->createIndex('attributes', 'multi_index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]));
 
         $collection = $database->getCollection('attributes');
-        $this->assertCount(8, $collection->getAttribute('attributes'));
-        $this->assertCount(3, $collection->getAttribute('indexes'));
+        $this->assertCount(9, $collection->getAttribute('attributes'));
+        $this->assertCount(4, $collection->getAttribute('indexes'));
 
         // Array
         $this->assertEquals(true, $database->createAttribute('attributes', 'string_list', Database::VAR_STRING, 128, true, null, true, true));
@@ -87,7 +89,7 @@ trait AttributeTests
         $this->assertEquals(true, $database->createAttribute('attributes', 'boolean_list', Database::VAR_BOOLEAN, 0, true, null, true, true));
 
         $collection = $database->getCollection('attributes');
-        $this->assertCount(12, $collection->getAttribute('attributes'));
+        $this->assertCount(13, $collection->getAttribute('attributes'));
 
         // Default values
         $this->assertEquals(true, $database->createAttribute('attributes', 'string_default', Database::VAR_STRING, 256, false, 'test'));
@@ -97,7 +99,7 @@ trait AttributeTests
         $this->assertEquals(true, $database->createAttribute('attributes', 'datetime_default', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']));
 
         $collection = $database->getCollection('attributes');
-        $this->assertCount(17, $collection->getAttribute('attributes'));
+        $this->assertCount(18, $collection->getAttribute('attributes'));
 
         // Delete
         $this->assertEquals(true, $database->deleteAttribute('attributes', 'string1'));
@@ -108,6 +110,7 @@ trait AttributeTests
         $this->assertEquals(true, $database->deleteAttribute('attributes', 'bigint'));
         $this->assertEquals(true, $database->deleteAttribute('attributes', 'float'));
         $this->assertEquals(true, $database->deleteAttribute('attributes', 'boolean'));
+        $this->assertEquals(true, $database->deleteAttribute('attributes', 'id'));
 
         $collection = $database->getCollection('attributes');
         $this->assertCount(9, $collection->getAttribute('attributes'));

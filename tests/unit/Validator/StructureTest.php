@@ -90,6 +90,16 @@ class StructureTest extends TestCase
                 'array' => true,
                 'filters' => [],
             ],
+            [
+                '$id' => 'id',
+                'type' => Database::VAR_ID,
+                'format' => '',
+                'size' => 0,
+                'required' => false,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ],
         ],
         'indexes' => [],
     ];
@@ -121,7 +131,10 @@ class StructureTest extends TestCase
 
     public function testDocumentInstance(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid('string'));
         $this->assertEquals(false, $validator->isValid(null));
@@ -133,7 +146,10 @@ class StructureTest extends TestCase
 
     public function testCollectionAttribute(): void
     {
-        $validator = new Structure(new Document());
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document()));
 
@@ -142,7 +158,10 @@ class StructureTest extends TestCase
 
     public function testCollection(): void
     {
-        $validator = new Structure(new Document());
+        $validator = new Structure(
+            new Document(),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -160,7 +179,10 @@ class StructureTest extends TestCase
 
     public function testRequiredKeys(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -177,7 +199,10 @@ class StructureTest extends TestCase
 
     public function testNullValues(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -188,6 +213,7 @@ class StructureTest extends TestCase
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
+            'id' => 1000,
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -204,7 +230,10 @@ class StructureTest extends TestCase
 
     public function testUnknownKeys(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -223,7 +252,10 @@ class StructureTest extends TestCase
 
     public function testIntegerAsString(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -241,7 +273,10 @@ class StructureTest extends TestCase
 
     public function testValidDocument(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -257,7 +292,10 @@ class StructureTest extends TestCase
 
     public function testStringValidation(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -275,7 +313,10 @@ class StructureTest extends TestCase
 
     public function testArrayOfStringsValidation(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -333,7 +374,10 @@ class StructureTest extends TestCase
      */
     public function testArrayAsObjectValidation(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -349,7 +393,10 @@ class StructureTest extends TestCase
 
     public function testArrayOfObjectsValidation(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -365,7 +412,10 @@ class StructureTest extends TestCase
 
     public function testIntegerValidation(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -396,7 +446,10 @@ class StructureTest extends TestCase
 
     public function testArrayOfIntegersValidation(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -451,7 +504,10 @@ class StructureTest extends TestCase
 
     public function testFloatValidation(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -482,7 +538,10 @@ class StructureTest extends TestCase
 
     public function testBooleanValidation(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -513,7 +572,10 @@ class StructureTest extends TestCase
 
     public function testFormatValidation(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -531,7 +593,10 @@ class StructureTest extends TestCase
 
     public function testIntegerMaxRange(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -549,7 +614,10 @@ class StructureTest extends TestCase
 
     public function testDoubleUnsigned(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -567,7 +635,10 @@ class StructureTest extends TestCase
 
     public function testDoubleMaxRange(): void
     {
-        $validator = new Structure(new Document($this->collection));
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -578,6 +649,77 @@ class StructureTest extends TestCase
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
+        ])));
+    }
+
+    public function testId(): void
+    {
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_INT
+        );
+
+        $id = 1000;
+        $mongoid = '507f1f77bcf86cd799439011';
+
+        /**
+         * Sql
+         */
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'My Title',
+            'description' => null,
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'id' => $id,
+        ])));
+
+        $this->assertEquals(false, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'My Title',
+            'description' => null,
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'id' => $mongoid,
+        ])));
+
+        /**
+         * Mongo
+         */
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_ID_MONGO
+        );
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'My Title',
+            'description' => null,
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'id' => $mongoid,
+        ])));
+
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'My Title',
+            'description' => null,
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'id' => $mongoid,
         ])));
     }
 

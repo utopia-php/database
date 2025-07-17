@@ -335,6 +335,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForIndexArray(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForUniqueIndex(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

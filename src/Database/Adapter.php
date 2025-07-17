@@ -855,6 +855,13 @@ abstract class Adapter
     abstract public function getMinDateTime(): \DateTime;
 
     /**
+     * Get Id's attribute primitive type int or string
+     *
+     * @return string
+     */
+    abstract public function getIdAttributeType(): string;
+
+    /**
      * Get the maximum supported DateTime value
      *
      * @return \DateTime

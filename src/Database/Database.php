@@ -6518,6 +6518,9 @@ class Database
                         if ($this->adapter->getIdAttributeType() === Database::VAR_ID_INT) {
                             $node = (int)$node;
                         }
+                        else {
+                            $node = (string)$node;
+                        }
                         break;
                     case self::VAR_INTEGER:
                         $node = (int)$node;

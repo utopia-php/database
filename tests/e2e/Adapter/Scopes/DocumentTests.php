@@ -253,7 +253,7 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => '',
         ]));
-        $this->assertNotEmpty(true, $documentIdNull->getSequence());
+        $this->assertArrayHasKey('$sequence', $documentIdNull);
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $documentIdNull = $database->getDocument('documents', $documentIdNull->getId());
@@ -284,19 +284,19 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => '',
         ]));
-        $this->assertNotEmpty(true, $documentId0->getSequence());
+        $this->assertArrayHasKey('$sequence', $documentId0);
         $this->assertIsInt($documentId0->getAttribute('id'));
         $this->assertEquals(0, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->getDocument('documents', $documentId0->getId());
-        $this->assertNotEmpty(true, $documentId0->getSequence());
+        $this->assertArrayHasKey('$sequence', $documentId0);
         $this->assertIsInt($documentId0->getAttribute('id'));
         $this->assertEquals(0, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->findOne('documents', [
             query::equal('id', [0])
         ]);
-        $this->assertNotEmpty(true, $documentId0->getSequence());
+        $this->assertArrayHasKey('$sequence', $documentId0);
         $this->assertIsInt($documentId0->getAttribute('id'));
         $this->assertEquals(0, $documentId0->getAttribute('id'));
 

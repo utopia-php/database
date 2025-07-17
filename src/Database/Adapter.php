@@ -747,7 +747,7 @@ abstract class Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $sequences
+     * @param array<int|string|null> $sequences
      * @param array<string> $permissionIds
      *
      * @return int

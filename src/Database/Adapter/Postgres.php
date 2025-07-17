@@ -1525,7 +1525,7 @@ class Postgres extends SQL
                 unset($results[$index]['_uid']);
             }
             if (\array_key_exists('_id', $document)) {
-                $results[$index]['$sequence'] = (int)$document['_id'];
+                $results[$index]['$sequence'] = $document['_id'];
                 unset($results[$index]['_id']);
             }
             if (\array_key_exists('_tenant', $document)) {

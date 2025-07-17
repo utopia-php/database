@@ -340,6 +340,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForCastIndexArray(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForUniqueIndex(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -391,11 +396,6 @@ class Pool extends Adapter
     }
 
     public function getSupportForGetConnectionId(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForCastIndexArray(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

@@ -1281,9 +1281,6 @@ class Postgres extends SQL
 
             return "{$attribute} = {$new}";
         };
-
-
-
         if (!empty($attribute)) {
             // Increment specific column by its new value in place
             $updateColumns = [

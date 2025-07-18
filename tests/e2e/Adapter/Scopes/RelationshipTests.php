@@ -1791,7 +1791,12 @@ trait RelationshipTests
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships1', new Document([
             'string' => 'text📝 updated',
-        ]));
+        ]), onNext: function () {
+            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+        }, onError:function ($e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+        });
 
         $document = $this->getDatabase()->findOne('testUpdateDocumentsRelationships1');
 
@@ -1829,11 +1834,21 @@ trait RelationshipTests
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships2', new Document([
             'testUpdateDocumentsRelationships1' => null
-        ]));
+        ]), onNext: function () {
+            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+        }, onError:function ($e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+        });
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships2', new Document([
             'testUpdateDocumentsRelationships1' => 'doc1'
-        ]));
+        ]), onNext: function () {
+            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
+        }, onError:function ($e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
+        });
 
         $documents = $this->getDatabase()->find('testUpdateDocumentsRelationships2');
 

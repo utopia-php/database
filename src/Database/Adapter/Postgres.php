@@ -10,7 +10,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
@@ -1453,82 +1452,67 @@ class Postgres extends SQL
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $hasIdAttribute = false;
-        foreach ($orderAttributes as $i => $attribute) {
-            $originalAttribute = $attribute;
+        $cursorWhere = [];
 
-            $attribute = $this->getInternalKeyForAttribute($attribute);
+        foreach ($orderAttributes as $i => $originalAttribute) {
+            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
-            if (\in_array($attribute, ['_uid', '_id'])) {
-                $hasIdAttribute = true;
-            }
 
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $direction = $orderType;
 
-            // Get most dominant/first order attribute
-            if ($i === 0 && !empty($cursor)) {
-                $orderMethodSequence = Query::TYPE_GREATER; // To preserve natural order
-                $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                    $orderMethodSequence = $orderType === Database::ORDER_ASC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                    $orderMethod = $orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER;
-                }
-
-                if (\is_null($cursor[$originalAttribute] ?? null)) {
-                    throw new OrderException(
-                        message: "Order attribute '{$originalAttribute}' is empty",
-                        attribute: $originalAttribute
-                    );
-                }
-
-                $binds[':cursor'] = $cursor[$originalAttribute];
-
-                $where[] = "(
-                        {$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($orderMethod)} :cursor 
-                        OR (
-                            {$this->quote($alias)}.{$this->quote($attribute)} = :cursor 
-                            AND
-                            {$this->quote($alias)}._id {$this->getSQLOperator($orderMethodSequence)} {$cursor['$sequence']}
-                        )
-                    )";
-            } elseif ($cursorDirection === Database::CURSOR_BEFORE) {
-                $orderType = $orderType === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $direction = ($direction === Database::ORDER_ASC)
+                    ? Database::ORDER_DESC
+                    : Database::ORDER_ASC;
             }
 
-            $orders[] = "{$this->quote($attribute)} {$orderType}";
-        }
+            $orders[] = "{$this->quote($attribute)} {$direction}";
 
-        // Allow after pagination without any order
-        if (empty($orderAttributes) && !empty($cursor)) {
-            $orderType = $orderTypes[0] ?? Database::ORDER_ASC;
+            // Build pagination WHERE clause only if we have a cursor
+            if (!empty($cursor)) {
+                // Special case: only 1 attribute and it's a unique primary key
+                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
+                    $operator = ($direction === Database::ORDER_DESC)
+                        ? Query::TYPE_LESSER
+                        : Query::TYPE_GREATER;
 
-            if ($cursorDirection === Database::CURSOR_AFTER) {
-                $orderMethod = $orderType === Database::ORDER_DESC
+                    $bindName = ":cursor_pk";
+                    $binds[$bindName] = $cursor[$originalAttribute];
+
+                    $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                    break;
+                }
+
+                $conditions = [];
+
+                // Add equality conditions for previous attributes
+                for ($j = 0; $j < $i; $j++) {
+                    $prevOriginal = $orderAttributes[$j];
+                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
+
+                    $bindName = ":cursor_{$j}";
+                    $binds[$bindName] = $cursor[$prevOriginal];
+
+                    $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
+                }
+
+                // Add comparison for current attribute
+                $operator = ($direction === Database::ORDER_DESC)
                     ? Query::TYPE_LESSER
                     : Query::TYPE_GREATER;
-            } else {
-                $orderMethod = $orderType === Database::ORDER_DESC
-                    ? Query::TYPE_GREATER
-                    : Query::TYPE_LESSER;
-            }
 
-            $where[] = "({$this->quote($alias)}._id {$this->getSQLOperator($orderMethod)} {$cursor['$sequence']})";
+                $bindName = ":cursor_{$i}";
+                $binds[$bindName] = $cursor[$originalAttribute];
+
+                $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+
+                $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
+            }
         }
 
-        // Allow order type without any order attribute, fallback to the natural order (_id)
-        if (!$hasIdAttribute) {
-            if (empty($orderAttributes) && !empty($orderTypes)) {
-                $order = $orderTypes[0] ?? Database::ORDER_ASC;
-                if ($cursorDirection === Database::CURSOR_BEFORE) {
-                    $order = $order === Database::ORDER_ASC ? Database::ORDER_DESC : Database::ORDER_ASC;
-                }
-
-                $orders[] = "{$this->quote($alias)}._id " . $this->filter($order);
-            } else {
-                $orders[] = "{$this->quote($alias)}._id " . ($cursorDirection === Database::CURSOR_AFTER ? Database::ORDER_ASC : Database::ORDER_DESC); // Enforce last ORDER by '_id'
-            }
+        if (!empty($cursorWhere)) {
+            $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
         $conditions = $this->getSQLConditions($queries, $binds);
@@ -1599,7 +1583,7 @@ class Postgres extends SQL
                 unset($results[$index]['_id']);
             }
             if (\array_key_exists('_tenant', $document)) {
-                $document['$tenant'] = $document['_tenant'] === null ? null : (int)$document['_tenant'];
+                $results[$index]['$tenant'] = $document['_tenant'] === null ? null : (int)$document['_tenant'];
                 unset($results[$index]['_tenant']);
             }
             if (\array_key_exists('_createdAt', $document)) {

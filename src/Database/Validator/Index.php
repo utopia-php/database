@@ -28,9 +28,10 @@ class Index extends Validator
      * @param array<Document> $attributes
      * @param int $maxLength
      * @param array<string> $reservedKeys
+     * @param bool $arrayIndexSupport
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [], $arrayIndexSupport = false)
+    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [], bool $arrayIndexSupport = false)
     {
         $this->maxLength = $maxLength;
         $this->reservedKeys = $reservedKeys;

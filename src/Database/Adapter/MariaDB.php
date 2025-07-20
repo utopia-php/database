@@ -2120,4 +2120,12 @@ class MariaDB extends SQL
     {
         return true;
     }
+
+    public function getSupportForIndexArray(): bool
+    {
+        /**
+         * Added for Appwrite tests
+         */
+        return false;
+    }
 }

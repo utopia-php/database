@@ -6034,25 +6034,22 @@ class Database
         $cursor = $grouped['cursor'];
         $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
 
-        $uniqueOrderBy = false;
-        foreach ($orderAttributes as $order) {
-            if ($order === '$id' || $order === '$sequence') {
-                $uniqueOrderBy = true;
-            }
-        }
-
-        if ($uniqueOrderBy === false) {
+        if (!in_array('$id', $orderAttributes) && !in_array('$sequence', $orderAttributes)) {
             $orderAttributes[] = '$sequence';
         }
 
-        if (!empty($cursor)) {
-            foreach ($orderAttributes as $order) {
-                if ($cursor->getAttribute($order) === null) {
-                    throw new OrderException(
-                        message: "Order attribute '{$order}' is empty",
-                        attribute: $order
-                    );
-                }
+        foreach ($orderAttributes as $i => $order) {
+            if (!empty($cursor) && $cursor->getAttribute($order) === null) {
+                throw new OrderException(
+                    message: "Order attribute '{$order}' is empty",
+                    attribute: $order
+                );
+            }
+
+            $orderTypes[$i] = $orderTypes[$i] ?? Database::ORDER_ASC;
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $orderTypes[$i] = ($orderTypes[$i] === Database::ORDER_ASC) ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
         }
 
@@ -6122,11 +6119,14 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection,
             $forPermission
         );
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
+
+        if ($cursorDirection === Database::CURSOR_BEFORE) {
+            $results = \array_reverse($results);
+        }
 
         foreach ($results as &$node) {
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {

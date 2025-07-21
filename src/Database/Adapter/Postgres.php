@@ -1382,14 +1382,13 @@ class Postgres extends SQL
      * @param array<string> $orderAttributes
      * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
-     * @param string $cursorDirection
      * @param string $forPermission
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1407,27 +1406,16 @@ class Postgres extends SQL
             $attribute = $this->filter($attribute);
 
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            $direction = $orderType;
 
-            if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $direction = ($direction === Database::ORDER_ASC)
-                    ? Database::ORDER_DESC
-                    : Database::ORDER_ASC;
-            }
+            $orders[] = "{$this->quote($attribute)} {$orderType}";
 
-            $orders[] = "{$this->quote($attribute)} {$direction}";
+            $operator = ($orderType === Database::ORDER_DESC) ? Query::TYPE_LESSER : Query::TYPE_GREATER;
 
-            // Build pagination WHERE clause only if we have a cursor
             if (!empty($cursor)) {
-                // Special case: only 1 attribute and it's a unique primary key
+                // Special case: No tie breaks. only 1 attribute and it's a unique primary key
                 if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
-                    $operator = ($direction === Database::ORDER_DESC)
-                        ? Query::TYPE_LESSER
-                        : Query::TYPE_GREATER;
-
                     $bindName = ":cursor_pk";
                     $binds[$bindName] = $cursor[$originalAttribute];
-
                     $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
                     break;
                 }
@@ -1444,11 +1432,6 @@ class Postgres extends SQL
 
                     $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
                 }
-
-                // Add comparison for current attribute
-                $operator = ($direction === Database::ORDER_DESC)
-                    ? Query::TYPE_LESSER
-                    : Query::TYPE_GREATER;
 
                 $bindName = ":cursor_{$i}";
                 $binds[$bindName] = $cursor[$originalAttribute];
@@ -1548,10 +1531,6 @@ class Postgres extends SQL
             }
 
             $results[$index] = new Document($results[$index]);
-        }
-
-        if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $results = \array_reverse($results);
         }
 
         return $results;

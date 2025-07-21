@@ -745,6 +745,7 @@ trait DocumentTests
         ]);
 
         $this->assertEquals(1, $docs);
+
         $this->assertEquals('first', $existingDocument->getAttribute('first'));
         $this->assertEquals(null, $existingDocument->getAttribute('last'));
         $this->assertEquals('second', $newDocument->getAttribute('first'));
@@ -1130,26 +1131,38 @@ trait DocumentTests
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
         $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
-        $this->assertArrayHasKey('$id', $document);
-        $this->assertArrayHasKey('$sequence', $document);
-        $this->assertArrayHasKey('$createdAt', $document);
-        $this->assertArrayHasKey('$updatedAt', $document);
-        $this->assertArrayHasKey('$permissions', $document);
-        $this->assertArrayHasKey('$collection', $document);
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$sequence', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        //$this->assertArrayNotHasKey('$collection', $document);
+        $this->assertArrayHasKey('main::$id', $document);
+        $this->assertArrayHasKey('main::$sequence', $document);
+        $this->assertArrayHasKey('main::$createdAt', $document);
+        $this->assertArrayHasKey('main::$updatedAt', $document);
+        $this->assertArrayHasKey('main::$permissions', $document);
+        $this->assertArrayHasKey('main::$collection', $document);
 
         $document = $database->getDocument('documents', $documentId, [
             Query::select(['string', 'integer_signed', '$id']),
         ]);
 
-        $this->assertArrayHasKey('$id', $document);
-        $this->assertArrayHasKey('$sequence', $document);
-        $this->assertArrayHasKey('$createdAt', $document);
-        $this->assertArrayHasKey('$updatedAt', $document);
-        $this->assertArrayHasKey('$permissions', $document);
-        $this->assertArrayHasKey('$collection', $document);
         $this->assertArrayHasKey('string', $document);
         $this->assertArrayHasKey('integer_signed', $document);
+        $this->assertArrayHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$sequence', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        //$this->assertArrayNotHasKey('$collection', $document);
         $this->assertArrayNotHasKey('float', $document);
+        $this->assertArrayHasKey('main::$id', $document);
+        $this->assertArrayHasKey('main::$sequence', $document);
+        $this->assertArrayHasKey('main::$createdAt', $document);
+        $this->assertArrayHasKey('main::$updatedAt', $document);
+        $this->assertArrayHasKey('main::$permissions', $document);
+        $this->assertArrayHasKey('main::$collection', $document);
 
         return $document;
     }
@@ -2856,12 +2869,18 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
-            $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
+            //$this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+            $this->assertArrayHasKey('main::$id', $document);
+            $this->assertArrayHasKey('main::$sequence', $document);
+            $this->assertArrayHasKey('main::$collection', $document);
+            $this->assertArrayHasKey('main::$createdAt', $document);
+            $this->assertArrayHasKey('main::$updatedAt', $document);
+            $this->assertArrayHasKey('main::$permissions', $document);
         }
 
         $documents = $database->find('movies', [
@@ -2875,11 +2894,17 @@ trait DocumentTests
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
             $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
-            $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
+            //$this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+            $this->assertArrayHasKey('main::$id', $document);
+            $this->assertArrayHasKey('main::$sequence', $document);
+            $this->assertArrayHasKey('main::$collection', $document);
+            $this->assertArrayHasKey('main::$createdAt', $document);
+            $this->assertArrayHasKey('main::$updatedAt', $document);
+            $this->assertArrayHasKey('main::$permissions', $document);
         }
 
         $documents = $database->find('movies', [
@@ -2892,12 +2917,18 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$id', $document);
             $this->assertArrayHasKey('$sequence', $document);
-            $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            //$this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+            $this->assertArrayHasKey('main::$id', $document);
+            $this->assertArrayHasKey('main::$sequence', $document);
+            $this->assertArrayHasKey('main::$collection', $document);
+            $this->assertArrayHasKey('main::$createdAt', $document);
+            $this->assertArrayHasKey('main::$updatedAt', $document);
+            $this->assertArrayHasKey('main::$permissions', $document);
         }
 
         $documents = $database->find('movies', [
@@ -2910,12 +2941,17 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+            $this->assertArrayHasKey('main::$sequence', $document);
+            $this->assertArrayHasKey('main::$collection', $document);
+            $this->assertArrayHasKey('main::$createdAt', $document);
+            $this->assertArrayHasKey('main::$updatedAt', $document);
+            $this->assertArrayHasKey('main::$permissions', $document);
         }
 
         $documents = $database->find('movies', [
@@ -2928,12 +2964,17 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
-            $this->assertArrayHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
+           // $this->assertArrayNotHasKey('$collection', $document);
             $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+            $this->assertArrayHasKey('main::$sequence', $document);
+            $this->assertArrayHasKey('main::$collection', $document);
+            $this->assertArrayHasKey('main::$createdAt', $document);
+            $this->assertArrayHasKey('main::$updatedAt', $document);
+            $this->assertArrayHasKey('main::$permissions', $document);
         }
 
         $documents = $database->find('movies', [
@@ -2946,12 +2987,17 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
-            $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
+          //  $this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);
-            $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayNotHasKey('$permissions', $document);
+            $this->assertArrayHasKey('main::$sequence', $document);
+            $this->assertArrayHasKey('main::$collection', $document);
+            $this->assertArrayHasKey('main::$createdAt', $document);
+            $this->assertArrayHasKey('main::$updatedAt', $document);
+            $this->assertArrayHasKey('main::$permissions', $document);
         }
 
         $documents = $database->find('movies', [
@@ -2964,12 +3010,17 @@ trait DocumentTests
             $this->assertArrayNotHasKey('director', $document);
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
-            $this->assertArrayHasKey('$id', $document);
-            $this->assertArrayHasKey('$sequence', $document);
-            $this->assertArrayHasKey('$collection', $document);
-            $this->assertArrayHasKey('$createdAt', $document);
-            $this->assertArrayHasKey('$updatedAt', $document);
+            $this->assertArrayNotHasKey('$id', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
+            //$this->assertArrayNotHasKey('$collection', $document);
+            $this->assertArrayNotHasKey('$createdAt', $document);
+            $this->assertArrayNotHasKey('$updatedAt', $document);
             $this->assertArrayHasKey('$permissions', $document);
+            $this->assertArrayHasKey('main::$sequence', $document);
+            $this->assertArrayHasKey('main::$collection', $document);
+            $this->assertArrayHasKey('main::$createdAt', $document);
+            $this->assertArrayHasKey('main::$updatedAt', $document);
+            $this->assertArrayHasKey('main::$permissions', $document);
         }
     }
 

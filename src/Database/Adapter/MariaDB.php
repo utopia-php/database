@@ -185,7 +185,7 @@ class MariaDB extends SQL
 
         $permissions = "
             CREATE TABLE {$this->getSQLTable($id . '_perms')} (
-                _id BIGINT NOT NULL AUTO_INCREMENT,
+                _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
                 _document VARCHAR(255) NOT NULL,

@@ -188,12 +188,12 @@ class Mongo extends Adapter
 
         try {
             if ($this->inTransaction === 0) {
-                throw new DatabaseException('No transaction in progress');
+                return false;
             }
             $this->inTransaction--;
             if ($this->inTransaction === 0) {
                 if (!$this->sessionId) {
-                    throw new DatabaseException('No session in progress');
+                    return false;
                 }
 
                 try {
@@ -1402,7 +1402,7 @@ class Mongo extends Adapter
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-        
+
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $filters = $this->buildFilters($queries);

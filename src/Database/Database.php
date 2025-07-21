@@ -1276,7 +1276,8 @@ class Database
             $validator = new IndexValidator(
                 $attributes,
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2204,7 +2205,8 @@ class Database
                     $validator = new IndexValidator(
                         $attributes,
                         $this->adapter->getMaxIndexLength(),
-                        $this->adapter->getInternalIndexesKeys()
+                        $this->adapter->getInternalIndexesKeys(),
+                        $this->adapter->getSupportForIndexArray()
                     );
 
                     foreach ($indexes as $index) {
@@ -3109,7 +3111,8 @@ class Database
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -3674,6 +3677,7 @@ class Database
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
 
+        $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
@@ -3762,11 +3766,14 @@ class Database
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
+
             foreach ($batch as $document) {
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
 
+                $document = $this->casting($collection, $document);
                 $document = $this->decode($collection, $document);
                 $onNext && $onNext($document);
                 $modified++;
@@ -4130,6 +4137,14 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
+            $originalPermissions = $old->getPermissions();
+            $currentPermissions  = $document->getPermissions();
+
+            sort($originalPermissions);
+            sort($currentPermissions);
+
+            $skipPermissionsUpdate = ($originalPermissions === $currentPermissions && $document->getAttribute('$permissions') !== null);
+
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -4287,7 +4302,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $id, $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document, $skipPermissionsUpdate);
             $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
@@ -5080,6 +5095,8 @@ class Database
                 $attribute,
                 $chunk
             )));
+
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {

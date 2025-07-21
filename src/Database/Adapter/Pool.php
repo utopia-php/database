@@ -235,7 +235,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function updateDocument(string $collection, string $id, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -335,6 +335,16 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForIndexArray(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForCastIndexArray(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForUniqueIndex(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -386,11 +396,6 @@ class Pool extends Adapter
     }
 
     public function getSupportForGetConnectionId(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForCastIndexArray(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -491,6 +496,11 @@ class Pool extends Adapter
     }
 
     public function getIdAttributeType(): string
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSequences(string $collection, array $documents): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

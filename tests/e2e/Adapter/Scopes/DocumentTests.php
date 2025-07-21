@@ -539,6 +539,7 @@ trait DocumentTests
         foreach ($results as $index => $document) {
             $createdAt[$index] = $document->getCreatedAt();
             $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty(true, $document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -575,6 +576,7 @@ trait DocumentTests
 
         foreach ($results as $document) {
             $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty(true, $document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));

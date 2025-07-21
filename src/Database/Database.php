@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -1269,7 +1270,8 @@ class Database
             $validator = new IndexValidator(
                 $attributes,
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2194,7 +2196,8 @@ class Database
                     $validator = new IndexValidator(
                         $attributes,
                         $this->adapter->getMaxIndexLength(),
-                        $this->adapter->getInternalIndexesKeys()
+                        $this->adapter->getInternalIndexesKeys(),
+                        $this->adapter->getSupportForIndexArray()
                     );
 
                     foreach ($indexes as $index) {
@@ -3099,7 +3102,8 @@ class Database
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -3663,6 +3667,7 @@ class Database
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
 
+        $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
@@ -3750,11 +3755,14 @@ class Database
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
+
             foreach ($batch as $document) {
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
 
+                $document = $this->casting($collection, $document);
                 $document = $this->decode($collection, $document);
                 $onNext && $onNext($document);
                 $modified++;
@@ -4118,6 +4126,14 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
+            $originalPermissions = $old->getPermissions();
+            $currentPermissions  = $document->getPermissions();
+
+            sort($originalPermissions);
+            sort($currentPermissions);
+
+            $skipPermissionsUpdate = ($originalPermissions === $currentPermissions && $document->getAttribute('$permissions') !== null);
+
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -4274,7 +4290,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $id, $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document, $skipPermissionsUpdate);
             $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
@@ -5025,6 +5041,19 @@ class Database
                 throw new StructureException($validator->getDescription());
             }
 
+            if (!$old->isEmpty()) {
+                // Check if document was updated after the request timestamp
+                try {
+                    $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
+                } catch (Exception $e) {
+                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                }
+
+                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    throw new ConflictException('Document was updated after the request timestamp');
+                }
+            }
+
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
@@ -5051,6 +5080,8 @@ class Database
                 $attribute,
                 $chunk
             )));
+
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
@@ -6001,7 +6032,29 @@ class Database
         $orderAttributes = $grouped['orderAttributes'];
         $orderTypes = $grouped['orderTypes'];
         $cursor = $grouped['cursor'];
-        $cursorDirection = $grouped['cursorDirection'];
+        $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
+
+        $uniqueOrderBy = false;
+        foreach ($orderAttributes as $order) {
+            if ($order === '$id' || $order === '$sequence') {
+                $uniqueOrderBy = true;
+            }
+        }
+
+        if ($uniqueOrderBy === false) {
+            $orderAttributes[] = '$sequence';
+        }
+
+        if (!empty($cursor)) {
+            foreach ($orderAttributes as $order) {
+                if ($cursor->getAttribute($order) === null) {
+                    throw new OrderException(
+                        message: "Order attribute '{$order}' is empty",
+                        attribute: $order
+                    );
+                }
+            }
+        }
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException("cursor Document must be from the same Collection.");
@@ -6069,7 +6122,7 @@ class Database
             $orderAttributes,
             $orderTypes,
             $cursor,
-            $cursorDirection ?? Database::CURSOR_AFTER,
+            $cursorDirection,
             $forPermission
         );
 
@@ -6433,6 +6486,8 @@ class Database
         }
 
         $attributes = $collection->getAttribute('attributes', []);
+
+        $attributes = \array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';

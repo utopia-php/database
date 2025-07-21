@@ -153,20 +153,21 @@ class Mongo extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
-                throw new DatabaseException('No transaction in progress');
+                return false;
             }
             $this->inTransaction--;
             if ($this->inTransaction === 0) {
                 if (!$this->sessionId) {
-                    throw new DatabaseException('No session in progress');
+                    return false;
                 }
-                $result = $this->client->commitTransaction(
-                    ['id' => $this->sessionId], // Pass raw id object
-                    $this->txnNumber,
-                    false
-                );
-                if (($result->ok ?? 0) !== 1.0) {
-                    throw new DatabaseException('Failed to commit transaction');
+                try {
+                    $result = $this->client->commitTransaction(
+                        ['id' => $this->sessionId], // Pass raw id object
+                        $this->txnNumber,
+                        false
+                    );
+                } catch (\Throwable $e) {
+                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
 
                 // Session is now closed by the client using endSessions,  state is reseted
@@ -195,13 +196,14 @@ class Mongo extends Adapter
                     throw new DatabaseException('No session in progress');
                 }
 
-                $result = $this->client->abortTransaction(
-                    ['id' => $this->sessionId], // Pass raw id object
-                    $this->txnNumber,
-                    false
-                );
-                if (($result->ok ?? 0) !== 1.0) {
-                    throw new DatabaseException('Failed to rollback transaction');
+                try {
+                    $result = $this->client->abortTransaction(
+                        ['id' => $this->sessionId], // Pass raw id object
+                        $this->txnNumber,
+                        false
+                    );
+                } catch (\Throwable $e) {
+                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
 
                 // Session is now closed by the client using endSessions, reset our state
@@ -936,7 +938,6 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $options = $this->addTransactionContext([]);
-
         $records = [];
         $hasSequence = null;
         $documents = array_map(fn ($doc) => clone $doc, $documents);
@@ -991,8 +992,6 @@ class Mongo extends Adapter
 
         try {
             $result = $this->client->insert($name, $document, $options);
-
-
             $filters = [];
             $filters['_uid'] = $document['_uid'];
 
@@ -1070,6 +1069,7 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
+        $options = $this->addTransactionContext([]);
         $queries = [
             Query::equal('$sequence', \array_map(fn ($document) => $document->getSequence(), $documents))
         ];
@@ -1089,7 +1089,6 @@ class Mongo extends Adapter
         ];
 
         try {
-            $options = $this->addTransactionContext([]);
             $this->client->update($name, $filters, $updateQuery, multi: true, options: $options);
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
@@ -1112,6 +1111,7 @@ class Mongo extends Adapter
 
         try {
             $name = $this->getNamespace() . '_' . $this->filter($collection);
+
             $attribute = $this->filter($attribute);
 
             $documentIds = [];
@@ -1168,6 +1168,7 @@ class Mongo extends Adapter
             }
 
             $options = $this->addTransactionContext([]);
+
             $this->client->upsert(
                 $name,
                 $operations,
@@ -1401,6 +1402,7 @@ class Mongo extends Adapter
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
+        
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $filters = $this->buildFilters($queries);

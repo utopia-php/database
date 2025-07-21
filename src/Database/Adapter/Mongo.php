@@ -341,6 +341,7 @@ class Mongo extends Adapter
         // Returns an array/object with the result document
         try {
             $this->getClient()->createCollection($id);
+
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage(), $e->getCode(), $e);
         }
@@ -535,6 +536,7 @@ class Mongo extends Adapter
     public function deleteAttribute(string $collection, string $id): bool
     {
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
+
         $this->getClient()->update(
             $collection,
             [],
@@ -735,6 +737,7 @@ class Mongo extends Adapter
         $id = $this->filter($id);
 
         $indexes = [];
+        $options = [];
 
         // pass in custom index name
         $indexes['name'] = $id;
@@ -775,7 +778,7 @@ class Mongo extends Adapter
             ];
         }
 
-        return $this->client->createIndexes($name, [$indexes]);
+        return $this->client->createIndexes($name, [$indexes], $options);
     }
 
     /**
@@ -866,7 +869,6 @@ class Mongo extends Adapter
         }
 
         $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
-      
         if (empty($result)) {
             return new Document([]);
         }
@@ -928,7 +930,6 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        // Initialize transaction context before validation to ensure transaction is active
         $options = $this->addTransactionContext([]);
 
         $records = [];
@@ -1103,7 +1104,7 @@ class Mongo extends Adapter
         if (empty($changes)) {
             return $changes;
         }
-       
+
         try {
             $name = $this->getNamespace() . '_' . $this->filter($collection);
             $attribute = $this->filter($attribute);
@@ -1120,7 +1121,7 @@ class Mongo extends Adapter
                 $attributes['_createdAt'] = $document->getCreatedAt();
                 $attributes['_updatedAt'] = $document->getUpdatedAt();
                 $attributes['_permissions'] = $document->getPermissions();
-          
+
                 if (!empty($document->getSequence())) {
                     $attributes['_id'] = new ObjectId($document->getSequence());
                 } else {
@@ -1135,7 +1136,7 @@ class Mongo extends Adapter
                 $record = $this->replaceChars('$', '_', $attributes);
                 $record = $this->timeToMongo($record);
                 $record = $this->removeNullKeys($record);
-               
+
 
                 // Build filter for upsert
                 $filter = ['_uid' => $document->getId()];
@@ -1171,7 +1172,7 @@ class Mongo extends Adapter
             // Get sequences for documents that were created
             if (!empty($documentIds)) {
                 $sequences = $this->getSequences($collection, $documentIds, $documentTenants);
-                
+
                 foreach ($changes as $change) {
                     if (isset($sequences[$change->getNew()->getId()])) {
                         $change->getNew()->setAttribute('$sequence', $sequences[$change->getNew()->getId()]);
@@ -1182,7 +1183,7 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
-      
+
         return \array_map(fn ($change) => $change->getNew(), $changes);
     }
 
@@ -1211,7 +1212,7 @@ class Mongo extends Adapter
 
             try {
                 $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
-                
+
                 foreach ($results->cursor->firstBatch as $result) {
                     $sequences[$result->_uid] = (string)$result->_id;
                 }

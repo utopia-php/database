@@ -376,7 +376,6 @@ abstract class Adapter
                 $this->startTransaction();
                 $result = $callback();
                 $this->commitTransaction();
-
                 return $result;
             } catch (\Throwable $action) {
                 try {

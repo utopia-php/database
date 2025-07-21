@@ -842,7 +842,7 @@ class Mongo extends Adapter
     {
 
         try {
-            $this->client->insert($name, $document);
+            $result = $this->client->insert($name, $document);
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];

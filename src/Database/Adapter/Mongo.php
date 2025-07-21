@@ -11,7 +11,6 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
 use Utopia\Database\Query;
@@ -843,7 +842,7 @@ class Mongo extends Adapter
     {
 
         try {
-            $bla = $this->client->insert($name, $document);
+             $this->client->insert($name, $document);
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
@@ -1011,8 +1010,7 @@ class Mongo extends Adapter
                 ];
             }   
             
-            // Use the new bulkUpsert method
-            $this->client->bulkUpsert(
+            $this->client->upsert(
                 $name,
                 $operations,
                 ["ordered" => false] // TODO Do we want to continue if an error is thrown? 

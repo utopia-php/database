@@ -22,7 +22,7 @@ abstract class Base extends TestCase
     use AttributeTests;
     use IndexTests;
     use PermissionTests;
-    //use RelationshipTests;
+    use RelationshipTests;
     use GeneralTests;
 
     protected static string $namespace;

@@ -341,7 +341,6 @@ class Mongo extends Adapter
         // Returns an array/object with the result document
         try {
             $this->getClient()->createCollection($id);
-
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage(), $e->getCode(), $e);
         }
@@ -536,7 +535,6 @@ class Mongo extends Adapter
     public function deleteAttribute(string $collection, string $id): bool
     {
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
-
         $this->getClient()->update(
             $collection,
             [],
@@ -869,6 +867,7 @@ class Mongo extends Adapter
         }
 
         $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
+        
         if (empty($result)) {
             return new Document([]);
         }

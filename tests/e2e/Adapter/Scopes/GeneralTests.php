@@ -120,9 +120,6 @@ trait GeneralTests
             'attr1' => 'value3',
         ]));
 
-
-
-
         $newDate = '2000-01-01T10:00:00.000+00:00';
 
         $doc1->setAttribute('$updatedAt', $newDate);
@@ -540,7 +537,6 @@ trait GeneralTests
 
     public function testCacheFallback(): void
     {
- 
         /** @var Database $database */
         $database = static::getDatabase();
 

@@ -649,15 +649,12 @@ trait CollectionTests
             ]),
         ];
 
-        /**
-         *  Update array length check to 255
-         */
         $indexes = [
             new Document([
                 '$id' => ID::custom('idx_cards'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['cards'],
-                'lengths' => [500],
+                'lengths' => [500], // Will be changed to Database::ARRAY_INDEX_LENGTH (255)
                 'orders' => [Database::ORDER_DESC],
             ]),
             new Document([
@@ -686,10 +683,6 @@ trait CollectionTests
         );
 
         $this->assertEquals($collection->getAttribute('indexes')[0]['attributes'][0], 'cards');
-        /**
-         * If we set getMaxIndexLength to 1024 then this tests pass but other tests that depend on index length fail
-         */
-
         $this->assertEquals($collection->getAttribute('indexes')[0]['lengths'][0], Database::ARRAY_INDEX_LENGTH);
         $this->assertEquals($collection->getAttribute('indexes')[0]['orders'][0], null);
 

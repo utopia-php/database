@@ -17,7 +17,7 @@ FROM php:8.3.19-cli-alpine3.21 AS compile
 ENV PHP_REDIS_VERSION="6.0.2" \
     PHP_SWOOLE_VERSION="v5.1.7" \
     PHP_XDEBUG_VERSION="3.4.2" \
-    PHP_MONGODB_VERSION="2.1.1"
+    PHP_MONGODB_VERSION="1.21.1"
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apk update && apk add --no-cache \

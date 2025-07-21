@@ -2074,12 +2074,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "088d890e1646a143ee95eb17e983e7944b3bcecd"
+                "reference": "9c67b64f90f9737c2d10279554c7a856ca586f10"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/088d890e1646a143ee95eb17e983e7944b3bcecd",
-                "reference": "088d890e1646a143ee95eb17e983e7944b3bcecd",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/9c67b64f90f9737c2d10279554c7a856ca586f10",
+                "reference": "9c67b64f90f9737c2d10279554c7a856ca586f10",
                 "shasum": ""
             },
             "require": {
@@ -2126,7 +2126,7 @@
                 "issues": "https://github.com/utopia-php/mongo/issues",
                 "source": "https://github.com/utopia-php/mongo/tree/feat-bulk-writes-2"
             },
-            "time": "2025-07-20T10:59:11+00:00"
+            "time": "2025-07-21T07:00:47+00:00"
         },
         {
             "name": "utopia-php/pools",

@@ -235,7 +235,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function updateDocument(string $collection, string $id, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -491,6 +491,11 @@ class Pool extends Adapter
     }
 
     protected function execute(mixed $stmt): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSequences(string $collection, array $documents): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

@@ -697,10 +697,11 @@ abstract class Adapter
      * @param string $collection
      * @param string $id
      * @param Document $document
+     * @param bool $skipPermissions
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, string $id, Document $document): Document;
+    abstract public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document;
 
     /**
      * Update documents
@@ -732,6 +733,13 @@ abstract class Adapter
         string $attribute,
         array $changes
     ): array;
+
+    /**
+     * @param string $collection
+     * @param array<Document> $documents
+     * @return array<Document>
+     */
+    abstract public function getSequences(string $collection, array $documents): array;
 
     /**
      * Delete Document

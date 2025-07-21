@@ -9,9 +9,6 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Database;
 use Utopia\Mongo\Client;
-use Utopia\Database\Helpers\Permission;
-use Utopia\Database\Helpers\Role;
-use Utopia\Database\Document;
 
 class MongoDBTest extends Base
 {

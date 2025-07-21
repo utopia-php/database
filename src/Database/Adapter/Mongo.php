@@ -535,6 +535,7 @@ class Mongo extends Adapter
     public function deleteAttribute(string $collection, string $id): bool
     {
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
+
         $this->getClient()->update(
             $collection,
             [],
@@ -867,14 +868,14 @@ class Mongo extends Adapter
         }
 
         $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
-        
+
         if (empty($result)) {
             return new Document([]);
         }
 
         $result = $this->replaceChars('_', '$', (array)$result[0]);
         $result = $this->timeToDocument($result);
-       
+
         return new Document($result);
     }
 
@@ -982,14 +983,14 @@ class Mongo extends Adapter
      */
     private function insertDocument(string $name, array $document, array $options = []): array
     {
-       
+
         try {
             $result = $this->client->insert($name, $document, $options);
-           
-          
+
+
             $filters = [];
             $filters['_uid'] = $document['_uid'];
-           
+
             if ($this->sharedTables) {
                 $filters['_tenant'] = $this->getTenant();
             }
@@ -999,12 +1000,12 @@ class Mongo extends Adapter
                 $name,
                 $filters,
                 array_merge($options, ['limit' => 1])
-                )->cursor->firstBatch[0];
-           
-                /**
-                 * TODO Do we even need this find?
-                 * We can just return the result from the insertDocument.
-                 */
+            )->cursor->firstBatch[0];
+
+            /**
+             * TODO Do we even need this find?
+             * We can just return the result from the insertDocument.
+             */
 
             return $this->client->toArray($result);
         } catch (MongoException $e) {

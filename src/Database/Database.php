@@ -1242,10 +1242,6 @@ class Database
 
                         $isArray = $collectionAttribute->getAttribute('array', false);
                         if ($isArray) {
-                            if (!$this->adapter->getSupportForIndexArray()) {
-                                throw new IndexException('Indexing an array attribute is not supported');
-                            }
-
                             if ($this->adapter->getMaxIndexLength() > 0) {
                                 $lengths[$i] = self::ARRAY_INDEX_LENGTH;
                             }
@@ -1274,7 +1270,8 @@ class Database
             $validator = new IndexValidator(
                 $attributes,
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2199,7 +2196,8 @@ class Database
                     $validator = new IndexValidator(
                         $attributes,
                         $this->adapter->getMaxIndexLength(),
-                        $this->adapter->getInternalIndexesKeys()
+                        $this->adapter->getInternalIndexesKeys(),
+                        $this->adapter->getSupportForIndexArray()
                     );
 
                     foreach ($indexes as $index) {
@@ -3079,10 +3077,6 @@ class Database
 
                     $isArray = $collectionAttribute->getAttribute('array', false);
                     if ($isArray) {
-                        if (!$this->adapter->getSupportForIndexArray()) {
-                            throw new IndexException('Indexing an array attribute is not supported');
-                        }
-
                         if ($this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = self::ARRAY_INDEX_LENGTH;
                         }
@@ -3108,7 +3102,8 @@ class Database
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

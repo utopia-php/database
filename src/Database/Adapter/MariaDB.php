@@ -2102,4 +2102,12 @@ class MariaDB extends SQL
     {
         return true;
     }
+
+    public function getSupportForIndexArray(): bool
+    {
+        /**
+         * Disabled to be compatible with Mysql adapter
+         */
+        return false;
+    }
 }

@@ -348,6 +348,7 @@ class Mongo extends Adapter
         // Returns an array/object with the result document
         try {
             $this->getClient()->createCollection($id);
+
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage(), $e->getCode(), $e);
         }
@@ -1111,7 +1112,6 @@ class Mongo extends Adapter
 
         try {
             $name = $this->getNamespace() . '_' . $this->filter($collection);
-
             $attribute = $this->filter($attribute);
 
             $documentIds = [];
@@ -1322,7 +1322,8 @@ class Mongo extends Adapter
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
         $filters = $this->timeFilter($filters);
-        $options = $this->addTransactionContext([]);
+
+        $options = [];
 
         try {
             $count = $this->client->delete(
@@ -1402,7 +1403,6 @@ class Mongo extends Adapter
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
-
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $filters = $this->buildFilters($queries);

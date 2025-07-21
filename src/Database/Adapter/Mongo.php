@@ -89,6 +89,11 @@ class Mongo extends Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
+        // If the database is not a replica set, we can't use transactions
+        if(!$this->client->isReplicaSet()){
+            return true;
+        }
+
         // Removed the attmpts to retry the transaction.
         //Unlike pdo if we run theabortTransaction more then once (same transactioId),
         // it will throw an error the there is no transaction in progress.
@@ -1162,7 +1167,7 @@ class Mongo extends Adapter
             }
 
             $options = $this->addTransactionContext([]);
-            $this->client->bulkUpsert(
+            $this->client->upsert(
                 $name,
                 $operations,
                 options: $options

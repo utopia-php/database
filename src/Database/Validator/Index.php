@@ -162,7 +162,7 @@ class Index extends Validator
                 }
 
                 if ($this->arrayIndexSupport === false) {
-                    $this->message = 'Indexing an array attribute is temporarily disabled';
+                    $this->message = 'Indexing an array attribute is not supported';
                     return false;
                 }
             } elseif ($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {

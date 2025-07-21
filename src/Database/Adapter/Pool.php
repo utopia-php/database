@@ -494,4 +494,9 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
+
+    public function getSequences(string $collection, array $documents): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
 }

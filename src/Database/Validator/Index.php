@@ -196,7 +196,7 @@ class Index extends Validator
             switch ($attribute->getAttribute('type')) {
                 case Database::VAR_STRING:
                     $attributeSize = $attribute->getAttribute('size', 0);
-                    $indexLength = $lengths[$attributePosition] ?? $attributeSize;
+                    $indexLength = !empty($lengths[$attributePosition]) ? $lengths[$attributePosition] : $attributeSize;
                     break;
                 case Database::VAR_FLOAT:
                     $attributeSize = 2; // 8 bytes / 4 mb4

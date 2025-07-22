@@ -1504,11 +1504,7 @@ class Postgres extends SQL
         try {
             $stmt = $this->getPDO()->prepare($sql);
             foreach ($binds as $key => $value) {
-                if ($key === ":sequence") {
-                    $stmt->bindValue($key, $value, PDO::PARAM_INT);
-                } else {
-                    $stmt->bindValue($key, $value, $this->getPDOType($value));
-                }
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
             }
 
             $this->execute($stmt);
@@ -1768,14 +1764,9 @@ class Postgres extends SQL
                         Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
-                    if ($attribute === $this->quote("_id")) {
-                        $binds[":sequence"] = $value;
-                        $conditions[] = "{$alias}.{$attribute} {$operator} :sequence";
-                    } else {
-                        $binds[":{$placeholder}_{$key}"] = $value;
-                        $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";
-                    }
 
+                    $binds[":{$placeholder}_{$key}"] = $value;
+                    $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";
                 }
 
                 return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';

@@ -4132,7 +4132,7 @@ class Database
             sort($originalPermissions);
             sort($currentPermissions);
 
-            $skipPermissionsUpdate = ($originalPermissions === $currentPermissions && $document->getAttribute('$permissions') !== null);
+            $skipPermissionsUpdate = $originalPermissions === $currentPermissions;
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID

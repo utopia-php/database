@@ -6054,8 +6054,6 @@ class Database
             }
         }
 
-        unset($query);
-
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
         return $results;

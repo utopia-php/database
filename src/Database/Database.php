@@ -6732,52 +6732,60 @@ class Database
         $nestedSelections = [];
 
         foreach ($queries as $query) {
-            if ($query->getMethod() == Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($values as $valueIndex => $value) {
-                    if (\str_contains($value, '.')) {
-                        // Shift the top level off the dot-path to pass the selection down the chain
-                        // 'foo.bar.baz' becomes 'bar.baz'
-                        $nestedSelections[] = Query::select([
-                            \implode('.', \array_slice(\explode('.', $value), 1))
-                        ]);
-
-                        $selectedKey = \explode('.', $value)[0];
-
-                        foreach ($relationships as $relationship) {
-                            $key = $relationship->getAttribute('key');
-                            $type = $relationship->getAttribute('options')['relationType'];
-                            $side = $relationship->getAttribute('options')['side'];
-
-                            if ($key === $selectedKey) {
-                                switch ($type) {
-                                    case Database::RELATION_MANY_TO_MANY:
-                                        unset($values[$valueIndex]);
-                                        break;
-                                    case Database::RELATION_ONE_TO_MANY:
-                                        if ($side === Database::RELATION_SIDE_PARENT) {
-                                            unset($values[$valueIndex]);
-                                        } else {
-                                            $values[$valueIndex] = $selectedKey;
-                                        }
-                                        break;
-                                    case Database::RELATION_MANY_TO_ONE:
-                                        if ($side === Database::RELATION_SIDE_PARENT) {
-                                            $values[$valueIndex] = $selectedKey;
-                                        } else {
-                                            unset($values[$valueIndex]);
-                                        }
-                                        break;
-                                    case Database::RELATION_ONE_TO_ONE:
-                                        $values[$valueIndex] = $selectedKey;
-                                        break;
-                                }
-                            }
-                        }
-                    }
-                }
-                $query->setValues(\array_values($values));
+            if ($query->getMethod() !== Query::TYPE_SELECT) {
+                continue;
             }
+
+            $values = $query->getValues();
+            foreach ($values as $valueIndex => $value) {
+                if (!\str_contains($value, '.')) {
+                    continue;
+                }
+
+                $selectedKey = \explode('.', $value)[0];
+
+                $relationship = \array_values(\array_filter(
+                    $relationships,
+                    fn (Document $relationship) => $relationship->getAttribute('key') === $selectedKey,
+                ))[0] ?? null;
+
+                if (!$relationship) {
+                    continue;
+                }
+
+                // Shift the top level off the dot-path to pass the selection down the chain
+                // 'foo.bar.baz' becomes 'bar.baz'
+                $nestedSelections[] = Query::select([
+                    \implode('.', \array_slice(\explode('.', $value), 1))
+                ]);
+
+                $type = $relationship->getAttribute('options')['relationType'];
+                $side = $relationship->getAttribute('options')['side'];
+
+                switch ($type) {
+                    case Database::RELATION_MANY_TO_MANY:
+                        unset($values[$valueIndex]);
+                        break;
+                    case Database::RELATION_ONE_TO_MANY:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            unset($values[$valueIndex]);
+                        } else {
+                            $values[$valueIndex] = $selectedKey;
+                        }
+                        break;
+                    case Database::RELATION_MANY_TO_ONE:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            $values[$valueIndex] = $selectedKey;
+                        } else {
+                            unset($values[$valueIndex]);
+                        }
+                        break;
+                    case Database::RELATION_ONE_TO_ONE:
+                        $values[$valueIndex] = $selectedKey;
+                        break;
+                }
+            }
+            $query->setValues(\array_values($values));
         }
 
         return $nestedSelections;

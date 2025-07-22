@@ -235,7 +235,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

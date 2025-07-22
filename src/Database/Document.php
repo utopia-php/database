@@ -82,6 +82,12 @@ class Document extends ArrayObject
      */
     public function getPermissions(): array
     {
+        var_dump('====');
+        var_dump(isset($this['$permissions']));
+        var_dump($this->getAttribute('$permissions'));
+        var_dump($this->getAttribute('$permissions', []));
+        var_dump('====');
+
         return \array_values(\array_unique($this->getAttribute('$permissions', [])));
     }
 

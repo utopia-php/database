@@ -21,7 +21,46 @@ use Utopia\Database\Validator\Authorization;
 
 trait DocumentTests
 {
-    public function testCreateDocument(): Document
+
+    public function testDecodePermissions(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        Authorization::disable();
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'status', Database::VAR_STRING, 20, true);
+
+        $document = new Document([
+            '$id' => 'd1',
+            'status' => 'processing',
+        ]);
+
+        $document = $database->createDocument(__FUNCTION__, $document);
+        var_dump($document);
+        var_dump($document->getPermissions());
+
+exit;
+
+        $document->setAttribute('status', 'available');
+
+
+        $document = $database->updateDocument(__FUNCTION__, $document->getId(), $document);
+        var_dump($document);
+
+        Authorization::reset();
+
+        var_dump($document->getPermissions());
+
+        var_dump($document);
+
+        $this->assertEquals('d1', $document->getId());
+        $this->assertEquals([], $document->getPermissions());
+        $this->assertArrayHasKey('$permissions', $document);
+
+        $this->assertEquals(true, false);
+    }
+
+        public function testCreateDocument(): Document
     {
         /** @var Database $database */
         $database = static::getDatabase();

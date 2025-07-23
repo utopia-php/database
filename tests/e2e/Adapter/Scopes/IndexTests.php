@@ -28,7 +28,9 @@ trait IndexTests
          * Check ticks sounding cast index for reserved words
          */
         $database->createAttribute('indexes', 'int', Database::VAR_INTEGER, 8, false, array:true);
-        $database->createIndex('indexes', 'indx8711', Database::INDEX_KEY, ['int'], [255]);
+        if ($database->getAdapter()->getSupportForIndexArray()) {
+            $database->createIndex('indexes', 'indx8711', Database::INDEX_KEY, ['int'], [255]);
+        }
 
         $database->createAttribute('indexes', 'name', Database::VAR_STRING, 10, false);
 
@@ -163,7 +165,8 @@ trait IndexTests
         $validator = new Index(
             $attributes,
             $database->getAdapter()->getMaxIndexLength(),
-            $database->getAdapter()->getInternalIndexesKeys()
+            $database->getAdapter()->getInternalIndexesKeys(),
+            $database->getAdapter()->getSupportForIndexArray()
         );
 
         $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
@@ -237,7 +240,8 @@ trait IndexTests
         $validator = new Index(
             $attributes,
             $database->getAdapter()->getMaxIndexLength(),
-            $database->getAdapter()->getInternalIndexesKeys()
+            $database->getAdapter()->getInternalIndexesKeys(),
+            $database->getAdapter()->getSupportForIndexArray()
         );
         $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
         $this->assertFalse($validator->isValid($indexes[0]));
@@ -291,6 +295,34 @@ trait IndexTests
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals($errorMessage, $e->getMessage());
+        }
+    }
+
+    public function testIndexLengthZero(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+
+        $database->createAttribute(__FUNCTION__, 'title1', Database::VAR_STRING, 1000, true);
+
+        try {
+            $database->createIndex(__FUNCTION__, 'index_title1', Database::INDEX_KEY, ['title1'], [0]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+        }
+
+
+        $database->createAttribute(__FUNCTION__, 'title2', Database::VAR_STRING, 100, true);
+        $database->createIndex(__FUNCTION__, 'index_title2', Database::INDEX_KEY, ['title2'], [0]);
+
+        try {
+            $database->updateAttribute(__FUNCTION__, 'title2', Database::VAR_STRING, 1000, true);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
         }
     }
 

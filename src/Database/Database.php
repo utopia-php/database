@@ -1271,7 +1271,8 @@ class Database
             $validator = new IndexValidator(
                 $attributes,
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2196,7 +2197,8 @@ class Database
                     $validator = new IndexValidator(
                         $attributes,
                         $this->adapter->getMaxIndexLength(),
-                        $this->adapter->getInternalIndexesKeys()
+                        $this->adapter->getInternalIndexesKeys(),
+                        $this->adapter->getSupportForIndexArray()
                     );
 
                     foreach ($indexes as $index) {
@@ -3101,7 +3103,8 @@ class Database
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -3219,43 +3222,7 @@ class Database
 
         $selects = Query::groupByType($queries)['selections'];
         $selections = $this->validateSelections($collection, $selects);
-        $nestedSelections = [];
-
-        foreach ($queries as $query) {
-            if ($query->getMethod() == Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($values as $valueIndex => $value) {
-                    if (\str_contains($value, '.')) {
-                        // Shift the top level off the dot-path to pass the selection down the chain
-                        // 'foo.bar.baz' becomes 'bar.baz'
-                        $nestedSelections[] = Query::select([
-                            \implode('.', \array_slice(\explode('.', $value), 1))
-                        ]);
-
-                        $key = \explode('.', $value)[0];
-
-                        foreach ($relationships as $relationship) {
-                            if ($relationship->getAttribute('key') === $key) {
-                                switch ($relationship->getAttribute('options')['relationType']) {
-                                    case Database::RELATION_MANY_TO_MANY:
-                                    case Database::RELATION_ONE_TO_MANY:
-                                        unset($values[$valueIndex]);
-                                        break;
-
-                                    case Database::RELATION_MANY_TO_ONE:
-                                    case Database::RELATION_ONE_TO_ONE:
-                                        $values[$valueIndex] = $key;
-                                        break;
-                                }
-                            }
-                        }
-                    }
-                }
-                $query->setValues(\array_values($values));
-            }
-        }
-
-        $queries = \array_values($queries);
+        $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3665,6 +3632,7 @@ class Database
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
 
+        $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
@@ -3752,11 +3720,14 @@ class Database
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
+
             foreach ($batch as $document) {
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
 
+                $document = $this->casting($collection, $document);
                 $document = $this->decode($collection, $document);
                 $onNext && $onNext($document);
                 $modified++;
@@ -5072,6 +5043,8 @@ class Database
                 $chunk
             )));
 
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
+
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
                     $created++;
@@ -6058,50 +6031,7 @@ class Database
         );
 
         $selections = $this->validateSelections($collection, $selects);
-        $nestedSelections = [];
-
-        foreach ($queries as $index => &$query) {
-            switch ($query->getMethod()) {
-                case Query::TYPE_SELECT:
-                    $values = $query->getValues();
-                    foreach ($values as $valueIndex => $value) {
-                        if (\str_contains($value, '.')) {
-                            // Shift the top level off the dot-path to pass the selection down the chain
-                            // 'foo.bar.baz' becomes 'bar.baz'
-                            $nestedSelections[] = Query::select([
-                                \implode('.', \array_slice(\explode('.', $value), 1))
-                            ]);
-
-                            $key = \explode('.', $value)[0];
-
-                            foreach ($relationships as $relationship) {
-                                if ($relationship->getAttribute('key') === $key) {
-                                    switch ($relationship->getAttribute('options')['relationType']) {
-                                        case Database::RELATION_MANY_TO_MANY:
-                                        case Database::RELATION_ONE_TO_MANY:
-                                            unset($values[$valueIndex]);
-                                            break;
-
-                                        case Database::RELATION_MANY_TO_ONE:
-                                        case Database::RELATION_ONE_TO_ONE:
-                                            $values[$valueIndex] = $key;
-                                            break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    $query->setValues(\array_values($values));
-                    break;
-                default:
-                    if (\str_contains($query->getAttribute(), '.')) {
-                        unset($queries[$index]);
-                    }
-                    break;
-            }
-        }
-
-        $queries = \array_values($queries);
+        $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         $getResults = fn () => $this->adapter->find(
             $collection->getId(),
@@ -6129,8 +6059,6 @@ class Database
                 $node->setAttribute('$collection', $collection->getId());
             }
         }
-
-        unset($query);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
@@ -6476,6 +6404,8 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
+        $attributes = \array_merge($attributes, $this->getInternalAttributes());
+
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
@@ -6781,7 +6711,7 @@ class Database
      * @return void
      * @throws QueryException
      */
-    public function checkQueriesType(array $queries)
+    private function checkQueriesType(array $queries): void
     {
         foreach ($queries as $query) {
             if (!$query instanceof Query) {
@@ -6792,5 +6722,78 @@ class Database
                 $this->checkQueriesType($query->getValues());
             }
         }
+    }
+
+    /**
+     * Process relationship queries, extracting nested selections.
+     *
+     * @param array<Document> $relationships
+     * @param array<Query> $queries
+     * @return array<Query>
+     */
+    private function processRelationshipQueries(
+        array $relationships,
+        array $queries,
+    ): array {
+        $nestedSelections = [];
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() !== Query::TYPE_SELECT) {
+                continue;
+            }
+
+            $values = $query->getValues();
+            foreach ($values as $valueIndex => $value) {
+                if (!\str_contains($value, '.')) {
+                    continue;
+                }
+
+                $selectedKey = \explode('.', $value)[0];
+
+                $relationship = \array_values(\array_filter(
+                    $relationships,
+                    fn (Document $relationship) => $relationship->getAttribute('key') === $selectedKey,
+                ))[0] ?? null;
+
+                if (!$relationship) {
+                    continue;
+                }
+
+                // Shift the top level off the dot-path to pass the selection down the chain
+                // 'foo.bar.baz' becomes 'bar.baz'
+                $nestedSelections[] = Query::select([
+                    \implode('.', \array_slice(\explode('.', $value), 1))
+                ]);
+
+                $type = $relationship->getAttribute('options')['relationType'];
+                $side = $relationship->getAttribute('options')['side'];
+
+                switch ($type) {
+                    case Database::RELATION_MANY_TO_MANY:
+                        unset($values[$valueIndex]);
+                        break;
+                    case Database::RELATION_ONE_TO_MANY:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            unset($values[$valueIndex]);
+                        } else {
+                            $values[$valueIndex] = $selectedKey;
+                        }
+                        break;
+                    case Database::RELATION_MANY_TO_ONE:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            $values[$valueIndex] = $selectedKey;
+                        } else {
+                            unset($values[$valueIndex]);
+                        }
+                        break;
+                    case Database::RELATION_ONE_TO_ONE:
+                        $values[$valueIndex] = $selectedKey;
+                        break;
+                }
+            }
+            $query->setValues(\array_values($values));
+        }
+
+        return $nestedSelections;
     }
 }

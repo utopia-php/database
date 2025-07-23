@@ -829,6 +829,7 @@ class Mirror extends Database
         array $queries = [],
         int $batchSize = self::DELETE_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         $modified = 0;
 
@@ -840,6 +841,7 @@ class Mirror extends Database
                 $onNext && $onNext($doc);
                 $modified++;
             },
+            $onError
         );
 
         if (

@@ -445,6 +445,7 @@ trait DocumentTests
         foreach ($results as $index => $document) {
             $createdAt[$index] = $document->getCreatedAt();
             $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty(true, $document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -481,6 +482,7 @@ trait DocumentTests
 
         foreach ($results as $document) {
             $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty(true, $document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -3953,27 +3955,6 @@ trait DocumentTests
          */
         $selects = ['$sequence', '$id', '$collection', '$permissions', '$updatedAt'];
 
-        try {
-            // a non existent document to test the error thrown
-            $database->deleteDocuments(
-                collection: 'bulk_delete',
-                queries: [
-                    Query::select([...$selects, '$createdAt']),
-                    Query::lessThan('$createdAt', '1800-01-01'),
-                    Query::orderAsc('$createdAt'),
-                    Query::orderAsc(),
-                    Query::limit(1),
-                ],
-                batchSize: 1,
-                onNext: function () {
-                    throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-                }
-            );
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-        }
-
         $count = $database->deleteDocuments(
             collection: 'bulk_delete',
             queries: [
@@ -3984,25 +3965,13 @@ trait DocumentTests
                 Query::orderAsc(),
                 Query::limit(2),
             ],
-            batchSize: 1,
-            onNext: function () {
-                throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-            },
-            onError:function ($e) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-            }
+            batchSize: 1
         );
 
         $this->assertEquals(2, $count);
 
         // TEST: Bulk Delete All Documents
-        $this->assertEquals(8, $database->deleteDocuments('bulk_delete', onNext: function () {
-            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-        }));
+        $this->assertEquals(8, $database->deleteDocuments('bulk_delete'));
 
         $docs = $database->find('bulk_delete');
         $this->assertCount(0, $docs);
@@ -4015,10 +3984,6 @@ trait DocumentTests
             Query::greaterThanEqual('integer', 5)
         ], onNext: function ($doc) use (&$results) {
             $results[] = $doc;
-            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         });
 
         $this->assertEquals(5, $count);
@@ -4035,16 +4000,7 @@ trait DocumentTests
 
         try {
             $this->getDatabase()->withRequestTimestamp($oneHourAgo, function () {
-                return $this->getDatabase()->deleteDocuments('bulk_delete', onNext: function () {
-                    throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-                }, onError:function ($e) {
-                    if ($e instanceof Exception) {
-                        $this->assertInstanceOf(Exception::class, $e);
-                        $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-                    } else {
-                        $this->fail("Caught value is not an Exception.");
-                    }
-                });
+                return $this->getDatabase()->deleteDocuments('bulk_delete');
             });
             $this->fail('Failed to throw exception');
         } catch (ConflictException $e) {
@@ -4088,12 +4044,7 @@ trait DocumentTests
             Permission::delete(Role::any())
         ], false);
 
-        $database->deleteDocuments('bulk_delete', onNext: function () {
-            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-        });
+        $database->deleteDocuments('bulk_delete');
 
         $this->assertEquals(0, \count($this->getDatabase()->find('bulk_delete')));
 
@@ -4138,20 +4089,10 @@ trait DocumentTests
         // Test limit
         $this->propagateBulkDocuments('bulk_delete_queries');
 
-        $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)], onNext: function () {
-            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-        }));
+        $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
         $this->assertEquals(5, \count($database->find('bulk_delete_queries')));
 
-        $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)], onNext: function () {
-            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-        }));
+        $this->assertEquals(5, $database->deleteDocuments('bulk_delete_queries', [Query::limit(5)]));
         $this->assertEquals(0, \count($database->find('bulk_delete_queries')));
 
         // Test Limit more than batchSize
@@ -4174,6 +4115,130 @@ trait DocumentTests
         $this->assertEquals(50, $database->deleteDocuments('bulk_delete_queries'));
 
         $database->deleteCollection('bulk_delete_queries');
+    }
+
+    public function testDeleteBulkDocumentsWithCallbackSupport(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(
+            'bulk_delete_with_callback',
+            attributes: [
+                new Document([
+                    '$id' => 'text',
+                    'type' => Database::VAR_STRING,
+                    'size' => 100,
+                    'required' => true,
+                ]),
+                new Document([
+                    '$id' => 'integer',
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 10,
+                    'required' => true,
+                ])
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::delete(Role::any())
+            ],
+            documentSecurity: false
+        );
+
+        $this->propagateBulkDocuments('bulk_delete_with_callback');
+
+        $docs = $database->find('bulk_delete_with_callback');
+        $this->assertCount(10, $docs);
+
+        /**
+         * Test Short select query, test pagination as well, Add order to select
+         */
+        $selects = ['$sequence', '$id', '$collection', '$permissions', '$updatedAt'];
+
+        try {
+            // a non existent document to test the error thrown
+            $database->deleteDocuments(
+                collection: 'bulk_delete_with_callback',
+                queries: [
+                    Query::select([...$selects, '$createdAt']),
+                    Query::lessThan('$createdAt', '1800-01-01'),
+                    Query::orderAsc('$createdAt'),
+                    Query::orderAsc(),
+                    Query::limit(1),
+                ],
+                batchSize: 1,
+                onNext: function () {
+                    throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
+                }
+            );
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+        }
+
+        $docs = $database->find('bulk_delete_with_callback');
+        $this->assertCount(10, $docs);
+
+        $count = $database->deleteDocuments(
+            collection: 'bulk_delete_with_callback',
+            queries: [
+                Query::select([...$selects, '$createdAt']),
+                Query::cursorAfter($docs[6]),
+                Query::greaterThan('$createdAt', '2000-01-01'),
+                Query::orderAsc('$createdAt'),
+                Query::orderAsc(),
+                Query::limit(2),
+            ],
+            batchSize: 1,
+            onNext: function () {
+                // simulating error throwing but should not stop deletion
+                throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
+            },
+            onError:function ($e) {
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+            }
+        );
+
+        $this->assertEquals(2, $count);
+
+        // TEST: Bulk Delete All Documents without passing callbacks
+        $this->assertEquals(8, $database->deleteDocuments('bulk_delete_with_callback'));
+
+        $docs = $database->find('bulk_delete_with_callback');
+        $this->assertCount(0, $docs);
+
+        // TEST: Bulk delete documents with queries with callbacks
+        $this->propagateBulkDocuments('bulk_delete_with_callback');
+
+        $results = [];
+        $count = $database->deleteDocuments('bulk_delete_with_callback', [
+            Query::greaterThanEqual('integer', 5)
+        ], onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
+        }, onError:function ($e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+        });
+
+        $this->assertEquals(5, $count);
+
+        foreach ($results as $document) {
+            $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
+        }
+
+        $docs = $database->find('bulk_delete_with_callback');
+        $this->assertEquals(5, \count($docs));
+
+        // Teardown
+        $database->deleteCollection('bulk_delete_with_callback');
     }
 
     public function testUpdateDocumentsQueries(): void

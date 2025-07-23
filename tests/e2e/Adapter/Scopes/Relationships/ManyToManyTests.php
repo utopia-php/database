@@ -1581,12 +1581,7 @@ trait ManyToManyTests
 
         // Delete person
         try {
-            $this->getDatabase()->deleteDocuments('bulk_delete_person_m2m', onNext: function () {
-                throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-            }, onError:function ($e) {
-                $this->assertInstanceOf(Exception::class, $e);
-                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-            });
+            $this->getDatabase()->deleteDocuments('bulk_delete_person_m2m');
             $this->fail('Failed to throw exception');
         } catch (RestrictedException $e) {
             $this->assertEquals('Cannot delete document because it has at least one related document.', $e->getMessage());
@@ -1594,20 +1589,10 @@ trait ManyToManyTests
 
         // Restrict Cleanup
         $this->getDatabase()->deleteRelationship('bulk_delete_person_m2m', 'bulk_delete_library_m2m');
-        $this->getDatabase()->deleteDocuments('bulk_delete_library_m2m', onNext: function () {
-            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-        });
+        $this->getDatabase()->deleteDocuments('bulk_delete_library_m2m');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library_m2m'));
 
-        $this->getDatabase()->deleteDocuments('bulk_delete_person_m2m', onNext: function () {
-            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
-        });
+        $this->getDatabase()->deleteDocuments('bulk_delete_person_m2m');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person_m2m'));
     }
 }

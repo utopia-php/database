@@ -77,7 +77,7 @@ class DocumentTest extends TestCase
         $data = [
             '$permissions' => null,
             'dog' => null,
-            //'bla' => true, // When adding this tests are passing, meaning the null entry is not last in the document
+            //'bla' => true, // When adding this line, tests are passing, meaning the 'dog' => null entry is not last in the document
         ];
 
         $this->assertEquals(null, $data['dog']);

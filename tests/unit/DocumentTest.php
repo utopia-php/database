@@ -8,6 +8,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Validator\Authorization;
 
 class DocumentTest extends TestCase
 {
@@ -66,6 +67,45 @@ class DocumentTest extends TestCase
 
     public function tearDown(): void
     {
+    }
+
+    public function testDocumentNulls(): void
+    {
+
+//        $doc = new \ArrayObject($nulls);
+//        var_dump(isset($doc['error']));
+//        var_dump(isset($doc['$shmuel']));
+
+        $data = [
+            '$permissions' => null,
+            'shmuel' => null,
+        ];
+
+        /**
+         * Expected
+         */
+        $this->assertEquals(null, $data['shmuel']);
+        $this->assertEquals(false, isset($data['shmuel']));
+
+
+        $document = new Document($data);
+
+        $this->assertEquals(null, $document['$permissions']);
+        $this->assertEquals(false, isset($document['$permissions']));
+
+        $this->assertEquals(null, $document['shmuel']);
+        $this->assertEquals(false, isset($document['shmuel']));
+
+        var_dump(isset($document['shmuel']));
+        $this->assertEquals(true, $document['shmuel']);
+        $this->assertEquals(true, $document['shmuel']);
+        exit;
+
+        var_dump($document->getAttribute('error', 'error'));
+        var_dump($document->getAttribute('$permissions', '$permissions'));
+        var_dump($document->getAttribute('shmuel', 'shmuel'));
+
+        $this->assertEquals(true, false);
     }
 
     public function testId(): void

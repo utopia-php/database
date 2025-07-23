@@ -79,6 +79,7 @@ class DocumentTest extends TestCase
         $data = [
             '$permissions' => null,
             'shmuel' => null,
+            //'bla' => true, // When adding this tests are passing
         ];
 
         /**
@@ -87,25 +88,13 @@ class DocumentTest extends TestCase
         $this->assertEquals(null, $data['shmuel']);
         $this->assertEquals(false, isset($data['shmuel']));
 
-
         $document = new Document($data);
 
         $this->assertEquals(null, $document['$permissions']);
         $this->assertEquals(false, isset($document['$permissions']));
 
         $this->assertEquals(null, $document['shmuel']);
-        $this->assertEquals(false, isset($document['shmuel']));
-
-        var_dump(isset($document['shmuel']));
-        $this->assertEquals(true, $document['shmuel']);
-        $this->assertEquals(true, $document['shmuel']);
-        exit;
-
-        var_dump($document->getAttribute('error', 'error'));
-        var_dump($document->getAttribute('$permissions', '$permissions'));
-        var_dump($document->getAttribute('shmuel', 'shmuel'));
-
-        $this->assertEquals(true, false);
+        $this->assertEquals(false, isset($document['shmuel'])); // Why is failing?????
     }
 
     public function testId(): void

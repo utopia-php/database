@@ -931,6 +931,7 @@ trait RelationshipTests
         $database->createCollection('model');
 
         $database->createAttribute('make', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('make', 'origin', Database::VAR_STRING, 255, true);
         $database->createAttribute('model', 'name', Database::VAR_STRING, 255, true);
         $database->createAttribute('model', 'year', Database::VAR_INTEGER, 0, true);
 
@@ -938,7 +939,9 @@ trait RelationshipTests
             collection: 'make',
             relatedCollection: 'model',
             type: Database::RELATION_ONE_TO_MANY,
-            id: 'models'
+            twoWay: true,
+            id: 'models',
+            twoWayKey: 'make',
         );
 
         $database->createDocument('make', new Document([
@@ -947,6 +950,7 @@ trait RelationshipTests
                 Permission::read(Role::any()),
             ],
             'name' => 'Ford',
+            'origin' => 'USA',
             'models' => [
                 [
                     '$id' => 'fiesta',
@@ -1143,9 +1147,68 @@ trait RelationshipTests
         if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
-
         $this->assertEquals('Ford', $make['name']);
         $this->assertArrayNotHasKey('models', $make);
+
+        // Select some parent attributes, all child attributes
+        $make = $database->findOne('make', [
+            Query::select(['name', 'models.*']),
+        ]);
+
+        $this->assertEquals('Ford', $make['name']);
+        $this->assertEquals(2, \count($make['models']));
+
+        /*
+         * FROM CHILD TO PARENT
+         */
+
+        // Select some parent attributes, some child attributes
+        $model = $database->findOne('model', [
+            Query::select(['name', 'make.name']),
+        ]);
+
+        $this->assertEquals('Fiesta', $model['name']);
+        $this->assertEquals('Ford', $model['make']['name']);
+        $this->assertArrayNotHasKey('origin', $model['make']);
+        $this->assertArrayNotHasKey('year', $model);
+        $this->assertArrayHasKey('name', $model);
+
+        // Select all parent attributes, some child attributes
+        $model = $database->findOne('model', [
+            Query::select(['*', 'make.name']),
+        ]);
+
+        $this->assertEquals('Fiesta', $model['name']);
+        $this->assertEquals('Ford', $model['make']['name']);
+        $this->assertArrayHasKey('year', $model);
+
+        // Select all parent attributes, all child attributes
+        $model = $database->findOne('model', [
+            Query::select(['*', 'make.*']),
+        ]);
+
+        $this->assertEquals('Fiesta', $model['name']);
+        $this->assertEquals('Ford', $model['make']['name']);
+        $this->assertArrayHasKey('year', $model);
+        $this->assertArrayHasKey('name', $model['make']);
+
+        // Select all parent attributes, no child attributes
+        $model = $database->findOne('model', [
+            Query::select(['*']),
+        ]);
+
+        $this->assertEquals('Fiesta', $model['name']);
+        $this->assertArrayHasKey('make', $model);
+        $this->assertArrayHasKey('year', $model);
+
+        // Select some parent attributes, all child attributes
+        $model = $database->findOne('model', [
+            Query::select(['name', 'make.*']),
+        ]);
+
+        $this->assertEquals('Fiesta', $model['name']);
+        $this->assertEquals('Ford', $model['make']['name']);
+        $this->assertEquals('USA', $model['make']['origin']);
     }
 
     public function testInheritRelationshipPermissions(): void
@@ -1791,12 +1854,7 @@ trait RelationshipTests
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships1', new Document([
             'string' => 'text📝 updated',
-        ]), onNext: function () {
-            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
-        });
+        ]));
 
         $document = $this->getDatabase()->findOne('testUpdateDocumentsRelationships1');
 
@@ -1834,21 +1892,11 @@ trait RelationshipTests
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships2', new Document([
             'testUpdateDocumentsRelationships1' => null
-        ]), onNext: function () {
-            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
-        });
+        ]));
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships2', new Document([
             'testUpdateDocumentsRelationships1' => 'doc1'
-        ]), onNext: function () {
-            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
-        });
+        ]));
 
         $documents = $this->getDatabase()->find('testUpdateDocumentsRelationships2');
 

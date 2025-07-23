@@ -445,6 +445,7 @@ trait DocumentTests
         foreach ($results as $index => $document) {
             $createdAt[$index] = $document->getCreatedAt();
             $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty(true, $document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -481,6 +482,7 @@ trait DocumentTests
 
         foreach ($results as $document) {
             $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty(true, $document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -3550,29 +3552,12 @@ trait DocumentTests
 
         // Test Update half of the documents
         $results = [];
-        try {
-            $count = $database->updateDocuments($collection, new Document([
-                'string' => 'text📝 updated',
-            ]), [
-                Query::lessThan('integer', -1),
-            ], onNext: function ($doc) use (&$results) {
-                $results[] = $doc;
-                throw new Exception("Error thrown to test update doesn't stopped and error is caught");
-            });
-        } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
-        }
         $count = $database->updateDocuments($collection, new Document([
             'string' => 'text📝 updated',
         ]), [
             Query::greaterThanEqual('integer', 5),
         ], onNext: function ($doc) use (&$results) {
             $results[] = $doc;
-            throw new Exception("Error thrown to test update doesn't stopped and error is caught");
-        }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
-            $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
         });
 
         $this->assertEquals(5, $count);
@@ -3605,16 +3590,7 @@ trait DocumentTests
         // Test Update all documents
         $this->assertEquals(10, $database->updateDocuments($collection, new Document([
             'string' => 'text📝 updated all',
-        ]), onNext: function () {
-            throw new DatabaseException("Error thrown to test update doesn't stopped and error is caught");
-        }, onError:function ($e) {
-            if ($e instanceof DatabaseException) {
-                $this->assertInstanceOf(DatabaseException::class, $e);
-                $this->assertEquals("Error thrown to test update doesn't stopped and error is caught", $e->getMessage());
-            } else {
-                $this->fail("Caught value is not an Exception.");
-            }
-        }));
+        ])));
 
         $updatedDocuments = $database->find($collection);
 

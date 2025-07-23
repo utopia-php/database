@@ -3427,6 +3427,7 @@ trait DocumentTests
         return $document;
     }
 
+
     /**
      * @depends testUpdateDocument
      */
@@ -3691,6 +3692,102 @@ trait DocumentTests
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
     }
+
+    public function testUpdateDocumentsWithCallbackSupport(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'update_callback';
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $database->createCollection($collection, attributes: [
+            new Document([
+                '$id' => ID::custom('string'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('integer'),
+                'type' => Database::VAR_INTEGER,
+                'format' => '',
+                'size' => 10000,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ], documentSecurity: false);
+
+        for ($i = 0; $i < 10; $i++) {
+            $database->createDocument($collection, new Document([
+                '$id' => 'doc' . $i,
+                'string' => 'text📝 ' . $i,
+                'integer' => $i
+            ]));
+        }
+        // Test onNext is throwing the error without the onError
+        // a non existent document to test the error thrown
+        try {
+            $results = [];
+            $count = $database->updateDocuments($collection, new Document([
+                'string' => 'text📝 updated',
+            ]), [
+                Query::greaterThanEqual('integer', 100),
+            ], onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+                throw new Exception("Error thrown to test that update doesn't stop and error is caught");
+            });
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
+        }
+
+        // Test Update half of the documents
+        $results = [];
+        $count = $database->updateDocuments($collection, new Document([
+            'string' => 'text📝 updated',
+        ]), [
+            Query::greaterThanEqual('integer', 5),
+        ], onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+            throw new Exception("Error thrown to test that update doesn't stop and error is caught");
+        }, onError:function ($e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
+        });
+
+        $this->assertEquals(5, $count);
+
+        foreach ($results as $document) {
+            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+        }
+
+        $updatedDocuments = $database->find($collection, [
+            Query::greaterThanEqual('integer', 5),
+        ]);
+
+        $this->assertCount(5, $updatedDocuments);
+    }
+
     /**
      * @depends testCreateDocument
      */

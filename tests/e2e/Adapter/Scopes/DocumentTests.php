@@ -22,13 +22,35 @@ use Utopia\Database\Validator\Authorization;
 trait DocumentTests
 {
 
-    public function testDecodePermissions(): void
+    public function testBla(): void
     {
+        $nulls = [
+            'error' => null,
+            '$permissions' => null,
+            'shmuel' => null,
+        ];
+
+//        $doc = new \ArrayObject($nulls);
+//        var_dump(isset($doc['error']));
+//        var_dump(isset($doc['$shmuel']));
+
+        $document = new Document($nulls);
+
+        var_dump(isset($document['shmuel']));
+exit;
+
+        var_dump($document->getAttribute('error', 'error'));
+        var_dump($document->getAttribute('$permissions', '$permissions'));
+        var_dump($document->getAttribute('shmuel', 'shmuel'));
+
+        exit;
+
         /** @var Database $database */
         $database = static::getDatabase();
         Authorization::disable();
         $database->createCollection(__FUNCTION__);
         $database->createAttribute(__FUNCTION__, 'status', Database::VAR_STRING, 20, true);
+
 
         $document = new Document([
             '$id' => 'd1',

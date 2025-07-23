@@ -3427,6 +3427,7 @@ trait DocumentTests
         return $document;
     }
 
+
     /**
      * @depends testUpdateDocument
      */
@@ -3691,6 +3692,102 @@ trait DocumentTests
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
     }
+
+    public function testUpdateDocumentsWithCallbackSupport(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'update_callback';
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $database->createCollection($collection, attributes: [
+            new Document([
+                '$id' => ID::custom('string'),
+                'type' => Database::VAR_STRING,
+                'format' => '',
+                'size' => 100,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('integer'),
+                'type' => Database::VAR_INTEGER,
+                'format' => '',
+                'size' => 10000,
+                'signed' => true,
+                'required' => false,
+                'default' => null,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ], documentSecurity: false);
+
+        for ($i = 0; $i < 10; $i++) {
+            $database->createDocument($collection, new Document([
+                '$id' => 'doc' . $i,
+                'string' => 'text📝 ' . $i,
+                'integer' => $i
+            ]));
+        }
+        // Test onNext is throwing the error without the onError
+        // a non existent document to test the error thrown
+        try {
+            $results = [];
+            $count = $database->updateDocuments($collection, new Document([
+                'string' => 'text📝 updated',
+            ]), [
+                Query::greaterThanEqual('integer', 100),
+            ], onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+                throw new Exception("Error thrown to test that update doesn't stop and error is caught");
+            });
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
+        }
+
+        // Test Update half of the documents
+        $results = [];
+        $count = $database->updateDocuments($collection, new Document([
+            'string' => 'text📝 updated',
+        ]), [
+            Query::greaterThanEqual('integer', 5),
+        ], onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+            throw new Exception("Error thrown to test that update doesn't stop and error is caught");
+        }, onError:function ($e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
+        });
+
+        $this->assertEquals(5, $count);
+
+        foreach ($results as $document) {
+            $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+        }
+
+        $updatedDocuments = $database->find($collection, [
+            Query::greaterThanEqual('integer', 5),
+        ]);
+
+        $this->assertCount(5, $updatedDocuments);
+    }
+
     /**
      * @depends testCreateDocument
      */
@@ -4115,6 +4212,130 @@ trait DocumentTests
         $this->assertEquals(50, $database->deleteDocuments('bulk_delete_queries'));
 
         $database->deleteCollection('bulk_delete_queries');
+    }
+
+    public function testDeleteBulkDocumentsWithCallbackSupport(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(
+            'bulk_delete_with_callback',
+            attributes: [
+                new Document([
+                    '$id' => 'text',
+                    'type' => Database::VAR_STRING,
+                    'size' => 100,
+                    'required' => true,
+                ]),
+                new Document([
+                    '$id' => 'integer',
+                    'type' => Database::VAR_INTEGER,
+                    'size' => 10,
+                    'required' => true,
+                ])
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::delete(Role::any())
+            ],
+            documentSecurity: false
+        );
+
+        $this->propagateBulkDocuments('bulk_delete_with_callback');
+
+        $docs = $database->find('bulk_delete_with_callback');
+        $this->assertCount(10, $docs);
+
+        /**
+         * Test Short select query, test pagination as well, Add order to select
+         */
+        $selects = ['$sequence', '$id', '$collection', '$permissions', '$updatedAt'];
+
+        try {
+            // a non existent document to test the error thrown
+            $database->deleteDocuments(
+                collection: 'bulk_delete_with_callback',
+                queries: [
+                    Query::select([...$selects, '$createdAt']),
+                    Query::lessThan('$createdAt', '1800-01-01'),
+                    Query::orderAsc('$createdAt'),
+                    Query::orderAsc(),
+                    Query::limit(1),
+                ],
+                batchSize: 1,
+                onNext: function () {
+                    throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
+                }
+            );
+        } catch (Exception $e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+        }
+
+        $docs = $database->find('bulk_delete_with_callback');
+        $this->assertCount(10, $docs);
+
+        $count = $database->deleteDocuments(
+            collection: 'bulk_delete_with_callback',
+            queries: [
+                Query::select([...$selects, '$createdAt']),
+                Query::cursorAfter($docs[6]),
+                Query::greaterThan('$createdAt', '2000-01-01'),
+                Query::orderAsc('$createdAt'),
+                Query::orderAsc(),
+                Query::limit(2),
+            ],
+            batchSize: 1,
+            onNext: function () {
+                // simulating error throwing but should not stop deletion
+                throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
+            },
+            onError:function ($e) {
+                $this->assertInstanceOf(Exception::class, $e);
+                $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+            }
+        );
+
+        $this->assertEquals(2, $count);
+
+        // TEST: Bulk Delete All Documents without passing callbacks
+        $this->assertEquals(8, $database->deleteDocuments('bulk_delete_with_callback'));
+
+        $docs = $database->find('bulk_delete_with_callback');
+        $this->assertCount(0, $docs);
+
+        // TEST: Bulk delete documents with queries with callbacks
+        $this->propagateBulkDocuments('bulk_delete_with_callback');
+
+        $results = [];
+        $count = $database->deleteDocuments('bulk_delete_with_callback', [
+            Query::greaterThanEqual('integer', 5)
+        ], onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+            throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
+        }, onError:function ($e) {
+            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
+        });
+
+        $this->assertEquals(5, $count);
+
+        foreach ($results as $document) {
+            $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
+        }
+
+        $docs = $database->find('bulk_delete_with_callback');
+        $this->assertEquals(5, \count($docs));
+
+        // Teardown
+        $database->deleteCollection('bulk_delete_with_callback');
     }
 
     public function testUpdateDocumentsQueries(): void

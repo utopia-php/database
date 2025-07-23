@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Restricted as RestrictedException;
+use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -2071,5 +2072,87 @@ trait OneToManyTests
         $relation2 = $database->getCollection('relation2');
         $this->assertCount(0, $relation2->getAttribute('attributes'));
         $this->assertCount(0, $relation2->getAttribute('indexes'));
+    }
+    public function testUpdateParentAndChild_OneToMany(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (
+            !$database->getAdapter()->getSupportForRelationships() ||
+            !$database->getAdapter()->getSupportForBatchOperations()
+        ) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $parentCollection = 'parent_combined_o2m';
+        $childCollection = 'child_combined_o2m';
+
+        $database->createCollection($parentCollection);
+        $database->createCollection($childCollection);
+
+        $database->createAttribute($parentCollection, 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute($childCollection, 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute($childCollection, 'parentNumber', Database::VAR_INTEGER, 0, false);
+
+        $database->createRelationship(
+            collection: $parentCollection,
+            relatedCollection: $childCollection,
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'parentNumber'
+        );
+
+        $database->createDocument($parentCollection, new Document([
+            '$id' => 'parent1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Parent 1',
+        ]));
+
+        $database->createDocument($childCollection, new Document([
+            '$id' => 'child1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Child 1',
+            'parentNumber' => null,
+        ]));
+
+        $database->updateDocuments(
+            $parentCollection,
+            new Document(['name' => 'Parent 1 Updated']),
+            [Query::equal('$id', ['parent1'])]
+        );
+
+        $parentDoc = $database->getDocument($parentCollection, 'parent1');
+        $this->assertEquals('Parent 1 Updated', $parentDoc->getAttribute('name'), 'Parent should be updated');
+
+        $childDoc = $database->getDocument($childCollection, 'child1');
+        $this->assertEquals('Child 1', $childDoc->getAttribute('name'), 'Child should remain unchanged');
+
+        // invalid update to child
+        try {
+            $database->updateDocuments(
+                $childCollection,
+                new Document(['parentNumber' => 'not-a-number']),
+                [Query::equal('$id', ['child1'])]
+            );
+            $this->fail('Expected exception was not thrown for invalid parentNumber type');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(Structure::class, $e);
+        }
+
+        // parent remains unaffected
+        $parentDocAfter = $database->getDocument($parentCollection, 'parent1');
+        $this->assertEquals('Parent 1 Updated', $parentDocAfter->getAttribute('name'), 'Parent should not be affected by failed child update');
+
+        $database->deleteCollection($parentCollection);
+        $database->deleteCollection($childCollection);
     }
 }

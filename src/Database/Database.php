@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
@@ -4273,6 +4274,7 @@ class Database
      * @param array<Query> $queries
      * @param int $batchSize
      * @param callable|null $onNext
+     * @param callable|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws ConflictException
@@ -4289,6 +4291,7 @@ class Database
         array $queries = [],
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         if ($updates->isEmpty()) {
             return 0;
@@ -4389,30 +4392,29 @@ class Database
                 break;
             }
 
-            foreach ($batch as &$document) {
-                $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+            $this->withTransaction(function () use ($collection, $updates, &$batch) {
+                foreach ($batch as &$document) {
+                    $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
 
-                if ($this->resolveRelationships) {
-                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
+                    if ($this->resolveRelationships) {
+                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
+                    }
+
+                    $document = $new;
+
+                    // Check if document was updated after the request timestamp
+                    try {
+                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    } catch (Exception $e) {
+                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                    }
+
+                    if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                        throw new ConflictException('Document was updated after the request timestamp');
+                    }
+
+                    $document = $this->encode($collection, $document);
                 }
-
-                $document = $new;
-
-                // Check if document was updated after the request timestamp
-                try {
-                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-                } catch (Exception $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                }
-
-                if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                    throw new ConflictException('Document was updated after the request timestamp');
-                }
-
-                $document = $this->encode($collection, $document);
-            }
-
-            $this->withTransaction(function () use ($collection, $updates, $batch) {
                 $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
@@ -4423,7 +4425,11 @@ class Database
             foreach ($batch as $doc) {
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
-                $onNext && $onNext($doc);
+                try {
+                    $onNext && $onNext($doc);
+                } catch (Throwable $th) {
+                    $onError ? $onError($th) : throw $th;
+                }
                 $modified++;
             }
 

@@ -6033,7 +6033,7 @@ class Database
         /**  @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
-            self::convertQueries($collection, $filters)
+            $this->convertQueries($collection, $filters)
         );
 
         $selections = $this->validateSelections($collection, $selects);
@@ -6193,7 +6193,7 @@ class Database
         }
 
         $queries = Query::groupByType($queries)['filters'];
-        $queries = self::convertQueries($collection, $queries);
+        $queries = $this->convertQueries($collection, $queries);
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
@@ -6237,7 +6237,7 @@ class Database
             }
         }
 
-        $queries = self::convertQueries($collection, $queries);
+        $queries = $this->convertQueries($collection, $queries);
 
         $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
 
@@ -6606,7 +6606,7 @@ class Database
      * @throws QueryException
      * @throws Exception
      */
-    public static function convertQueries(Document $collection, array $queries): array
+    public function convertQueries(Document $collection, array $queries): array
     {
         $attributes = $collection->getAttribute('attributes', []);
 

@@ -8,7 +8,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Validator\Authorization;
 
 class DocumentTest extends TestCase
 {
@@ -72,9 +71,9 @@ class DocumentTest extends TestCase
     public function testDocumentNulls(): void
     {
 
-//        $doc = new \ArrayObject($nulls);
-//        var_dump(isset($doc['error']));
-//        var_dump(isset($doc['$shmuel']));
+        //        $doc = new \ArrayObject($nulls);
+        //        var_dump(isset($doc['error']));
+        //        var_dump(isset($doc['$shmuel']));
 
         $data = [
             '$permissions' => null,

@@ -70,30 +70,26 @@ class DocumentTest extends TestCase
 
     public function testDocumentNulls(): void
     {
-
         //        $doc = new \ArrayObject($nulls);
         //        var_dump(isset($doc['error']));
-        //        var_dump(isset($doc['$shmuel']));
+        //        var_dump(isset($doc['$dog']));
 
         $data = [
             '$permissions' => null,
-            'shmuel' => null,
+            'dog' => null,
             //'bla' => true, // When adding this tests are passing
         ];
 
-        /**
-         * Expected
-         */
-        $this->assertEquals(null, $data['shmuel']);
-        $this->assertEquals(false, isset($data['shmuel']));
+        $this->assertEquals(null, $data['dog']);
+        $this->assertEquals(false, isset($data['dog']));
 
         $document = new Document($data);
 
         $this->assertEquals(null, $document['$permissions']);
         $this->assertEquals(false, isset($document['$permissions']));
 
-        $this->assertEquals(null, $document['shmuel']);
-        $this->assertEquals(false, isset($document['shmuel'])); // Why is failing?????
+        $this->assertEquals(null, $document['dog']);
+        $this->assertEquals(false, isset($document['dog'])); // Why is failing?????
     }
 
     public function testId(): void

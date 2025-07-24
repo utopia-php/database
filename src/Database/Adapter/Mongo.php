@@ -90,7 +90,7 @@ class Mongo extends Adapter
     public function withTransaction(callable $callback): mixed
     {
         // If the database is not a replica set, we can't use transactions
-        if(!$this->client->isReplicaSet()){
+        if (!$this->client->isReplicaSet()) {
             return true;
         }
 

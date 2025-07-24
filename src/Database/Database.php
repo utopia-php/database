@@ -3300,6 +3300,8 @@ class Database
             return $document;
         }
 
+        $document = $this->adapter->castingAfter($collection, $document);
+
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
@@ -3653,12 +3655,16 @@ class Database
             throw new StructureException($structure->getDescription());
         }
 
+        $document = $this->adapter->castingBefore($collection, $document);
+
         $document = $this->withTransaction(function () use ($collection, $document) {
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
             return $this->adapter->createDocument($collection->getId(), $document);
         });
+
+        $document = $this->adapter->castingAfter($collection, $document);
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
@@ -3744,6 +3750,9 @@ class Database
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
+
+            $document = $this->adapter->castingBefore($collection, $document);
+
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
@@ -3752,6 +3761,7 @@ class Database
             });
 
             foreach ($batch as $document) {
+                $document = $this->adapter->castingAfter($collection, $document);
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
@@ -4275,7 +4285,12 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
+            $document = $this->adapter->castingBefore($collection, $document);
+
             $this->adapter->updateDocument($collection->getId(), $id, $document);
+
+            $document = $this->adapter->castingAfter($collection, $document);
+
             $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
@@ -4437,11 +4452,15 @@ class Database
                 if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                     throw new ConflictException('Document was updated after the request timestamp');
                 }
-
                 $document = $this->encode($collection, $document);
+                $document = $this->adapter->castingBefore($collection, $document);
             }
+            unset($document);
+
+            $updates = $this->adapter->castingBefore($collection, $updates);
 
             $this->withTransaction(function () use ($collection, $updates, $batch) {
+
                 $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
@@ -4450,6 +4469,7 @@ class Database
             });
 
             foreach ($batch as $doc) {
+                $doc = $this->adapter->castingAfter($collection, $doc);
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
                 $onNext && $onNext($doc);
@@ -5045,6 +5065,9 @@ class Database
 
             $seenIds[] = $document->getId();
 
+            $old = $this->adapter->castingBefore($collection, $old);
+            $document = $this->adapter->castingBefore($collection, $document);
+
             $documents[$key] = new Change(
                 old: $old,
                 new: $document
@@ -5075,6 +5098,9 @@ class Database
             }
 
             foreach ($batch as $doc) {
+
+                $doc = $this->adapter->castingAfter($collection, $doc);
+
                 if ($this->resolveRelationships) {
                     $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
@@ -6043,12 +6069,16 @@ class Database
             throw new DatabaseException("cursor Document must be from the same Collection.");
         }
 
+        if (!empty($cursor)) {
+            $cursor = $this->adapter->castingBefore($collection, $cursor);
+        }
+
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
         /**  @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
-            self::convertQueries($collection, $filters)
+            $this->convertQueries($collection, $filters)
         );
 
         $selections = $this->validateSelections($collection, $selects);
@@ -6112,6 +6142,10 @@ class Database
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         foreach ($results as &$node) {
+            //var_dump($node);
+            $node = $this->adapter->castingAfter($collection, $node);
+
+
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
@@ -6124,6 +6158,7 @@ class Database
             }
         }
 
+        unset($node);
         unset($query);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
@@ -6253,7 +6288,7 @@ class Database
         }
 
         $queries = Query::groupByType($queries)['filters'];
-        $queries = self::convertQueries($collection, $queries);
+        $queries = $this->convertQueries($collection, $queries);
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
@@ -6297,7 +6332,7 @@ class Database
             }
         }
 
-        $queries = self::convertQueries($collection, $queries);
+        $queries = $this->convertQueries($collection, $queries);
 
         $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
 
@@ -6664,7 +6699,7 @@ class Database
      * @throws QueryException
      * @throws Exception
      */
-    public static function convertQueries(Document $collection, array $queries): array
+    public function convertQueries(Document $collection, array $queries): array
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -6685,7 +6720,11 @@ class Database
                         $values = $query->getValues();
                         foreach ($values as $valueIndex => $value) {
                             try {
-                                $values[$valueIndex] = DateTime::setTimezone($value);
+                                if ($this->adapter->isMongo()) {
+                                    $values[$valueIndex] = $this->adapter->setUTCDatetime($value);
+                                } else {
+                                    $values[$valueIndex] = DateTime::setTimezone($value);
+                                }
                             } catch (\Throwable $e) {
                                 throw new QueryException($e->getMessage(), $e->getCode(), $e);
                             }

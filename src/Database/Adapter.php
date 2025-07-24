@@ -1200,4 +1200,43 @@ abstract class Adapter
      * @return bool
      */
     abstract protected function execute(mixed $stmt): bool;
+
+    /**
+        * Returns the document after casting
+        * @param Document $collection
+        * @param Document $document
+        * @return Document
+        */
+    abstract public function castingBefore(Document $collection, Document $document): Document;
+
+    /**
+     * Returns the document after casting
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     */
+    abstract public function castingAfter(Document $collection, Document $document): Document;
+
+    /**
+     * Is Mongo?
+     *
+     * @return bool
+     */
+    abstract public function isMongo(): bool;
+
+    /**
+     * Is internal casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForInternalCasting(): bool;
+
+    /**
+    * Set UTC Datetime
+    *
+    * @param string $value
+    * @return mixed
+    */
+    abstract public function setUTCDatetime(string $value): mixed;
+
 }

@@ -809,6 +809,59 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Is internal casting supported?
+     *
+     * @return bool
+     */
+    public function getSupportForInternalCasting(): bool
+    {
+        return false;
+    }
+
+    /**
+      * Returns the document after casting
+      * @param Document $collection
+      * @param Document $document
+      * @return Document
+      */
+    public function castingBefore(Document $collection, Document $document): Document
+    {
+        return $document;
+    }
+
+    /**
+     * Returns the document after casting
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     */
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        return $document;
+    }
+
+    /**
+        * Is Mongo?
+        *
+        * @return bool
+        */
+    public function isMongo(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Set UTC Datetime
+     *
+     * @param string $value
+     * @return mixed
+     */
+    public function setUTCDatetime(string $value): mixed
+    {
+        return $value;
+    }
+
+    /**
      * Is index supported?
      *
      * @return bool

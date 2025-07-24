@@ -1044,15 +1044,16 @@ class Postgres extends SQL
     /**
      * Update Document
      *
+     *
      * @param string $collection
      * @param string $id
      * @param Document $document
-     *
+     * @param bool $skipPermissions
      * @return Document
      * @throws DatabaseException
      * @throws DuplicateException
      */
-    public function updateDocument(string $collection, string $id, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1062,6 +1063,7 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $columns = '';
 
+        if (!$skipPermissions) {
         $sql = "
 			SELECT _type, _permission
 			FROM {$this->getSQLTable($name . '_perms')}
@@ -1127,7 +1129,7 @@ class Postgres extends SQL
             foreach ($removals as $type => $permissions) {
                 $removeQuery .= "(
                     _type = '{$type}'
-                    AND _permission IN (" . implode(', ', \array_map(fn (string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
+                    AND _permission IN (" . implode(', ', \array_map(fn(string $i) => ":_remove_{$type}_{$i}", \array_keys($permissions))) . ")
                 )";
                 if ($type !== \array_key_last($removals)) {
                     $removeQuery .= ' OR ';
@@ -1193,6 +1195,7 @@ class Postgres extends SQL
                 }
             }
         }
+    }
 
         /**
          * Update Attributes

@@ -3590,6 +3590,10 @@ class Database
             ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
             ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
+        if (!$document->offsetExists('$permissions')){
+            $document->setAttribute('$permissions', []);
+        }
+
         if ($this->adapter->getSharedTables()) {
             if ($this->adapter->getTenantPerDocument()) {
                 if (
@@ -4091,6 +4095,18 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
+            $skipPermissionsUpdate = false;
+
+            if ($document->offsetExists('$permissions')){
+                $originalPermissions = $old->getPermissions();
+                $currentPermissions  = $document->getPermissions();
+
+                sort($originalPermissions);
+                sort($currentPermissions);
+
+                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+            }
+
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -4247,7 +4263,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $id, $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document, $skipPermissionsUpdate);
             $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
@@ -4913,12 +4929,21 @@ class Database
                 )));
             }
 
-            $updatesPermissions = \in_array('$permissions', \array_keys($document->getArrayCopy()))
-                && $document->getPermissions() != $old->getPermissions();
+            $skipPermissionsUpdate = false;
+
+            if ($document->offsetExists('$permissions')){
+                $originalPermissions = $old->getPermissions();
+                $currentPermissions  = $document->getPermissions();
+
+                sort($originalPermissions);
+                sort($currentPermissions);
+
+                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+            }
 
             if (
                 empty($attribute)
-                && !$updatesPermissions
+                && $skipPermissionsUpdate
                 && $old->getAttributes() == $document->getAttributes()
             ) {
                 // If not updating a single attribute and the
@@ -4974,7 +4999,7 @@ class Database
                 }
             }
 
-            if (!$updatesPermissions) {
+            if ($skipPermissionsUpdate) {
                 $document->setAttribute('$permissions', $old->getPermissions());
             }
 

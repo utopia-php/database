@@ -6,6 +6,8 @@ use Exception;
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
+use MongoDB\BSON\Int32;
+use MongoDB\BSON\Int64;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -191,10 +193,11 @@ class Mongo extends Adapter
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
+
         if ($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
-
+     
         // Returns an array/object with the result document
         try {
             $this->getClient()->createCollection($id);
@@ -203,18 +206,38 @@ class Mongo extends Adapter
             throw new Duplicate($e->getMessage(), $e->getCode(), $e);
         }
 
-        $indexesCreated = $this->client->createIndexes($id, [[
-            'key' => ['_uid' => $this->getOrder(Database::ORDER_DESC)],
-            'name' => '_uid',
-            'unique' => true,
-            'collation' => [ // https://docs.mongodb.com/manual/core/index-case-insensitive/#create-a-case-insensitive-index
-                'locale' => 'en',
-                'strength' => 1,
+        $internalIndex = [
+            [
+                'key' => ['_uid' => $this->getOrder(Database::ORDER_ASC)],
+                'name' => '_uid',
+                'unique' => true,
+                'collation' => [
+                    'locale' => 'en',
+                    'strength' => 1,
+                ]
+            ],
+            [
+                'key' => ['_createdAt' => $this->getOrder(Database::ORDER_ASC)],
+                'name' => '_createdAt',
+            ],
+            [
+                'key' => ['_updatedAt' => $this->getOrder(Database::ORDER_ASC)],
+                'name' => '_updatedAt',
+            ],
+            [
+                'key' => ['_permissions' => $this->getOrder(Database::ORDER_ASC)],
+                'name' => '_permissions',
             ]
-        ], [
-            'key' => ['_permissions' => $this->getOrder(Database::ORDER_DESC)],
-            'name' => '_permissions',
-        ]]);
+        ];
+
+        if ($this->sharedTables) {
+            foreach ($internalIndex as &$index) {
+                $index['key'] = array_merge(['_tenant' => $this->getOrder(Database::ORDER_ASC)], $index['key']);
+            }
+            unset($index);
+        }
+
+        $indexesCreated = $this->client->createIndexes($id, $internalIndex);
 
         if (!$indexesCreated) {
             return false;
@@ -222,7 +245,7 @@ class Mongo extends Adapter
 
         // Since attributes are not used by this adapter
         // Only act when $indexes is provided
-
+       
         if (!empty($indexes)) {
             /**
              * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
@@ -236,6 +259,11 @@ class Mongo extends Adapter
                 $unique = false;
                 $attributes = $index->getAttribute('attributes');
                 $orders = $index->getAttribute('orders');
+
+                // If sharedTables, always add _tenant as the first key
+                if ($this->sharedTables) {
+                    $key['_tenant'] = $this->getOrder(Database::ORDER_ASC);
+                }
 
                 foreach ($attributes as $attribute) {
                     $attribute = $this->filter($attribute);
@@ -268,6 +296,7 @@ class Mongo extends Adapter
                 return false;
             }
         }
+        
         return true;
     }
 
@@ -596,8 +625,12 @@ class Mongo extends Adapter
         $indexes = [];
         $options = [];
 
-        // pass in custom index name
         $indexes['name'] = $id;
+
+        // If sharedTables, always add _tenant as the first key
+        if ($this->sharedTables) {
+            $indexes['key']['_tenant'] = $this->getOrder(Database::ORDER_ASC);
+        }
 
         foreach ($attributes as $i => $attribute) {
             $attribute = $this->filter($attribute);
@@ -726,13 +759,13 @@ class Mongo extends Adapter
         }
 
         $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
-
+        
         if (empty($result)) {
             return new Document([]);
         }
 
         $result = $this->replaceChars('_', '$', (array)$result[0]);
-        $result = $this->timeToDocument($result);
+        //$result = $this->timeToDocument($result);
 
         return new Document($result);
     }
@@ -760,7 +793,7 @@ class Mongo extends Adapter
         }
 
         $record = $this->replaceChars('$', '_', (array)$document);
-        $record = $this->timeToMongo($record);
+        //$record = $this->timeToMongo($record);
 
         // Insert manual id if set
         if (!empty($sequence)) {
@@ -770,10 +803,129 @@ class Mongo extends Adapter
         $result = $this->insertDocument($name, $this->removeNullKeys($record));
 
         $result = $this->replaceChars('_', '$', $result);
-        $result = $this->timeToDocument($result);
+        //$result = $this->timeToDocument($result);
 
         return new Document($result);
     }
+
+
+       /**
+     * Returns the document after casting from
+     *@param Document $collection
+     * @param Document $document
+
+     * @return Document
+     */
+public function internalCastingFrom($collection, $document): Document
+{
+
+    if (!$this->getSupportForInternalCasting()) {
+        return $document;
+    }
+
+    if($document->isEmpty()){
+        return $document;
+    }
+
+    $attributes = $collection->getAttribute('attributes', []);
+
+    $attributes = \array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
+   
+    foreach ($attributes as $attribute) {
+        $key = $attribute['$id'] ?? '';
+        $type = $attribute['type'] ?? '';
+        $array = $attribute['array'] ?? false;
+        $value = $document->getAttribute($key, null);
+        if (is_null($value)) {
+            continue;
+        }
+        
+        if ($array) {
+            $value = !is_string($value)
+                ? $value
+                : json_decode($value, true);
+        } else {
+            $value = [$value];
+        }
+        
+        foreach ($value as &$node) {
+            //var_dump([$type, $key, $node]);
+            switch ($type) {
+                case Database::VAR_INTEGER:
+                    $node = (int)$node;
+                break;
+                case Database::VAR_DATETIME :
+                    $node =  DateTime::format($node->toDateTime());
+                    break;
+                default:
+                    break;
+            }
+        }
+        unset($node);
+        $document->setAttribute($key, ($array) ? $value : $value[0]);
+    }
+
+    return $document;
+}
+
+
+
+       /**
+     * Returns the document after casting to
+     *@param Document $collection
+     * @param Document $document
+
+     * @return Document
+     */
+public function internalCastingTo($collection, $document): Document
+{
+
+    if (!$this->getSupportForInternalCasting()) {
+        return $document;
+    }
+
+  if($document->isEmpty()){
+        return $document;
+    }
+
+    $attributes = $collection->getAttribute('attributes', []);
+
+    $attributes = \array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
+
+    foreach ($attributes as $attribute) {
+ 
+        $key = $attribute['$id'] ?? '';
+        $type = $attribute['type'] ?? '';
+        $array = $attribute['array'] ?? false;
+        
+        $value = $document->getAttribute($key, null);
+        if (is_null($value)) {
+            continue;
+        }
+        
+        if ($array) {
+            $value = !is_string($value)
+                ? $value
+                : json_decode($value, true);
+        } else {
+            $value = [$value];
+        }
+        
+        foreach ($value as &$node) {
+            switch ($type) {
+                case Database::VAR_DATETIME :
+                    $node = new UTCDateTime(new \DateTime($node));
+                    break;
+                default:
+                    break;
+            }
+        }
+        unset($node);
+        $document->setAttribute($key, ($array) ? $value : $value[0]);
+    }
+
+    return $document;
+}
 
     /**
      * Create Documents in batches
@@ -809,7 +961,7 @@ class Mongo extends Adapter
             }
 
             $record = $this->replaceChars('$', '_', (array)$document);
-            $record = $this->timeToMongo($record);
+            //$record = $this->timeToMongo($record);
 
             if (!empty($sequence)) {
                 $record['_id'] = $sequence;
@@ -822,7 +974,7 @@ class Mongo extends Adapter
 
         foreach ($documents as $index => $document) {
             $documents[$index] = $this->replaceChars('_', '$', $this->client->toArray($document));
-            $documents[$index] = $this->timeToDocument($documents[$index]);
+            //$documents[$index] = $this->timeToDocument($documents[$index]);
 
             $documents[$index] = new Document($documents[$index]);
         }
@@ -863,6 +1015,8 @@ class Mongo extends Adapter
         }
     }
 
+
+
     /**
      * Update Document
      *
@@ -879,7 +1033,7 @@ class Mongo extends Adapter
 
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
-        $record = $this->timeToMongo($record);
+        //$record = $this->timeToMongo($record);
 
         $filters = [];
         $filters['_uid'] = $id;
@@ -926,7 +1080,7 @@ class Mongo extends Adapter
 
         $record = $updates->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
-        $record = $this->timeToMongo($record);
+       //$record = $this->timeToMongo($record);
 
         $updateQuery = [
             '$set' => $record,
@@ -964,10 +1118,9 @@ class Mongo extends Adapter
             foreach ($changes as $change) {
                 $document = $change->getNew();
                 $attributes = $document->getAttributes();
-
                 $attributes['_uid'] = $document->getId();
-                $attributes['_createdAt'] = $document->getCreatedAt();
-                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_createdAt'] = $document['$createdAt'];
+                $attributes['_updatedAt'] = $document['$updatedAt'];
                 $attributes['_permissions'] = $document->getPermissions();
 
                 if (!empty($document->getSequence())) {
@@ -982,10 +1135,9 @@ class Mongo extends Adapter
                 }
 
                 $record = $this->replaceChars('$', '_', $attributes);
-                $record = $this->timeToMongo($record);
+                //$record = $this->timeToMongo($record);
                 $record = $this->removeNullKeys($record);
-
-
+        
                 // Build filter for upsert
                 $filter = ['_uid' => $document->getId()];
                 if ($this->sharedTables) {
@@ -1159,8 +1311,7 @@ class Mongo extends Adapter
         }
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
-        $filters = $this->timeFilter($filters);
-
+        //$filters = $this->timeFilter($filters);
         $options = [];
 
         try {
@@ -1241,7 +1392,7 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $queries = array_map(fn ($query) => clone $query, $queries);
-
+       
         $filters = $this->buildFilters($queries);
 
         if ($this->sharedTables) {
@@ -1314,7 +1465,7 @@ class Mongo extends Adapter
                 }
 
                 $tmp = $cursor[$originalAttribute];
-
+         
                 if ($originalAttribute === '$sequence') {
                     $tmp = new ObjectId($tmp);
 
@@ -1342,10 +1493,10 @@ class Mongo extends Adapter
         if (!empty($orFilters)) {
             $filters['$or'] = $orFilters;
         }
-
+        
         // Translate operators and handle time filters
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
-        $filters = $this->timeFilter($filters);
+        //$filters = $this->timeFilter($filters);
 
         $found = [];
 
@@ -1355,17 +1506,13 @@ class Mongo extends Adapter
             throw $this->processException($e);
         }
 
-
         if (empty($results)) {
             return $found;
         }
 
-
         foreach ($this->client->toArray($results) as $result) {
             $record = $this->replaceChars('_', '$', (array)$result);
-
-            $record = $this->timeToDocument($record);
-
+            //$record = $this->timeToDocument($record);
             $found[] = new Document($record);
         }
 
@@ -1433,6 +1580,7 @@ class Mongo extends Adapter
      */
     private function timeToMongo(array $record): array
     {
+
         if (isset($record['_createdAt'])) {
             $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
         }
@@ -1876,6 +2024,28 @@ class Mongo extends Adapter
     {
         return false;
     }
+
+    /**
+     * Is internal casting supported?
+     *
+     * @return bool
+     */
+    public function  getSupportForInternalCasting(): bool
+    {
+        return true;
+    }
+
+    
+    public function isMongo(): bool
+    {
+        return true;
+    }
+
+    public function setUTCDatetime(string $value): mixed
+    {
+        return new UTCDateTime(new \DateTime($value));
+    }
+
 
     /**
      * Are attributes supported?

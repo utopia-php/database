@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use PhpParser\Node\Scalar\MagicConst\Dir;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -1200,4 +1201,41 @@ abstract class Adapter
      * @return bool
      */
     abstract protected function execute(mixed $stmt): bool;
+
+    /**
+     * Returns the document after casting from
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     */
+    abstract public function internalCastingFrom(Document $collection, Document $document): Document;
+
+    /**
+     * Returns the document after casting to
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     */
+    abstract public function internalCastingTo(Document $collection, Document $document): Document;
+    /**
+     * @return bool
+     */
+    abstract public function isMongo(): bool;
+
+    /**
+     * Is internal casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForInternalCasting(): bool;
+
+     /**
+     * Set UTC Datetime
+     *
+     * @param string $value
+     * @return mixed
+     */
+    abstract function setUTCDatetime(string $value): mixed;
+
 }
+

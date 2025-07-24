@@ -67,7 +67,7 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => 'Works',
         ]));
-
+       //var_dump($document);
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
@@ -120,7 +120,7 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => 'Works',
         ]));
-
+ 
         $this->assertEquals('56000', $manualIdDocument->getSequence());
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
@@ -246,9 +246,9 @@ trait DocumentTests
         $count = $database->createDocuments($collection, $documents, 3, onNext: function ($doc) use (&$results) {
             $results[] = $doc;
         });
-
+        
         $this->assertEquals($count, \count($results));
-
+     
         foreach ($results as $document) {
             $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
@@ -451,10 +451,11 @@ trait DocumentTests
             $this->assertEquals(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+      
         }
-
+ 
         $documents = $database->find(__FUNCTION__);
-
+        
         $this->assertEquals(2, count($documents));
 
         foreach ($documents as $document) {

@@ -2074,23 +2074,23 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "9c67b64f90f9737c2d10279554c7a856ca586f10"
+                "reference": "0516d0d325ea54c093f18435e0b11795c1293328"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/9c67b64f90f9737c2d10279554c7a856ca586f10",
-                "reference": "9c67b64f90f9737c2d10279554c7a856ca586f10",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/0516d0d325ea54c093f18435e0b11795c1293328",
+                "reference": "0516d0d325ea54c093f18435e0b11795c1293328",
                 "shasum": ""
             },
             "require": {
-                "ext-mongodb": "*",
+                "ext-mongodb": "2.1.1",
                 "mongodb/mongodb": "2.1.0",
                 "php": ">=8.0"
             },
             "require-dev": {
                 "fakerphp/faker": "^1.14",
                 "laravel/pint": "1.2.*",
-                "phpstan/phpstan": "1.8.*",
+                "phpstan/phpstan": "2.1.*",
                 "phpunit/phpunit": "^9.4",
                 "swoole/ide-helper": "4.8.0"
             },
@@ -2126,7 +2126,7 @@
                 "issues": "https://github.com/utopia-php/mongo/issues",
                 "source": "https://github.com/utopia-php/mongo/tree/feat-bulk-writes-2"
             },
-            "time": "2025-07-21T07:00:47+00:00"
+            "time": "2025-07-22T13:34:49+00:00"
         },
         {
             "name": "utopia-php/pools",

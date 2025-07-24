@@ -3590,7 +3590,7 @@ class Database
             ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
             ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
-        if (!$document->offsetExists('$permissions')){
+        if (!$document->offsetExists('$permissions')) {
             $document->setAttribute('$permissions', []);
         }
 
@@ -4097,7 +4097,7 @@ class Database
 
             $skipPermissionsUpdate = false;
 
-            if ($document->offsetExists('$permissions')){
+            if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
                 $currentPermissions  = $document->getPermissions();
 
@@ -4931,7 +4931,7 @@ class Database
 
             $skipPermissionsUpdate = false;
 
-            if ($document->offsetExists('$permissions')){
+            if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
                 $currentPermissions  = $document->getPermissions();
 

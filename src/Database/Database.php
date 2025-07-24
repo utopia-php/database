@@ -3590,10 +3590,6 @@ class Database
             ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
             ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
 
-        if (!$document->offsetExists('$permissions')) {
-            $document->setAttribute('$permissions', []);
-        }
-
         if ($this->adapter->getSharedTables()) {
             if ($this->adapter->getTenantPerDocument()) {
                 if (

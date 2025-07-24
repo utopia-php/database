@@ -6,8 +6,6 @@ use Exception;
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
-use MongoDB\BSON\Int32;
-use MongoDB\BSON\Int64;
 use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -197,7 +195,7 @@ class Mongo extends Adapter
         if ($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
-     
+
         // Returns an array/object with the result document
         try {
             $this->getClient()->createCollection($id);
@@ -245,7 +243,7 @@ class Mongo extends Adapter
 
         // Since attributes are not used by this adapter
         // Only act when $indexes is provided
-       
+
         if (!empty($indexes)) {
             /**
              * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
@@ -296,7 +294,7 @@ class Mongo extends Adapter
                 return false;
             }
         }
-        
+
         return true;
     }
 
@@ -661,7 +659,6 @@ class Mongo extends Adapter
 
         if (!empty($collation) &&
             $type !== Database::INDEX_FULLTEXT) {
-            //$options['collation'] = $collation;
             $indexes['collation'] = [
                 'locale' => 'en',
                 'strength' => 1,
@@ -759,13 +756,12 @@ class Mongo extends Adapter
         }
 
         $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
-        
+
         if (empty($result)) {
             return new Document([]);
         }
 
         $result = $this->replaceChars('_', '$', (array)$result[0]);
-        //$result = $this->timeToDocument($result);
 
         return new Document($result);
     }
@@ -793,7 +789,6 @@ class Mongo extends Adapter
         }
 
         $record = $this->replaceChars('$', '_', (array)$document);
-        //$record = $this->timeToMongo($record);
 
         // Insert manual id if set
         if (!empty($sequence)) {
@@ -803,129 +798,125 @@ class Mongo extends Adapter
         $result = $this->insertDocument($name, $this->removeNullKeys($record));
 
         $result = $this->replaceChars('_', '$', $result);
-        //$result = $this->timeToDocument($result);
 
         return new Document($result);
     }
 
 
-       /**
+    /**
      * Returns the document after casting from
      *@param Document $collection
      * @param Document $document
 
      * @return Document
      */
-public function internalCastingFrom($collection, $document): Document
-{
+    public function castingAfter($collection, $document): Document
+    {
 
-    if (!$this->getSupportForInternalCasting()) {
-        return $document;
-    }
-
-    if($document->isEmpty()){
-        return $document;
-    }
-
-    $attributes = $collection->getAttribute('attributes', []);
-
-    $attributes = \array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
-   
-    foreach ($attributes as $attribute) {
-        $key = $attribute['$id'] ?? '';
-        $type = $attribute['type'] ?? '';
-        $array = $attribute['array'] ?? false;
-        $value = $document->getAttribute($key, null);
-        if (is_null($value)) {
-            continue;
+        if (!$this->getSupportForInternalCasting()) {
+            return $document;
         }
-        
-        if ($array) {
-            $value = !is_string($value)
-                ? $value
-                : json_decode($value, true);
-        } else {
-            $value = [$value];
+
+        if ($document->isEmpty()) {
+            return $document;
         }
-        
-        foreach ($value as &$node) {
-            //var_dump([$type, $key, $node]);
-            switch ($type) {
-                case Database::VAR_INTEGER:
-                    $node = (int)$node;
-                break;
-                case Database::VAR_DATETIME :
-                    $node =  DateTime::format($node->toDateTime());
-                    break;
-                default:
-                    break;
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $attributes = \array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
+
+        foreach ($attributes as $attribute) {
+            $key = $attribute['$id'] ?? '';
+            $type = $attribute['type'] ?? '';
+            $array = $attribute['array'] ?? false;
+            $value = $document->getAttribute($key, null);
+            if (is_null($value)) {
+                continue;
             }
+
+            if ($array) {
+                $value = !is_string($value)
+                    ? $value
+                    : json_decode($value, true);
+            } else {
+                $value = [$value];
+            }
+
+            foreach ($value as &$node) {
+                switch ($type) {
+                    case Database::VAR_INTEGER:
+                        $node = (int)$node;
+                        break;
+                    case Database::VAR_DATETIME :
+                        $node =  DateTime::format($node->toDateTime());
+                        break;
+                    default:
+                        break;
+                }
+            }
+            unset($node);
+            $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
-        unset($node);
-        $document->setAttribute($key, ($array) ? $value : $value[0]);
+
+        return $document;
     }
 
-    return $document;
-}
-
-
-
-       /**
+    /**
      * Returns the document after casting to
      *@param Document $collection
      * @param Document $document
 
      * @return Document
      */
-public function internalCastingTo($collection, $document): Document
-{
+    public function castingBefore($collection, $document): Document
+    {
 
-    if (!$this->getSupportForInternalCasting()) {
-        return $document;
-    }
-
-  if($document->isEmpty()){
-        return $document;
-    }
-
-    $attributes = $collection->getAttribute('attributes', []);
-
-    $attributes = \array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
-
-    foreach ($attributes as $attribute) {
- 
-        $key = $attribute['$id'] ?? '';
-        $type = $attribute['type'] ?? '';
-        $array = $attribute['array'] ?? false;
-        
-        $value = $document->getAttribute($key, null);
-        if (is_null($value)) {
-            continue;
+        if (!$this->getSupportForInternalCasting()) {
+            return $document;
         }
-        
-        if ($array) {
-            $value = !is_string($value)
-                ? $value
-                : json_decode($value, true);
-        } else {
-            $value = [$value];
+
+        if ($document->isEmpty()) {
+            return $document;
         }
-        
-        foreach ($value as &$node) {
-            switch ($type) {
-                case Database::VAR_DATETIME :
-                    $node = new UTCDateTime(new \DateTime($node));
-                    break;
-                default:
-                    break;
+
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $attributes = \array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
+
+        foreach ($attributes as $attribute) {
+
+            $key = $attribute['$id'] ?? '';
+            $type = $attribute['type'] ?? '';
+            $array = $attribute['array'] ?? false;
+
+            $value = $document->getAttribute($key, null);
+            if (is_null($value)) {
+                continue;
             }
-        }
-        unset($node);
-        $document->setAttribute($key, ($array) ? $value : $value[0]);
-    }
 
-    return $document;
-}
+            if ($array) {
+                $value = !is_string($value)
+                    ? $value
+                    : json_decode($value, true);
+            } else {
+                $value = [$value];
+            }
+
+            foreach ($value as &$node) {
+                switch ($type) {
+                    case Database::VAR_DATETIME :
+                        $node = new UTCDateTime(new \DateTime($node));
+                        break;
+                    default:
+                        break;
+                }
+            }
+            unset($node);
+            $document->setAttribute($key, ($array) ? $value : $value[0]);
+        }
+
+        return $document;
+    }
 
     /**
      * Create Documents in batches
@@ -961,7 +952,6 @@ public function internalCastingTo($collection, $document): Document
             }
 
             $record = $this->replaceChars('$', '_', (array)$document);
-            //$record = $this->timeToMongo($record);
 
             if (!empty($sequence)) {
                 $record['_id'] = $sequence;
@@ -974,8 +964,6 @@ public function internalCastingTo($collection, $document): Document
 
         foreach ($documents as $index => $document) {
             $documents[$index] = $this->replaceChars('_', '$', $this->client->toArray($document));
-            //$documents[$index] = $this->timeToDocument($documents[$index]);
-
             $documents[$index] = new Document($documents[$index]);
         }
 
@@ -994,7 +982,7 @@ public function internalCastingTo($collection, $document): Document
     {
 
         try {
-             $this->client->insert($name, $document);
+            $this->client->insert($name, $document);
 
             $filters = [];
             $filters['_uid'] = $document['_uid'];
@@ -1033,7 +1021,6 @@ public function internalCastingTo($collection, $document): Document
 
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
-        //$record = $this->timeToMongo($record);
 
         $filters = [];
         $filters['_uid'] = $id;
@@ -1066,6 +1053,7 @@ public function internalCastingTo($collection, $document): Document
      */
     public function updateDocuments(string $collection, Document $updates, array $documents): int
     {
+        ;
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $queries = [
@@ -1080,7 +1068,7 @@ public function internalCastingTo($collection, $document): Document
 
         $record = $updates->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
-       //$record = $this->timeToMongo($record);
+
 
         $updateQuery = [
             '$set' => $record,
@@ -1135,9 +1123,8 @@ public function internalCastingTo($collection, $document): Document
                 }
 
                 $record = $this->replaceChars('$', '_', $attributes);
-                //$record = $this->timeToMongo($record);
                 $record = $this->removeNullKeys($record);
-        
+
                 // Build filter for upsert
                 $filter = ['_uid' => $document->getId()];
                 if ($this->sharedTables) {
@@ -1160,8 +1147,8 @@ public function internalCastingTo($collection, $document): Document
                     'filter' => $filter,
                     'update' => $update,
                 ];
-            }   
-            
+            }
+
             $this->client->upsert(
                 $name,
                 $operations,
@@ -1311,7 +1298,7 @@ public function internalCastingTo($collection, $document): Document
         }
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
-        //$filters = $this->timeFilter($filters);
+
         $options = [];
 
         try {
@@ -1390,9 +1377,10 @@ public function internalCastingTo($collection, $document): Document
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
+
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $queries = array_map(fn ($query) => clone $query, $queries);
-       
+
         $filters = $this->buildFilters($queries);
 
         if ($this->sharedTables) {
@@ -1465,7 +1453,7 @@ public function internalCastingTo($collection, $document): Document
                 }
 
                 $tmp = $cursor[$originalAttribute];
-         
+
                 if ($originalAttribute === '$sequence') {
                     $tmp = new ObjectId($tmp);
 
@@ -1493,10 +1481,9 @@ public function internalCastingTo($collection, $document): Document
         if (!empty($orFilters)) {
             $filters['$or'] = $orFilters;
         }
-        
+
         // Translate operators and handle time filters
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
-        //$filters = $this->timeFilter($filters);
 
         $found = [];
 
@@ -1512,7 +1499,7 @@ public function internalCastingTo($collection, $document): Document
 
         foreach ($this->client->toArray($results) as $result) {
             $record = $this->replaceChars('_', '$', (array)$result);
-            //$record = $this->timeToDocument($record);
+
             $found[] = new Document($record);
         }
 
@@ -2030,12 +2017,12 @@ public function internalCastingTo($collection, $document): Document
      *
      * @return bool
      */
-    public function  getSupportForInternalCasting(): bool
+    public function getSupportForInternalCasting(): bool
     {
         return true;
     }
 
-    
+
     public function isMongo(): bool
     {
         return true;

@@ -79,9 +79,11 @@ class DocumentTest extends TestCase
 
         $this->assertEquals(null, $document['cat']);
         $this->assertEquals(false, isset($document['cat']));
+        $this->assertEquals('cat', $document->getAttribute('cat', 'cat'));
 
         $this->assertEquals(null, $document['dog']);
         $this->assertEquals(false, isset($document['dog']));
+        $this->assertEquals('dog', $document->getAttribute('dog', 'dog'));
     }
 
     public function testId(): void

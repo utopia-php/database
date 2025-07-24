@@ -50,6 +50,8 @@ class Document extends ArrayObject
             }
         }
 
+        unset($value);
+
         parent::__construct($input);
     }
 

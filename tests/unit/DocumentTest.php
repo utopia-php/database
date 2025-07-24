@@ -70,18 +70,10 @@ class DocumentTest extends TestCase
 
     public function testDocumentNulls(): void
     {
-        //        $doc = new \ArrayObject($nulls);
-        //        var_dump(isset($doc['error']));
-        //        var_dump(isset($doc['$dog']));
-
         $data = [
             '$permissions' => null,
-            'dog' => null,
-            //'bla' => true, // When adding this line, tests are passing, meaning the 'dog' => null entry is not last in the document
+            'dog' => null, // last entry is null
         ];
-
-        $this->assertEquals(null, $data['dog']);
-        $this->assertEquals(false, isset($data['dog']));
 
         $document = new Document($data);
 
@@ -89,7 +81,7 @@ class DocumentTest extends TestCase
         $this->assertEquals(false, isset($document['$permissions']));
 
         $this->assertEquals(null, $document['dog']);
-        $this->assertEquals(false, isset($document['dog'])); // Why is failing?????
+        $this->assertEquals(false, isset($document['dog']));
     }
 
     public function testId(): void

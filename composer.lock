@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d0116653391026bc9593e93a53760ab7",
+    "content-hash": "d671739cd5467316e960b1879d08ee6a",
     "packages": [
         {
             "name": "brick/math",
@@ -2070,16 +2070,16 @@
         },
         {
             "name": "utopia-php/mongo",
-            "version": "dev-feat-bulk-writes-2",
+            "version": "0.4.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "0516d0d325ea54c093f18435e0b11795c1293328"
+                "reference": "6b62e8daa51edfb648984c2c57cf977e87cbc444"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/0516d0d325ea54c093f18435e0b11795c1293328",
-                "reference": "0516d0d325ea54c093f18435e0b11795c1293328",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/6b62e8daa51edfb648984c2c57cf977e87cbc444",
+                "reference": "6b62e8daa51edfb648984c2c57cf977e87cbc444",
                 "shasum": ""
             },
             "require": {
@@ -2124,9 +2124,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/feat-bulk-writes-2"
+                "source": "https://github.com/utopia-php/mongo/tree/0.4.0"
             },
-            "time": "2025-07-22T13:34:49+00:00"
+            "time": "2025-07-23T14:55:58+00:00"
         },
         {
             "name": "utopia-php/pools",
@@ -4335,18 +4335,9 @@
             "time": "2022-10-09T10:19:07+00:00"
         }
     ],
-    "aliases": [
-        {
-            "package": "utopia-php/mongo",
-            "version": "dev-feat-bulk-writes-2",
-            "alias": "0.3.1",
-            "alias_normalized": "0.3.1.0"
-        }
-    ],
+    "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "utopia-php/mongo": 20
-    },
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

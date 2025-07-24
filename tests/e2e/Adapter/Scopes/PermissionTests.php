@@ -14,6 +14,20 @@ use Utopia\Database\Validator\Authorization;
 
 trait PermissionTests
 {
+    public function testCreateDocumentsEmptyPermission(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+
+        $document = $database->createDocument(__FUNCTION__, new Document());
+
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertEquals([], $document->getPermissions());
+        $this->assertEquals([], $document->getAttribute('$permissions'));
+    }
+
     public function testReadPermissionsFailure(): Document
     {
         Authorization::cleanRoles();

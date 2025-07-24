@@ -6385,6 +6385,9 @@ class Database
         $attributes = \array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
+            if ($attribute['$id'] === '$permissions'){
+                continue;
+            }
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];

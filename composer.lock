@@ -2074,23 +2074,23 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "e9ee5bce6262e1504c368c10a5ae7df2f3737a0e"
+                "reference": "68dcddf5f266822f4a5b361a1aeafa5a9036d4bf"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/e9ee5bce6262e1504c368c10a5ae7df2f3737a0e",
-                "reference": "e9ee5bce6262e1504c368c10a5ae7df2f3737a0e",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/68dcddf5f266822f4a5b361a1aeafa5a9036d4bf",
+                "reference": "68dcddf5f266822f4a5b361a1aeafa5a9036d4bf",
                 "shasum": ""
             },
             "require": {
-                "ext-mongodb": "*",
+                "ext-mongodb": "2.1.1",
                 "mongodb/mongodb": "2.1.0",
                 "php": ">=8.0"
             },
             "require-dev": {
                 "fakerphp/faker": "^1.14",
                 "laravel/pint": "1.2.*",
-                "phpstan/phpstan": "1.8.*",
+                "phpstan/phpstan": "2.1.*",
                 "phpunit/phpunit": "^9.4",
                 "swoole/ide-helper": "4.8.0"
             },
@@ -2126,7 +2126,7 @@
                 "issues": "https://github.com/utopia-php/mongo/issues",
                 "source": "https://github.com/utopia-php/mongo/tree/feat-mongo-transactions"
             },
-            "time": "2025-07-21T10:12:18+00:00"
+            "time": "2025-07-24T20:15:02+00:00"
         },
         {
             "name": "utopia-php/pools",

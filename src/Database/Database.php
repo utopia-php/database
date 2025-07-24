@@ -1204,7 +1204,6 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
-
         $permissions ??= [
             Permission::create(Role::any()),
         ];
@@ -3314,6 +3313,7 @@ class Database
             }
         }
 
+        $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
         $this->map = [];
 
@@ -3669,7 +3669,6 @@ class Database
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
-
 
         $document = $this->decode($collection, $document);
 
@@ -4118,7 +4117,6 @@ class Database
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
-
         if (!$id) {
             throw new DatabaseException('Must define $id attribute');
         }
@@ -6077,7 +6075,6 @@ class Database
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
-
         /**  @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
@@ -6718,11 +6715,9 @@ class Database
             }
 
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
-
                 foreach ($queries as $index => $query) {
                     if ($query->getAttribute() === $attribute->getId()) {
                         $values = $query->getValues();
-
                         foreach ($values as $valueIndex => $value) {
                             try {
                                 if ($this->adapter->isMongo()) {

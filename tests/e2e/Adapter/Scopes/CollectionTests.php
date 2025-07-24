@@ -59,9 +59,7 @@ trait CollectionTests
         $this->assertCount(2, $database->listCollections());
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors2'));
         $collection = $database->getCollection('actors2');
-
         $collection->setAttribute('name', 'actors'); // change name to one that exists
-
         $this->assertInstanceOf('Utopia\Database\Document', $database->updateDocument(
             $collection->getCollection(),
             $collection->getId(),
@@ -1417,7 +1415,6 @@ trait CollectionTests
             ]));
 
             $database->deleteIndex($collectionId, $indexId1);
-
             $database->deleteDocument($collectionId, 'doc1');
 
             $database->deleteDocuments($collectionId);

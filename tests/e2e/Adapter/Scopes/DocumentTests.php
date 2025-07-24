@@ -67,7 +67,7 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => 'Works',
         ]));
-        //var_dump($document);
+
         $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
@@ -451,7 +451,6 @@ trait DocumentTests
             $this->assertEquals(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
-
         }
 
         $documents = $database->find(__FUNCTION__);

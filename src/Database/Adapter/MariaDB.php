@@ -5,7 +5,6 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
-use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -1148,206 +1147,67 @@ class MariaDB extends SQL
     }
 
     /**
-     * @param string $collection
+     * @param string $tableName
+     * @param string $columns
+     * @param array<string> $batchKeys
+     * @param array<string> $attributes
+     * @param array<mixed> $bindValues
      * @param string $attribute
-     * @param array<Change> $changes
-     * @return array<Document>
-     * @throws DatabaseException
+     * @return mixed
      */
-    public function createOrUpdateDocuments(
-        string $collection,
-        string $attribute,
-        array $changes
-    ): array {
-        if (empty($changes)) {
-            return $changes;
-        }
+    public function getUpsertStatement(
+        string $tableName,
+        string $columns,
+        array $batchKeys,
+        array $attributes,
+        array $bindValues,
+        string $attribute = '',
+    ): mixed {
+        $getUpdateClause = function (string $attribute, bool $increment = false): string {
+            $attribute = $this->quote($this->filter($attribute));
 
-        try {
-            $name = $this->filter($collection);
-            $attribute = $this->filter($attribute);
-
-            $attributes = [];
-            $bindIndex = 0;
-            $batchKeys = [];
-            $bindValues = [];
-
-            foreach ($changes as $change) {
-                $document = $change->getNew();
-                $attributes = $document->getAttributes();
-                $attributes['_uid'] = $document->getId();
-                $attributes['_createdAt'] = $document->getCreatedAt();
-                $attributes['_updatedAt'] = $document->getUpdatedAt();
-                $attributes['_permissions'] = \json_encode($document->getPermissions());
-
-                if (!empty($document->getSequence())) {
-                    $attributes['_id'] = $document->getSequence();
-                }
-
-                if ($this->sharedTables) {
-                    $attributes['_tenant'] = $document->getTenant();
-                }
-
-                \ksort($attributes);
-
-                $columns = [];
-                foreach (\array_keys($attributes) as $key => $attr) {
-                    /**
-                     * @var string $attr
-                     */
-                    $columns[$key] = "{$this->quote($this->filter($attr))}";
-                }
-                $columns = '(' . \implode(', ', $columns) . ')';
-
-                $bindKeys = [];
-
-                foreach ($attributes as $attrValue) {
-                    if (\is_array($attrValue)) {
-                        $attrValue = \json_encode($attrValue);
-                    }
-                    $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
-                    $bindKey = 'key_' . $bindIndex;
-                    $bindKeys[] = ':' . $bindKey;
-                    $bindValues[$bindKey] = $attrValue;
-                    $bindIndex++;
-                }
-
-                $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
-            }
-
-            $getUpdateClause = function (string $attribute, bool $increment = false): string {
-                $attribute = $this->quote($this->filter($attribute));
-
-                if ($increment) {
-                    $new = "{$attribute} + VALUES({$attribute})";
-                } else {
-                    $new = "VALUES({$attribute})";
-                }
-
-                if ($this->sharedTables) {
-                    return "{$attribute} = IF(_tenant = VALUES(_tenant), {$new}, {$attribute})";
-                }
-
-                return "{$attribute} = {$new}";
-            };
-
-            if (!empty($attribute)) {
-                // Increment specific column by its new value in place
-                $updateColumns = [
-                    $getUpdateClause($attribute, increment: true),
-                    $getUpdateClause('_updatedAt'),
-                ];
+            if ($increment) {
+                $new = "{$attribute} + VALUES({$attribute})";
             } else {
-                // Update all columns
-                $updateColumns = [];
-                foreach (\array_keys($attributes) as $attr) {
-                    /**
-                     * @var string $attr
-                     */
-                    $updateColumns[] = $getUpdateClause($this->filter($attr));
-                }
+                $new = "VALUES({$attribute})";
             }
 
-            $stmt = $this->getPDO()->prepare(
-                "
-                INSERT INTO {$this->getSQLTable($name)} {$columns}
-                VALUES " . \implode(', ', $batchKeys) . "
-                ON DUPLICATE KEY UPDATE
-                    " . \implode(', ', $updateColumns)
-            );
-
-            foreach ($bindValues as $key => $binding) {
-                $stmt->bindValue($key, $binding, $this->getPDOType($binding));
+            if ($this->sharedTables) {
+                return "{$attribute} = IF(_tenant = VALUES(_tenant), {$new}, {$attribute})";
             }
 
-            $stmt->execute();
-            $stmt->closeCursor();
+            return "{$attribute} = {$new}";
+        };
 
-            $removeQueries = [];
-            $removeBindValues = [];
-            $addQueries = [];
-            $addBindValues = [];
-
-            foreach ($changes as $index => $change) {
-                $old = $change->getOld();
-                $document = $change->getNew();
-
-                $current = [];
-                foreach (Database::PERMISSIONS as $type) {
-                    $current[$type] = $old->getPermissionsByType($type);
-                }
-
-                // Calculate removals
-                foreach (Database::PERMISSIONS as $type) {
-                    $toRemove = \array_diff($current[$type], $document->getPermissionsByType($type));
-                    if (!empty($toRemove)) {
-                        $removeQueries[] = "(
-                            _document = :_uid_{$index}
-                            " . ($this->sharedTables ? " AND _tenant = :_tenant_{$index}" : '') . "
-                            AND _type = '{$type}'
-                            AND _permission IN (" . \implode(',', \array_map(fn ($i) => ":remove_{$type}_{$index}_{$i}", \array_keys($toRemove))) . ")
-                        )";
-                        $removeBindValues[":_uid_{$index}"] = $document->getId();
-                        if ($this->sharedTables) {
-                            $removeBindValues[":_tenant_{$index}"] = $document->getTenant();
-                        }
-                        foreach ($toRemove as $i => $perm) {
-                            $removeBindValues[":remove_{$type}_{$index}_{$i}"] = $perm;
-                        }
-                    }
-                }
-
-                // Calculate additions
-                foreach (Database::PERMISSIONS as $type) {
-                    $toAdd = \array_diff($document->getPermissionsByType($type), $current[$type]);
-
-                    foreach ($toAdd as $i => $permission) {
-                        $addQuery = "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}";
-
-                        if ($this->sharedTables) {
-                            $addQuery .= ", :_tenant_{$index}";
-                        }
-
-                        $addQuery .= ")";
-                        $addQueries[] = $addQuery;
-                        $addBindValues[":_uid_{$index}"] = $document->getId();
-                        $addBindValues[":add_{$type}_{$index}_{$i}"] = $permission;
-
-                        if ($this->sharedTables) {
-                            $addBindValues[":_tenant_{$index}"] = $document->getTenant();
-                        }
-                    }
-                }
+        if (!empty($attribute)) {
+            // Increment specific column by its new value in place
+            $updateColumns = [
+                $getUpdateClause($attribute, increment: true),
+                $getUpdateClause('_updatedAt'),
+            ];
+        } else {
+            // Update all columns
+            $updateColumns = [];
+            foreach (\array_keys($attributes) as $attr) {
+                /**
+                 * @var string $attr
+                 */
+                $updateColumns[] = $getUpdateClause($this->filter($attr));
             }
-
-            // Execute permission removals
-            if (!empty($removeQueries)) {
-                $removeQuery = \implode(' OR ', $removeQueries);
-                $stmtRemovePermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE {$removeQuery}");
-                foreach ($removeBindValues as $key => $value) {
-                    $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
-                }
-                $stmtRemovePermissions->execute();
-            }
-
-            // Execute permission additions
-            if (!empty($addQueries)) {
-                $sqlAddPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission";
-                if ($this->sharedTables) {
-                    $sqlAddPermissions .= ", _tenant";
-                }
-                $sqlAddPermissions .= ") VALUES " . \implode(', ', $addQueries);
-                $stmtAddPermissions = $this->getPDO()->prepare($sqlAddPermissions);
-                foreach ($addBindValues as $key => $value) {
-                    $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
-                }
-                $stmtAddPermissions->execute();
-            }
-        } catch (PDOException $e) {
-            throw $this->processException($e);
         }
 
-        return \array_map(fn ($change) => $change->getNew(), $changes);
+        $stmt = $this->getPDO()->prepare(
+            "
+            INSERT INTO {$this->getSQLTable($tableName)} {$columns}
+            VALUES " . \implode(', ', $batchKeys) . "
+            ON DUPLICATE KEY UPDATE
+                " . \implode(', ', $updateColumns)
+        );
+
+        foreach ($bindValues as $key => $binding) {
+            $stmt->bindValue($key, $binding, $this->getPDOType($binding));
+        }
+        return $stmt;
     }
 
     /**

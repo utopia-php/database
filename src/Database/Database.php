@@ -3527,11 +3527,23 @@ class Database
 
                     $related = [];
                     if (!empty($relatedIds)) {
-                        $related = $this->find($relatedCollection->getId(), [
+                        $foundRelated = $this->find($relatedCollection->getId(), [
                             Query::equal('$id', $relatedIds),
                             Query::limit(PHP_INT_MAX),
                             ...$queries
                         ]);
+
+                        // Preserve the order of related documents to match the junction order
+                        $relatedById = [];
+                        foreach ($foundRelated as $doc) {
+                            $relatedById[$doc->getId()] = $doc;
+                        }
+
+                        foreach ($relatedIds as $relatedId) {
+                            if (isset($relatedById[$relatedId])) {
+                                $related[] = $relatedById[$relatedId];
+                            }
+                        }
                     }
 
                     $this->relationshipFetchDepth--;

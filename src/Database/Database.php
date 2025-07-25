@@ -4628,7 +4628,7 @@ class Database
                                     $this->skipRelationships(fn () => $this->updateDocument(
                                         $relatedCollection->getId(),
                                         $oldRelated->getId(),
-                                        $oldRelated->setAttribute($twoWayKey, null)
+                                        new Document([$twoWayKey => null])
                                     ));
                                 }
                                 break;

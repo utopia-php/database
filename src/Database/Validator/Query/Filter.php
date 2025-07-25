@@ -6,6 +6,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Sequence;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
@@ -25,7 +26,8 @@ class Filter extends Base
      * @param \DateTime $maxAllowedDate
      */
     public function __construct(
-        array $attributes = [],
+        array $attributes,
+        private readonly string $idAttributeType,
         private readonly int $maxValuesCount = 100,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
@@ -106,6 +108,10 @@ class Filter extends Base
             $validator = null;
 
             switch ($attributeType) {
+                case Database::VAR_ID:
+                    $validator = new Sequence($this->idAttributeType, $attribute === '$sequence');
+                    break;
+
                 case Database::VAR_STRING:
                     $validator = new Text(0, 0);
                     break;

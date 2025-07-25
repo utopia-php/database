@@ -1519,6 +1519,205 @@ trait ManyToManyTests
         $database->deleteCollection('two');
     }
 
+    public function testSelectManyToMany(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('select_m2m_collection1');
+        $database->createCollection('select_m2m_collection2');
+
+        $database->createAttribute('select_m2m_collection1', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('select_m2m_collection1', 'type', Database::VAR_STRING, 255, true);
+        $database->createAttribute('select_m2m_collection2', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('select_m2m_collection2', 'type', Database::VAR_STRING, 255, true);
+
+        // Many-to-Many Relationship
+        $database->createRelationship(
+            collection: 'select_m2m_collection1',
+            relatedCollection: 'select_m2m_collection2',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true
+        );
+
+        // Create documents in the first collection
+        $doc1 = $database->createDocument('select_m2m_collection1', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Document 1',
+            'type' => 'Type A',
+            'select_m2m_collection2' => [
+                [
+                    '$id' => 'related_doc1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    'name' => 'Related Document 1',
+                    'type' => 'Type B',
+                ],
+                [
+                    '$id' => 'related_doc2',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    'name' => 'Related Document 2',
+                    'type' => 'Type C',
+                ],
+            ],
+        ]));
+
+        // Use select query to get only name of the related documents
+        $docs = $database->find('select_m2m_collection1', [
+            Query::select(['name', 'select_m2m_collection2.name']),
+        ]);
+
+        $this->assertCount(1, $docs);
+        $this->assertEquals('Document 1', $docs[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('type', $docs[0]);
+
+        $relatedDocs = $docs[0]->getAttribute('select_m2m_collection2');
+
+        $this->assertCount(2, $relatedDocs);
+        $this->assertEquals('Related Document 1', $relatedDocs[0]->getAttribute('name'));
+        $this->assertEquals('Related Document 2', $relatedDocs[1]->getAttribute('name'));
+        $this->assertArrayNotHasKey('type', $relatedDocs[0]);
+        $this->assertArrayNotHasKey('type', $relatedDocs[1]);
+    }
+
+    public function testSelectAcrossMultipleCollections(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Create collections
+        $database->createCollection('artists', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ], documentSecurity: false);
+        $database->createCollection('albums', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ], documentSecurity: false);
+        $database->createCollection('tracks', permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ], documentSecurity: false);
+
+        // Add attributes
+        $database->createAttribute('artists', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('albums', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('tracks', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('tracks', 'duration', Database::VAR_INTEGER, 0, true);
+
+        // Create relationships
+        $database->createRelationship(
+            collection: 'artists',
+            relatedCollection: 'albums',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true
+        );
+
+        $database->createRelationship(
+            collection: 'albums',
+            relatedCollection: 'tracks',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true
+        );
+
+        // Create documents
+        $database->createDocument('artists', new Document([
+            '$id' => 'artist1',
+            'name' => 'The Great Artist',
+            'albums' => [
+                [
+                    '$id' => 'album1',
+                    'name' => 'First Album',
+                    'tracks' => [
+                        [
+                            '$id' => 'track1',
+                            'title' => 'Hit Song 1',
+                            'duration' => 180,
+                        ],
+                        [
+                            '$id' => 'track2',
+                            'title' => 'Hit Song 2',
+                            'duration' => 220,
+                        ]
+                    ]
+                ],
+                [
+                    '$id' => 'album2',
+                    'name' => 'Second Album',
+                    'tracks' => [
+                        [
+                            '$id' => 'track3',
+                            'title' => 'Ballad 3',
+                            'duration' => 240,
+                        ]
+                    ]
+                ]
+            ]
+        ]));
+
+        // Query with nested select
+        $artists = $database->find('artists', [
+            Query::select(['name', 'albums.name', 'albums.tracks.title'])
+        ]);
+
+        $this->assertCount(1, $artists);
+        $artist = $artists[0];
+        $this->assertEquals('The Great Artist', $artist->getAttribute('name'));
+        $this->assertArrayHasKey('albums', $artist->getArrayCopy());
+
+        $albums = $artist->getAttribute('albums');
+        $this->assertCount(2, $albums);
+
+        $album1 = $albums[0];
+        $this->assertEquals('First Album', $album1->getAttribute('name'));
+        $this->assertArrayHasKey('tracks', $album1->getArrayCopy());
+        $this->assertArrayNotHasKey('artists', $album1->getArrayCopy());
+
+        $album2 = $albums[1];
+        $this->assertEquals('Second Album', $album2->getAttribute('name'));
+        $this->assertArrayHasKey('tracks', $album2->getArrayCopy());
+
+        $album1Tracks = $album1->getAttribute('tracks');
+        $this->assertCount(2, $album1Tracks);
+        $this->assertEquals('Hit Song 1', $album1Tracks[0]->getAttribute('title'));
+        $this->assertArrayNotHasKey('duration', $album1Tracks[0]->getArrayCopy());
+        $this->assertEquals('Hit Song 2', $album1Tracks[1]->getAttribute('title'));
+        $this->assertArrayNotHasKey('duration', $album1Tracks[1]->getArrayCopy());
+
+        $album2Tracks = $album2->getAttribute('tracks');
+        $this->assertCount(1, $album2Tracks);
+        $this->assertEquals('Ballad 3', $album2Tracks[0]->getAttribute('title'));
+        $this->assertArrayNotHasKey('duration', $album2Tracks[0]->getArrayCopy());
+    }
+
     public function testDeleteBulkDocumentsManyToManyRelationship(): void
     {
         /** @var Database $database */

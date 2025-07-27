@@ -1155,9 +1155,16 @@ class Mongo extends Adapter
                 ["ordered" => false] // TODO Do we want to continue if an error is thrown?
             );
 
-            // Get sequences for documents that were created
             if (!empty($documentIds)) {
-                $sequences = $this->getSequences($collection, $documentIds, $documentTenants);
+                // Create temporary documents for getSequences
+                $tempDocuments = [];
+                foreach ($changes as $change) {
+                    if (empty($change->getNew()->getSequence())) {
+                        $tempDocuments[] = $change->getNew();
+                    }
+                }
+                
+                $sequences = $this->getSequences($collection, $tempDocuments);
 
                 foreach ($changes as $change) {
                     if (isset($sequences[$change->getNew()->getId()])) {
@@ -1185,7 +1192,6 @@ class Mongo extends Adapter
     {
         $documentIds = [];
         $documentTenants = [];
-
         foreach ($documents as $document) {
             if (empty($document->getSequence())) {
                 $documentIds[] = $document->getId();

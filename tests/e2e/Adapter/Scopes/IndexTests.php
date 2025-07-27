@@ -304,8 +304,8 @@ trait IndexTests
         $database = static::getDatabase();
 
         $database->createCollection(__FUNCTION__);
-
-        $database->createAttribute(__FUNCTION__, 'title1', Database::VAR_STRING, 1000, true);
+       
+        $database->createAttribute(__FUNCTION__, 'title1', Database::VAR_STRING, $database->getAdapter()->getMaxIndexLength() + 300, true);
 
         try {
             $database->createIndex(__FUNCTION__, 'index_title1', Database::INDEX_KEY, ['title1'], [0]);
@@ -319,7 +319,7 @@ trait IndexTests
         $database->createIndex(__FUNCTION__, 'index_title2', Database::INDEX_KEY, ['title2'], [0]);
 
         try {
-            $database->updateAttribute(__FUNCTION__, 'title2', Database::VAR_STRING, 1000, true);
+            $database->updateAttribute(__FUNCTION__, 'title2', Database::VAR_STRING, $database->getAdapter()->getMaxIndexLength() + 300, true);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());

@@ -4107,7 +4107,7 @@ class Database
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
-var_dump($document);
+
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -4211,11 +4211,6 @@ var_dump($document);
 
                     // If values are not equal we need to update document.
                     if ($value !== $oldValue) {
-                        var_dump('==========================');
-                        var_dump($key);
-                        var_dump($oldValue);
-                        var_dump($value);
-
                         $shouldUpdate = true;
                         break;
                     }
@@ -6297,21 +6292,13 @@ var_dump($document);
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-//        $internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
-//            // We don't want to encode permissions into a JSON string
-//            return $attribute['$id'] !== '$permissions';
-//        });
-
-        //$attributes = \array_merge($attributes, $this->getInternalAttributes());
-        //$attributes = \array_merge($attributes, $internalAttributes);
-
-        $attributes += $this->getInternalAttributes();
+        foreach ($this->getInternalAttributes() as $attribute) {
+            if ($attribute['$id'] !== '$permissions') { // Don't encode permissions into a JSON string
+                $attributes[] = new Document($attribute);
+            }
+        }
 
         foreach ($attributes as $attribute) {
-            if ($attribute['$id'] === '$permissions') {
-                continue; // We don't want to encode permissions into a JSON string
-            }
-
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $default = $attribute['default'] ?? null;
@@ -6374,10 +6361,7 @@ var_dump($document);
         foreach ($relationships as $relationship) {
             $key = $relationship['$id'] ?? '';
 
-            if (
-                \array_key_exists($key, (array)$document)
-                || \array_key_exists($this->adapter->filter($key), (array)$document)
-            ) {
+            if ($document->offsetExists($key) || $document->offsetExists($this->adapter->filter($key))) {
                 $value = $document->getAttribute($key);
                 $value ??= $document->getAttribute($this->adapter->filter($key));
                 $document->removeAttribute($this->adapter->filter($key));
@@ -6385,14 +6369,13 @@ var_dump($document);
             }
         }
 
-        //$attributes = \array_merge($attributes, $this->getInternalAttributes());
-        $attributes += $this->getInternalAttributes();
+        foreach ($this->getInternalAttributes() as $attribute) {
+            if ($attribute['$id'] !== '$permissions') {
+                $attributes[] = new Document($attribute);
+            }
+        }
 
         foreach ($attributes as $attribute) {
-            if ($attribute['$id'] === '$permissions') {
-                continue;
-            }
-
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
@@ -6409,10 +6392,11 @@ var_dump($document);
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
-            foreach ($value as &$node) {
-                foreach (\array_reverse($filters) as $filter) {
+            foreach ($value as $k => $node) {
+                foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
+                $value[$k] = $node;
             }
 
             if (
@@ -6443,15 +6427,13 @@ var_dump($document);
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $attributes += $this->getInternalAttributes();
-
-        //$attributes = \array_merge($attributes, $this->getInternalAttributes());
+        foreach ($this->getInternalAttributes() as $attribute) {
+            if ($attribute['$id'] !== '$permissions') {
+                $attributes[] = new Document($attribute);
+            }
+        }
 
         foreach ($attributes as $attribute) {
-            if ($attribute['$id'] === '$permissions') {
-                continue;
-            }
-
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;

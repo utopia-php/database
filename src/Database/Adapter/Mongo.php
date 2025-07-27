@@ -7,6 +7,7 @@ use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -997,7 +998,9 @@ class Mongo extends Adapter
                         $node = (int)$node;
                         break;
                     case Database::VAR_DATETIME :
-                        $node =  DateTime::format($node->toDateTime());
+                        if ($node instanceof UTCDateTime) {
+                            $node =  DateTime::format($node->toDateTime());
+                        }
                         break;
                     default:
                         break;
@@ -1054,7 +1057,9 @@ class Mongo extends Adapter
             foreach ($value as &$node) {
                 switch ($type) {
                     case Database::VAR_DATETIME :
-                        $node = new UTCDateTime(new \DateTime($node));
+                        if (!($node instanceof UTCDateTime)) {
+                            $node = new UTCDateTime(new \DateTime($node));
+                        }
                         break;
                     default:
                         break;
@@ -1343,9 +1348,8 @@ class Mongo extends Adapter
      * Get sequences for documents that were created
      *
      * @param string $collection
-     * @param array<string> $documentIds
-     * @param array<int> $documentTenants
-     * @return array<string, string>
+     * @param array<Document> $documents
+     * @return array<Document>
      */
     public function getSequences(string $collection, array $documents): array
     {
@@ -1471,8 +1475,8 @@ class Mongo extends Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $ids
-     *
+     * @param array<string> $sequences
+     * @param array<string> $permissionIds
      * @return int
      */
     public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
@@ -1699,74 +1703,7 @@ class Mongo extends Adapter
         return $found;
     }
 
-    /**
-     * Recursive function to convert timestamps/datetime
-     * to BSON based UTCDatetime type for Mongo filter/query.
-     *
-     * @param array<string, mixed> $filters
-     *
-     * @return array<string, mixed>
-     * @throws Exception
-     */
-    private function timeFilter(array $filters): array
-    {
-        $results = $filters;
 
-        foreach ($filters as $k => $v) {
-            if ($k === '_createdAt' || $k == '_updatedAt') {
-                if (is_array($v)) {
-                    foreach ($v as $sk => $sv) {
-                        $results[$k][$sk] = $this->toMongoDatetime($sv);
-                    }
-                } else {
-                    $results[$k] = $this->toMongoDatetime($v);
-                }
-            } else {
-                if (is_array($v)) {
-                    $results[$k] = $this->timeFilter($v);
-                }
-            }
-        }
-
-        return $results;
-    }
-
-    /**
-     * Converts timestamp base fields to Utopia\Document format.
-     *
-     * @param array<string, mixed> $record
-     *
-     * @return array<string, mixed>
-     */
-    private function timeToDocument(array $record): array
-    {
-        $record['$createdAt'] = DateTime::format($record['$createdAt']->toDateTime());
-        $record['$updatedAt'] = DateTime::format($record['$updatedAt']->toDateTime());
-
-        return $record;
-    }
-
-    /**
-     * Converts timestamp base fields to Mongo\BSON datetime format.
-     *
-     * @param array<string, mixed> $record
-     *
-     * @return array<string, mixed>
-     * @throws Exception
-     */
-    private function timeToMongo(array $record): array
-    {
-
-        if (isset($record['_createdAt'])) {
-            $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
-        }
-
-        if (isset($record['_updatedAt'])) {
-            $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
-        }
-
-        return $record;
-    }
 
     /**
      * Converts timestamp to Mongo\BSON datetime format.
@@ -2560,7 +2497,8 @@ class Mongo extends Adapter
 
     public function getTenantQuery(string $collection, string $parentAlias = ''): string
     {
-        return $this->getTenant();
+        // ** tenant in mongodb is an int but we need to return a string in order to be compatible with the rest of the code
+        return (string)$this->getTenant();
     }
 
 }

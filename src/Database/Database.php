@@ -3738,7 +3738,6 @@ class Database
             }
 
             $document = $this->adapter->castingBefore($collection, $document);
-
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {

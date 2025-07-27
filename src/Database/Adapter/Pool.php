@@ -499,4 +499,29 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
+
+    public function castingBefore(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForInternalCasting(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function isMongo(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setUTCDatetime(string $value): mixed
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
 }

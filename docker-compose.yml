@@ -87,16 +87,8 @@ services:
     environment:
       MONGO_INITDB_DATABASE: utopia_testing
       MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: password  
-      # Replica set
-      # MONGO_INITDB_REPLICA_SET: rs0
-      # MONGO_INITDB_REPLICA_SET_NAME: rs0
-      # MONGO_INITDB_REPLICA_SET_KEY: rs0
-      # MONGO_INITDB_REPLICA_SET_KEY_FILE: /etc/mongo-keyfile
-      # MONGO_INITDB_REPLICA_SET_KEY_FILE_NAME: mongo-keyfile
-      # MONGO_INITDB_REPLICA_SET_KEY_FILE_PATH: /etc/mongo-keyfile
-      # MONGO_INITDB_REPLICA_SET_KEY_FILE_PATH_NAME: mongo-keyfile
-      # MONGO_INITDB_REPLICA_SET_KEY_FILE_PATH_NAME_NAME: mongo-keyfile
+      MONGO_INITDB_ROOT_PASSWORD: password
+    command: mongod --replSet rs0 --bind_ip_all --keyFile /etc/mongo-keyfile
 
 # Manyally initate the replica set
 #docker compose exec mongo  mongosh admin -u root -p password --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "mongo:27017"}]})'

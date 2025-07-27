@@ -91,7 +91,8 @@ class Mongo extends Adapter
     {
         // If the database is not a replica set, we can't use transactions
         if (!$this->client->isReplicaSet()) {
-            return true;
+            $result = $callback();
+            return $result;
         }
 
         // Removed the attmpts to retry the transaction.

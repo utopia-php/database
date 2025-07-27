@@ -1181,7 +1181,7 @@ class Mongo extends Adapter
      * @param array<int> $documentTenants
      * @return array<string, string>
      */
-    protected function getSequences(string $collection, array $documentIds, array $documentTenants = []): array
+    public function getSequences(string $collection, array $documentIds, array $documentTenants = []): array
     {
         $sequences = [];
         $name = $this->getNamespace() . '_' . $this->filter($collection);
@@ -2013,6 +2013,21 @@ class Mongo extends Adapter
     }
 
     /**
+     * Is index supported?
+     *
+     * @return bool
+     */
+    public function getSupportForIndex(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForIndexArray(): bool
+    {
+        return true;
+    }
+
+    /**
      * Is internal casting supported?
      *
      * @return bool
@@ -2042,16 +2057,6 @@ class Mongo extends Adapter
     public function getSupportForAttributes(): bool
     {
         return false;
-    }
-
-    /**
-     * Is index supported?
-     *
-     * @return bool
-     */
-    public function getSupportForIndex(): bool
-    {
-        return true;
     }
 
     /**
@@ -2368,4 +2373,5 @@ class Mongo extends Adapter
     {
         return $this->getTenant();
     }
+
 }

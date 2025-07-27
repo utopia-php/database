@@ -4107,7 +4107,7 @@ class Database
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
-
+var_dump($document);
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -4211,6 +4211,11 @@ class Database
 
                     // If values are not equal we need to update document.
                     if ($value !== $oldValue) {
+                        var_dump('==========================');
+                        var_dump($key);
+                        var_dump($oldValue);
+                        var_dump($value);
+
                         $shouldUpdate = true;
                         break;
                     }
@@ -6292,14 +6297,21 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
-            // We don't want to encode permissions into a JSON string
-            return $attribute['$id'] !== '$permissions';
-        });
+//        $internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
+//            // We don't want to encode permissions into a JSON string
+//            return $attribute['$id'] !== '$permissions';
+//        });
 
-        $attributes = \array_merge($attributes, $internalAttributes);
+        //$attributes = \array_merge($attributes, $this->getInternalAttributes());
+        //$attributes = \array_merge($attributes, $internalAttributes);
+
+        $attributes += $this->getInternalAttributes();
 
         foreach ($attributes as $attribute) {
+            if ($attribute['$id'] === '$permissions') {
+                continue; // We don't want to encode permissions into a JSON string
+            }
+
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $default = $attribute['default'] ?? null;
@@ -6373,9 +6385,14 @@ class Database
             }
         }
 
-        $attributes = \array_merge($attributes, $this->getInternalAttributes());
+        //$attributes = \array_merge($attributes, $this->getInternalAttributes());
+        $attributes += $this->getInternalAttributes();
 
         foreach ($attributes as $attribute) {
+            if ($attribute['$id'] === '$permissions') {
+                continue;
+            }
+
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
@@ -6426,9 +6443,15 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $attributes = \array_merge($attributes, $this->getInternalAttributes());
+        $attributes += $this->getInternalAttributes();
+
+        //$attributes = \array_merge($attributes, $this->getInternalAttributes());
 
         foreach ($attributes as $attribute) {
+            if ($attribute['$id'] === '$permissions') {
+                continue;
+            }
+
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;

@@ -27,8 +27,8 @@ trait PermissionTests
 
         $document = $database->createDocument(__FUNCTION__, new Document());
 
-        $this->assertArrayNotHasKey('$permissions', $document);
-        $this->assertEquals(null, $document->getAttribute('$permissions'));
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertEquals([], $document->getAttribute('$permissions'));
 
         $documents = [];
 
@@ -43,8 +43,8 @@ trait PermissionTests
 
         $this->assertEquals(2, $count);
         foreach ($results as $result) {
-            $this->assertArrayNotHasKey('$permissions', $result);
-            $this->assertEquals(null, $result->getAttribute('$permissions'));
+            $this->assertArrayHasKey('$permissions', $result);
+            $this->assertEquals([], $result->getAttribute('$permissions'));
         }
     }
 

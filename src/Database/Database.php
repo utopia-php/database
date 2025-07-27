@@ -6293,9 +6293,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($this->getInternalAttributes() as $attribute) {
-            if ($attribute['$id'] !== '$permissions') { // Don't encode permissions into a JSON string
-                $attributes[] = new Document($attribute);
-            }
+            $attributes[] = $attribute;
         }
 
         foreach ($attributes as $attribute) {
@@ -6304,6 +6302,13 @@ class Database
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
+
+            if ($attribute['$id'] === '$permissions') {
+                if (empty($value)){
+                    $document->setAttribute('$permissions', []); // set default value
+                }
+                continue;
+            }
 
             // Continue on optional param with no default
             if (is_null($value) && is_null($default)) {
@@ -6370,12 +6375,13 @@ class Database
         }
 
         foreach ($this->getInternalAttributes() as $attribute) {
-            if ($attribute['$id'] !== '$permissions') {
-                $attributes[] = new Document($attribute);
-            }
+            $attributes[] = $attribute;
         }
 
         foreach ($attributes as $attribute) {
+//            if ($attribute['$id'] === '$permissions') {
+//                continue;
+//            }
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
@@ -6428,12 +6434,13 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach ($this->getInternalAttributes() as $attribute) {
-            if ($attribute['$id'] !== '$permissions') {
-                $attributes[] = new Document($attribute);
-            }
+            $attributes[] = $attribute;
         }
 
         foreach ($attributes as $attribute) {
+//            if ($attribute['$id'] === '$permissions') {
+//                continue;
+//            }
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;

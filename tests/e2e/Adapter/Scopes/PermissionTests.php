@@ -759,7 +759,7 @@ trait PermissionTests
             $this->expectNotToPerformAssertions();
             return;
         }
-        
+
         $documents = $database->find(
             $collection->getId()
         );

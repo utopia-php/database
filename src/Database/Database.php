@@ -5079,14 +5079,14 @@ class Database
             /**
              * @var array<Change> $chunk
              */
-       
+
             $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
                 $collection->getId(),
                 $attribute,
                 $chunk
             )));
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
-            
+
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
                     $created++;

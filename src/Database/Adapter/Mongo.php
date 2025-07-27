@@ -7,6 +7,7 @@ use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -1184,9 +1185,8 @@ class Mongo extends Adapter
      * Get sequences for documents that were created
      *
      * @param string $collection
-     * @param array<string> $documentIds
-     * @param array<int> $documentTenants
-     * @return array<string, string>
+     * @param array<Document> $documents
+     * @return array<Document>
      */
     public function getSequences(string $collection, array $documents): array
     {
@@ -1309,8 +1309,8 @@ class Mongo extends Adapter
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $ids
-     *
+     * @param array<string> $sequences
+     * @param array<string> $permissionIds
      * @return int
      */
     public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
@@ -2397,7 +2397,8 @@ class Mongo extends Adapter
 
     public function getTenantQuery(string $collection, string $parentAlias = ''): string
     {
-        return $this->getTenant();
+        // ** tenant in mongodb is an int but we need to return a string in order to be compatible with the rest of the code
+        return (string)$this->getTenant();
     }
 
 }

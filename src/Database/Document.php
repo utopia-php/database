@@ -39,12 +39,10 @@ class Document extends ArrayObject
             if (!\is_array($value)) {
                 continue;
             }
-
             if (isset($value['$id']) || isset($value['$collection'])) {
                 $input[$key] = new self($value);
                 continue;
             }
-
             foreach ($value as $childKey => $child) {
                 if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
                     $value[$childKey] = new self($child);

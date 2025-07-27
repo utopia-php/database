@@ -35,11 +35,11 @@ class Document extends ArrayObject
             throw new StructureException('$permissions must be of type array');
         }
 
-        foreach ($input as $key => $value) {
+        foreach ($input as $key => &$value) {
             if (!\is_array($value)) {
                 continue;
             }
-            if (isset($value['$id']) || isset($value['$collection'])) {
+            if ((isset($value['$id']) || isset($value['$collection']))) {
                 $input[$key] = new self($value);
                 continue;
             }
@@ -48,9 +48,9 @@ class Document extends ArrayObject
                     $value[$childKey] = new self($child);
                 }
             }
-
-            $input[$key] = $value;
         }
+
+        unset($value); // Unset Reference
 
         parent::__construct($input);
     }

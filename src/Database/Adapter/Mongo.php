@@ -1163,7 +1163,7 @@ class Mongo extends Adapter
                         $tempDocuments[] = $change->getNew();
                     }
                 }
-                
+
                 $sequences = $this->getSequences($collection, $tempDocuments);
 
                 foreach ($changes as $change) {
@@ -1195,7 +1195,7 @@ class Mongo extends Adapter
         foreach ($documents as $document) {
             if (empty($document->getSequence())) {
                 $documentIds[] = $document->getId();
-                
+
                 if ($this->sharedTables) {
                     $documentTenants[] = $document->getTenant();
                 }

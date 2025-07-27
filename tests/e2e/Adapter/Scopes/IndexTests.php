@@ -304,7 +304,7 @@ trait IndexTests
         $database = static::getDatabase();
 
         $database->createCollection(__FUNCTION__);
-       
+
         $database->createAttribute(__FUNCTION__, 'title1', Database::VAR_STRING, $database->getAdapter()->getMaxIndexLength() + 300, true);
 
         try {

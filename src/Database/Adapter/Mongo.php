@@ -849,7 +849,9 @@ class Mongo extends Adapter
                         $node = (int)$node;
                         break;
                     case Database::VAR_DATETIME :
-                        $node =  DateTime::format($node->toDateTime());
+                        if ($node instanceof UTCDateTime) {
+                            $node =  DateTime::format($node->toDateTime());
+                        }
                         break;
                     default:
                         break;
@@ -906,7 +908,9 @@ class Mongo extends Adapter
             foreach ($value as &$node) {
                 switch ($type) {
                     case Database::VAR_DATETIME :
-                        $node = new UTCDateTime(new \DateTime($node));
+                        if (!($node instanceof UTCDateTime)) {
+                            $node = new UTCDateTime(new \DateTime($node));
+                        }
                         break;
                     default:
                         break;
@@ -1536,74 +1540,7 @@ class Mongo extends Adapter
         return $found;
     }
 
-    /**
-     * Recursive function to convert timestamps/datetime
-     * to BSON based UTCDatetime type for Mongo filter/query.
-     *
-     * @param array<string, mixed> $filters
-     *
-     * @return array<string, mixed>
-     * @throws Exception
-     */
-    private function timeFilter(array $filters): array
-    {
-        $results = $filters;
 
-        foreach ($filters as $k => $v) {
-            if ($k === '_createdAt' || $k == '_updatedAt') {
-                if (is_array($v)) {
-                    foreach ($v as $sk => $sv) {
-                        $results[$k][$sk] = $this->toMongoDatetime($sv);
-                    }
-                } else {
-                    $results[$k] = $this->toMongoDatetime($v);
-                }
-            } else {
-                if (is_array($v)) {
-                    $results[$k] = $this->timeFilter($v);
-                }
-            }
-        }
-
-        return $results;
-    }
-
-    /**
-     * Converts timestamp base fields to Utopia\Document format.
-     *
-     * @param array<string, mixed> $record
-     *
-     * @return array<string, mixed>
-     */
-    private function timeToDocument(array $record): array
-    {
-        $record['$createdAt'] = DateTime::format($record['$createdAt']->toDateTime());
-        $record['$updatedAt'] = DateTime::format($record['$updatedAt']->toDateTime());
-
-        return $record;
-    }
-
-    /**
-     * Converts timestamp base fields to Mongo\BSON datetime format.
-     *
-     * @param array<string, mixed> $record
-     *
-     * @return array<string, mixed>
-     * @throws Exception
-     */
-    private function timeToMongo(array $record): array
-    {
-
-        if (isset($record['_createdAt'])) {
-            $record['_createdAt'] = $this->toMongoDatetime($record['_createdAt']);
-        }
-
-        if (isset($record['_updatedAt'])) {
-            $record['_updatedAt'] = $this->toMongoDatetime($record['_updatedAt']);
-        }
-
-        return $record;
-    }
 
     /**
      * Converts timestamp to Mongo\BSON datetime format.

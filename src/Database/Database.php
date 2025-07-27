@@ -6450,7 +6450,7 @@ class Database
                 $value = [$value];
             }
 
-            foreach ($value as &$node) {
+            foreach ($value as $k => $node) {
                 switch ($type) {
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;
@@ -6464,6 +6464,8 @@ class Database
                     default:
                         break;
                 }
+
+                $value[$k] = $node;
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);

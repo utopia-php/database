@@ -1399,12 +1399,14 @@ trait AttributeTests
         $this->assertEquals('Antony', $document->getAttribute('names')[1]);
         $this->assertEquals(100, $document->getAttribute('numbers')[1]);
 
-        /**
-         * functional index dependency cannot be dropped or rename
-         */
-        $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
+        if ($database->getAdapter()->getSupportForIndexArray()) {
+            /**
+             * functional index dependency cannot be dropped or rename
+             */
+            $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
+        }
 
-        if ($this->getDatabase()->getAdapter()->getSupportForCastIndexArray()) {
+        if ($database->getAdapter()->getSupportForCastIndexArray()) {
             /**
              * Delete attribute
              */
@@ -1443,22 +1445,24 @@ trait AttributeTests
             $this->assertTrue($database->deleteAttribute($collection, 'cards_new'));
         }
 
-        try {
-            $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
-            $this->fail('Failed to throw exception');
-        } catch (Throwable $e) {
-            if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
-                $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
-            } else {
-                $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+        if ($database->getAdapter()->getSupportForIndexArray()) {
+            try {
+                $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                if ($database->getAdapter()->getSupportForFulltextIndex()) {
+                    $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
+                } else {
+                    $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+                }
             }
-        }
 
-        try {
-            $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
-            $this->fail('Failed to throw exception');
-        } catch (Throwable $e) {
-            $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+            try {
+                $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+            }
         }
 
         $this->assertEquals(true, $database->createAttribute(
@@ -1470,32 +1474,36 @@ trait AttributeTests
             array: true
         ));
 
-        if ($database->getAdapter()->getMaxIndexLength() > 0) {
-            // If getMaxIndexLength() > 0 We clear length for array attributes
-            $database->createIndex($collection, 'indx1', Database::INDEX_KEY, ['long_size'], [], []);
-            $database->deleteIndex($collection, 'indx1');
-            $database->createIndex($collection, 'indx2', Database::INDEX_KEY, ['long_size'], [1000], []);
+        if ($database->getAdapter()->getSupportForIndexArray()) {
+
+
+            if ($database->getAdapter()->getMaxIndexLength() > 0) {
+                // If getMaxIndexLength() > 0 We clear length for array attributes
+                $database->createIndex($collection, 'indx1', Database::INDEX_KEY, ['long_size'], [], []);
+                $database->deleteIndex($collection, 'indx1');
+                $database->createIndex($collection, 'indx2', Database::INDEX_KEY, ['long_size'], [1000], []);
+
+                try {
+                    $database->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
+                    $this->fail('Failed to throw exception');
+                } catch (Throwable $e) {
+                    $this->assertEquals('Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+                }
+            }
+
+            // We clear orders for array attributes
+            $database->createIndex($collection, 'indx3', Database::INDEX_KEY, ['names'], [255], ['desc']);
 
             try {
-                $database->createIndex($collection, 'indx_numbers', Database::INDEX_KEY, ['tv_show', 'numbers'], [], []); // [700, 255]
+                $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
-                $this->assertEquals('Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength(), $e->getMessage());
+                $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
             }
+
+            $this->assertTrue($database->createIndex($collection, 'indx6', Database::INDEX_KEY, ['age', 'names'], [null, 999], []));
+            $this->assertTrue($database->createIndex($collection, 'indx7', Database::INDEX_KEY, ['age', 'booleans'], [0, 999], []));
         }
-
-        // We clear orders for array attributes
-        $database->createIndex($collection, 'indx3', Database::INDEX_KEY, ['names'], [255], ['desc']);
-
-        try {
-            $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
-            $this->fail('Failed to throw exception');
-        } catch (Throwable $e) {
-            $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
-        }
-
-        $this->assertTrue($database->createIndex($collection, 'indx6', Database::INDEX_KEY, ['age', 'names'], [null, 999], []));
-        $this->assertTrue($database->createIndex($collection, 'indx7', Database::INDEX_KEY, ['age', 'booleans'], [0, 999], []));
 
         if ($this->getDatabase()->getAdapter()->getSupportForQueryContains()) {
             try {

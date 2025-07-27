@@ -39,7 +39,7 @@
         "utopia-php/framework": "0.33.*",
         "utopia-php/cache": "0.13.*",
         "utopia-php/pools": "0.8.*",
-        "utopia-php/mongo": "dev-feat-mongo-transactions as 0.3.1"
+        "utopia-php/mongo": "0.5.*"
     },
     "require-dev": {
         "fakerphp/faker": "1.23.*",

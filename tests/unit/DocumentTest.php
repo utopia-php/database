@@ -68,6 +68,24 @@ class DocumentTest extends TestCase
     {
     }
 
+    public function testDocumentNulls(): void
+    {
+        $data = [
+            'cat' => null,
+            'dog' => null, // last entry is null
+        ];
+
+        $document = new Document($data);
+
+        $this->assertEquals(null, $document['cat']);
+        $this->assertEquals(false, isset($document['cat']));
+        $this->assertEquals('cat', $document->getAttribute('cat', 'cat'));
+
+        $this->assertEquals(null, $document['dog']);
+        $this->assertEquals(false, isset($document['dog']));
+        $this->assertEquals('dog', $document->getAttribute('dog', 'dog'));
+    }
+
     public function testId(): void
     {
         $this->assertEquals($this->id, $this->document->getId());

@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDOException;
 use Utopia\Database\Adapter;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -377,7 +378,7 @@ abstract class SQL extends Adapter
             unset($document['_uid']);
         }
         if (\array_key_exists('_tenant', $document)) {
-            $document['$tenant'] = $document['_tenant'] === null ? null : (int)$document['_tenant'];
+            $document['$tenant'] = $document['_tenant'];
             unset($document['_tenant']);
         }
         if (\array_key_exists('_createdAt', $document)) {
@@ -710,49 +711,64 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Get internal IDs for the given documents
+     * Assign internal IDs for the given documents
      *
      * @param string $collection
-     * @param array<string> $documentIds
-     * @param array<?int> $documentTenants
-     * @return array<string>
+     * @param array<Document> $documents
+     * @return array<Document>
      * @throws DatabaseException
      */
-    protected function getSequences(string $collection, array $documentIds, array $documentTenants = []): array
+    public function getSequences(string $collection, array $documents): array
     {
-        $sequences = [];
+        $documentIds = [];
+        $keys = [];
+        $binds = [];
 
-        /**
-         * UID, _tenant bottleneck is ~ 5000 rows since we use _uid IN query
-         */
-        foreach (\array_chunk($documentIds, 1000) as $documentIdsChunk) {
-            $sql = "
-                SELECT _uid, _id
-                FROM {$this->getSQLTable($collection)}
-                WHERE {$this->quote('_uid')} IN (" . implode(',', array_map(fn ($index) => ":_key_{$index}", array_keys($documentIdsChunk))) . ")
-                {$this->getTenantQuery($collection, tenantCount: \count($documentIdsChunk))}
-            ";
+        foreach ($documents as $i => $document) {
+            if (empty($document->getSequence())) {
+                $documentIds[] = $document->getId();
 
-            $stmt = $this->getPDO()->prepare($sql);
+                $key = ":uid_{$i}";
 
-            foreach ($documentIdsChunk as $index => $id) {
-                $stmt->bindValue(":_key_{$index}", $id);
-            }
+                $binds[$key] = $document->getId();
+                $keys[] = $key;
 
-            if ($this->sharedTables) {
-                foreach ($documentIdsChunk as $index => $id) {
-                    $stmt->bindValue(":_tenant_{$index}", \array_shift($documentTenants));
+                if ($this->sharedTables) {
+                    $binds[':_tenant_'.$i] = $document->getTenant();
                 }
             }
-
-            $stmt->execute();
-            $results = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
-            $stmt->closeCursor();
-
-            $sequences = [...$sequences, ...$results];
         }
 
-        return $sequences;
+        if (empty($documentIds)) {
+            return $documents;
+        }
+
+        $placeholders = implode(',', array_values($keys));
+
+        $sql = "
+            SELECT _uid, _id
+            FROM {$this->getSQLTable($collection)}
+            WHERE {$this->quote('_uid')} IN ({$placeholders})
+            {$this->getTenantQuery($collection, tenantCount: \count($documentIds))}
+            ";
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+
+        $stmt->execute();
+        $sequences = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
+        $stmt->closeCursor();
+
+        foreach ($documents as $document) {
+            if (isset($sequences[$document->getId()])) {
+                $document['$sequence'] = $sequences[$document->getId()];
+            }
+        }
+
+        return $documents;
     }
 
     /**
@@ -1427,6 +1443,11 @@ abstract class SQL extends Adapter
      */
     abstract public function getSupportForJSONOverlaps(): bool;
 
+    public function getSupportForIndexArray(): bool
+    {
+        return true;
+    }
+
     public function getSupportForCastIndexArray(): bool
     {
         return false;
@@ -1446,6 +1467,24 @@ abstract class SQL extends Adapter
     {
         return true;
     }
+
+    /**
+     * @param string $tableName
+     * @param string $columns
+     * @param array<string> $batchKeys
+     * @param array<mixed> $bindValues
+     * @param array<string> $attributes
+     * @param string $attribute
+     * @return mixed
+     */
+    abstract protected function getUpsertStatement(
+        string $tableName,
+        string $columns,
+        array $batchKeys,
+        array $attributes,
+        array $bindValues,
+        string $attribute = '',
+    ): mixed;
 
     /**
      * @param string $value
@@ -1575,7 +1614,7 @@ abstract class SQL extends Adapter
      */
     protected function getSQLTable(string $name): string
     {
-        return "{$this->quote($this->getDatabase())}.{$this->quote($this->getNamespace().'_'.$this->filter($name))}";
+        return "{$this->quote($this->getDatabase())}.{$this->quote($this->getNamespace() . '_' .$this->filter($name))}";
     }
 
     /**
@@ -1856,8 +1895,6 @@ abstract class SQL extends Adapter
             $batchKeys = [];
             $bindValues = [];
             $permissions = [];
-            $documentIds = [];
-            $documentTenants = [];
 
             foreach ($documents as $index => $document) {
                 $attributes = $document->getAttributes();
@@ -1868,13 +1905,10 @@ abstract class SQL extends Adapter
 
                 if (!empty($document->getSequence())) {
                     $attributes['_id'] = $document->getSequence();
-                } else {
-                    $documentIds[] = $document->getId();
                 }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();
-                    $documentTenants[] = $document->getTenant();
                 }
 
                 $bindKeys = [];
@@ -1937,21 +1971,169 @@ abstract class SQL extends Adapter
                 $this->execute($stmtPermissions);
             }
 
-            $sequences = $this->getSequences(
-                $collection,
-                $documentIds,
-                $documentTenants
-            );
-
-            foreach ($documents as $document) {
-                if (isset($sequences[$document->getId()])) {
-                    $document['$sequence'] = $sequences[$document->getId()];
-                }
-            }
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
         return $documents;
+    }
+
+    /**
+     * @param string $collection
+     * @param string $attribute
+     * @param array<Change> $changes
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    public function createOrUpdateDocuments(
+        string $collection,
+        string $attribute,
+        array $changes
+    ): array {
+        if (empty($changes)) {
+            return $changes;
+        }
+
+        try {
+            $name = $this->filter($collection);
+            $attribute = $this->filter($attribute);
+
+            $attributes = [];
+            $bindIndex = 0;
+            $batchKeys = [];
+            $bindValues = [];
+
+            foreach ($changes as $change) {
+                $document = $change->getNew();
+                $attributes = $document->getAttributes();
+                $attributes['_uid'] = $document->getId();
+                $attributes['_createdAt'] = $document->getCreatedAt();
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+                if (!empty($document->getSequence())) {
+                    $attributes['_id'] = $document->getSequence();
+                }
+
+                if ($this->sharedTables) {
+                    $attributes['_tenant'] = $document->getTenant();
+                }
+
+                \ksort($attributes);
+
+                $columns = [];
+                foreach (\array_keys($attributes) as $key => $attr) {
+                    /**
+                     * @var string $attr
+                     */
+                    $columns[$key] = "{$this->quote($this->filter($attr))}";
+                }
+                $columns = '(' . \implode(', ', $columns) . ')';
+
+                $bindKeys = [];
+
+                foreach ($attributes as $attrValue) {
+                    if (\is_array($attrValue)) {
+                        $attrValue = \json_encode($attrValue);
+                    }
+                    $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
+                    $bindKey = 'key_' . $bindIndex;
+                    $bindKeys[] = ':' . $bindKey;
+                    $bindValues[$bindKey] = $attrValue;
+                    $bindIndex++;
+                }
+
+                $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+            }
+
+            $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $attributes, $bindValues, $attribute);
+            $stmt->execute();
+            $stmt->closeCursor();
+
+            $removeQueries = [];
+            $removeBindValues = [];
+            $addQueries = [];
+            $addBindValues = [];
+
+            foreach ($changes as $index => $change) {
+                $old = $change->getOld();
+                $document = $change->getNew();
+
+                $current = [];
+                foreach (Database::PERMISSIONS as $type) {
+                    $current[$type] = $old->getPermissionsByType($type);
+                }
+
+                // Calculate removals
+                foreach (Database::PERMISSIONS as $type) {
+                    $toRemove = \array_diff($current[$type], $document->getPermissionsByType($type));
+                    if (!empty($toRemove)) {
+                        $removeQueries[] = "(
+                            _document = :_uid_{$index}
+                            " . ($this->sharedTables ? " AND _tenant = :_tenant_{$index}" : '') . "
+                            AND _type = '{$type}'
+                            AND _permission IN (" . \implode(',', \array_map(fn ($i) => ":remove_{$type}_{$index}_{$i}", \array_keys($toRemove))) . ")
+                        )";
+                        $removeBindValues[":_uid_{$index}"] = $document->getId();
+                        if ($this->sharedTables) {
+                            $removeBindValues[":_tenant_{$index}"] = $document->getTenant();
+                        }
+                        foreach ($toRemove as $i => $perm) {
+                            $removeBindValues[":remove_{$type}_{$index}_{$i}"] = $perm;
+                        }
+                    }
+                }
+
+                // Calculate additions
+                foreach (Database::PERMISSIONS as $type) {
+                    $toAdd = \array_diff($document->getPermissionsByType($type), $current[$type]);
+
+                    foreach ($toAdd as $i => $permission) {
+                        $addQuery = "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}";
+
+                        if ($this->sharedTables) {
+                            $addQuery .= ", :_tenant_{$index}";
+                        }
+
+                        $addQuery .= ")";
+                        $addQueries[] = $addQuery;
+                        $addBindValues[":_uid_{$index}"] = $document->getId();
+                        $addBindValues[":add_{$type}_{$index}_{$i}"] = $permission;
+
+                        if ($this->sharedTables) {
+                            $addBindValues[":_tenant_{$index}"] = $document->getTenant();
+                        }
+                    }
+                }
+            }
+
+            // Execute permission removals
+            if (!empty($removeQueries)) {
+                $removeQuery = \implode(' OR ', $removeQueries);
+                $stmtRemovePermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE {$removeQuery}");
+                foreach ($removeBindValues as $key => $value) {
+                    $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
+                }
+                $stmtRemovePermissions->execute();
+            }
+
+            // Execute permission additions
+            if (!empty($addQueries)) {
+                $sqlAddPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission";
+                if ($this->sharedTables) {
+                    $sqlAddPermissions .= ", _tenant";
+                }
+                $sqlAddPermissions .= ") VALUES " . \implode(', ', $addQueries);
+                $stmtAddPermissions = $this->getPDO()->prepare($sqlAddPermissions);
+                foreach ($addBindValues as $key => $value) {
+                    $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
+                }
+                $stmtAddPermissions->execute();
+            }
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return \array_map(fn ($change) => $change->getNew(), $changes);
     }
 }

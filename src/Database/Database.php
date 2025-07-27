@@ -3520,13 +3520,30 @@ class Database
                         Query::limit(PHP_INT_MAX)
                     ]));
 
-                    $related = [];
+                    $relatedIds = [];
                     foreach ($junctions as $junction) {
-                        $related[] = $this->getDocument(
-                            $relatedCollection->getId(),
-                            $junction->getAttribute($key),
-                            $queries
-                        );
+                        $relatedIds[] = $junction->getAttribute($key);
+                    }
+
+                    $related = [];
+                    if (!empty($relatedIds)) {
+                        $foundRelated = $this->find($relatedCollection->getId(), [
+                            Query::equal('$id', $relatedIds),
+                            Query::limit(PHP_INT_MAX),
+                            ...$queries
+                        ]);
+
+                        // Preserve the order of related documents to match the junction order
+                        $relatedById = [];
+                        foreach ($foundRelated as $doc) {
+                            $relatedById[$doc->getId()] = $doc;
+                        }
+
+                        foreach ($relatedIds as $relatedId) {
+                            if (isset($relatedById[$relatedId])) {
+                                $related[] = $relatedById[$relatedId];
+                            }
+                        }
                     }
 
                     $this->relationshipFetchDepth--;
@@ -4110,7 +4127,6 @@ class Database
             if ($this->adapter->getSharedTables()) {
                 $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
             }
-
             $document = new Document($document);
 
             $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
@@ -4347,7 +4363,7 @@ class Database
         $cursor = $grouped['cursor'];
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
+            throw new DatabaseException("Cursor document must be from the same Collection.");
         }
 
         unset($updates['$id']);
@@ -4497,8 +4513,8 @@ class Database
 
             if ($oldValue == $value) {
                 if (
-                    ($relationType === Database::RELATION_ONE_TO_ONE ||
-                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
+                    ($relationType === Database::RELATION_ONE_TO_ONE
+                        || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
                     $value instanceof Document
                 ) {
                     $document->setAttribute($key, $value->getId());
@@ -4624,7 +4640,7 @@ class Database
                                     $this->skipRelationships(fn () => $this->updateDocument(
                                         $relatedCollection->getId(),
                                         $oldRelated->getId(),
-                                        $oldRelated->setAttribute($twoWayKey, null)
+                                        new Document([$twoWayKey => null])
                                     ));
                                 }
                                 break;
@@ -4650,7 +4666,7 @@ class Database
                                 } elseif ($item instanceof Document) {
                                     return $item->getId();
                                 } else {
-                                    throw new RelationshipException('Invalid relationship value. No ID provided.');
+                                    throw new RelationshipException('Invalid relationship value. Must be either a document or document ID.');
                                 }
                             }, $value);
 

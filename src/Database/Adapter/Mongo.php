@@ -1181,19 +1181,34 @@ class Mongo extends Adapter
      * @param array<int> $documentTenants
      * @return array<string, string>
      */
-    public function getSequences(string $collection, array $documentIds, array $documentTenants = []): array
+    public function getSequences(string $collection, array $documents): array
     {
+        $documentIds = [];
+        $documentTenants = [];
+
+        foreach ($documents as $document) {
+            if (empty($document->getSequence())) {
+                $documentIds[] = $document->getId();
+                
+                if ($this->sharedTables) {
+                    $documentTenants[] = $document->getTenant();
+                }
+            }
+        }
+
+        if (empty($documentIds)) {
+            return $documents;
+        }
+
         $sequences = [];
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        // Process in chunks to avoid large queries
-        foreach (\array_chunk($documentIds, 1000) as $documentIdsChunk) {
+        foreach (\array_chunk($documentIds, 1000) as $index => $documentIdsChunk) {
             $filters = ['_uid' => ['$in' => $documentIdsChunk]];
 
             if ($this->sharedTables) {
-                $tenantChunk = \array_slice($documentTenants, 0, \count($documentIdsChunk));
+                $tenantChunk = \array_slice($documentTenants, $index * 1000, \count($documentIdsChunk));
                 $filters['_tenant'] = ['$in' => $tenantChunk];
-                $documentTenants = \array_slice($documentTenants, \count($documentIdsChunk));
             }
 
             try {
@@ -1207,8 +1222,13 @@ class Mongo extends Adapter
                 continue;
             }
         }
+        foreach ($documents as $document) {
+            if (isset($sequences[$document->getId()])) {
+                $document['$sequence'] = $sequences[$document->getId()];
+            }
+        }
 
-        return $sequences;
+        return $documents;
     }
 
     /**

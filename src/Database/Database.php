@@ -6303,7 +6303,7 @@ class Database
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
-            if ($attribute['$id'] === '$permissions') {
+            if ($key === '$permissions') {
                 if (empty($value)){
                     $document->setAttribute('$permissions', []); // set default value
                 }
@@ -6379,9 +6379,6 @@ class Database
         }
 
         foreach ($attributes as $attribute) {
-//            if ($attribute['$id'] === '$permissions') {
-//                continue;
-//            }
             $key = $attribute['$id'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
@@ -6398,11 +6395,11 @@ class Database
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
-            foreach ($value as $k => $node) {
+            foreach ($value as $index => $node) {
                 foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
-                $value[$k] = $node;
+                $value[$index] = $node;
             }
 
             if (
@@ -6438,9 +6435,6 @@ class Database
         }
 
         foreach ($attributes as $attribute) {
-//            if ($attribute['$id'] === '$permissions') {
-//                continue;
-//            }
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -6457,7 +6451,7 @@ class Database
                 $value = [$value];
             }
 
-            foreach ($value as $k => $node) {
+            foreach ($value as $index => $node) {
                 switch ($type) {
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;
@@ -6472,7 +6466,7 @@ class Database
                         break;
                 }
 
-                $value[$k] = $node;
+                $value[$index] = $node;
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);

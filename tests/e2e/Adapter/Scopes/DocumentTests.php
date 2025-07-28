@@ -409,7 +409,7 @@ trait DocumentTests
             ];
         }
 
-        $documents = array_map(fn($d) => new Document($d), $data);
+        $documents = array_map(fn ($d) => new Document($d), $data);
 
         $results = [];
         $count = $database->createDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
@@ -432,7 +432,7 @@ trait DocumentTests
             'number' => 101,
         ];
 
-        $documents = array_map(fn($d) => new Document($d), $data);
+        $documents = array_map(fn ($d) => new Document($d), $data);
 
         Authorization::disable();
 
@@ -451,7 +451,7 @@ trait DocumentTests
         $this->assertEquals(2, $count);
     }
 
-        public function testUpsertDocuments(): void
+    public function testUpsertDocuments(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();

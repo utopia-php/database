@@ -4108,7 +4108,7 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
-            $skipPermissionsUpdate = false;
+            $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
@@ -4941,7 +4941,7 @@ class Database
                 )));
             }
 
-            $skipPermissionsUpdate = false;
+            $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();

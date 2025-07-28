@@ -6304,7 +6304,7 @@ class Database
             $value = $document->getAttribute($key);
 
             if ($key === '$permissions') {
-                if (empty($value)){
+                if (empty($value)) {
                     $document->setAttribute('$permissions', []); // set default value
                 }
                 continue;
@@ -6366,7 +6366,10 @@ class Database
         foreach ($relationships as $relationship) {
             $key = $relationship['$id'] ?? '';
 
-            if ($document->offsetExists($key) || $document->offsetExists($this->adapter->filter($key))) {
+            if (
+                \array_key_exists($key, (array)$document)
+                || \array_key_exists($this->adapter->filter($key), (array)$document)
+            ) {
                 $value = $document->getAttribute($key);
                 $value ??= $document->getAttribute($this->adapter->filter($key));
                 $document->removeAttribute($this->adapter->filter($key));

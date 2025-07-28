@@ -1189,7 +1189,7 @@ class Mongo extends Adapter
         foreach ($documents as $document) {
             if (empty($document->getSequence())) {
                 $documentIds[] = $document->getId();
-                
+
                 if ($this->sharedTables) {
                     $documentTenants[] = $document->getTenant();
                 }

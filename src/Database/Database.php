@@ -4118,6 +4118,18 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
+            $skipPermissionsUpdate = false;
+
+            if ($document->offsetExists('$permissions')) {
+                $originalPermissions = $old->getPermissions();
+                $currentPermissions  = $document->getPermissions();
+
+                sort($originalPermissions);
+                sort($currentPermissions);
+
+                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+            }
+
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -4952,12 +4964,21 @@ class Database
                 )));
             }
 
-            $updatesPermissions = \in_array('$permissions', \array_keys($document->getArrayCopy()))
-                && $document->getPermissions() != $old->getPermissions();
+            $skipPermissionsUpdate = false;
+
+            if ($document->offsetExists('$permissions')) {
+                $originalPermissions = $old->getPermissions();
+                $currentPermissions  = $document->getPermissions();
+
+                sort($originalPermissions);
+                sort($currentPermissions);
+
+                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+            }
 
             if (
                 empty($attribute)
-                && !$updatesPermissions
+                && $skipPermissionsUpdate
                 && $old->getAttributes() == $document->getAttributes()
             ) {
                 // If not updating a single attribute and the
@@ -5013,7 +5034,7 @@ class Database
                 }
             }
 
-            if (!$updatesPermissions) {
+            if ($skipPermissionsUpdate) {
                 $document->setAttribute('$permissions', $old->getPermissions());
             }
 
@@ -6331,12 +6352,9 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
-            // We don't want to encode permissions into a JSON string
-            return $attribute['$id'] !== '$permissions';
-        });
-
-        $attributes = \array_merge($attributes, $internalAttributes);
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6344,6 +6362,13 @@ class Database
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
+
+            if ($key === '$permissions') {
+                if (empty($value)) {
+                    $document->setAttribute('$permissions', []); // set default value
+                }
+                continue;
+            }
 
             // Continue on optional param with no default
             if (is_null($value) && is_null($default)) {
@@ -6412,7 +6437,9 @@ class Database
             }
         }
 
-        $attributes = \array_merge($attributes, $this->getInternalAttributes());
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6431,10 +6458,11 @@ class Database
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
-            foreach ($value as &$node) {
-                foreach (\array_reverse($filters) as $filter) {
+            foreach ($value as $index => $node) {
+                foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
+                $value[$index] = $node;
             }
 
             if (
@@ -6465,7 +6493,9 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $attributes = \array_merge($attributes, $this->getInternalAttributes());
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6484,7 +6514,7 @@ class Database
                 $value = [$value];
             }
 
-            foreach ($value as &$node) {
+            foreach ($value as $index => $node) {
                 switch ($type) {
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;
@@ -6498,6 +6528,8 @@ class Database
                     default:
                         break;
                 }
+
+                $value[$index] = $node;
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);

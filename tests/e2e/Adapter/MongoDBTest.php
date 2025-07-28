@@ -3,8 +3,8 @@
 namespace Tests\E2E\Adapter;
 
 use Exception;
-use Redis;
-use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Cache\Adapter\Memory;
+use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Database;
@@ -35,10 +35,8 @@ class MongoDBTest extends Base
             return self::$database;
         }
 
-        $redis = new Redis();
-        $redis->connect('redis', 6379);
-        $redis->flushAll();
-        $cache = new Cache(new RedisAdapter($redis));
+        // Use Memory cache adapter as fallback when Redis is not available
+        $cache = new Cache(new Memory());
 
         $schema = 'utopiaTests'; // same as $this->testDatabase
         $client = new Client(

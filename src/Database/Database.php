@@ -4286,7 +4286,7 @@ class Database
 
             $document = $this->adapter->castingBefore($collection, $document);
 
-            $this->adapter->updateDocument($collection->getId(), $id, $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document, $skipPermissionsUpdate);
 
             $document = $this->adapter->castingAfter($collection, $document);
 

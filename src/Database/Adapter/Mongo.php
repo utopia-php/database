@@ -1020,12 +1020,17 @@ class Mongo extends Adapter
      * @return Document
      * @throws Exception
      */
-    public function updateDocument(string $collection, string $id, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
+
+        // If skipPermissions is true, remove the _permissions field from the update
+        if ($skipPermissions) {
+            unset($record['_permissions']);
+        }
 
         $filters = [];
         $filters['_uid'] = $id;

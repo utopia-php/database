@@ -35,14 +35,6 @@ class Document extends ArrayObject
             throw new StructureException('$permissions must be of type array');
         }
 
-//        if (isset($input['$id']) && !\is_string($input['$id'])) {
-//            throw new StructureException('$id must be of type string');
-//        }
-//
-//        if (isset($input['$permissions']) && !is_array($input['$permissions'])) {
-//            throw new StructureException('$permissions must be of type array');
-//        }
-//
         foreach ($input as $key => $value) {
             if (!\is_array($value)) {
                 continue;

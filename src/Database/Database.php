@@ -4963,7 +4963,7 @@ class Database
                 )));
             }
 
-            $skipPermissionsUpdate = false;
+            $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();

@@ -3268,6 +3268,8 @@ class Database
             return $document;
         }
 
+        $document = $this->adapter->castingAfter($collection, $document);
+
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
@@ -3638,12 +3640,16 @@ class Database
             throw new StructureException($structure->getDescription());
         }
 
+        $document = $this->adapter->castingBefore($collection, $document);
+
         $document = $this->withTransaction(function () use ($collection, $document) {
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
             return $this->adapter->createDocument($collection->getId(), $document);
         });
+
+        $document = $this->adapter->castingAfter($collection, $document);
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
@@ -3730,6 +3736,8 @@ class Database
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
+
+            $document = $this->adapter->castingBefore($collection, $document);
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
@@ -3740,6 +3748,7 @@ class Database
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
             foreach ($batch as $document) {
+                $document = $this->adapter->castingAfter($collection, $document);
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
@@ -4275,7 +4284,12 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
+            $document = $this->adapter->castingBefore($collection, $document);
+
             $this->adapter->updateDocument($collection->getId(), $id, $document, $skipPermissionsUpdate);
+
+            $document = $this->adapter->castingAfter($collection, $document);
+
             $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
@@ -4442,7 +4456,14 @@ class Database
                     }
 
                     $document = $this->encode($collection, $document);
+                    $document = $this->adapter->castingBefore($collection, $document);
+
                 }
+
+                unset($document);
+
+                $updates = $this->adapter->castingBefore($collection, $updates);
+
                 $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
@@ -4451,6 +4472,7 @@ class Database
             });
 
             foreach ($batch as $doc) {
+                $doc = $this->adapter->castingAfter($collection, $doc);
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
                 try {
@@ -4928,6 +4950,7 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
+        $processedDocuments = []; // Track which documents were actually processed
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                 $old = Authorization::skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
@@ -4940,7 +4963,7 @@ class Database
                     $document->getId(),
                 )));
             }
-
+          
             $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
@@ -4963,6 +4986,9 @@ class Database
                 unset($documents[$key]);
                 continue;
             }
+
+            // Track that this document was processed
+            $processedDocuments[$document->getId()] = true;
 
             // If old is empty, check if user has create permission on the collection
             // If old is not empty, check if user has update permission on the collection
@@ -5059,6 +5085,9 @@ class Database
 
             $seenIds[] = $document->getId();
 
+            $old = $this->adapter->castingBefore($collection, $old);
+            $document = $this->adapter->castingBefore($collection, $document);
+
             $documents[$key] = new Change(
                 old: $old,
                 new: $document
@@ -5074,14 +5103,15 @@ class Database
             /**
              * @var array<Change> $chunk
              */
+
             $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
                 $collection->getId(),
                 $attribute,
                 $chunk
             )));
-
+           
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
-
+          
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
                     $created++;
@@ -5091,6 +5121,9 @@ class Database
             }
 
             foreach ($batch as $doc) {
+
+                $doc = $this->adapter->castingAfter($collection, $doc);
+
                 if ($this->resolveRelationships) {
                     $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
@@ -5105,7 +5138,10 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                $onNext && $onNext($doc);
+                // Only call onNext for documents that were actually processed
+                if (isset($processedDocuments[$doc->getId()])) {
+                    $onNext && $onNext($doc);
+                }
             }
         }
 
@@ -5114,7 +5150,7 @@ class Database
             'created' => $created,
             'updated' => $updated,
         ]));
-
+  
         return $created + $updated;
     }
 
@@ -6065,6 +6101,10 @@ class Database
             throw new DatabaseException("cursor Document must be from the same Collection.");
         }
 
+        if (!empty($cursor)) {
+            $cursor = $this->adapter->castingBefore($collection, $cursor);
+        }
+
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
         /**  @var array<Query> $queries */
@@ -6091,6 +6131,10 @@ class Database
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         foreach ($results as &$node) {
+
+            $node = $this->adapter->castingAfter($collection, $node);
+
+
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
@@ -6102,6 +6146,8 @@ class Database
                 $node->setAttribute('$collection', $collection->getId());
             }
         }
+
+        unset($node);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
@@ -6675,7 +6721,11 @@ class Database
                         $values = $query->getValues();
                         foreach ($values as $valueIndex => $value) {
                             try {
-                                $values[$valueIndex] = DateTime::setTimezone($value);
+                                if ($this->adapter->isMongo()) {
+                                    $values[$valueIndex] = $this->adapter->setUTCDatetime($value);
+                                } else {
+                                    $values[$valueIndex] = DateTime::setTimezone($value);
+                                }
                             } catch (\Throwable $e) {
                                 throw new QueryException($e->getMessage(), $e->getCode(), $e);
                             }

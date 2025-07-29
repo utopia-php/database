@@ -14,6 +14,40 @@ use Utopia\Database\Validator\Authorization;
 
 trait PermissionTests
 {
+    public function testCreateDocumentsEmptyPermission(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+
+        /**
+         * Validate the decode function does not add $permissions null entry when no permissions are provided
+         */
+
+        $document = $database->createDocument(__FUNCTION__, new Document());
+
+        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertEquals([], $document->getAttribute('$permissions'));
+
+        $documents = [];
+
+        for ($i = 0; $i < 2; $i++) {
+            $documents[] = new Document();
+        }
+
+        $results = [];
+        $count = $database->createDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
+
+        $this->assertEquals(2, $count);
+        foreach ($results as $result) {
+            $this->assertArrayHasKey('$permissions', $result);
+            $this->assertEquals([], $result->getAttribute('$permissions'));
+        }
+    }
+
     public function testReadPermissionsFailure(): Document
     {
         Authorization::cleanRoles();

@@ -1176,12 +1176,13 @@ class Mongo extends Adapter
      * @return Document
      * @throws Exception
      */
-    public function updateDocument(string $collection, string $id, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
+
 
         $filters = [];
         $filters['_uid'] = $id;
@@ -1264,6 +1265,7 @@ class Mongo extends Adapter
 
             $documentIds = [];
             $documentTenants = [];
+            $tempDocuments = []; // Collect documents that need sequences
 
             $operations = [];
             foreach ($changes as $change) {
@@ -1278,6 +1280,7 @@ class Mongo extends Adapter
                     $attributes['_id'] = new ObjectId($document->getSequence());
                 } else {
                     $documentIds[] = $document->getId();
+                    $tempDocuments[] = $document; // Collect for sequence retrieval
                 }
 
                 if ($this->sharedTables) {
@@ -1319,24 +1322,6 @@ class Mongo extends Adapter
                 $operations,
                 options: $options
             );
-
-            if (!empty($documentIds)) {
-                // Create temporary documents for getSequences
-                $tempDocuments = [];
-                foreach ($changes as $change) {
-                    if (empty($change->getNew()->getSequence())) {
-                        $tempDocuments[] = $change->getNew();
-                    }
-                }
-
-                $sequences = $this->getSequences($collection, $tempDocuments);
-
-                foreach ($changes as $change) {
-                    if (isset($sequences[$change->getNew()->getId()])) {
-                        $change->getNew()->setAttribute('$sequence', $sequences[$change->getNew()->getId()]);
-                    }
-                }
-            }
 
         } catch (MongoException $e) {
             throw $this->processException($e);

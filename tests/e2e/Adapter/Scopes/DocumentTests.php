@@ -388,6 +388,69 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
+    public function testSkipPermissions(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'number', Database::VAR_INTEGER, 0, false);
+
+        $data = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $data[] = [
+                '$id' => "$i",
+                'number' => $i,
+            ];
+        }
+
+        $documents = array_map(fn ($d) => new Document($d), $data);
+
+        $results = [];
+        $count = $database->createDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
+
+        $this->assertEquals($count, \count($results));
+        $this->assertEquals(10, \count($results));
+
+        /**
+         * Update 1 row
+         */
+        $data[\array_key_last($data)]['number'] = 100;
+
+        /**
+         * Add 1 row
+         */
+        $data[] = [
+            '$id' => "101",
+            'number' => 101,
+        ];
+
+        $documents = array_map(fn ($d) => new Document($d), $data);
+      
+        Authorization::disable();
+
+        $results = [];
+        $count = $database->createOrUpdateDocuments(
+            __FUNCTION__,
+            $documents,
+            onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+            }
+        );
+
+        Authorization::reset();
+
+        $this->assertEquals(2, \count($results));
+        $this->assertEquals(2, $count);
+    }
+
     public function testUpsertDocuments(): void
     {
         /** @var Database $database */

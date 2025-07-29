@@ -4117,6 +4117,18 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
+            $skipPermissionsUpdate = true;
+
+            if ($document->offsetExists('$permissions')) {
+                $originalPermissions = $old->getPermissions();
+                $currentPermissions  = $document->getPermissions();
+
+                sort($originalPermissions);
+                sort($currentPermissions);
+
+                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+            }
+
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -4274,7 +4286,7 @@ class Database
 
             $document = $this->adapter->castingBefore($collection, $document);
 
-            $this->adapter->updateDocument($collection->getId(), $id, $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document, $skipPermissionsUpdate);
 
             $document = $this->adapter->castingAfter($collection, $document);
 
@@ -4938,6 +4950,7 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
+        $processedDocuments = []; // Track which documents were actually processed
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                 $old = Authorization::skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
@@ -4950,13 +4963,22 @@ class Database
                     $document->getId(),
                 )));
             }
+          
+            $skipPermissionsUpdate = true;
 
-            $updatesPermissions = \in_array('$permissions', \array_keys($document->getArrayCopy()))
-                && $document->getPermissions() != $old->getPermissions();
+            if ($document->offsetExists('$permissions')) {
+                $originalPermissions = $old->getPermissions();
+                $currentPermissions  = $document->getPermissions();
+
+                sort($originalPermissions);
+                sort($currentPermissions);
+
+                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+            }
 
             if (
                 empty($attribute)
-                && !$updatesPermissions
+                && $skipPermissionsUpdate
                 && $old->getAttributes() == $document->getAttributes()
             ) {
                 // If not updating a single attribute and the
@@ -4964,6 +4986,9 @@ class Database
                 unset($documents[$key]);
                 continue;
             }
+
+            // Track that this document was processed
+            $processedDocuments[$document->getId()] = true;
 
             // If old is empty, check if user has create permission on the collection
             // If old is not empty, check if user has update permission on the collection
@@ -5012,7 +5037,7 @@ class Database
                 }
             }
 
-            if (!$updatesPermissions) {
+            if ($skipPermissionsUpdate) {
                 $document->setAttribute('$permissions', $old->getPermissions());
             }
 
@@ -5084,8 +5109,9 @@ class Database
                 $attribute,
                 $chunk
             )));
+           
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
-
+          
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
                     $created++;
@@ -5112,7 +5138,10 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                $onNext && $onNext($doc);
+                // Only call onNext for documents that were actually processed
+                if (isset($processedDocuments[$doc->getId()])) {
+                    $onNext && $onNext($doc);
+                }
             }
         }
 
@@ -5121,7 +5150,7 @@ class Database
             'created' => $created,
             'updated' => $updated,
         ]));
-
+  
         return $created + $updated;
     }
 
@@ -6330,12 +6359,9 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
-            // We don't want to encode permissions into a JSON string
-            return $attribute['$id'] !== '$permissions';
-        });
-
-        $attributes = \array_merge($attributes, $internalAttributes);
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6343,6 +6369,13 @@ class Database
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
+
+            if ($key === '$permissions') {
+                if (empty($value)) {
+                    $document->setAttribute('$permissions', []); // set default value
+                }
+                continue;
+            }
 
             // Continue on optional param with no default
             if (is_null($value) && is_null($default)) {
@@ -6411,7 +6444,9 @@ class Database
             }
         }
 
-        $attributes = \array_merge($attributes, $this->getInternalAttributes());
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6430,10 +6465,11 @@ class Database
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
-            foreach ($value as &$node) {
-                foreach (\array_reverse($filters) as $filter) {
+            foreach ($value as $index => $node) {
+                foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
+                $value[$index] = $node;
             }
 
             if (
@@ -6464,7 +6500,9 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $attributes = \array_merge($attributes, $this->getInternalAttributes());
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6483,7 +6521,7 @@ class Database
                 $value = [$value];
             }
 
-            foreach ($value as &$node) {
+            foreach ($value as $index => $node) {
                 switch ($type) {
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;
@@ -6497,6 +6535,8 @@ class Database
                     default:
                         break;
                 }
+
+                $value[$index] = $node;
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);

@@ -761,8 +761,12 @@ class Mongo extends Adapter
         if (empty($result)) {
             return new Document([]);
         }
-
+      
         $result = $this->replaceChars('_', '$', (array)$result[0]);
+
+        // if (array_key_exists('$permissions', $result) && empty($result['$permissions'])) {
+        //     $result['$permissions'] = [];
+        // }
 
         return new Document($result);
     }
@@ -778,7 +782,7 @@ class Mongo extends Adapter
      */
     public function createDocument(string $collection, Document $document): Document
     {
-
+       
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $sequence = $document->getSequence();
@@ -795,9 +799,9 @@ class Mongo extends Adapter
         if (!empty($sequence)) {
             $record['_id'] = $sequence;
         }
-
+        
         $result = $this->insertDocument($name, $this->removeNullKeys($record));
-
+      
         $result = $this->replaceChars('_', '$', $result);
 
         return new Document($result);
@@ -1001,7 +1005,7 @@ class Mongo extends Adapter
                 $filters,
                 ['limit' => 1]
             )->cursor->firstBatch[0];
-
+            
             return $this->client->toArray($result);
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
@@ -1027,11 +1031,7 @@ class Mongo extends Adapter
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
 
-        // If skipPermissions is true, remove the _permissions field from the update
-        if ($skipPermissions) {
-            unset($record['_permissions']);
-        }
-
+    
         $filters = [];
         $filters['_uid'] = $id;
         if ($this->sharedTables) {
@@ -1111,6 +1111,7 @@ class Mongo extends Adapter
 
             $documentIds = [];
             $documentTenants = [];
+            $tempDocuments = []; // Collect documents that need sequences
 
             $operations = [];
             foreach ($changes as $change) {
@@ -1125,6 +1126,7 @@ class Mongo extends Adapter
                     $attributes['_id'] = new ObjectId($document->getSequence());
                 } else {
                     $documentIds[] = $document->getId();
+                    $tempDocuments[] = $document; // Collect for sequence retrieval
                 }
 
                 if ($this->sharedTables) {
@@ -1165,28 +1167,10 @@ class Mongo extends Adapter
                 ["ordered" => false] // TODO Do we want to continue if an error is thrown?
             );
 
-            if (!empty($documentIds)) {
-                // Create temporary documents for getSequences
-                $tempDocuments = [];
-                foreach ($changes as $change) {
-                    if (empty($change->getNew()->getSequence())) {
-                        $tempDocuments[] = $change->getNew();
-                    }
-                }
-
-                $sequences = $this->getSequences($collection, $tempDocuments);
-
-                foreach ($changes as $change) {
-                    if (isset($sequences[$change->getNew()->getId()])) {
-                        $change->getNew()->setAttribute('$sequence', $sequences[$change->getNew()->getId()]);
-                    }
-                }
-            }
-
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
-
+      
         return \array_map(fn ($change) => $change->getNew(), $changes);
     }
 

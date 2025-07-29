@@ -4117,7 +4117,7 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
-            $skipPermissionsUpdate = false;
+            $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
@@ -4950,6 +4950,7 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
+        $processedDocuments = []; // Track which documents were actually processed
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                 $old = Authorization::skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
@@ -4962,7 +4963,7 @@ class Database
                     $document->getId(),
                 )));
             }
-
+          
             $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
@@ -4985,6 +4986,9 @@ class Database
                 unset($documents[$key]);
                 continue;
             }
+
+            // Track that this document was processed
+            $processedDocuments[$document->getId()] = true;
 
             // If old is empty, check if user has create permission on the collection
             // If old is not empty, check if user has update permission on the collection
@@ -5105,8 +5109,9 @@ class Database
                 $attribute,
                 $chunk
             )));
+           
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
-
+          
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
                     $created++;
@@ -5133,7 +5138,10 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                $onNext && $onNext($doc);
+                // Only call onNext for documents that were actually processed
+                if (isset($processedDocuments[$doc->getId()])) {
+                    $onNext && $onNext($doc);
+                }
             }
         }
 
@@ -5142,7 +5150,7 @@ class Database
             'created' => $created,
             'updated' => $updated,
         ]));
-
+  
         return $created + $updated;
     }
 

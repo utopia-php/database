@@ -433,7 +433,7 @@ trait DocumentTests
         ];
 
         $documents = array_map(fn ($d) => new Document($d), $data);
-
+      
         Authorization::disable();
 
         $results = [];

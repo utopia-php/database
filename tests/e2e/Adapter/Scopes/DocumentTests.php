@@ -4634,4 +4634,123 @@ trait DocumentTests
             $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
         }
     }
+
+    public function testModifyDocumentWithDates(): void
+    {
+        /**
+         * @var Database $database
+         */
+        $database = static::getDatabase();
+        $collection = 'create_modify_dates';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+        $this->assertEquals(true, $database->createAttribute($collection, 'datetime', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
+
+        $date = '2000-01-01T10:00:00.000+00:00';
+        // test - default behaviour of external datetime attribute not changed
+        $doc = $database->createDocument($collection, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any()),Permission::write(Role::any()),Permission::update(Role::any())],
+            'datetime' => ''
+        ]));
+        $this->assertNotEmpty($doc->getAttribute('datetime'));
+        $this->assertNotEmpty($doc->getAttribute('$createdAt'));
+        $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
+
+        $doc = $database->getDocument($collection, 'doc1');
+        $this->assertNotEmpty($doc->getAttribute('datetime'));
+        $this->assertNotEmpty($doc->getAttribute('$createdAt'));
+        $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
+
+        $database->setPreserveDates(true);
+        // test - modifying $createdAt and $updatedAt
+        $doc = $database->createDocument($collection, new Document([
+            '$id' => 'doc2',
+            '$permissions' => [Permission::read(Role::any()),Permission::write(Role::any()),Permission::update(Role::any())],
+            '$createdAt' => $date
+        ]));
+
+        $this->assertEquals($doc->getAttribute('$createdAt'), $date);
+        $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
+        $this->assertNotEquals($doc->getAttribute('$updatedAt'), $date);
+
+        $doc = $database->getDocument($collection, 'doc2');
+
+        $this->assertEquals($doc->getAttribute('$createdAt'), $date);
+        $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
+        $this->assertNotEquals($doc->getAttribute('$updatedAt'), $date);
+
+        $database->setPreserveDates(false);
+        $database->deleteCollection($collection);
+    }
+
+    public function testModifyBulkDocumentWithDates(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collection = 'bulk_modify_dates';
+        $date = '2000-01-01T10:00:00.000+00:00';
+
+        $database->setPreserveDates(true);
+        $database->createCollection($collection);
+
+        $this->assertTrue(
+            $database->createAttribute($collection, 'attr1', Database::VAR_STRING, 128, false)
+        );
+
+        $documents = [
+            new Document([
+                '$id' => 'doc2',
+                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any())],
+                'attr1' => 'value2',
+                '$createdAt' => $date
+            ]),
+            new Document([
+                '$id' => 'doc3',
+                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any())],
+                'attr1' => 'value3',
+                '$createdAt' => $date
+            ]),
+            new Document([
+                '$id' => 'doc4',
+                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any())],
+                'attr1' => 'value4',
+                '$createdAt' => null
+            ]),
+            new Document([
+                '$id' => 'doc5',
+                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any())],
+                'attr1' => 'value5'
+            ]),
+            new Document([
+                '$id' => 'doc6',
+                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any())],
+                'attr1' => 'value6',
+                '$createdAt' => $date,
+                '$updatedAt' => $date
+            ]),
+        ];
+
+        $resultDocs = $database->createDocuments($collection, $documents, batchSize: 2);
+
+        foreach (['doc2', 'doc3', 'doc6'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($date, $doc->getAttribute('$createdAt'), "Mismatch for doc: $id");
+            if ($id === 'doc6') {
+                $this->assertEquals($date, $doc->getAttribute('$updatedAt'), "updatedAt incorrectly preserved for doc: $id");
+            } else {
+                $this->assertNotEquals($date, $doc->getAttribute('$updatedAt'), "updatedAt incorrectly preserved for doc: $id");
+            }
+        }
+
+        foreach (['doc4', 'doc5'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertNotEmpty($doc->getAttribute('$createdAt'), "createdAt missing for doc: $id");
+            $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt missing for doc: $id");
+        }
+
+        $database->setPreserveDates(false);
+        $database->deleteCollection($collection);
+    }
 }

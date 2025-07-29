@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
@@ -1270,7 +1271,8 @@ class Database
             $validator = new IndexValidator(
                 $attributes,
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2195,7 +2197,8 @@ class Database
                     $validator = new IndexValidator(
                         $attributes,
                         $this->adapter->getMaxIndexLength(),
-                        $this->adapter->getInternalIndexesKeys()
+                        $this->adapter->getInternalIndexesKeys(),
+                        $this->adapter->getSupportForIndexArray()
                     );
 
                     foreach ($indexes as $index) {
@@ -3100,7 +3103,8 @@ class Database
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -3218,43 +3222,7 @@ class Database
 
         $selects = Query::groupByType($queries)['selections'];
         $selections = $this->validateSelections($collection, $selects);
-        $nestedSelections = [];
-
-        foreach ($queries as $query) {
-            if ($query->getMethod() == Query::TYPE_SELECT) {
-                $values = $query->getValues();
-                foreach ($values as $valueIndex => $value) {
-                    if (\str_contains($value, '.')) {
-                        // Shift the top level off the dot-path to pass the selection down the chain
-                        // 'foo.bar.baz' becomes 'bar.baz'
-                        $nestedSelections[] = Query::select([
-                            \implode('.', \array_slice(\explode('.', $value), 1))
-                        ]);
-
-                        $key = \explode('.', $value)[0];
-
-                        foreach ($relationships as $relationship) {
-                            if ($relationship->getAttribute('key') === $key) {
-                                switch ($relationship->getAttribute('options')['relationType']) {
-                                    case Database::RELATION_MANY_TO_MANY:
-                                    case Database::RELATION_ONE_TO_MANY:
-                                        unset($values[$valueIndex]);
-                                        break;
-
-                                    case Database::RELATION_MANY_TO_ONE:
-                                    case Database::RELATION_ONE_TO_ONE:
-                                        $values[$valueIndex] = $key;
-                                        break;
-                                }
-                            }
-                        }
-                    }
-                }
-                $query->setValues(\array_values($values));
-            }
-        }
-
-        $queries = \array_values($queries);
+        $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3552,13 +3520,30 @@ class Database
                         Query::limit(PHP_INT_MAX)
                     ]));
 
-                    $related = [];
+                    $relatedIds = [];
                     foreach ($junctions as $junction) {
-                        $related[] = $this->getDocument(
-                            $relatedCollection->getId(),
-                            $junction->getAttribute($key),
-                            $queries
-                        );
+                        $relatedIds[] = $junction->getAttribute($key);
+                    }
+
+                    $related = [];
+                    if (!empty($relatedIds)) {
+                        $foundRelated = $this->find($relatedCollection->getId(), [
+                            Query::equal('$id', $relatedIds),
+                            Query::limit(PHP_INT_MAX),
+                            ...$queries
+                        ]);
+
+                        // Preserve the order of related documents to match the junction order
+                        $relatedById = [];
+                        foreach ($foundRelated as $doc) {
+                            $relatedById[$doc->getId()] = $doc;
+                        }
+
+                        foreach ($relatedIds as $relatedId) {
+                            if (isset($relatedById[$relatedId])) {
+                                $related[] = $relatedById[$relatedId];
+                            }
+                        }
                     }
 
                     $this->relationshipFetchDepth--;
@@ -3664,6 +3649,7 @@ class Database
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
 
+        $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
@@ -3751,11 +3737,14 @@ class Database
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
+
             foreach ($batch as $document) {
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
 
+                $document = $this->casting($collection, $document);
                 $document = $this->decode($collection, $document);
                 $onNext && $onNext($document);
                 $modified++;
@@ -4119,6 +4108,18 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
+            $skipPermissionsUpdate = true;
+
+            if ($document->offsetExists('$permissions')) {
+                $originalPermissions = $old->getPermissions();
+                $currentPermissions  = $document->getPermissions();
+
+                sort($originalPermissions);
+                sort($currentPermissions);
+
+                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+            }
+
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
@@ -4126,7 +4127,6 @@ class Database
             if ($this->adapter->getSharedTables()) {
                 $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
             }
-
             $document = new Document($document);
 
             $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
@@ -4275,7 +4275,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $id, $document);
+            $this->adapter->updateDocument($collection->getId(), $id, $document, $skipPermissionsUpdate);
             $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
@@ -4302,6 +4302,7 @@ class Database
      * @param array<Query> $queries
      * @param int $batchSize
      * @param callable|null $onNext
+     * @param callable|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws ConflictException
@@ -4318,6 +4319,7 @@ class Database
         array $queries = [],
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         if ($updates->isEmpty()) {
             return 0;
@@ -4361,7 +4363,7 @@ class Database
         $cursor = $grouped['cursor'];
 
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
-            throw new DatabaseException("cursor Document must be from the same Collection.");
+            throw new DatabaseException("Cursor document must be from the same Collection.");
         }
 
         unset($updates['$id']);
@@ -4418,30 +4420,29 @@ class Database
                 break;
             }
 
-            foreach ($batch as &$document) {
-                $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+            $this->withTransaction(function () use ($collection, $updates, &$batch) {
+                foreach ($batch as &$document) {
+                    $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
 
-                if ($this->resolveRelationships) {
-                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
+                    if ($this->resolveRelationships) {
+                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
+                    }
+
+                    $document = $new;
+
+                    // Check if document was updated after the request timestamp
+                    try {
+                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    } catch (Exception $e) {
+                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                    }
+
+                    if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                        throw new ConflictException('Document was updated after the request timestamp');
+                    }
+
+                    $document = $this->encode($collection, $document);
                 }
-
-                $document = $new;
-
-                // Check if document was updated after the request timestamp
-                try {
-                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-                } catch (Exception $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                }
-
-                if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                    throw new ConflictException('Document was updated after the request timestamp');
-                }
-
-                $document = $this->encode($collection, $document);
-            }
-
-            $this->withTransaction(function () use ($collection, $updates, $batch) {
                 $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
@@ -4452,7 +4453,11 @@ class Database
             foreach ($batch as $doc) {
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
-                $onNext && $onNext($doc);
+                try {
+                    $onNext && $onNext($doc);
+                } catch (Throwable $th) {
+                    $onError ? $onError($th) : throw $th;
+                }
                 $modified++;
             }
 
@@ -4508,8 +4513,8 @@ class Database
 
             if ($oldValue == $value) {
                 if (
-                    ($relationType === Database::RELATION_ONE_TO_ONE ||
-                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
+                    ($relationType === Database::RELATION_ONE_TO_ONE
+                        || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
                     $value instanceof Document
                 ) {
                     $document->setAttribute($key, $value->getId());
@@ -4635,7 +4640,7 @@ class Database
                                     $this->skipRelationships(fn () => $this->updateDocument(
                                         $relatedCollection->getId(),
                                         $oldRelated->getId(),
-                                        $oldRelated->setAttribute($twoWayKey, null)
+                                        new Document([$twoWayKey => null])
                                     ));
                                 }
                                 break;
@@ -4661,7 +4666,7 @@ class Database
                                 } elseif ($item instanceof Document) {
                                     return $item->getId();
                                 } else {
-                                    throw new RelationshipException('Invalid relationship value. No ID provided.');
+                                    throw new RelationshipException('Invalid relationship value. Must be either a document or document ID.');
                                 }
                             }, $value);
 
@@ -4936,12 +4941,21 @@ class Database
                 )));
             }
 
-            $updatesPermissions = \in_array('$permissions', \array_keys($document->getArrayCopy()))
-                && $document->getPermissions() != $old->getPermissions();
+            $skipPermissionsUpdate = true;
+
+            if ($document->offsetExists('$permissions')) {
+                $originalPermissions = $old->getPermissions();
+                $currentPermissions  = $document->getPermissions();
+
+                sort($originalPermissions);
+                sort($currentPermissions);
+
+                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+            }
 
             if (
                 empty($attribute)
-                && !$updatesPermissions
+                && $skipPermissionsUpdate
                 && $old->getAttributes() == $document->getAttributes()
             ) {
                 // If not updating a single attribute and the
@@ -4997,7 +5011,7 @@ class Database
                 }
             }
 
-            if (!$updatesPermissions) {
+            if ($skipPermissionsUpdate) {
                 $document->setAttribute('$permissions', $old->getPermissions());
             }
 
@@ -5065,6 +5079,8 @@ class Database
                 $attribute,
                 $chunk
             )));
+
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
@@ -5755,6 +5771,7 @@ class Database
      * @param array<Query> $queries
      * @param int $batchSize
      * @param callable|null $onNext
+     * @param callable|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws DatabaseException
@@ -5766,6 +5783,7 @@ class Database
         array $queries = [],
         int $batchSize = self::DELETE_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -5846,32 +5864,33 @@ class Database
 
             $sequences = [];
             $permissionIds = [];
-            foreach ($batch as $document) {
-                $sequences[] = $document->getSequence();
-                if (!empty($document->getPermissions())) {
-                    $permissionIds[] = $document->getId();
+
+            $this->withTransaction(function () use ($collection, $sequences, $permissionIds, $batch) {
+                foreach ($batch as $document) {
+                    $sequences[] = $document->getSequence();
+                    if (!empty($document->getPermissions())) {
+                        $permissionIds[] = $document->getId();
+                    }
+
+                    if ($this->resolveRelationships) {
+                        $document = $this->silent(fn () => $this->deleteDocumentRelationships(
+                            $collection,
+                            $document
+                        ));
+                    }
+
+                    // Check if document was updated after the request timestamp
+                    try {
+                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    } catch (Exception $e) {
+                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                    }
+
+                    if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                        throw new ConflictException('Document was updated after the request timestamp');
+                    }
                 }
 
-                if ($this->resolveRelationships) {
-                    $document = $this->silent(fn () => $this->deleteDocumentRelationships(
-                        $collection,
-                        $document
-                    ));
-                }
-
-                // Check if document was updated after the request timestamp
-                try {
-                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-                } catch (Exception $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                }
-
-                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                    throw new ConflictException('Document was updated after the request timestamp');
-                }
-            }
-
-            $this->withTransaction(function () use ($collection, $sequences, $permissionIds) {
                 $this->adapter->deleteDocuments(
                     $collection->getId(),
                     $sequences,
@@ -5887,8 +5906,11 @@ class Database
                 } else {
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
-
-                $onNext && $onNext($document);
+                try {
+                    $onNext && $onNext($document);
+                } catch (Throwable $th) {
+                    $onError ? $onError($th) : throw $th;
+                }
                 $modified++;
             }
 
@@ -6048,54 +6070,11 @@ class Database
         /**  @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
-            self::convertQueries($collection, $filters)
+            $this->convertQueries($collection, $filters)
         );
 
         $selections = $this->validateSelections($collection, $selects);
-        $nestedSelections = [];
-
-        foreach ($queries as $index => &$query) {
-            switch ($query->getMethod()) {
-                case Query::TYPE_SELECT:
-                    $values = $query->getValues();
-                    foreach ($values as $valueIndex => $value) {
-                        if (\str_contains($value, '.')) {
-                            // Shift the top level off the dot-path to pass the selection down the chain
-                            // 'foo.bar.baz' becomes 'bar.baz'
-                            $nestedSelections[] = Query::select([
-                                \implode('.', \array_slice(\explode('.', $value), 1))
-                            ]);
-
-                            $key = \explode('.', $value)[0];
-
-                            foreach ($relationships as $relationship) {
-                                if ($relationship->getAttribute('key') === $key) {
-                                    switch ($relationship->getAttribute('options')['relationType']) {
-                                        case Database::RELATION_MANY_TO_MANY:
-                                        case Database::RELATION_ONE_TO_MANY:
-                                            unset($values[$valueIndex]);
-                                            break;
-
-                                        case Database::RELATION_MANY_TO_ONE:
-                                        case Database::RELATION_ONE_TO_ONE:
-                                            $values[$valueIndex] = $key;
-                                            break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    $query->setValues(\array_values($values));
-                    break;
-                default:
-                    if (\str_contains($query->getAttribute(), '.')) {
-                        unset($queries[$index]);
-                    }
-                    break;
-            }
-        }
-
-        $queries = \array_values($queries);
+        $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         $getResults = fn () => $this->adapter->find(
             $collection->getId(),
@@ -6123,8 +6102,6 @@ class Database
                 $node->setAttribute('$collection', $collection->getId());
             }
         }
-
-        unset($query);
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
@@ -6253,7 +6230,7 @@ class Database
         }
 
         $queries = Query::groupByType($queries)['filters'];
-        $queries = self::convertQueries($collection, $queries);
+        $queries = $this->convertQueries($collection, $queries);
 
         $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
@@ -6297,7 +6274,7 @@ class Database
             }
         }
 
-        $queries = self::convertQueries($collection, $queries);
+        $queries = $this->convertQueries($collection, $queries);
 
         $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
 
@@ -6336,12 +6313,9 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
-            // We don't want to encode permissions into a JSON string
-            return $attribute['$id'] !== '$permissions';
-        });
-
-        $attributes = \array_merge($attributes, $internalAttributes);
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6349,6 +6323,13 @@ class Database
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
+
+            if ($key === '$permissions') {
+                if (empty($value)) {
+                    $document->setAttribute('$permissions', []); // set default value
+                }
+                continue;
+            }
 
             // Continue on optional param with no default
             if (is_null($value) && is_null($default)) {
@@ -6417,7 +6398,9 @@ class Database
             }
         }
 
-        $attributes = \array_merge($attributes, $this->getInternalAttributes());
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6436,10 +6419,11 @@ class Database
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
-            foreach ($value as &$node) {
-                foreach (\array_reverse($filters) as $filter) {
+            foreach ($value as $index => $node) {
+                foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
+                $value[$index] = $node;
             }
 
             if (
@@ -6470,6 +6454,10 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
+
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
@@ -6487,7 +6475,7 @@ class Database
                 $value = [$value];
             }
 
-            foreach ($value as &$node) {
+            foreach ($value as $index => $node) {
                 switch ($type) {
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;
@@ -6501,6 +6489,8 @@ class Database
                     default:
                         break;
                 }
+
+                $value[$index] = $node;
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);
@@ -6664,7 +6654,7 @@ class Database
      * @throws QueryException
      * @throws Exception
      */
-    public static function convertQueries(Document $collection, array $queries): array
+    public function convertQueries(Document $collection, array $queries): array
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -6789,7 +6779,7 @@ class Database
      * @return void
      * @throws QueryException
      */
-    public function checkQueriesType(array $queries)
+    private function checkQueriesType(array $queries): void
     {
         foreach ($queries as $query) {
             if (!$query instanceof Query) {
@@ -6800,5 +6790,78 @@ class Database
                 $this->checkQueriesType($query->getValues());
             }
         }
+    }
+
+    /**
+     * Process relationship queries, extracting nested selections.
+     *
+     * @param array<Document> $relationships
+     * @param array<Query> $queries
+     * @return array<Query>
+     */
+    private function processRelationshipQueries(
+        array $relationships,
+        array $queries,
+    ): array {
+        $nestedSelections = [];
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() !== Query::TYPE_SELECT) {
+                continue;
+            }
+
+            $values = $query->getValues();
+            foreach ($values as $valueIndex => $value) {
+                if (!\str_contains($value, '.')) {
+                    continue;
+                }
+
+                $selectedKey = \explode('.', $value)[0];
+
+                $relationship = \array_values(\array_filter(
+                    $relationships,
+                    fn (Document $relationship) => $relationship->getAttribute('key') === $selectedKey,
+                ))[0] ?? null;
+
+                if (!$relationship) {
+                    continue;
+                }
+
+                // Shift the top level off the dot-path to pass the selection down the chain
+                // 'foo.bar.baz' becomes 'bar.baz'
+                $nestedSelections[] = Query::select([
+                    \implode('.', \array_slice(\explode('.', $value), 1))
+                ]);
+
+                $type = $relationship->getAttribute('options')['relationType'];
+                $side = $relationship->getAttribute('options')['side'];
+
+                switch ($type) {
+                    case Database::RELATION_MANY_TO_MANY:
+                        unset($values[$valueIndex]);
+                        break;
+                    case Database::RELATION_ONE_TO_MANY:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            unset($values[$valueIndex]);
+                        } else {
+                            $values[$valueIndex] = $selectedKey;
+                        }
+                        break;
+                    case Database::RELATION_MANY_TO_ONE:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            $values[$valueIndex] = $selectedKey;
+                        } else {
+                            unset($values[$valueIndex]);
+                        }
+                        break;
+                    case Database::RELATION_ONE_TO_ONE:
+                        $values[$valueIndex] = $selectedKey;
+                        break;
+                }
+            }
+            $query->setValues(\array_values($values));
+        }
+
+        return $nestedSelections;
     }
 }

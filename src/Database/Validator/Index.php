@@ -22,16 +22,20 @@ class Index extends Validator
      */
     protected array $reservedKeys;
 
+    protected bool $arrayIndexSupport;
+
     /**
      * @param array<Document> $attributes
      * @param int $maxLength
      * @param array<string> $reservedKeys
+     * @param bool $arrayIndexSupport
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [])
+    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [], bool $arrayIndexSupport = false)
     {
         $this->maxLength = $maxLength;
         $this->reservedKeys = $reservedKeys;
+        $this->arrayIndexSupport = $arrayIndexSupport;
 
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -156,6 +160,11 @@ class Index extends Validator
                     $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
                     return false;
                 }
+
+                if ($this->arrayIndexSupport === false) {
+                    $this->message = 'Indexing an array attribute is not supported';
+                    return false;
+                }
             } elseif ($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
                 $this->message = 'Cannot set a length on "'. $attribute->getAttribute('type') . '" attributes';
                 return false;
@@ -187,7 +196,7 @@ class Index extends Validator
             switch ($attribute->getAttribute('type')) {
                 case Database::VAR_STRING:
                     $attributeSize = $attribute->getAttribute('size', 0);
-                    $indexLength = $lengths[$attributePosition] ?? $attributeSize;
+                    $indexLength = !empty($lengths[$attributePosition]) ? $lengths[$attributePosition] : $attributeSize;
                     break;
                 case Database::VAR_FLOAT:
                     $attributeSize = 2; // 8 bytes / 4 mb4

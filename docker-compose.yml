@@ -17,7 +17,7 @@ services:
       - ./dev/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
-      - ./vendor/utopia-php/mongo/src/Client.php:/usr/src/code/vendor/utopia-php/mongo/src/Client.php
+      #- ./vendor/utopia-php/mongo/src/Client.php:/usr/src/code/vendor/utopia-php/mongo/src/Client.php
     environment:
       PHP_IDE_CONFIG: serverName=tests
 
@@ -88,6 +88,8 @@ services:
       MONGO_INITDB_DATABASE: utopia_testing
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_USERNAME: user
+      MONGO_INITDB_PASSWORD: paswword
     command: mongod --replSet rs0 --bind_ip_all --keyFile /etc/mongo-keyfile
 
 # Manyally initate the replica set

@@ -1262,9 +1262,6 @@ class Mongo extends Adapter
             $name = $this->getNamespace() . '_' . $this->filter($collection);
             $attribute = $this->filter($attribute);
 
-            $documentIds = [];
-            $documentTenants = [];
-
             $operations = [];
             foreach ($changes as $change) {
                 $document = $change->getNew();
@@ -1276,13 +1273,10 @@ class Mongo extends Adapter
 
                 if (!empty($document->getSequence())) {
                     $attributes['_id'] = new ObjectId($document->getSequence());
-                } else {
-                    $documentIds[] = $document->getId();
                 }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();
-                    $documentTenants[] = $document->getTenant();
                 }
 
                 $record = $this->replaceChars('$', '_', $attributes);
@@ -1290,6 +1284,7 @@ class Mongo extends Adapter
 
                 // Build filter for upsert
                 $filter = ['_uid' => $document->getId()];
+
                 if ($this->sharedTables) {
                     $filter['_tenant'] = $document->getTenant();
                 }
@@ -1366,7 +1361,7 @@ class Mongo extends Adapter
             foreach ($results->cursor->firstBatch as $result) {
                 $sequences[$result->_uid] = (string)$result->_id;
             }
-
+    
         foreach ($documents as $document) {
             if (isset($sequences[$document->getId()])) {
                 $document['$sequence'] = $sequences[$document->getId()];

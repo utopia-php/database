@@ -912,7 +912,7 @@ class Mongo extends Adapter
         if (empty($result)) {
             return new Document([]);
         }
-
+      
         $result = $this->replaceChars('_', '$', (array)$result[0]);
 
         return new Document($result);
@@ -929,7 +929,7 @@ class Mongo extends Adapter
      */
     public function createDocument(string $collection, Document $document): Document
     {
-
+       
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $sequence = $document->getSequence();
@@ -1183,7 +1183,7 @@ class Mongo extends Adapter
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
 
-
+    
         $filters = [];
         $filters['_uid'] = $id;
         if ($this->sharedTables) {
@@ -1233,7 +1233,6 @@ class Mongo extends Adapter
         $record = $updates->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
 
-
         $updateQuery = [
             '$set' => $record,
         ];
@@ -1265,7 +1264,6 @@ class Mongo extends Adapter
 
             $documentIds = [];
             $documentTenants = [];
-            $tempDocuments = []; // Collect documents that need sequences
 
             $operations = [];
             foreach ($changes as $change) {
@@ -1280,7 +1278,6 @@ class Mongo extends Adapter
                     $attributes['_id'] = new ObjectId($document->getSequence());
                 } else {
                     $documentIds[] = $document->getId();
-                    $tempDocuments[] = $document; // Collect for sequence retrieval
                 }
 
                 if ($this->sharedTables) {
@@ -1326,7 +1323,7 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
-
+      
         return \array_map(fn ($change) => $change->getNew(), $changes);
     }
 
@@ -1358,25 +1355,18 @@ class Mongo extends Adapter
         $sequences = [];
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        foreach (\array_chunk($documentIds, 1000) as $index => $documentIdsChunk) {
-            $filters = ['_uid' => ['$in' => $documentIdsChunk]];
+        $filters = ['_uid' => ['$in' => $documentIds]];
 
-            if ($this->sharedTables) {
-                $tenantChunk = \array_slice($documentTenants, $index * 1000, \count($documentIdsChunk));
-                $filters['_tenant'] = ['$in' => $tenantChunk];
-            }
-
-            try {
-                $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
-
-                foreach ($results->cursor->firstBatch as $result) {
-                    $sequences[$result->_uid] = (string)$result->_id;
-                }
-            } catch (MongoException $e) {
-                // If query fails, continue with empty sequences
-                continue;
-            }
+        if ($this->sharedTables) {
+            $filters['_tenant'] = ['$in' => $documentTenants];
         }
+
+            $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
+
+            foreach ($results->cursor->firstBatch as $result) {
+                $sequences[$result->_uid] = (string)$result->_id;
+            }
+
         foreach ($documents as $document) {
             if (isset($sequences[$document->getId()])) {
                 $document['$sequence'] = $sequences[$document->getId()];

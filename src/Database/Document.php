@@ -70,12 +70,7 @@ class Document extends ArrayObject
      */
     public function getSequence(): string
     {
-        /**
-         * This can be a  better fix ?
-         * Since we always check logic by empty($document->getSequence()
-         */
         return $this->getAttribute('$sequence', '0');
-        //return $this->getAttribute('$sequence', '');
     }
 
     /**

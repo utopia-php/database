@@ -6808,7 +6808,7 @@ class Database
                 }
 
                 $nesting = \explode('.', $value);
-                $selectedKey = \array_shift($nesting); // Removes and return first item
+                $selectedKey = \array_shift($nesting); // Remove and return first item
 
                 $relationship = \array_values(\array_filter(
                     $relationships,

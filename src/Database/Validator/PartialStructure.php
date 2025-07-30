@@ -13,7 +13,7 @@ class PartialStructure extends Structure
      * Returns true if valid or false if not.
      *
      * @param mixed $document
-     * @param array<string, string> $requiredAttributes optional list of required attributes to check
+     * @param array<int, string> $requiredAttributes optional list of required attributes to check
      *
      * @return bool
      */
@@ -37,6 +37,9 @@ class PartialStructure extends Structure
             $name = $attribute['$id'] ?? '';
             $keys[$name] = $attribute;
         }
+        /**
+         * @var array<mixed,mixed> $requiredAttributesMap
+         */
         $requiredAttributesMap = [];
         foreach ($this->attributes as $attribute) {
             if ($attribute['required'] === true && in_array($attribute['$id'], $requiredAttributes)) {

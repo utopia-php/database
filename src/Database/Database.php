@@ -6808,8 +6808,7 @@ class Database
                 }
 
                 $nesting = \explode('.', $value);
-
-                $selectedKey = $nesting[0];
+                $selectedKey = \array_shift($nesting); // Removes and return first item
 
                 $relationship = \array_values(\array_filter(
                     $relationships,
@@ -6823,11 +6822,17 @@ class Database
                 // Shift the top level off the dot-path to pass the selection down the chain
                 // 'foo.bar.baz' becomes 'bar.baz'
                 $nestedSelections[] = Query::select([
-                    \implode('.', \array_slice($nesting, 1))
+                    \implode('.', $nesting)
                 ]);
 
                 $type = $relationship->getAttribute('options')['relationType'];
                 $side = $relationship->getAttribute('options')['side'];
+
+                var_dump('=========== in ========');
+                var_dump($selectedKey);
+                var_dump($nesting);
+                var_dump($type);
+                var_dump($side);
 
                 switch ($type) {
                     case Database::RELATION_MANY_TO_MANY:

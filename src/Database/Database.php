@@ -6092,7 +6092,7 @@ class Database
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        foreach ($results as &$node) {
+        foreach ($results as $index => $node) {
             if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
@@ -6103,6 +6103,8 @@ class Database
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
             }
+
+            $results[$index] = $node;
         }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);

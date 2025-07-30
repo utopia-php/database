@@ -43,7 +43,6 @@ trait RelationshipTests
         $database->createCollection('veterinarians');
         $database->createAttribute('veterinarians', 'fullname', Database::VAR_STRING, 256, true);
 
-
         $database->createCollection('presidents');
         $database->createAttribute('presidents', 'first_name', Database::VAR_STRING, 256, true);
         $database->createAttribute('presidents', 'last_name', Database::VAR_STRING, 256, true);
@@ -220,7 +219,7 @@ trait RelationshipTests
             'animal' => 'tiger',
         ]));
 
-        var_dump('===start');
+        var_dump('=== start === === start === === start === === start === === start === === start === === start === === start === === start ===');
 
         $docs = $database->find('veterinarians',
             [

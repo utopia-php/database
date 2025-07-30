@@ -3527,6 +3527,8 @@ class Database
 
                     $related = [];
                     if (!empty($relatedIds)) {
+                        //var_dump($queries);
+
                         $foundRelated = $this->find($relatedCollection->getId(), [
                             Query::equal('$id', $relatedIds),
                             Query::limit(PHP_INT_MAX),

@@ -3283,7 +3283,7 @@ class Database
         $document = $this->decode($collection, $document, $selections);
         $this->map = [];
 
-        if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+        if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
         }
 
@@ -6091,7 +6091,7 @@ class Database
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         foreach ($results as &$node) {
-            if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+            if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
 
@@ -6802,7 +6802,9 @@ class Database
                     continue;
                 }
 
-                $selectedKey = \explode('.', $value)[0];
+                $nesting = \explode('.', $value);
+
+                $selectedKey = $nesting[0];
 
                 $relationship = \array_values(\array_filter(
                     $relationships,
@@ -6816,7 +6818,7 @@ class Database
                 // Shift the top level off the dot-path to pass the selection down the chain
                 // 'foo.bar.baz' becomes 'bar.baz'
                 $nestedSelections[] = Query::select([
-                    \implode('.', \array_slice(\explode('.', $value), 1))
+                    \implode('.', \array_slice($nesting, 1))
                 ]);
 
                 $type = $relationship->getAttribute('options')['relationType'];
@@ -6845,6 +6847,7 @@ class Database
                         break;
                 }
             }
+
             $query->setValues(\array_values($values));
         }
 

@@ -27,6 +27,215 @@ trait RelationshipTests
     use ManyToOneTests;
     use ManyToManyTests;
 
+    public function testZoo(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('zoo');
+        $database->createAttribute('zoo', 'name', Database::VAR_STRING, 256, true);
+
+        $database->createCollection('veterinarians');
+        $database->createAttribute('veterinarians', 'fullname', Database::VAR_STRING, 256, true);
+
+
+        $database->createCollection('presidents');
+        $database->createAttribute('presidents', 'first_name', Database::VAR_STRING, 256, true);
+        $database->createAttribute('presidents', 'last_name', Database::VAR_STRING, 256, true);
+        $database->createRelationship(
+            collection: 'presidents',
+            relatedCollection: 'veterinarians',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'votes',
+            twoWayKey: 'presidents'
+        );
+
+        $database->createCollection('animals');
+        $database->createAttribute('animals', 'name', Database::VAR_STRING, 256, true);
+        $database->createAttribute('animals', 'age', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('animals', 'price', Database::VAR_FLOAT, 0, false);
+        $database->createAttribute('animals', 'date_of_birth', Database::VAR_DATETIME, 0, true, filters:['datetime']);
+        $database->createAttribute('animals', 'longtext', Database::VAR_STRING, 100000000, false);
+        $database->createAttribute('animals', 'is_active', Database::VAR_BOOLEAN, 0, false, default: true);
+        $database->createAttribute('animals', 'integers', Database::VAR_INTEGER, 0, false, array: true);
+        $database->createAttribute('animals', 'email', Database::VAR_STRING, 255, false);
+        $database->createAttribute('animals', 'ip', Database::VAR_STRING, 255, false);
+        $database->createAttribute('animals', 'url', Database::VAR_STRING, 255, false);
+        $database->createAttribute('animals', 'enum', Database::VAR_STRING, 255, false);
+
+        $database->createRelationship(
+            collection: 'presidents',
+            relatedCollection: 'animals',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'animal',
+            twoWayKey: 'president'
+        );
+
+        $database->createRelationship(
+            collection: 'veterinarians',
+            relatedCollection: 'animals',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'animals',
+            twoWayKey: 'veterinarian'
+        );
+
+        $database->createRelationship(
+            collection: 'animals',
+            relatedCollection: 'zoo',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'zoo',
+            twoWayKey: 'animals'
+        );
+
+        $zoo1 = $database->createDocument('zoo', new Document([
+            '$id' => 'zoo1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Bronx Zoo'
+        ]));
+
+        $animal1 = $database->createDocument('animals', new Document([
+            '$id' => 'iguana',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Iguana',
+            'age' => 11,
+            'price' => 50.5,
+            'date_of_birth' => '1975-06-12',
+            'longtext' => 'I am a pretty long text',
+            'is_active' => true,
+            'integers' => [1, 2, 3],
+            'email' => 'iguana@appwrite.io',
+            'enum' => 'maybe',
+            'ip' => '127.0.0.1',
+            'url' => 'https://appwrite.io/',
+            'zoo' => $zoo1->getId(),
+        ]));
+
+        $animal2 = $database->createDocument('animals', new Document([
+            '$id' => 'tiger',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Tiger',
+            'age' => 5,
+            'price' => 1000,
+            'date_of_birth' => '2020-06-12',
+            'longtext' => 'I am a hungry tiger',
+            'is_active' => false,
+            'integers' => [9, 2, 3],
+            'email' => 'tiger@appwrite.io',
+            'enum' => 'yes',
+            'ip' => '255.0.0.1',
+            'url' => 'https://appwrite.io/',
+            'zoo' => $zoo1->getId(),
+        ]));
+
+        $animal3 = $database->createDocument('animals', new Document([
+            '$id' => 'lama',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Lama',
+            'age' => 15,
+            'price' => 1000,
+            'date_of_birth' => '1975-06-12',
+            'is_active' => true,
+            'integers' => null,
+            'email' => null,
+            'enum' => null,
+            'ip' => '255.0.0.1',
+            'url' => 'https://appwrite.io/',
+            'zoo' => null,
+        ]));
+
+        $veterinarian1 = $database->createDocument('veterinarians', new Document([
+            '$id' => 'dr.pol',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'fullname' => 'The Incredible Dr. Pol',
+            'animals' => ['iguana'],
+        ]));
+
+        $veterinarian2 = $database->createDocument('veterinarians', new Document([
+            '$id' => 'dr.seuss',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'fullname' => 'Dr. Seuss',
+            'animals' => ['tiger'],
+        ]));
+
+        $president1 = $database->createDocument('presidents', new Document([
+            '$id' => 'trump',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'first_name' => 'Donald',
+            'last_name' => 'Trump',
+            'votes' => [
+                $veterinarian1->getId(),
+                $veterinarian2->getId(),
+            ],
+        ]));
+
+        $president2 = $database->createDocument('presidents', new Document([
+            '$id' => 'bush',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'first_name' => 'George',
+            'last_name' => 'Bush',
+            'animal' => 'iguana',
+        ]));
+
+        $president3 = $database->createDocument('presidents', new Document([
+            '$id' => 'biden',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'first_name' => 'Joe',
+            'last_name' => 'Biden',
+            'animal' => 'tiger',
+        ]));
+
+        var_dump('===start');
+
+        $docs = $database->find('veterinarians',
+            [
+                Query::select([
+                    '*',
+                    'animals.*',
+                    'animals.zoo.*',
+                    //'animals.president.*',
+                ])
+            ]
+        );
+
+        $this->assertEquals('shmuel', 'fogel');
+    }
+
     public function testDeleteRelatedCollection(): void
     {
         /** @var Database $database */

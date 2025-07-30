@@ -6349,11 +6349,12 @@ class Database
                 $value = ($array) ? $value : [$value];
             }
 
-            foreach ($value as &$node) {
-                if (($node !== null)) {
+            foreach ($value as $index => $node) {
+                if ($node !== null) {
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
+                    $value[$index] = $node;
                 }
             }
 

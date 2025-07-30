@@ -119,7 +119,38 @@ trait GeneralTests
             '$permissions' => [],
             'attr1' => 'value3',
         ]));
+        // updating with empty dates
+        try {
+            $doc1->setAttribute('$updatedAt', '');
+            $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
+            $this->fail('Failed to throw structure exception');
 
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+        }
+
+        try {
+            $this->getDatabase()->updateDocuments(
+                'preserve_update_dates',
+                new Document([
+                    '$updatedAt' => ''
+                ]),
+                [
+                    Query::equal('$id', [
+                        $doc2->getId(),
+                        $doc3->getId()
+                    ])
+                ]
+            );
+            $this->fail('Failed to throw structure exception');
+
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+        }
+
+        // non empty dates
         $newDate = '2000-01-01T10:00:00.000+00:00';
 
         $doc1->setAttribute('$updatedAt', $newDate);

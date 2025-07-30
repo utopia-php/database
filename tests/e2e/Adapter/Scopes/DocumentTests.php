@@ -4635,7 +4635,7 @@ trait DocumentTests
         }
     }
 
-    public function testModifyDocumentWithDates(): void
+    public function testDateTimeDocument(): void
     {
         /**
          * @var Database $database
@@ -4684,71 +4684,286 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
-    public function testModifyBulkDocumentWithDates(): void
+    public function testNormalDocumentDateOperations(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();
-
-        $collection = 'bulk_modify_dates';
-        $date = '2000-01-01T10:00:00.000+00:00';
+        $collection = 'normal_date_operations';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
 
         $database->setPreserveDates(true);
+
+        $createDate = '2000-01-01T10:00:00.000+00:00';
+        $updateDate = '2000-02-01T15:30:00.000+00:00';
+        $date1 = '2000-01-01T10:00:00.000+00:00';
+        $date2 = '2000-02-01T15:30:00.000+00:00';
+        $date3 = '2000-03-01T20:45:00.000+00:00';
+        // Test 1: Create with custom createdAt, then update with custom updatedAt
+        $doc = $database->createDocument($collection, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'initial',
+            '$createdAt' => $createDate
+        ]));
+
+        $this->assertEquals($createDate, $doc->getAttribute('$createdAt'));
+        $this->assertNotEquals($createDate, $doc->getAttribute('$updatedAt'));
+
+        // Update with custom updatedAt
+        $doc->setAttribute('string', 'updated');
+        $doc->setAttribute('$updatedAt', $updateDate);
+        $updatedDoc = $database->updateDocument($collection, 'doc1', $doc);
+
+        $this->assertEquals($createDate, $updatedDoc->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $updatedDoc->getAttribute('$updatedAt'));
+
+        // Test 2: Create with both custom dates
+        $doc2 = $database->createDocument($collection, new Document([
+            '$id' => 'doc2',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'both_dates',
+            '$createdAt' => $createDate,
+            '$updatedAt' => $updateDate
+        ]));
+
+        $this->assertEquals($createDate, $doc2->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $doc2->getAttribute('$updatedAt'));
+
+        // Test 3: Create without dates, then update with custom dates
+        $doc3 = $database->createDocument($collection, new Document([
+            '$id' => 'doc3',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'no_dates'
+        ]));
+
+
+        $doc3->setAttribute('string', 'updated_no_dates');
+        $doc3->setAttribute('$createdAt', $createDate);
+        $doc3->setAttribute('$updatedAt', $updateDate);
+        $updatedDoc3 = $database->updateDocument($collection, 'doc3', $doc3);
+
+        $this->assertEquals($createDate, $updatedDoc3->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $updatedDoc3->getAttribute('$updatedAt'));
+
+        // Test 4: Update only createdAt
+        $doc4 = $database->createDocument($collection, new Document([
+            '$id' => 'doc4',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'initial'
+        ]));
+
+        $originalCreatedAt4 = $doc4->getAttribute('$createdAt');
+        $originalUpdatedAt4 = $doc4->getAttribute('$updatedAt');
+
+        $doc4->setAttribute('$updatedAt', null);
+        $doc4->setAttribute('$createdAt', null);
+        $updatedDoc4 = $database->updateDocument($collection, 'doc4', document: $doc4);
+
+        $this->assertEquals($originalCreatedAt4, $updatedDoc4->getAttribute('$createdAt'));
+        $this->assertNotEquals($originalUpdatedAt4, $updatedDoc4->getAttribute('$updatedAt'));
+
+        // Test 5: Update only updatedAt
+        $updatedDoc4->setAttribute('$updatedAt', $updateDate);
+        $updatedDoc4->setAttribute('$createdAt', $createDate);
+        $finalDoc4 = $database->updateDocument($collection, 'doc4', $updatedDoc4);
+
+        $this->assertEquals($createDate, $finalDoc4->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $finalDoc4->getAttribute('$updatedAt'));
+
+        // Test 6: Create with updatedAt, update with createdAt
+        $doc5 = $database->createDocument($collection, new Document([
+            '$id' => 'doc5',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'doc5',
+            '$updatedAt' => $date2
+        ]));
+
+        $this->assertNotEquals($date2, $doc5->getAttribute('$createdAt'));
+        $this->assertEquals($date2, $doc5->getAttribute('$updatedAt'));
+
+        $doc5->setAttribute('string', 'doc5_updated');
+        $doc5->setAttribute('$createdAt', $date1);
+        $updatedDoc5 = $database->updateDocument($collection, 'doc5', $doc5);
+
+        $this->assertEquals($date1, $updatedDoc5->getAttribute('$createdAt'));
+        $this->assertEquals($date2, $updatedDoc5->getAttribute('$updatedAt'));
+
+        // Test 7: Create with both dates, update with different dates
+        $doc6 = $database->createDocument($collection, new Document([
+            '$id' => 'doc6',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'doc6',
+            '$createdAt' => $date1,
+            '$updatedAt' => $date2
+        ]));
+
+        $this->assertEquals($date1, $doc6->getAttribute('$createdAt'));
+        $this->assertEquals($date2, $doc6->getAttribute('$updatedAt'));
+
+        $doc6->setAttribute('string', 'doc6_updated');
+        $doc6->setAttribute('$createdAt', $date3);
+        $doc6->setAttribute('$updatedAt', $date3);
+        $updatedDoc6 = $database->updateDocument($collection, 'doc6', $doc6);
+
+        $this->assertEquals($date3, $updatedDoc6->getAttribute('$createdAt'));
+        $this->assertEquals($date3, $updatedDoc6->getAttribute('$updatedAt'));
+
+        // Test 8: Preserve dates disabled
+        $database->setPreserveDates(false);
+
+        $customDate = '2000-01-01T10:00:00.000+00:00';
+
+        $doc7 = $database->createDocument($collection, new Document([
+            '$id' => 'doc7',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'doc7',
+            '$createdAt' => $customDate,
+            '$updatedAt' => $customDate
+        ]));
+
+        $this->assertNotEquals($customDate, $doc7->getAttribute('$createdAt'));
+        $this->assertNotEquals($customDate, $doc7->getAttribute('$updatedAt'));
+
+        // Update with custom dates should also be ignored
+        $doc7->setAttribute('string', 'updated');
+        $doc7->setAttribute('$createdAt', $customDate);
+        $doc7->setAttribute('$updatedAt', $customDate);
+        $updatedDoc7 = $database->updateDocument($collection, 'doc7', $doc7);
+
+        $this->assertNotEquals($customDate, $updatedDoc7->getAttribute('$createdAt'));
+        $this->assertNotEquals($customDate, $updatedDoc7->getAttribute('$updatedAt'));
+
+        $database->setPreserveDates(false);
+        $database->deleteCollection($collection);
+    }
+
+    public function testBulkDocumentDateOperations(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        $collection = 'bulk_date_operations';
         $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
 
-        $this->assertTrue(
-            $database->createAttribute($collection, 'attr1', Database::VAR_STRING, 128, false)
-        );
+        $database->setPreserveDates(true);
 
+        $createDate = '2000-01-01T10:00:00.000+00:00';
+        $updateDate = '2000-02-01T15:30:00.000+00:00';
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())];
+
+        // Test 1: Bulk create with different date configurations
         $documents = [
             new Document([
+                '$id' => 'doc1',
+                '$permissions' => $permissions,
+                'string' => 'doc1',
+                '$createdAt' => $createDate
+            ]),
+            new Document([
                 '$id' => 'doc2',
-                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any())],
-                'attr1' => 'value2',
-                '$createdAt' => $date
+                '$permissions' => $permissions,
+                'string' => 'doc2',
+                '$updatedAt' => $updateDate
             ]),
             new Document([
                 '$id' => 'doc3',
-                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any())],
-                'attr1' => 'value3',
-                '$createdAt' => $date
+                '$permissions' => $permissions,
+                'string' => 'doc3',
+                '$createdAt' => $createDate,
+                '$updatedAt' => $updateDate
             ]),
             new Document([
                 '$id' => 'doc4',
-                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any())],
-                'attr1' => 'value4',
-                '$createdAt' => null
+                '$permissions' => $permissions,
+                'string' => 'doc4'
             ]),
             new Document([
                 '$id' => 'doc5',
-                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any())],
-                'attr1' => 'value5'
+                '$permissions' => $permissions,
+                'string' => 'doc5',
+                '$createdAt' => null
             ]),
             new Document([
                 '$id' => 'doc6',
-                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any())],
-                'attr1' => 'value6',
-                '$createdAt' => $date,
-                '$updatedAt' => $date
-            ]),
+                '$permissions' => $permissions,
+                'string' => 'doc6',
+                '$updatedAt' => null
+            ])
         ];
 
-        $resultDocs = $database->createDocuments($collection, $documents, batchSize: 2);
+        $database->createDocuments($collection, $documents);
 
-        foreach (['doc2', 'doc3', 'doc6'] as $id) {
+        // Verify initial state
+        foreach (['doc1', 'doc3'] as $id) {
             $doc = $database->getDocument($collection, $id);
-            $this->assertEquals($date, $doc->getAttribute('$createdAt'), "Mismatch for doc: $id");
-            if ($id === 'doc6') {
-                $this->assertEquals($date, $doc->getAttribute('$updatedAt'), "updatedAt incorrectly preserved for doc: $id");
-            } else {
-                $this->assertNotEquals($date, $doc->getAttribute('$updatedAt'), "updatedAt incorrectly preserved for doc: $id");
-            }
+            $this->assertEquals($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
         }
 
-        foreach (['doc4', 'doc5'] as $id) {
+        foreach (['doc2', 'doc3'] as $id) {
             $doc = $database->getDocument($collection, $id);
-            $this->assertNotEmpty($doc->getAttribute('$createdAt'), "createdAt missing for doc: $id");
-            $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt missing for doc: $id");
+            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
         }
+
+        foreach (['doc4', 'doc5', 'doc6'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertNotEmpty($doc->getAttribute('$createdAt'), "createdAt missing for $id");
+            $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt missing for $id");
+        }
+
+        // Test 2: Bulk update with custom dates
+        $updateDoc = new Document([
+            'string' => 'updated',
+            '$createdAt' => $createDate,
+            '$updatedAt' => $updateDate
+        ]);
+        $ids = [];
+        foreach ($documents as $doc) {
+            $ids[] = $doc->getId();
+        }
+        $count = $database->updateDocuments($collection, $updateDoc, [
+            Query::equal('$id', $ids)
+        ]);
+        $this->assertEquals(6, $count);
+
+        foreach (['doc1', 'doc3'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertEquals('updated', $doc->getAttribute('string'), "string mismatch for $id");
+        }
+
+        foreach (['doc2', 'doc4','doc5','doc6'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertEquals('updated', $doc->getAttribute('string'), "string mismatch for $id");
+        }
+
+        // Test 3: Bulk update with preserve dates disabled
+        $database->setPreserveDates(false);
+
+        $customDate = 'should be ignored anyways so no error';
+        $updateDocDisabled = new Document([
+            'string' => 'disabled_update',
+            '$createdAt' => $customDate,
+            '$updatedAt' => $customDate
+        ]);
+
+        $countDisabled = $database->updateDocuments($collection, $updateDocDisabled);
+        $this->assertEquals(6, $countDisabled);
+
+        // Test 4: Bulk update with preserve dates re-enabled
+        $database->setPreserveDates(true);
+
+        $newDate = '2000-03-01T20:45:00.000+00:00';
+        $updateDocEnabled = new Document([
+            'string' => 'enabled_update',
+            '$createdAt' => $newDate,
+            '$updatedAt' => $newDate
+        ]);
+
+        $countEnabled = $database->updateDocuments($collection, $updateDocEnabled);
+        $this->assertEquals(6, $countEnabled);
 
         $database->setPreserveDates(false);
         $database->deleteCollection($collection);

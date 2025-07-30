@@ -4119,10 +4119,11 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
+            $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
-            $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
+            $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;  // Make sure user doesn't switch createdAt
 
             if ($this->adapter->getSharedTables()) {
                 $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
@@ -4251,7 +4252,7 @@ class Database
 
             if ($shouldUpdate) {
                 $updatedAt = $document->getUpdatedAt();
-                $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+                $document->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
             }
 
             // Check if document was updated after the request timestamp
@@ -4365,21 +4366,23 @@ class Database
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException("Cursor document must be from the same Collection.");
         }
-
+        $attributesToCheckForRequiredValidation = ['$updatedAt'];
         unset($updates['$id']);
-        unset($updates['$createdAt']);
         unset($updates['$tenant']);
-
+        if (($updates->getCreatedAt() === null || !$this->preserveDates)) {
+            unset($updates['$createdAt']);
+        } else {
+            $updates['$createdAt'] = $updates->getCreatedAt();
+            $attributesToCheckForRequiredValidation[] = '$createdAt';
+        }
         if ($this->adapter->getSharedTables()) {
             $updates['$tenant'] = $this->adapter->getTenant();
         }
 
-        if (!$this->preserveDates) {
-            $updates['$updatedAt'] = DateTime::now();
-        }
+        $updatedAt = $updates->getUpdatedAt();
+        $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
 
         $updates = $this->encode($collection, $updates);
-
         // Check new document structure
         $validator = new PartialStructure(
             $collection,
@@ -4387,7 +4390,7 @@ class Database
             $this->adapter->getMaxDateTime(),
         );
 
-        if (!$validator->isValid($updates)) {
+        if (!$validator->isValid($updates, $attributesToCheckForRequiredValidation)) {
             throw new StructureException($validator->getDescription());
         }
 

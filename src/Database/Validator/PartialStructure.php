@@ -13,10 +13,11 @@ class PartialStructure extends Structure
      * Returns true if valid or false if not.
      *
      * @param mixed $document
+     * @param array<string, string> $requiredAttributes optional list of required attributes to check
      *
      * @return bool
      */
-    public function isValid($document): bool
+    public function isValid($document, array $requiredAttributes = []): bool
     {
         if (!$document instanceof Document) {
             $this->message = 'Value must be an instance of Document';
@@ -36,7 +37,16 @@ class PartialStructure extends Structure
             $name = $attribute['$id'] ?? '';
             $keys[$name] = $attribute;
         }
+        $requiredAttributesMap = [];
+        foreach ($this->attributes as $attribute) {
+            if ($attribute['required'] === true && in_array($attribute['$id'], $requiredAttributes)) {
+                $requiredAttributesMap[] = $attribute;
+            }
+        }
 
+        if (!$this->checkForAllRequiredValues($structure, $requiredAttributesMap, $keys)) {
+            return false;
+        }
         if (!$this->checkForUnknownAttributes($structure, $keys)) {
             return false;
         }

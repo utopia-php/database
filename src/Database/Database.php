@@ -6663,32 +6663,8 @@ class Database
         }
 
         foreach ($attributes as $attribute) {
-            foreach ($queries as $index => $query) {
+            foreach ($queries as $query) {
                 if ($query->getAttribute() === $attribute->getId()) {
-                    /**
-                     * Hack test - Remove this:
-                     */
-
-                                        if($query->getAttribute() === '$sequence'){
-                                            /**
-                                             * Hack for Postgres, since bindParam does not convert '' on int attribute
-                                             */
-                                            $values = $query->getValues();
-                                            foreach ($values as $valueIndex => $value) {
-//                                                if($value === ''){
-//                                                    $values[$valueIndex] = '0';
-//                                                }
-                                                if(empty($value)){
-                                                    throw new DatabaseException\Structure('Shmuel tests');
-                                                }
-                                            }
-                                            $query->setValues($values);
-                                            $queries[$index] = $query;
-                                        }
-
-                    /**
-                     * End test
-                     */
                     $query->setOnArray($attribute->getAttribute('array', false));
                 }
             }

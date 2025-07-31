@@ -626,13 +626,16 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Update Document
+     *
      * @param string $collection
      * @param string $id
      * @param Document $document
      * @param bool $skipPermissions
      * @return Document
-     * @throws DatabaseException
-     * @throws DuplicateException
+     * @throws Exception
+     * @throws PDOException
+     * @throws Duplicate
      */
     public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
     {

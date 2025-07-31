@@ -3310,11 +3310,11 @@ class Database
     /**
      * @param Document $collection
      * @param Document $document
-     * @param array<Query> $queries
+     * @param array<string, array<Query>> $selects
      * @return Document
      * @throws DatabaseException
      */
-    private function populateDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
+    private function populateDocumentRelationships(Document $collection, Document $document, array $selects = []): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -3330,6 +3330,8 @@ class Database
             $twoWay = $relationship['options']['twoWay'];
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
+
+            $queries = $selects[$key] ?? [];
 
             if (!empty($value)) {
                 $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();
@@ -3527,8 +3529,6 @@ class Database
 
                     $related = [];
                     if (!empty($relatedIds)) {
-                        //var_dump($queries);
-
                         $foundRelated = $this->find($relatedCollection->getId(), [
                             Query::equal('$id', $relatedIds),
                             Query::limit(PHP_INT_MAX),
@@ -6788,7 +6788,7 @@ class Database
      *
      * @param array<Document> $relationships
      * @param array<Query> $queries
-     * @return array<Query>
+     * @return array<string, array<Query>> $selects
      */
     private function processRelationshipQueries(
         array $relationships,
@@ -6823,7 +6823,7 @@ class Database
                 // 'foo.bar.baz' becomes 'bar.baz'
 
                 $nestingPath = \implode('.', $nesting);
-                $nestedSelections[] = Query::select([$nestingPath]);
+                $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
 
                 $type = $relationship->getAttribute('options')['relationType'];
                 $side = $relationship->getAttribute('options')['side'];
@@ -6855,6 +6855,10 @@ class Database
             $query->setValues(\array_values($values));
         }
 
+        if(!empty($nestedSelections)){
+            var_dump('$nestedSelections$nestedSelections$nestedSelections$nestedSelections$nestedSelections$nestedSelections$nestedSelections$nestedSelections');
+            var_dump($nestedSelections);
+        }
         return $nestedSelections;
     }
 }

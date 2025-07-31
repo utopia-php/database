@@ -55,22 +55,22 @@ trait RelationshipTests
             twoWayKey: 'presidents'
         );
 
-        $database->createCollection('animals');
-        $database->createAttribute('animals', 'name', Database::VAR_STRING, 256, true);
-        $database->createAttribute('animals', 'age', Database::VAR_INTEGER, 0, false);
-        $database->createAttribute('animals', 'price', Database::VAR_FLOAT, 0, false);
-        $database->createAttribute('animals', 'date_of_birth', Database::VAR_DATETIME, 0, true, filters:['datetime']);
-        $database->createAttribute('animals', 'longtext', Database::VAR_STRING, 100000000, false);
-        $database->createAttribute('animals', 'is_active', Database::VAR_BOOLEAN, 0, false, default: true);
-        $database->createAttribute('animals', 'integers', Database::VAR_INTEGER, 0, false, array: true);
-        $database->createAttribute('animals', 'email', Database::VAR_STRING, 255, false);
-        $database->createAttribute('animals', 'ip', Database::VAR_STRING, 255, false);
-        $database->createAttribute('animals', 'url', Database::VAR_STRING, 255, false);
-        $database->createAttribute('animals', 'enum', Database::VAR_STRING, 255, false);
+        $database->createCollection('__animals');
+        $database->createAttribute('__animals', 'name', Database::VAR_STRING, 256, true);
+        $database->createAttribute('__animals', 'age', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('__animals', 'price', Database::VAR_FLOAT, 0, false);
+        $database->createAttribute('__animals', 'date_of_birth', Database::VAR_DATETIME, 0, true, filters:['datetime']);
+        $database->createAttribute('__animals', 'longtext', Database::VAR_STRING, 100000000, false);
+        $database->createAttribute('__animals', 'is_active', Database::VAR_BOOLEAN, 0, false, default: true);
+        $database->createAttribute('__animals', 'integers', Database::VAR_INTEGER, 0, false, array: true);
+        $database->createAttribute('__animals', 'email', Database::VAR_STRING, 255, false);
+        $database->createAttribute('__animals', 'ip', Database::VAR_STRING, 255, false);
+        $database->createAttribute('__animals', 'url', Database::VAR_STRING, 255, false);
+        $database->createAttribute('__animals', 'enum', Database::VAR_STRING, 255, false);
 
         $database->createRelationship(
             collection: 'presidents',
-            relatedCollection: 'animals',
+            relatedCollection: '__animals',
             type: Database::RELATION_ONE_TO_ONE,
             twoWay: true,
             id: 'animal',
@@ -79,7 +79,7 @@ trait RelationshipTests
 
         $database->createRelationship(
             collection: 'veterinarians',
-            relatedCollection: 'animals',
+            relatedCollection: '__animals',
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
             id: 'animals',
@@ -87,7 +87,7 @@ trait RelationshipTests
         );
 
         $database->createRelationship(
-            collection: 'animals',
+            collection: '__animals',
             relatedCollection: 'zoo',
             type: Database::RELATION_MANY_TO_ONE,
             twoWay: true,
@@ -104,7 +104,7 @@ trait RelationshipTests
             'name' => 'Bronx Zoo'
         ]));
 
-        $animal1 = $database->createDocument('animals', new Document([
+        $animal1 = $database->createDocument('__animals', new Document([
             '$id' => 'iguana',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -124,7 +124,7 @@ trait RelationshipTests
             'zoo' => $zoo1->getId(),
         ]));
 
-        $animal2 = $database->createDocument('animals', new Document([
+        $animal2 = $database->createDocument('__animals', new Document([
             '$id' => 'tiger',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -144,7 +144,7 @@ trait RelationshipTests
             'zoo' => $zoo1->getId(),
         ]));
 
-        $animal3 = $database->createDocument('animals', new Document([
+        $animal3 = $database->createDocument('__animals', new Document([
             '$id' => 'lama',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -231,8 +231,9 @@ trait RelationshipTests
                 ])
             ]
         );
+var_dump($docs);
 
-        $this->assertEquals('shmuel', 'fogel');
+      $this->assertEquals('shmuel', 'fogel');
     }
 
     public function testDeleteRelatedCollection(): void

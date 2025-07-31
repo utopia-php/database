@@ -20,11 +20,13 @@ class Documents extends IndexedQueries
      *
      * @param array<mixed> $attributes
      * @param array<mixed> $indexes
+     * @param string $idAttributeType
      * @throws Exception
      */
     public function __construct(
         array $attributes,
         array $indexes,
+        string $idAttributeType,
         int $maxValuesCount = 100,
         \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
@@ -38,7 +40,7 @@ class Documents extends IndexedQueries
         $attributes[] = new Document([
             '$id' => '$sequence',
             'key' => '$sequence',
-            'type' => Database::VAR_STRING,
+            'type' => Database::VAR_ID,
             'array' => false,
         ]);
         $attributes[] = new Document([
@@ -60,6 +62,7 @@ class Documents extends IndexedQueries
             new Cursor(),
             new Filter(
                 $attributes,
+                $idAttributeType,
                 $maxValuesCount,
                 $minAllowedDate,
                 $maxAllowedDate,

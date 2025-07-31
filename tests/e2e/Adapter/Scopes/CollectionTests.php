@@ -107,6 +107,15 @@ trait CollectionTests
                 'array' => false,
                 'filters' => [],
             ]),
+            new Document([
+                '$id' => ID::custom('attribute4'),
+                'type' => Database::VAR_ID,
+                'size' => 0,
+                'required' => false,
+                'signed' => false,
+                'array' => false,
+                'filters' => [],
+            ]),
         ];
 
         $indexes = [
@@ -131,6 +140,13 @@ trait CollectionTests
                 'lengths' => [],
                 'orders' => ['DESC', 'ASC'],
             ]),
+            new Document([
+                '$id' => ID::custom('index4'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute4'],
+                'lengths' => [],
+                'orders' => ['DESC'],
+            ]),
         ];
 
         $collection = $database->createCollection('withSchema', $attributes, $indexes);
@@ -139,22 +155,27 @@ trait CollectionTests
         $this->assertEquals('withSchema', $collection->getId());
 
         $this->assertIsArray($collection->getAttribute('attributes'));
-        $this->assertCount(3, $collection->getAttribute('attributes'));
+        $this->assertCount(4, $collection->getAttribute('attributes'));
         $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
         $this->assertEquals(Database::VAR_STRING, $collection->getAttribute('attributes')[0]['type']);
         $this->assertEquals('attribute2', $collection->getAttribute('attributes')[1]['$id']);
         $this->assertEquals(Database::VAR_INTEGER, $collection->getAttribute('attributes')[1]['type']);
         $this->assertEquals('attribute3', $collection->getAttribute('attributes')[2]['$id']);
         $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[2]['type']);
+        $this->assertEquals('attribute4', $collection->getAttribute('attributes')[3]['$id']);
+        $this->assertEquals(Database::VAR_ID, $collection->getAttribute('attributes')[3]['type']);
 
         $this->assertIsArray($collection->getAttribute('indexes'));
-        $this->assertCount(3, $collection->getAttribute('indexes'));
+        $this->assertCount(4, $collection->getAttribute('indexes'));
         $this->assertEquals('index1', $collection->getAttribute('indexes')[0]['$id']);
         $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[0]['type']);
         $this->assertEquals('index2', $collection->getAttribute('indexes')[1]['$id']);
         $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[1]['type']);
         $this->assertEquals('index3', $collection->getAttribute('indexes')[2]['$id']);
         $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[2]['type']);
+        $this->assertEquals('index4', $collection->getAttribute('indexes')[3]['$id']);
+        $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[3]['type']);
+
 
         $database->deleteCollection('withSchema');
 

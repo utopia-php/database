@@ -6821,9 +6821,9 @@ class Database
 
                 // Shift the top level off the dot-path to pass the selection down the chain
                 // 'foo.bar.baz' becomes 'bar.baz'
-                $nestedSelections[] = Query::select([
-                    \implode('.', $nesting)
-                ]);
+
+                $nestingPath = \implode('.', $nesting);
+                $nestedSelections[] = Query::select([$nestingPath]);
 
                 $type = $relationship->getAttribute('options')['relationType'];
                 $side = $relationship->getAttribute('options')['side'];

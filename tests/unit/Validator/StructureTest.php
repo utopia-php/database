@@ -718,10 +718,6 @@ class StructureTest extends TestCase
         $id = '1000';
         $mongoid = '507f1f77bcf86cd799439011';
 
-        /**
-         * Sql
-         */
-
         $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
             'title' => 'My Title',
@@ -731,6 +727,8 @@ class StructureTest extends TestCase
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
             'id' => $id,
         ])));
 
@@ -743,6 +741,8 @@ class StructureTest extends TestCase
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
             'id' => $mongoid,
         ])));
 
@@ -763,6 +763,8 @@ class StructureTest extends TestCase
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
             'id' => $mongoid,
         ])));
 
@@ -775,6 +777,8 @@ class StructureTest extends TestCase
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
             'id' => $mongoid,
         ])));
     }

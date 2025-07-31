@@ -3283,7 +3283,7 @@ class Database
         $document = $this->decode($collection, $document, $selections);
         $this->map = [];
 
-        if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+        if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
         }
 
@@ -3310,11 +3310,11 @@ class Database
     /**
      * @param Document $collection
      * @param Document $document
-     * @param array<Query> $queries
+     * @param array<string, array<Query>> $selects
      * @return Document
      * @throws DatabaseException
      */
-    private function populateDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
+    private function populateDocumentRelationships(Document $collection, Document $document, array $selects = []): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -3330,6 +3330,8 @@ class Database
             $twoWay = $relationship['options']['twoWay'];
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
+
+            $queries = $selects[$key] ?? [];
 
             if (!empty($value)) {
                 $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();
@@ -6091,8 +6093,8 @@ class Database
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        foreach ($results as &$node) {
-            if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+        foreach ($results as $index => $node) {
+            if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
 
@@ -6102,6 +6104,8 @@ class Database
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
             }
+
+            $results[$index] = $node;
         }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
@@ -6351,11 +6355,12 @@ class Database
                 $value = ($array) ? $value : [$value];
             }
 
-            foreach ($value as &$node) {
-                if (($node !== null)) {
+            foreach ($value as $index => $node) {
+                if ($node !== null) {
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
+                    $value[$index] = $node;
                 }
             }
 
@@ -6788,7 +6793,7 @@ class Database
      *
      * @param array<Document> $relationships
      * @param array<Query> $queries
-     * @return array<Query>
+     * @return array<string, array<Query>> $selects
      */
     private function processRelationshipQueries(
         array $relationships,
@@ -6807,7 +6812,8 @@ class Database
                     continue;
                 }
 
-                $selectedKey = \explode('.', $value)[0];
+                $nesting = \explode('.', $value);
+                $selectedKey = \array_shift($nesting); // Remove and return first item
 
                 $relationship = \array_values(\array_filter(
                     $relationships,
@@ -6820,9 +6826,9 @@ class Database
 
                 // Shift the top level off the dot-path to pass the selection down the chain
                 // 'foo.bar.baz' becomes 'bar.baz'
-                $nestedSelections[] = Query::select([
-                    \implode('.', \array_slice(\explode('.', $value), 1))
-                ]);
+
+                $nestingPath = \implode('.', $nesting);
+                $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
 
                 $type = $relationship->getAttribute('options')['relationType'];
                 $side = $relationship->getAttribute('options')['side'];
@@ -6850,6 +6856,7 @@ class Database
                         break;
                 }
             }
+
             $query->setValues(\array_values($values));
         }
 

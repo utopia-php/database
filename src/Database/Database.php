@@ -4366,14 +4366,12 @@ class Database
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException("Cursor document must be from the same Collection.");
         }
-        $attributesToCheckForRequiredValidation = ['$updatedAt'];
         unset($updates['$id']);
         unset($updates['$tenant']);
         if (($updates->getCreatedAt() === null || !$this->preserveDates)) {
             unset($updates['$createdAt']);
         } else {
             $updates['$createdAt'] = $updates->getCreatedAt();
-            $attributesToCheckForRequiredValidation[] = '$createdAt';
         }
         if ($this->adapter->getSharedTables()) {
             $updates['$tenant'] = $this->adapter->getTenant();
@@ -4390,7 +4388,7 @@ class Database
             $this->adapter->getMaxDateTime(),
         );
 
-        if (!$validator->isValid($updates, $attributesToCheckForRequiredValidation)) {
+        if (!$validator->isValid($updates)) {
             throw new StructureException($validator->getDescription());
         }
 

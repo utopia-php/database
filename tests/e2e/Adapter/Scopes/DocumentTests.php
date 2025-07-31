@@ -5064,7 +5064,7 @@ trait DocumentTests
         // Test 5: Bulk upsert operations with custom dates
         $database->setPreserveDates(true);
 
-        // Test 5.1: Bulk upsert with different date configurations
+        // Test 6: Bulk upsert with different date configurations
         $upsertDocuments = [
             new Document([
                 '$id' => 'upsert1',
@@ -5097,7 +5097,7 @@ trait DocumentTests
             $upsertResults[] = $doc;
         });
 
-        // Verify initial upsert state
+        // Test 7: Verify initial upsert state
         foreach (['upsert1', 'upsert3'] as $id) {
             $doc = $database->getDocument($collection, $id);
             $this->assertEquals($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
@@ -5114,7 +5114,7 @@ trait DocumentTests
             $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt missing for $id");
         }
 
-        // Test 5.2: Bulk upsert update with custom dates using updateDocuments
+        // Test 8: Bulk upsert update with custom dates using updateDocuments
         $newDate = '2000-04-01T12:00:00.000+00:00';
         $updateUpsertDoc = new Document([
             'string' => 'upsert_updated',
@@ -5139,7 +5139,30 @@ trait DocumentTests
             $this->assertEquals('upsert_updated', $doc->getAttribute('string'), "string mismatch for $id");
         }
 
-        // Test 5.3: Bulk upsert operations with createOrUpdateDocuments
+        // Test 9: checking by passing null to each
+        $updateUpsertDoc = new Document([
+            'string' => 'upsert_updated',
+            '$createdAt' => null,
+            '$updatedAt' => null
+        ]);
+
+        $upsertIds = [];
+        foreach ($upsertDocuments as $doc) {
+            $upsertIds[] = $doc->getId();
+        }
+
+        $countUpsert = $database->updateDocuments($collection, $updateUpsertDoc, [
+            Query::equal('$id', $upsertIds)
+        ]);
+        $this->assertEquals(4, $countUpsert);
+
+        foreach ($upsertIds as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertNotEmpty($doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+            $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+        }
+
+        // Test 10: Bulk upsert operations with createOrUpdateDocuments
         $upsertUpdateDocuments = [];
         foreach ($upsertDocuments as $doc) {
             $updatedDoc = clone $doc;
@@ -5161,7 +5184,7 @@ trait DocumentTests
             $this->assertEquals('upsert_updated_via_upsert', $doc->getAttribute('string'), "string mismatch for upsert update");
         }
 
-        // Test 5.4: Bulk upsert with preserve dates disabled
+        // Test 11: Bulk upsert with preserve dates disabled
         $database->setPreserveDates(false);
 
         $customDate = 'should be ignored anyways so no error';

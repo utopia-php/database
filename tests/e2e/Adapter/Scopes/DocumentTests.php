@@ -1843,6 +1843,7 @@ trait DocumentTests
         $documents = $database->find('movies', [
             Query::equal('$sequence', [$data['$sequence']]),
         ]);
+
         $this->assertEquals(1, count($documents));
 
         $empty = new Document();

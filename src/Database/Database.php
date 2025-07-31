@@ -6828,12 +6828,6 @@ class Database
                 $type = $relationship->getAttribute('options')['relationType'];
                 $side = $relationship->getAttribute('options')['side'];
 
-                var_dump('=========== in ========');
-                var_dump($selectedKey);
-                var_dump($nesting);
-                var_dump($type);
-                var_dump($side);
-
                 switch ($type) {
                     case Database::RELATION_MANY_TO_MANY:
                         unset($values[$valueIndex]);

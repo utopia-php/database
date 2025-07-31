@@ -1845,11 +1845,6 @@ trait DocumentTests
         ]);
         $this->assertEquals(1, count($documents));
 
-        /**
-         * Test getSequence returns '' Postgres bindParam issue on empty string
-         * Hack in convertQueries to change $sequence empty string from '' => '0'
-         * We should not use this fix and use structure validations, or change using not querying on empty string
-         */
         $empty = new Document();
         $this->assertEquals('0', $empty->getSequence());
 

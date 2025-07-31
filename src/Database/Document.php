@@ -70,7 +70,7 @@ class Document extends ArrayObject
      */
     public function getSequence(): string
     {
-        return $this->getAttribute('$sequence', '0');
+        return $this->getAttribute('$sequence', '');
     }
 
     /**

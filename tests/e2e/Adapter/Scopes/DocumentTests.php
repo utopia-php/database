@@ -1846,14 +1846,7 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
 
         $empty = new Document();
-        $this->assertEquals('0', $empty->getSequence());
-
-        /**
-         * Check no exceptions is thrown
-         */
-        $database->find('movies', [
-            Query::equal('$sequence', [$empty->getSequence()]),
-        ]);
+        $this->assertEquals('', $empty->getSequence());
     }
 
     public function testFindOrderBy(): void

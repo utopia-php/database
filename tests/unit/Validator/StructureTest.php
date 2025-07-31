@@ -715,8 +715,8 @@ class StructureTest extends TestCase
             Database::VAR_ID_INT
         );
 
-        $id = '1000';
-        $mongoid = '507f1f77bcf86cd799439011';
+        $sqlId = '1000';
+        $mongoId = '507f1f77bcf86cd799439011';
 
         $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -729,7 +729,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
-            'id' => $id,
+            'id' => $sqlId,
         ])));
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -743,12 +743,9 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
-            'id' => $mongoid,
+            'id' => $mongoId,
         ])));
 
-        /**
-         * Mongo
-         */
         $validator = new Structure(
             new Document($this->collection),
             Database::VAR_ID_MONGO
@@ -765,7 +762,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
-            'id' => $mongoid,
+            'id' => $mongoId,
         ])));
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -779,7 +776,7 @@ class StructureTest extends TestCase
             'feedback' => 'team@appwrite.io',
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
-            'id' => $mongoid,
+            'id' => $mongoId,
         ])));
     }
 

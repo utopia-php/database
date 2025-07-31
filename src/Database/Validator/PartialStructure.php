@@ -36,6 +36,9 @@ class PartialStructure extends Structure
             $name = $attribute['$id'] ?? '';
             $keys[$name] = $attribute;
         }
+        /**
+         * @var array<string, mixed> $requiredAttributes
+         */
         $requiredAttributes = [];
         foreach ($this->attributes as $attribute) {
             if ($attribute['required'] === true && $document->offsetExists($attribute['$id'])) {

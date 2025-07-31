@@ -422,6 +422,10 @@ abstract class SQL extends Adapter
             $attributes['_updatedAt'] = $updates->getUpdatedAt();
         }
 
+        if (!empty($updates->getCreatedAt())) {
+            $attributes['_createdAt'] = $updates->getCreatedAt();
+        }
+
         if (!empty($updates->getPermissions())) {
             $attributes['_permissions'] = json_encode($updates->getPermissions());
         }

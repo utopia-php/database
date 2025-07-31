@@ -4834,6 +4834,102 @@ trait DocumentTests
         $this->assertNotEquals($customDate, $updatedDoc7->getAttribute('$createdAt'));
         $this->assertNotEquals($customDate, $updatedDoc7->getAttribute('$updatedAt'));
 
+        // Test 9: Upsert operations with custom dates
+        $database->setPreserveDates(true);
+
+        // Test 9.1: Upsert new document with custom createdAt
+        $upsertResults = [];
+        $database->createOrUpdateDocuments($collection, [
+            new Document([
+                '$id' => 'upsert1',
+                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+                'string' => 'upsert1_initial',
+                '$createdAt' => $createDate
+            ])
+        ], onNext: function ($doc) use (&$upsertResults) {
+            $upsertResults[] = $doc;
+        });
+        $upsertDoc1 = $upsertResults[0];
+
+        $this->assertEquals($createDate, $upsertDoc1->getAttribute('$createdAt'));
+        $this->assertNotEquals($createDate, $upsertDoc1->getAttribute('$updatedAt'));
+
+        // Test 9.2: Upsert existing document with custom updatedAt
+        $upsertDoc1->setAttribute('string', 'upsert1_updated');
+        $upsertDoc1->setAttribute('$updatedAt', $updateDate);
+        $updatedUpsertResults = [];
+        $database->createOrUpdateDocuments($collection, [$upsertDoc1], onNext: function ($doc) use (&$updatedUpsertResults) {
+            $updatedUpsertResults[] = $doc;
+        });
+        $updatedUpsertDoc1 = $updatedUpsertResults[0];
+
+        $this->assertEquals($createDate, $updatedUpsertDoc1->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $updatedUpsertDoc1->getAttribute('$updatedAt'));
+
+        // Test 9.3: Upsert new document with both custom dates
+        $upsertResults2 = [];
+        $database->createOrUpdateDocuments($collection, [
+            new Document([
+                '$id' => 'upsert2',
+                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+                'string' => 'upsert2_both_dates',
+                '$createdAt' => $createDate,
+                '$updatedAt' => $updateDate
+            ])
+        ], onNext: function ($doc) use (&$upsertResults2) {
+            $upsertResults2[] = $doc;
+        });
+        $upsertDoc2 = $upsertResults2[0];
+
+        $this->assertEquals($createDate, $upsertDoc2->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $upsertDoc2->getAttribute('$updatedAt'));
+
+        // Test 9.4: Upsert existing document with different dates
+        $upsertDoc2->setAttribute('string', 'upsert2_updated');
+        $upsertDoc2->setAttribute('$createdAt', $date3);
+        $upsertDoc2->setAttribute('$updatedAt', $date3);
+        $updatedUpsertResults2 = [];
+        $database->createOrUpdateDocuments($collection, [$upsertDoc2], onNext: function ($doc) use (&$updatedUpsertResults2) {
+            $updatedUpsertResults2[] = $doc;
+        });
+        $updatedUpsertDoc2 = $updatedUpsertResults2[0];
+
+        $this->assertEquals($date3, $updatedUpsertDoc2->getAttribute('$createdAt'));
+        $this->assertEquals($date3, $updatedUpsertDoc2->getAttribute('$updatedAt'));
+
+        // Test 9.5: Upsert with preserve dates disabled
+        $database->setPreserveDates(false);
+
+        $upsertResults3 = [];
+        $database->createOrUpdateDocuments($collection, [
+            new Document([
+                '$id' => 'upsert3',
+                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+                'string' => 'upsert3_disabled',
+                '$createdAt' => $customDate,
+                '$updatedAt' => $customDate
+            ])
+        ], onNext: function ($doc) use (&$upsertResults3) {
+            $upsertResults3[] = $doc;
+        });
+        $upsertDoc3 = $upsertResults3[0];
+
+        $this->assertNotEquals($customDate, $upsertDoc3->getAttribute('$createdAt'));
+        $this->assertNotEquals($customDate, $upsertDoc3->getAttribute('$updatedAt'));
+
+        // Update with custom dates should also be ignored
+        $upsertDoc3->setAttribute('string', 'upsert3_updated');
+        $upsertDoc3->setAttribute('$createdAt', $customDate);
+        $upsertDoc3->setAttribute('$updatedAt', $customDate);
+        $updatedUpsertResults3 = [];
+        $database->createOrUpdateDocuments($collection, [$upsertDoc3], onNext: function ($doc) use (&$updatedUpsertResults3) {
+            $updatedUpsertResults3[] = $doc;
+        });
+        $updatedUpsertDoc3 = $updatedUpsertResults3[0];
+
+        $this->assertNotEquals($customDate, $updatedUpsertDoc3->getAttribute('$createdAt'));
+        $this->assertNotEquals($customDate, $updatedUpsertDoc3->getAttribute('$updatedAt'));
+
         $database->setPreserveDates(false);
         $database->deleteCollection($collection);
     }
@@ -4964,6 +5060,131 @@ trait DocumentTests
 
         $countEnabled = $database->updateDocuments($collection, $updateDocEnabled);
         $this->assertEquals(6, $countEnabled);
+
+        // Test 5: Bulk upsert operations with custom dates
+        $database->setPreserveDates(true);
+
+        // Test 5.1: Bulk upsert with different date configurations
+        $upsertDocuments = [
+            new Document([
+                '$id' => 'upsert1',
+                '$permissions' => $permissions,
+                'string' => 'upsert1_initial',
+                '$createdAt' => $createDate
+            ]),
+            new Document([
+                '$id' => 'upsert2',
+                '$permissions' => $permissions,
+                'string' => 'upsert2_initial',
+                '$updatedAt' => $updateDate
+            ]),
+            new Document([
+                '$id' => 'upsert3',
+                '$permissions' => $permissions,
+                'string' => 'upsert3_initial',
+                '$createdAt' => $createDate,
+                '$updatedAt' => $updateDate
+            ]),
+            new Document([
+                '$id' => 'upsert4',
+                '$permissions' => $permissions,
+                'string' => 'upsert4_initial'
+            ])
+        ];
+
+        $upsertResults = [];
+        $database->createOrUpdateDocuments($collection, $upsertDocuments, onNext: function ($doc) use (&$upsertResults) {
+            $upsertResults[] = $doc;
+        });
+
+        // Verify initial upsert state
+        foreach (['upsert1', 'upsert3'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+        }
+
+        foreach (['upsert2', 'upsert3'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+        }
+
+        foreach (['upsert4'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertNotEmpty($doc->getAttribute('$createdAt'), "createdAt missing for $id");
+            $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt missing for $id");
+        }
+
+        // Test 5.2: Bulk upsert update with custom dates using updateDocuments
+        $newDate = '2000-04-01T12:00:00.000+00:00';
+        $updateUpsertDoc = new Document([
+            'string' => 'upsert_updated',
+            '$createdAt' => $newDate,
+            '$updatedAt' => $newDate
+        ]);
+
+        $upsertIds = [];
+        foreach ($upsertDocuments as $doc) {
+            $upsertIds[] = $doc->getId();
+        }
+
+        $countUpsert = $database->updateDocuments($collection, $updateUpsertDoc, [
+            Query::equal('$id', $upsertIds)
+        ]);
+        $this->assertEquals(4, $countUpsert);
+
+        foreach ($upsertIds as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($newDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+            $this->assertEquals($newDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertEquals('upsert_updated', $doc->getAttribute('string'), "string mismatch for $id");
+        }
+
+        // Test 5.3: Bulk upsert operations with createOrUpdateDocuments
+        $upsertUpdateDocuments = [];
+        foreach ($upsertDocuments as $doc) {
+            $updatedDoc = clone $doc;
+            $updatedDoc->setAttribute('string', 'upsert_updated_via_upsert');
+            $updatedDoc->setAttribute('$createdAt', $newDate);
+            $updatedDoc->setAttribute('$updatedAt', $newDate);
+            $upsertUpdateDocuments[] = $updatedDoc;
+        }
+
+        $upsertUpdateResults = [];
+        $countUpsertUpdate = $database->createOrUpdateDocuments($collection, $upsertUpdateDocuments, onNext: function ($doc) use (&$upsertUpdateResults) {
+            $upsertUpdateResults[] = $doc;
+        });
+        $this->assertEquals(4, $countUpsertUpdate);
+
+        foreach ($upsertUpdateResults as $doc) {
+            $this->assertEquals($newDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for upsert update");
+            $this->assertEquals($newDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for upsert update");
+            $this->assertEquals('upsert_updated_via_upsert', $doc->getAttribute('string'), "string mismatch for upsert update");
+        }
+
+        // Test 5.4: Bulk upsert with preserve dates disabled
+        $database->setPreserveDates(false);
+
+        $customDate = 'should be ignored anyways so no error';
+        $upsertDisabledDocuments = [];
+        foreach ($upsertDocuments as $doc) {
+            $disabledDoc = clone $doc;
+            $disabledDoc->setAttribute('string', 'upsert_disabled');
+            $disabledDoc->setAttribute('$createdAt', $customDate);
+            $disabledDoc->setAttribute('$updatedAt', $customDate);
+            $upsertDisabledDocuments[] = $disabledDoc;
+        }
+
+        $upsertDisabledResults = [];
+        $countUpsertDisabled = $database->createOrUpdateDocuments($collection, $upsertDisabledDocuments, onNext: function ($doc) use (&$upsertDisabledResults) {
+            $upsertDisabledResults[] = $doc;
+        });
+        $this->assertEquals(4, $countUpsertDisabled);
+
+        foreach ($upsertDisabledResults as $doc) {
+            $this->assertNotEquals($customDate, $doc->getAttribute('$createdAt'), "createdAt should not be custom date when disabled");
+            $this->assertNotEquals($customDate, $doc->getAttribute('$updatedAt'), "updatedAt should not be custom date when disabled");
+            $this->assertEquals('upsert_disabled', $doc->getAttribute('string'), "string mismatch for disabled upsert");
+        }
 
         $database->setPreserveDates(false);
         $database->deleteCollection($collection);

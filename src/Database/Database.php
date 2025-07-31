@@ -4993,14 +4993,14 @@ class Database
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt)
+                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt)
                 ->removeAttribute('$sequence');
 
-            if ($old->isEmpty()) {
-                $createdAt = $document->getCreatedAt();
-                $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+            $createdAt = $document->getCreatedAt();
+            if ($createdAt === null || !$this->preserveDates) {
+                $document->setAttribute('$createdAt', $old->isEmpty() ? $time : $old->getCreatedAt());
             } else {
-                $document['$createdAt'] = $old->getCreatedAt();
+                $document->setAttribute('$createdAt', $createdAt);
             }
 
             // Force matching optional parameter sets

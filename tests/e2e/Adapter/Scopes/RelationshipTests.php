@@ -232,9 +232,10 @@ trait RelationshipTests
                 ])
             ]
         );
+
         var_dump($docs);
 
-        $this->assertEquals('shmuel', 'fogel');
+        //$this->assertEquals('shmuel', 'fogel');
     }
 
     public function testDeleteRelatedCollection(): void

@@ -221,7 +221,8 @@ trait RelationshipTests
 
         var_dump('=== start === === start === === start === === start === === start === === start === === start === === start === === start ===');
 
-        $docs = $database->find('veterinarians',
+        $docs = $database->find(
+            'veterinarians',
             [
                 Query::select([
                     '*',
@@ -231,9 +232,9 @@ trait RelationshipTests
                 ])
             ]
         );
-var_dump($docs);
+        var_dump($docs);
 
-      $this->assertEquals('shmuel', 'fogel');
+        $this->assertEquals('shmuel', 'fogel');
     }
 
     public function testDeleteRelatedCollection(): void

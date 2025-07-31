@@ -6855,7 +6855,7 @@ class Database
             $query->setValues(\array_values($values));
         }
 
-        if(!empty($nestedSelections)){
+        if (!empty($nestedSelections)) {
             var_dump('$nestedSelections$nestedSelections$nestedSelections$nestedSelections$nestedSelections$nestedSelections$nestedSelections$nestedSelections');
             var_dump($nestedSelections);
         }

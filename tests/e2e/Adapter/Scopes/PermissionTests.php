@@ -94,6 +94,42 @@ trait PermissionTests
             $this->assertEquals($permissions, $document->getPermissions());
         }
 
+        /**
+         * Unset permissions
+         */
+        $updates = new Document([
+            '$permissions' => [],
+            'president' => 'Richard Nixon'
+        ]);
+
+        /**
+         * @var $results Array<Document>
+         */
+        $results = [];
+        $modified = $database->updateDocuments(
+            __FUNCTION__,
+            $updates,
+            onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+            }
+        );
+
+        $this->assertEquals(3, $modified);
+
+        foreach ($results as $result) {
+            $this->assertEquals('Richard Nixon', $result->getAttribute('president'));
+            $this->assertEquals([], $result->getPermissions());
+        }
+
+        $documents = $database->find(__FUNCTION__);
+
+        $this->assertEquals(3, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertEquals('Richard Nixon', $document->getAttribute('president'));
+            $this->assertEquals([], $document->getPermissions());
+        }
+
         $this->assertEquals('shmuel', 'fogel');
     }
 

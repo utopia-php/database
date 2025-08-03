@@ -14,7 +14,17 @@ use Utopia\Database\Validator\Authorization;
 
 trait PermissionTests
 {
-    public function testCreateDocumentsEmptyPermission(): void
+//    public function testCreateDocumentsEmptyPermission1(): void
+//    {
+//        /** @var Database $database */
+//        $database = static::getDatabase();
+//
+//        $database->createCollection(__FUNCTION__);
+//
+//        $document = $database->createDocument(__FUNCTION__, new Document());
+//    }
+
+        public function testCreateDocumentsEmptyPermission(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();
@@ -46,6 +56,8 @@ trait PermissionTests
             $this->assertArrayHasKey('$permissions', $result);
             $this->assertEquals([], $result->getAttribute('$permissions'));
         }
+
+        $this->assertEquals('shmuel', 'fogel');
     }
 
     public function testReadPermissionsFailure(): Document

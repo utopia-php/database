@@ -449,6 +449,11 @@ trait DocumentTests
 
         $this->assertEquals(2, \count($results));
         $this->assertEquals(2, $count);
+
+        foreach ($results as $result){
+            $this->assertArrayHasKey('$permissions', $result);
+            $this->assertEquals([], $result->getAttribute('$permissions'));
+        }
     }
 
     public function testUpsertDocuments(): void

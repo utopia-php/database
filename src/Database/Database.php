@@ -3609,6 +3609,10 @@ class Database
             ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
             ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
 
+        if (empty($document->getPermissions())){
+            $document->setAttribute('$permissions', []);
+        }
+
         if ($this->adapter->getSharedTables()) {
             if ($this->adapter->getTenantPerDocument()) {
                 if (
@@ -3707,6 +3711,10 @@ class Database
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
                 ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+
+            if (empty($document->getPermissions())){
+                $document->setAttribute('$permissions', []);
+            }
 
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {
@@ -4421,7 +4429,7 @@ class Database
             if (empty($batch)) {
                 break;
             }
-
+var_dump($updates);
             $this->withTransaction(function () use ($collection, $updates, &$batch) {
                 foreach ($batch as &$document) {
                     $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
@@ -6334,9 +6342,9 @@ class Database
             }
 
             if ($key === '$permissions') {
-                if (empty($value)) {
-                    $document->setAttribute('$permissions', []); // set default value
-                }
+//                if (empty($value)) {
+//                    $document->setAttribute('$permissions', []); // set default value
+//                }
                 continue;
             }
 

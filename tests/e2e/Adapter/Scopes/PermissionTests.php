@@ -127,6 +127,9 @@ trait PermissionTests
 
         foreach ($documents as $document) {
             $this->assertEquals('Richard Nixon', $document->getAttribute('president'));
+            /**
+             * This is failing!!!
+             */
             $this->assertEquals([], $document->getPermissions());
         }
     }

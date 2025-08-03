@@ -3609,7 +3609,7 @@ class Database
             ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
             ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
 
-        if (empty($document->getPermissions())){
+        if (empty($document->getPermissions())) {
             $document->setAttribute('$permissions', []);
         }
 
@@ -3712,7 +3712,7 @@ class Database
                 ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
                 ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
 
-            if (empty($document->getPermissions())){
+            if (empty($document->getPermissions())) {
                 $document->setAttribute('$permissions', []);
             }
 

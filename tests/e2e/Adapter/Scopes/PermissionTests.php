@@ -14,7 +14,7 @@ use Utopia\Database\Validator\Authorization;
 
 trait PermissionTests
 {
-        public function testCreateDocumentsEmptyPermission(): void
+    public function testCreateDocumentsEmptyPermission(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();

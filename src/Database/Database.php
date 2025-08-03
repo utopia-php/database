@@ -6343,9 +6343,6 @@ class Database
             }
 
             if ($key === '$permissions') {
-//                if (empty($value)) {
-//                    $document->setAttribute('$permissions', []); // set default value
-//                }
                 continue;
             }
 
@@ -6426,6 +6423,10 @@ class Database
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
+            if ($key === '$permissions') {
+                continue;
+            }
+
             if (\is_null($value)) {
                 $value = $document->getAttribute($this->adapter->filter($key));
 
@@ -6482,6 +6483,10 @@ class Database
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);
             if (is_null($value)) {
+                continue;
+            }
+
+            if ($key === '$permissions') {
                 continue;
             }
 

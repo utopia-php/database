@@ -95,7 +95,7 @@ trait RelationshipTests
             twoWayKey: 'animals'
         );
 
-        $zoo1 = $database->createDocument('zoo', new Document([
+        $zoo = $database->createDocument('zoo', new Document([
             '$id' => 'zoo1',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -103,6 +103,12 @@ trait RelationshipTests
             ],
             'name' => 'Bronx Zoo'
         ]));
+
+        var_dump($zoo);
+        $this->assertEquals('zoo1', $zoo->getId());
+        $this->assertArrayHasKey('animals', $zoo);
+
+        $this->assertEquals('shmuel', 'fogel');
 
         $animal1 = $database->createDocument('__animals', new Document([
             '$id' => 'iguana',
@@ -121,7 +127,7 @@ trait RelationshipTests
             'enum' => 'maybe',
             'ip' => '127.0.0.1',
             'url' => 'https://appwrite.io/',
-            'zoo' => $zoo1->getId(),
+            'zoo' => $zoo->getId(),
         ]));
 
         $animal2 = $database->createDocument('__animals', new Document([
@@ -141,7 +147,7 @@ trait RelationshipTests
             'enum' => 'yes',
             'ip' => '255.0.0.1',
             'url' => 'https://appwrite.io/',
-            'zoo' => $zoo1->getId(),
+            'zoo' => $zoo->getId(),
         ]));
 
         $animal3 = $database->createDocument('__animals', new Document([
@@ -233,9 +239,7 @@ trait RelationshipTests
             ]
         );
 
-        var_dump($docs);
-
-        //$this->assertEquals('shmuel', 'fogel');
+        $this->assertEquals('shmuel', 'fogel');
     }
 
     public function testDeleteRelatedCollection(): void

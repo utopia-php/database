@@ -4429,7 +4429,7 @@ class Database
             if (empty($batch)) {
                 break;
             }
-var_dump($updates);
+
             $this->withTransaction(function () use ($collection, $updates, &$batch) {
                 foreach ($batch as &$document) {
                     $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
@@ -4453,6 +4453,7 @@ var_dump($updates);
 
                     $document = $this->encode($collection, $document);
                 }
+
                 $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,

@@ -278,9 +278,7 @@ class Document extends ArrayObject
      */
     public function removeAttribute(string $key): static
     {
-        if (\array_key_exists($key, (array)$this)) {
-            unset($this[$key]);
-        }
+        unset($this[$key]);
 
         /* @phpstan-ignore-next-line */
         return $this;

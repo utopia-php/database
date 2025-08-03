@@ -3285,7 +3285,7 @@ class Database
         $document = $this->decode($collection, $document, $selections);
         $this->map = [];
 
-        if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+        if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
         }
 
@@ -3312,11 +3312,11 @@ class Database
     /**
      * @param Document $collection
      * @param Document $document
-     * @param array<Query> $queries
+     * @param array<string, array<Query>> $selects
      * @return Document
      * @throws DatabaseException
      */
-    private function populateDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
+    private function populateDocumentRelationships(Document $collection, Document $document, array $selects = []): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -3332,6 +3332,8 @@ class Database
             $twoWay = $relationship['options']['twoWay'];
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
+
+            $queries = $selects[$key] ?? [];
 
             if (!empty($value)) {
                 $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();
@@ -3606,8 +3608,8 @@ class Database
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
-            ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
-            ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+            ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
+            ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
 
         if ($this->adapter->getSharedTables()) {
             if ($this->adapter->getTenantPerDocument()) {
@@ -3709,8 +3711,8 @@ class Database
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
-                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+                ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
+                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
 
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {
@@ -4110,8 +4112,8 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        $document = $this->withTransaction(function () use ($collection, $id, $document) {
+        $newUpdatedAt = $document->getUpdatedAt();
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
             $time = DateTime::now();
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -4128,10 +4130,11 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
+            $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
-            $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
+            $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
                 $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
@@ -4259,8 +4262,7 @@ class Database
             }
 
             if ($shouldUpdate) {
-                $updatedAt = $document->getUpdatedAt();
-                $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+                $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
             }
 
             // Check if document was updated after the request timestamp
@@ -4379,21 +4381,21 @@ class Database
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException("Cursor document must be from the same Collection.");
         }
-
         unset($updates['$id']);
-        unset($updates['$createdAt']);
         unset($updates['$tenant']);
-
+        if (($updates->getCreatedAt() === null || !$this->preserveDates)) {
+            unset($updates['$createdAt']);
+        } else {
+            $updates['$createdAt'] = $updates->getCreatedAt();
+        }
         if ($this->adapter->getSharedTables()) {
             $updates['$tenant'] = $this->adapter->getTenant();
         }
 
-        if (!$this->preserveDates) {
-            $updates['$updatedAt'] = DateTime::now();
-        }
+        $updatedAt = $updates->getUpdatedAt();
+        $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
 
         $updates = $this->encode($collection, $updates);
-
         // Check new document structure
         $validator = new PartialStructure(
             $collection,
@@ -4950,7 +4952,6 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
-        $processedDocuments = []; // Track which documents were actually processed
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                 $old = Authorization::skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
@@ -4963,7 +4964,7 @@ class Database
                     $document->getId(),
                 )));
             }
-          
+
             $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
@@ -4986,9 +4987,6 @@ class Database
                 unset($documents[$key]);
                 continue;
             }
-
-            // Track that this document was processed
-            $processedDocuments[$document->getId()] = true;
 
             // If old is empty, check if user has create permission on the collection
             // If old is not empty, check if user has update permission on the collection
@@ -5016,14 +5014,14 @@ class Database
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt)
+                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt)
                 ->removeAttribute('$sequence');
 
-            if ($old->isEmpty()) {
-                $createdAt = $document->getCreatedAt();
-                $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+            $createdAt = $document->getCreatedAt();
+            if ($createdAt === null || !$this->preserveDates) {
+                $document->setAttribute('$createdAt', $old->isEmpty() ? $time : $old->getCreatedAt());
             } else {
-                $document['$createdAt'] = $old->getCreatedAt();
+                $document->setAttribute('$createdAt', $createdAt);
             }
 
             // Force matching optional parameter sets
@@ -5103,15 +5101,14 @@ class Database
             /**
              * @var array<Change> $chunk
              */
-
             $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
                 $collection->getId(),
                 $attribute,
                 $chunk
             )));
-           
+
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
-          
+
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
                     $created++;
@@ -5138,10 +5135,7 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                // Only call onNext for documents that were actually processed
-                if (isset($processedDocuments[$doc->getId()])) {
-                    $onNext && $onNext($doc);
-                }
+                $onNext && $onNext($doc);
             }
         }
 
@@ -5150,7 +5144,7 @@ class Database
             'created' => $created,
             'updated' => $updated,
         ]));
-  
+
         return $created + $updated;
     }
 
@@ -6130,12 +6124,11 @@ class Database
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        foreach ($results as &$node) {
+        foreach ($results as $index => $node) {
 
             $node = $this->adapter->castingAfter($collection, $node);
 
-
-            if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+            if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
 
@@ -6145,9 +6138,9 @@ class Database
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
             }
-        }
 
-        unset($node);
+            $results[$index] = $node;
+        }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
@@ -6358,7 +6351,7 @@ class Database
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-
+        $internalDateAttributes = ['$createdAt','$updatedAt'];
         foreach ($this->getInternalAttributes() as $attribute) {
             $attributes[] = $attribute;
         }
@@ -6369,6 +6362,11 @@ class Database
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
+
+            if (in_array($key, $internalDateAttributes) && is_string($value) && empty($value)) {
+                $document->setAttribute($key, null);
+                continue;
+            }
 
             if ($key === '$permissions') {
                 if (empty($value)) {
@@ -6391,18 +6389,18 @@ class Database
                 $value = ($array) ? $value : [$value];
             }
 
-            foreach ($value as &$node) {
-                if (($node !== null)) {
+            foreach ($value as $index => $node) {
+                if ($node !== null) {
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
+                    $value[$index] = $node;
                 }
             }
 
             if (!$array) {
                 $value = $value[0];
             }
-
             $document->setAttribute($key, $value);
         }
 
@@ -6833,7 +6831,7 @@ class Database
      *
      * @param array<Document> $relationships
      * @param array<Query> $queries
-     * @return array<Query>
+     * @return array<string, array<Query>> $selects
      */
     private function processRelationshipQueries(
         array $relationships,
@@ -6852,7 +6850,8 @@ class Database
                     continue;
                 }
 
-                $selectedKey = \explode('.', $value)[0];
+                $nesting = \explode('.', $value);
+                $selectedKey = \array_shift($nesting); // Remove and return first item
 
                 $relationship = \array_values(\array_filter(
                     $relationships,
@@ -6865,9 +6864,9 @@ class Database
 
                 // Shift the top level off the dot-path to pass the selection down the chain
                 // 'foo.bar.baz' becomes 'bar.baz'
-                $nestedSelections[] = Query::select([
-                    \implode('.', \array_slice(\explode('.', $value), 1))
-                ]);
+
+                $nestingPath = \implode('.', $nesting);
+                $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
 
                 $type = $relationship->getAttribute('options')['relationType'];
                 $side = $relationship->getAttribute('options')['side'];
@@ -6895,6 +6894,7 @@ class Database
                         break;
                 }
             }
+
             $query->setValues(\array_values($values));
         }
 

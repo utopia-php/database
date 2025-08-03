@@ -4931,6 +4931,23 @@ trait DocumentTests
         $this->assertNotEquals($customDate, $updatedDoc7->getAttribute('$createdAt'));
         $this->assertNotEquals($customDate, $updatedDoc7->getAttribute('$updatedAt'));
 
+        // Test checking updatedAt updates even old document exists
+        $database->setPreserveDates(true);
+        $doc11 = $database->createDocument($collection, new Document([
+            '$id' => 'doc11',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'no_dates',
+            '$createdAt' => $customDate
+        ]));
+
+        $newUpdatedAt = $doc11->getUpdatedAt();
+
+        $newDoc11 = new Document([
+            'string' => 'no_dates_update',
+        ]);
+        $updatedDoc7 = $database->updateDocument($collection, 'doc11', $newDoc11);
+        $this->assertNotEquals($newUpdatedAt, $updatedDoc7->getAttribute('$updatedAt'));
+
         $database->setPreserveDates(false);
         $database->deleteCollection($collection);
     }

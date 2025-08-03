@@ -129,8 +129,6 @@ trait PermissionTests
             $this->assertEquals('Richard Nixon', $document->getAttribute('president'));
             $this->assertEquals([], $document->getPermissions());
         }
-
-        $this->assertEquals('shmuel', 'fogel');
     }
 
         public function testCreateDocumentsEmptyPermission(): void

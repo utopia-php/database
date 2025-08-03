@@ -225,7 +225,6 @@ class Mongo extends Adapter
      */
     private function addTransactionContext(array $options = []): array
     {
-
         if ($this->inTransaction) {
             $options['lsid'] = ['id' => $this->sessionId];
             $options['txnNumber'] = new \MongoDB\BSON\Int64($this->txnNumber);

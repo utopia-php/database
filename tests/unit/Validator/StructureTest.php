@@ -133,7 +133,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid('string'));
@@ -148,7 +148,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document()));
@@ -160,7 +160,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document(),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -183,7 +183,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -205,7 +205,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -240,7 +240,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -264,7 +264,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -287,7 +287,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -308,7 +308,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -331,7 +331,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -400,7 +400,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -421,7 +421,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -442,7 +442,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -480,7 +480,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -546,7 +546,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -584,7 +584,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -622,7 +622,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -645,7 +645,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -668,7 +668,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -691,7 +691,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $this->assertEquals(false, $validator->isValid(new Document([
@@ -712,7 +712,7 @@ class StructureTest extends TestCase
     {
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $sqlId = '1000';

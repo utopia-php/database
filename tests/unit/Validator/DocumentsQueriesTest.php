@@ -126,7 +126,7 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->collection['attributes'],
             $this->collection['indexes'],
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $queries = [
@@ -164,7 +164,7 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->collection['attributes'],
             $this->collection['indexes'],
-            Database::VAR_ID_INT
+            Database::VAR_INTEGER
         );
 
         $queries = ['{"method":"notEqual","attribute":"title","values":["Iron Man","Ant Man"]}'];

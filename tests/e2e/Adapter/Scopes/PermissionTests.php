@@ -44,9 +44,6 @@ trait PermissionTests
             ]);
         }
 
-        /**
-         * @var $results Array<Document>
-         */
         $results = [];
         $count = $database->createDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
             $results[] = $doc;
@@ -66,9 +63,6 @@ trait PermissionTests
             'president' => 'George Washington'
         ]);
 
-        /**
-         * @var $results Array<Document>
-         */
         $results = [];
         $modified = $database->updateDocuments(
             __FUNCTION__,
@@ -108,9 +102,6 @@ trait PermissionTests
             'president' => 'Joe biden'
         ]);
 
-        /**
-         * @var $results Array<Document>
-         */
         $results = [];
         $modified = $database->updateDocuments(
             __FUNCTION__,
@@ -145,9 +136,6 @@ trait PermissionTests
             'president' => 'Richard Nixon'
         ]);
 
-        /**
-         * @var $results Array<Document>
-         */
         $results = [];
         $modified = $database->updateDocuments(
             __FUNCTION__,

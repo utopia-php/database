@@ -11,7 +11,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
-use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
 
@@ -431,16 +430,6 @@ abstract class SQL extends Adapter
             $attributes['_permissions'] = json_encode($updates->getPermissions());
         }
 
-//        if ($updatePermissions) {
-//            $originalPermissions = $document->getPermissions();
-//            $currentPermissions  = $updates->getPermissions();
-//
-//            sort($originalPermissions);
-//            sort($currentPermissions);
-//
-//            $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
-//        }
-
         if (empty($attributes)) {
             return 0;
         }
@@ -503,6 +492,10 @@ abstract class SQL extends Adapter
             $addBindValues = [];
 
             foreach ($documents as $index => $document) {
+                if ($document->getAttribute('$skipPermissionsUpdate', false)) {
+                    continue;
+                }
+
                 $sql = "
                     SELECT _type, _permission
                     FROM {$this->getSQLTable($name . '_perms')}

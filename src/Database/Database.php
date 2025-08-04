@@ -3609,7 +3609,7 @@ class Database
             ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
             ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
 
-        if (empty($document->getPermissions())){
+        if (empty($document->getPermissions())) {
             $document->setAttribute('$permissions', []);
         }
 
@@ -3712,7 +3712,7 @@ class Database
                 ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
                 ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
 
-            if (empty($document->getPermissions())){
+            if (empty($document->getPermissions())) {
                 $document->setAttribute('$permissions', []);
             }
 
@@ -4433,8 +4433,27 @@ class Database
                 break;
             }
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch) {
+            $currentPermissions  = $updates->getPermissions();
+            sort($currentPermissions);
+
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
                 foreach ($batch as $index => $document) {
+
+                    $skipPermissionsUpdate = true;
+
+                    if ($updates->offsetExists('$permissions')) {
+                        if (!$document->offsetExists('$permissions')) {
+                            throw new QueryException('Permission document missing in select');
+                        }
+
+                        $originalPermissions = $document->getPermissions();
+                        sort($originalPermissions);
+
+                        $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+                    }
+
+                    $document->setAttribute('$skipPermissionsUpdate', $skipPermissionsUpdate);
+
                     $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
 
                     if ($this->resolveRelationships) {
@@ -4465,6 +4484,8 @@ class Database
             });
 
             foreach ($batch as $doc) {
+                $doc->removeAttribute('$skipPermissionsUpdate');
+
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
                 try {

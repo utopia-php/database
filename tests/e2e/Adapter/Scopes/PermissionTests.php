@@ -95,6 +95,49 @@ trait PermissionTests
         }
 
         /**
+         * Change permissions remove delete
+         */
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        $updates = new Document([
+            '$permissions' => $permissions,
+            'president' => 'Joe biden'
+        ]);
+
+        /**
+         * @var $results Array<Document>
+         */
+        $results = [];
+        $modified = $database->updateDocuments(
+            __FUNCTION__,
+            $updates,
+            onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+            }
+        );
+
+        $this->assertEquals(3, $modified);
+
+        foreach ($results as $result) {
+            $this->assertEquals('Joe biden', $result->getAttribute('president'));
+            $this->assertEquals($permissions, $result->getPermissions());
+            $this->assertArrayNotHasKey('$skipPermissionsUpdate', $result);
+        }
+
+        $documents = $database->find(__FUNCTION__);
+
+        $this->assertEquals(3, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertEquals('Joe biden', $document->getAttribute('president'));
+            $this->assertEquals($permissions, $document->getPermissions());
+        }
+
+        /**
          * Unset permissions
          */
         $updates = new Document([
@@ -133,12 +176,11 @@ trait PermissionTests
         foreach ($documents as $document) {
             $this->assertEquals('Richard Nixon', $document->getAttribute('president'));
             $this->assertEquals([], $document->getPermissions());
+            $this->assertArrayNotHasKey('$skipPermissionsUpdate', $document);
         }
-
-        $this->assertEquals('shmuel', 'fogel');
     }
 
-        public function testCreateDocumentsEmptyPermission(): void
+    public function testCreateDocumentsEmptyPermission(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();

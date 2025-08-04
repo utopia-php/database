@@ -4,7 +4,6 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
 use Utopia\Validator;
-use Utopia\Validator\Integer;
 use Utopia\Validator\Range;
 
 class Sequence extends Validator

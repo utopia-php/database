@@ -748,7 +748,7 @@ class StructureTest extends TestCase
 
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_ID_MONGO
+            Database::VAR_OBJECT_ID
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([

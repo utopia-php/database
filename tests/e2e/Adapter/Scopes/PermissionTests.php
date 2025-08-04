@@ -122,16 +122,20 @@ trait PermissionTests
         }
 
         $documents = $database->find(__FUNCTION__);
+        $this->assertEquals(0, count($documents));
+
+        Authorization::disable();
+        $documents = $database->find(__FUNCTION__);
+        Authorization::reset();
 
         $this->assertEquals(3, count($documents));
 
         foreach ($documents as $document) {
             $this->assertEquals('Richard Nixon', $document->getAttribute('president'));
-            /**
-             * This is failing!!!
-             */
             $this->assertEquals([], $document->getPermissions());
         }
+
+        $this->assertEquals('shmuel', 'fogel');
     }
 
         public function testCreateDocumentsEmptyPermission(): void

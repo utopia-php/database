@@ -4375,13 +4375,16 @@ class Database
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException("Cursor document must be from the same Collection.");
         }
+
         unset($updates['$id']);
         unset($updates['$tenant']);
+
         if (($updates->getCreatedAt() === null || !$this->preserveDates)) {
             unset($updates['$createdAt']);
         } else {
             $updates['$createdAt'] = $updates->getCreatedAt();
         }
+
         if ($this->adapter->getSharedTables()) {
             $updates['$tenant'] = $this->adapter->getTenant();
         }
@@ -4431,7 +4434,7 @@ class Database
             }
 
             $this->withTransaction(function () use ($collection, $updates, &$batch) {
-                foreach ($batch as &$document) {
+                foreach ($batch as $index => $document) {
                     $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
 
                     if ($this->resolveRelationships) {
@@ -4451,7 +4454,7 @@ class Database
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
 
-                    $document = $this->encode($collection, $document);
+                    $batch[$index] = $this->encode($collection, $document);
                 }
 
                 $this->adapter->updateDocuments(

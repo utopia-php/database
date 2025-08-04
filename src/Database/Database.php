@@ -42,10 +42,7 @@ class Database
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
     public const VAR_ID = 'id';
-
-    // VAR_ID types
-    public const VAR_ID_INT = '_integer';
-    public const VAR_ID_MONGO = '_mongo';
+    public const VAR_OBJECT_ID = 'objectId';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
@@ -6506,6 +6503,9 @@ class Database
             foreach ($value as $index => $node) {
                 switch ($type) {
                     case self::VAR_ID:
+                        // Disabled until Appwrite migrates to use real int ID's for MySQL
+                        //$type = $this->adapter->getIdAttributeType();
+                        //\settype($node, $type);
                         $node = (string)$node;
                         break;
                     case self::VAR_BOOLEAN:

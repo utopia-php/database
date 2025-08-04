@@ -1629,7 +1629,7 @@ abstract class SQL extends Adapter
      */
     public function getIdAttributeType(): string
     {
-        return Database::VAR_ID_INT;
+        return Database::VAR_INTEGER;
     }
 
     /**

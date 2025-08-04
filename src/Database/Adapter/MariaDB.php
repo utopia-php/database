@@ -1750,7 +1750,7 @@ class MariaDB extends SQL
 
         switch ($type) {
             case Database::VAR_ID:
-                return 'bigint UNSIGNED';
+                return 'BIGINT UNSIGNED';
 
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes

@@ -863,7 +863,7 @@ abstract class Adapter
     abstract public function getMinDateTime(): \DateTime;
 
     /**
-     * Get Id's attribute primitive type int or string
+     * Get the primitive type of the primary key type for this adapter
      *
      * @return string
      */

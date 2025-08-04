@@ -18,34 +18,34 @@ class FilterTest extends TestCase
      */
     public function setUp(): void
     {
-        $this->validator = new Filter(
-            attributes: [
-                new Document([
-                    '$id' => 'string',
-                    'key' => 'string',
-                    'type' => Database::VAR_STRING,
-                    'array' => false,
-                ]),
-                new Document([
-                    '$id' => 'string_array',
-                    'key' => 'string_array',
-                    'type' => Database::VAR_STRING,
-                    'array' => true,
-                ]),
-                new Document([
-                    '$id' => 'integer_array',
-                    'key' => 'integer_array',
-                    'type' => Database::VAR_INTEGER,
-                    'array' => true,
-                ]),
-                new Document([
-                    '$id' => 'integer',
-                    'key' => 'integer',
-                    'type' => Database::VAR_INTEGER,
-                    'array' => false,
-                ]),
-            ],
-        );
+        $attributes = [
+            new Document([
+                '$id' => 'string',
+                'key' => 'string',
+                'type' => Database::VAR_STRING,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'string_array',
+                'key' => 'string_array',
+                'type' => Database::VAR_STRING,
+                'array' => true,
+            ]),
+            new Document([
+                '$id' => 'integer_array',
+                'key' => 'integer_array',
+                'type' => Database::VAR_INTEGER,
+                'array' => true,
+            ]),
+            new Document([
+                '$id' => 'integer',
+                'key' => 'integer',
+                'type' => Database::VAR_INTEGER,
+                'array' => false,
+            ]),
+        ];
+
+        $this->validator = new Filter($attributes, Database::VAR_INTEGER);
     }
 
     public function testSuccess(): void

@@ -63,7 +63,7 @@ class QueriesTest extends TestCase
         $validator = new Queries(
             [
                 new Cursor(),
-                new Filter($attributes),
+                new Filter($attributes, Database::VAR_INTEGER),
                 new Limit(),
                 new Offset(),
                 new Order($attributes)

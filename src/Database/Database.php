@@ -5233,7 +5233,7 @@ class Database
                 }
             }
 
-            if ($max && ($document->getAttribute($attribute) + $value > $max)) {
+            if (!\is_null($max) && ($document->getAttribute($attribute) + $value > $max)) {
                 throw new LimitException('Attribute value exceeds maximum limit: ' . $max);
             }
 

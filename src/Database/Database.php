@@ -3615,6 +3615,10 @@ class Database
             ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
             ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
 
+        if (empty($document->getPermissions())) {
+            $document->setAttribute('$permissions', []);
+        }
+
         if ($this->adapter->getSharedTables()) {
             if ($this->adapter->getTenantPerDocument()) {
                 if (
@@ -3714,6 +3718,10 @@ class Database
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
                 ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+
+            if (empty($document->getPermissions())) {
+                $document->setAttribute('$permissions', []);
+            }
 
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {
@@ -4456,6 +4464,7 @@ class Database
 
                     $document = $this->encode($collection, $document);
                 }
+
                 $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
@@ -6350,9 +6359,6 @@ class Database
             }
 
             if ($key === '$permissions') {
-                if (empty($value)) {
-                    $document->setAttribute('$permissions', []); // set default value
-                }
                 continue;
             }
 
@@ -6433,6 +6439,10 @@ class Database
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
+            if ($key === '$permissions') {
+                continue;
+            }
+
             if (\is_null($value)) {
                 $value = $document->getAttribute($this->adapter->filter($key));
 
@@ -6489,6 +6499,10 @@ class Database
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);
             if (is_null($value)) {
+                continue;
+            }
+
+            if ($key === '$permissions') {
                 continue;
             }
 

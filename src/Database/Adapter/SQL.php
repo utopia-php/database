@@ -426,7 +426,7 @@ abstract class SQL extends Adapter
             $attributes['_createdAt'] = $updates->getCreatedAt();
         }
 
-        if (!empty($updates->getPermissions())) {
+        if ($updates->offsetExists('$permissions')) {
             $attributes['_permissions'] = json_encode($updates->getPermissions());
         }
 
@@ -484,7 +484,7 @@ abstract class SQL extends Adapter
         $affected = $stmt->rowCount();
 
         // Permissions logic
-        if (!empty($updates->getPermissions())) {
+        if ($updates->offsetExists('$permissions')) {
             $removeQueries = [];
             $removeBindValues = [];
 
@@ -492,7 +492,10 @@ abstract class SQL extends Adapter
             $addBindValues = [];
 
             foreach ($documents as $index => $document) {
-                // Permissions logic
+                if ($document->getAttribute('$skipPermissionsUpdate', false)) {
+                    continue;
+                }
+
                 $sql = "
                     SELECT _type, _permission
                     FROM {$this->getSQLTable($name . '_perms')}

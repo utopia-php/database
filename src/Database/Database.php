@@ -5332,7 +5332,7 @@ class Database
                 }
             }
 
-            if ($min && ($document->getAttribute($attribute) - $value < $min)) {
+            if (!\is_null($min) && ($document->getAttribute($attribute) - $value < $min)) {
                 throw new LimitException('Attribute value exceeds minimum limit: ' . $min);
             }
 

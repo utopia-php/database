@@ -1374,11 +1374,6 @@ abstract class SQL extends Adapter
      */
     abstract public function getSupportForJSONOverlaps(): bool;
 
-    public function getSupportForIndexArray(): bool
-    {
-        return true;
-    }
-
     public function getSupportForCastIndexArray(): bool
     {
         return false;

@@ -893,20 +893,6 @@ abstract class Adapter
     abstract public function getSupportForIndex(): bool;
 
     /**
-     * Is indexing array supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForIndexArray(): bool;
-
-    /**
-     * Is cast index as array supported?
-     *
-     * @return bool
-     */
-    abstract public function getSupportForCastIndexArray(): bool;
-
-    /**
      * Is unique index supported?
      *
      * @return bool
@@ -978,6 +964,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForGetConnectionId(): bool;
+
+    /**
+     * Is cast index as array supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForCastIndexArray(): bool;
 
     /**
      * Is upserting supported?

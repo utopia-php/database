@@ -1242,10 +1242,6 @@ class Database
 
                         $isArray = $collectionAttribute->getAttribute('array', false);
                         if ($isArray) {
-                            if (!$this->adapter->getSupportForIndexArray()) {
-                                throw new IndexException('Indexing an array attribute is not supported');
-                            }
-
                             if ($this->adapter->getMaxIndexLength() > 0) {
                                 $lengths[$i] = self::ARRAY_INDEX_LENGTH;
                             }
@@ -3079,10 +3075,6 @@ class Database
 
                     $isArray = $collectionAttribute->getAttribute('array', false);
                     if ($isArray) {
-                        if (!$this->adapter->getSupportForIndexArray()) {
-                            throw new IndexException('Indexing an array attribute is not supported');
-                        }
-
                         if ($this->adapter->getMaxIndexLength() > 0) {
                             $lengths[$i] = self::ARRAY_INDEX_LENGTH;
                         }

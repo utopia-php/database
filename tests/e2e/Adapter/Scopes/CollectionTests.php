@@ -628,7 +628,6 @@ trait CollectionTests
 
     public function testCreateCollectionWithSchemaIndexes(): void
     {
-        /** @var Database $database */
         $database = static::getDatabase();
 
         $attributes = [
@@ -652,6 +651,13 @@ trait CollectionTests
 
         $indexes = [
             new Document([
+                '$id' => ID::custom('idx_cards'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['cards'],
+                'lengths' => [500], // Will be changed to Database::ARRAY_INDEX_LENGTH (255)
+                'orders' => [Database::ORDER_DESC],
+            ]),
+            new Document([
                 '$id' => ID::custom('idx_username'),
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['username'],
@@ -667,16 +673,6 @@ trait CollectionTests
             ]),
         ];
 
-        if ($database->getAdapter()->getSupportForIndexArray()) {
-            $indexes[] = new Document([
-                '$id' => ID::custom('idx_cards'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['cards'],
-                'lengths' => [500], // Will be changed to Database::ARRAY_INDEX_LENGTH (255)
-                'orders' => [Database::ORDER_DESC],
-            ]);
-        }
-
         $collection = $database->createCollection(
             'collection98',
             $attributes,
@@ -686,18 +682,16 @@ trait CollectionTests
             ]
         );
 
-        $this->assertEquals($collection->getAttribute('indexes')[0]['attributes'][0], 'username');
-        $this->assertEquals($collection->getAttribute('indexes')[0]['lengths'][0], null);
+        $this->assertEquals($collection->getAttribute('indexes')[0]['attributes'][0], 'cards');
+        $this->assertEquals($collection->getAttribute('indexes')[0]['lengths'][0], Database::ARRAY_INDEX_LENGTH);
+        $this->assertEquals($collection->getAttribute('indexes')[0]['orders'][0], null);
 
         $this->assertEquals($collection->getAttribute('indexes')[1]['attributes'][0], 'username');
-        $this->assertEquals($collection->getAttribute('indexes')[1]['lengths'][0], 99);
-        $this->assertEquals($collection->getAttribute('indexes')[1]['orders'][0], Database::ORDER_DESC);
+        $this->assertEquals($collection->getAttribute('indexes')[1]['lengths'][0], null);
 
-        if ($database->getAdapter()->getSupportForIndexArray()) {
-            $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'cards');
-            $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], Database::ARRAY_INDEX_LENGTH);
-            $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], null);
-        }
+        $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'username');
+        $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], 99);
+        $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], Database::ORDER_DESC);
     }
 
     public function testCollectionUpdate(): Document
@@ -1039,7 +1033,6 @@ trait CollectionTests
         /**
          * Default mode already tested, we'll test 'schema' and 'table' isolation here
          */
-        /** @var Database $database */
         $database = static::getDatabase();
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
@@ -1243,7 +1236,6 @@ trait CollectionTests
     }
     public function testSharedTablesDuplicates(): void
     {
-        /** @var Database $database */
         $database = static::getDatabase();
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();

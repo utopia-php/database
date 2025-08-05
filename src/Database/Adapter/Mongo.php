@@ -1089,78 +1089,90 @@ class Mongo extends Adapter
     }
 
     /**
-     * @param string $collection
-     * @param string $attribute
-     * @param array<Change> $changes
-     * @return array<Document>
-     */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
-    {
-        if (empty($changes)) {
-            return $changes;
-        }
+    * @param string $collection
+    * @param string $attribute
+    * @param array<Change> $changes
+    * @return array<Document>
+    */
+   public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
+   {
+       if (empty($changes)) {
+           return $changes;
+       }
 
-        try {
-            $name = $this->getNamespace() . '_' . $this->filter($collection);
-            $attribute = $this->filter($attribute);
+       try {
+           $name = $this->getNamespace() . '_' . $this->filter($collection);
+           $attribute = $this->filter($attribute);
 
-            $operations = [];
-            foreach ($changes as $change) {
-                $document = $change->getNew();
-                $attributes = $document->getAttributes();
-                $attributes['_uid'] = $document->getId();
-                $attributes['_createdAt'] = $document['$createdAt'];
-                $attributes['_updatedAt'] = $document['$updatedAt'];
-                $attributes['_permissions'] = $document->getPermissions();
+           $operations = [];
+           foreach ($changes as $change) {
+               $document = $change->getNew();
+               $attributes = $document->getAttributes();
+               $attributes['_uid'] = $document->getId();
+               $attributes['_createdAt'] = $document['$createdAt'];
+               $attributes['_updatedAt'] = $document['$updatedAt'];
+               $attributes['_permissions'] = $document->getPermissions();
 
-                if (!empty($document->getSequence())) {
-                    $attributes['_id'] = new ObjectId($document->getSequence());
-                } 
+               if (!empty($document->getSequence())) {
+                   $attributes['_id'] = new ObjectId($document->getSequence());
+               } else {
+                   $documentIds[] = $document->getId();
+               }
 
-                if ($this->sharedTables) {
-                    $attributes['_tenant'] = $document->getTenant();
-                }
+               if ($this->sharedTables) {
+                   $attributes['_tenant'] = $document->getTenant();
+               }
 
-                $record = $this->replaceChars('$', '_', $attributes);
-                $record = $this->removeNullKeys($record);
+               $record = $this->replaceChars('$', '_', $attributes);
+               $record = $this->removeNullKeys($record);
 
-                // Build filter for upsert
-                $filter = ['_uid' => $document->getId()];
-                
-                if ($this->sharedTables) {
-                    $filter['_tenant'] = $document->getTenant();
-                }
+               // Build filter for upsert
+               $filter = ['_uid' => $document->getId()];
 
-                if (!empty($attribute)) {
-                    // Increment specific attribute
-                    $update = [
-                        '$inc' => [$attribute => $record[$attribute] ?? 0],
-                        '$set' => ['_updatedAt' => $record['_updatedAt']]
-                    ];
-                } else {
-                    // Update all fields
-                    unset($record['_id']); // Don't update _id
-                    $update = ['$set' => $record];
-                }
+               if ($this->sharedTables) {
+                   $filter['_tenant'] = $document->getTenant();
+               }
 
-                $operations[] = [
-                    'filter' => $filter,
-                    'update' => $update,
-                ];
-            }
+               unset($record['_id']); // Don't update _id
 
-            $this->client->upsert(
-                $name,
-                $operations,
-                ["ordered" => false] // TODO Do we want to continue if an error is thrown?
-            );
+               if (!empty($attribute)) {
+                   // Get the attribute value before removing it from $set
+                   $attributeValue = $record[$attribute] ?? 0;
 
-        } catch (MongoException $e) {
-            throw $this->processException($e);
-        }
-      
-        return \array_map(fn ($change) => $change->getNew(), $changes);
-    }
+                   // Remove the attribute from $set since we're incrementing it
+                   // it is requierd to mimic the behaver of SQL on duplicate key update
+                   unset($record[$attribute]);
+                   
+                   // Increment the specific attribute and update all other fields
+                   $update = [
+                       '$inc' => [$attribute => $attributeValue],
+                       '$set' => $record
+                   ];
+               } else {
+                   // Update all fields
+                   $update = [
+                       '$set' => $record
+                   ];
+               }
+
+               $operations[] = [
+                   'filter' => $filter,
+                   'update' => $update,
+               ];
+           }
+
+           $this->client->upsert(
+               $name,
+               $operations,
+               ["ordered" => false] // TODO Do we want to continue if an error is thrown?
+           );
+
+       } catch (MongoException $e) {
+           throw $this->processException($e);
+       }
+
+       return \array_map(fn ($change) => $change->getNew(), $changes);
+   }
 
     /**
      * Get sequences for documents that were created

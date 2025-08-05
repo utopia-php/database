@@ -1131,16 +1131,26 @@ class Mongo extends Adapter
                     $filter['_tenant'] = $document->getTenant();
                 }
 
+                unset($record['_id']); // Don't update _id
+
                 if (!empty($attribute)) {
-                    // Increment specific attribute
+                    // Get the attribute value before removing it from $set
+                    $attributeValue = $record[$attribute] ?? 0;
+
+                    // Remove the attribute from $set since we're incrementing it
+                    // it is requierd to mimic the behaver of SQL on duplicate key update
+                    unset($record[$attribute]);
+                    
+                    // Increment the specific attribute and update all other fields
                     $update = [
-                        '$inc' => [$attribute => $record[$attribute] ?? 0],
-                        '$set' => ['_updatedAt' => $record['_updatedAt']]
+                        '$inc' => [$attribute => $attributeValue],
+                        '$set' => $record
                     ];
                 } else {
                     // Update all fields
-                    unset($record['_id']); // Don't update _id
-                    $update = ['$set' => $record];
+                    $update = [
+                        '$set' => $record
+                    ];
                 }
 
                 $operations[] = [
@@ -2277,6 +2287,14 @@ class Mongo extends Adapter
     protected function execute(mixed $stmt): bool
     {
         return true;
+    }
+
+  /**
+     * @return string
+     */
+    public function getIdAttributeType(): string
+    {
+        return Database::VAR_OBJECT_ID;
     }
 
     /**

@@ -1209,15 +1209,6 @@ abstract class Adapter
     abstract public function getSchemaAttributes(string $collection): array;
 
     /**
-     * Get the query to check for tenant when in shared tables mode
-     *
-     * @param string $collection   The collection being queried
-     * @param string $alias  The alias of the parent collection if in a subquery
-     * @return string
-     */
-    abstract public function getTenantQuery(string $collection, string $alias = ''): string;
-
-    /**
      * @param mixed $stmt
      * @return bool
      */

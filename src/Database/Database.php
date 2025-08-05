@@ -4385,13 +4385,16 @@ class Database
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException("Cursor document must be from the same Collection.");
         }
+
         unset($updates['$id']);
         unset($updates['$tenant']);
+
         if (($updates->getCreatedAt() === null || !$this->preserveDates)) {
             unset($updates['$createdAt']);
         } else {
             $updates['$createdAt'] = $updates->getCreatedAt();
         }
+
         if ($this->adapter->getSharedTables()) {
             $updates['$tenant'] = $this->adapter->getTenant();
         }
@@ -4441,8 +4444,27 @@ class Database
                 break;
             }
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch) {
-                foreach ($batch as &$document) {
+            $currentPermissions  = $updates->getPermissions();
+            sort($currentPermissions);
+
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
+                foreach ($batch as $index => $document) {
+
+                    $skipPermissionsUpdate = true;
+
+                    if ($updates->offsetExists('$permissions')) {
+                        if (!$document->offsetExists('$permissions')) {
+                            throw new QueryException('Permission document missing in select');
+                        }
+
+                        $originalPermissions = $document->getPermissions();
+                        sort($originalPermissions);
+
+                        $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+                    }
+
+                    $document->setAttribute('$skipPermissionsUpdate', $skipPermissionsUpdate);
+
                     $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
 
                     if ($this->resolveRelationships) {
@@ -4462,7 +4484,7 @@ class Database
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
 
-                    $document = $this->encode($collection, $document);
+                    $batch[$index] = $this->encode($collection, $document);
                 }
 
                 $this->adapter->updateDocuments(
@@ -4473,6 +4495,8 @@ class Database
             });
 
             foreach ($batch as $doc) {
+                $doc->removeAttribute('$skipPermissionsUpdate');
+
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
                 try {

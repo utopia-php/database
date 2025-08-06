@@ -3604,8 +3604,8 @@ class Database
             // Add collection attribute for proper cycle detection - this is critical!
             $relationship->setAttribute('collection', $collection->getId());
 
-            // Skip if we should not fetch this relationship based on current fetch stack
-            $skipFetch = $this->shouldSkipRelationshipFetchBatch($relationship, $collection);
+            // TEMP: Simplify cycle detection to only check max depth
+            $skipFetch = $twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH);
             
             if ($skipFetch) {
                 // Remove the relationship attribute from all documents

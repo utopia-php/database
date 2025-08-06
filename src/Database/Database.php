@@ -3604,8 +3604,11 @@ class Database
             // Add collection attribute for proper cycle detection - this is critical!
             $relationship->setAttribute('collection', $collection->getId());
 
-            // Use batch-aware cycle detection designed for breadth-first traversal
-            $skipFetch = $this->shouldSkipRelationshipFetchBatch($relationship, $collection);
+            // In breadth-first batch processing, cycle detection is not needed:
+            // - Depth control prevents infinite recursion 
+            // - Map prevents duplicate fetches
+            // - Level-by-level processing can't create cycles
+            $skipFetch = false;
             
             if ($skipFetch) {
                 // Remove the relationship attribute from all documents

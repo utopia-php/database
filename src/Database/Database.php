@@ -6613,11 +6613,11 @@ class Database
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         // Use batch relationship population for better performance
-        // But only if we're not already in relationship processing (depth 1 means no nesting)
+        // But only if we're not already in relationship processing (empty stack means top-level)
         if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             if (count($results) > 0) {
-                if ($this->relationshipFetchDepth === 1) {
-                    // Use batch processing only for top-level calls
+                if (empty($this->relationshipFetchStack)) {
+                    // Use batch processing only for top-level calls (empty fetch stack)
                     $results = $this->silent(fn () => $this->populateDocumentsRelationships($collection, $results, $nestedSelections));
                 } else {
                     // Use original single-document processing for nested relationship calls

@@ -3601,22 +3601,12 @@ class Database
             $side = $relationship['options']['side'];
             $queries = $selects[$key] ?? [];
 
-            // Add collection attribute for proper cycle detection - this is critical!
+            // Add collection attribute for relationship context
             $relationship->setAttribute('collection', $collection->getId());
 
-            // In breadth-first batch processing, rely only on depth control:
-            // - Level-by-level processing prevents infinite cycles naturally
-            // - Depth limit prevents infinite recursion
-            // - Map tracking in individual methods prevents duplicate fetches  
-            $skipFetch = false;
-            
-            if ($skipFetch) {
-                // Remove the relationship attribute from all documents
-                foreach ($documents as $document) {
-                    $document->removeAttribute($key);
-                }
-                continue;
-            }
+            // EXPERIMENT: Pure breadth-first processing with NO cycle detection
+            // Theory: Level-by-level processing + depth control prevents infinite recursion
+            // Map tracking prevents duplicate fetches, reverse mapping handles result assignment
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
@@ -3692,19 +3682,20 @@ class Database
             return;
         }
 
-        // Collect all related document IDs
+        // Collect all related document IDs, checking map to avoid duplicates
         $relatedIds = [];
         $documentsByRelatedId = [];
         
         foreach ($documents as $document) {
             $value = $document->getAttribute($key);
             if (!\is_null($value)) {
-                $relatedIds[] = $value;
-                $documentsByRelatedId[$value] = $document;
-                
-                // Add to map for cycle detection
+                // Check if this relationship has already been processed
                 $k = $relatedCollection->getId() . ':' . $value . '=>' . $document->getCollection() . ':' . $document->getId();
-                $this->map[$k] = true;
+                if (!isset($this->map[$k])) {
+                    $relatedIds[] = $value;
+                    $documentsByRelatedId[$value] = $document;
+                    $this->map[$k] = true;
+                }
             }
         }
 
@@ -3777,15 +3768,17 @@ class Database
             return;
         }
 
-        // Collect all parent document IDs and track in map
+        // Collect all parent document IDs, checking map to avoid duplicates
         $parentIds = [];
         foreach ($documents as $document) {
             $parentId = $document->getId();
-            $parentIds[] = $parentId;
             
-            // Add to map for duplicate prevention (one-to-many: parent -> children)
+            // Check if this parent->children relationship has already been processed
             $k = $collection->getId() . ':' . $parentId . '=>' . $relatedCollection->getId() . ':*';
-            $this->map[$k] = true;
+            if (!isset($this->map[$k])) {
+                $parentIds[] = $parentId;
+                $this->map[$k] = true;
+            }
         }
 
         if (empty($parentIds)) {
@@ -3870,15 +3863,17 @@ class Database
             return;
         }
 
-        // Collect all child document IDs and track in map
+        // Collect all child document IDs, checking map to avoid duplicates
         $childIds = [];
         foreach ($documents as $document) {
             $childId = $document->getId();
-            $childIds[] = $childId;
             
-            // Add to map for duplicate prevention (many-to-one: children -> parents)
+            // Check if this child->parent relationship has already been processed
             $k = $collection->getId() . ':' . $childId . '=>' . $relatedCollection->getId() . ':*';
-            $this->map[$k] = true;
+            if (!isset($this->map[$k])) {
+                $childIds[] = $childId;
+                $this->map[$k] = true;
+            }
         }
 
         if (empty($childIds)) {
@@ -3947,15 +3942,17 @@ class Database
             return;
         }
 
-        // Collect all document IDs and track in map
+        // Collect all document IDs, checking map to avoid duplicates
         $documentIds = [];
         foreach ($documents as $document) {
             $documentId = $document->getId();
-            $documentIds[] = $documentId;
             
-            // Add to map for duplicate prevention (many-to-many: documents -> related)
+            // Check if this document->related relationship has already been processed
             $k = $collection->getId() . ':' . $documentId . '=>' . $relatedCollection->getId() . ':*';
-            $this->map[$k] = true;
+            if (!isset($this->map[$k])) {
+                $documentIds[] = $documentId;
+                $this->map[$k] = true;
+            }
         }
 
         if (empty($documentIds)) {

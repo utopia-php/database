@@ -3604,8 +3604,8 @@ class Database
             // Add collection attribute for proper cycle detection - this is critical!
             $relationship->setAttribute('collection', $collection->getId());
 
-            // TEMP: Simplify cycle detection to only check max depth
-            $skipFetch = $twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH);
+            // Skip if we should not fetch this relationship based on current fetch stack
+            $skipFetch = $this->shouldSkipRelationshipFetchBatch($relationship, $collection);
             
             if ($skipFetch) {
                 // Remove the relationship attribute from all documents
@@ -3664,7 +3664,10 @@ class Database
             $existingSide = $fetchedRelationship['options']['side'];
 
             // If this relationship has already been fetched for this document, skip it
-            $reflexive = $fetchedRelationship == $relationship;
+            // Compare by key identifying properties instead of full Document comparison
+            $reflexive = ($fetchedRelationship['key'] === $relationship['key'] &&
+                         $fetchedRelationship['collection'] === $relationship['collection'] &&
+                         $fetchedRelationship['options']['relatedCollection'] === $relationship['options']['relatedCollection']);
 
             // If this relationship is the same as a previously fetched relationship, but on the other side, skip it
             $symmetric = $existingKey === $twoWayKey

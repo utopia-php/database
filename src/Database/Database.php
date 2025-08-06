@@ -3601,6 +3601,9 @@ class Database
             $side = $relationship['options']['side'];
             $queries = $selects[$key] ?? [];
 
+            // Add collection attribute for proper cycle detection - this is critical!
+            $relationship->setAttribute('collection', $collection->getId());
+
             // Skip if we should not fetch this relationship based on current fetch stack
             $skipFetch = $this->shouldSkipRelationshipFetchBatch($relationship, $collection);
             
@@ -3661,7 +3664,7 @@ class Database
             $existingSide = $fetchedRelationship['options']['side'];
 
             // If this relationship has already been fetched for this document, skip it
-            $reflexive = $fetchedRelationship == $relationship->getArrayCopy();
+            $reflexive = $fetchedRelationship == $relationship;
 
             // If this relationship is the same as a previously fetched relationship, but on the other side, skip it
             $symmetric = $existingKey === $twoWayKey

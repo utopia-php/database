@@ -3764,6 +3764,9 @@ class Database
         foreach ($documentsByRelatedId as $relatedId => $document) {
             if (isset($relatedById[$relatedId])) {
                 $document->setAttribute($key, $relatedById[$relatedId]);
+            } else {
+                // If related document not found, set to null instead of leaving the string ID
+                $document->setAttribute($key, null);
             }
         }
     }

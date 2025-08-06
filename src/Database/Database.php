@@ -3592,12 +3592,12 @@ class Database
         }
 
         foreach ($relationships as $relationship) {
-            $key = $relationship->getAttribute('key');
-            $relatedCollection = $this->getCollection($relationship->getAttribute('options')['relatedCollection']);
-            $relationType = $relationship->getAttribute('options')['relationType'];
-            $twoWay = $relationship->getAttribute('options')['twoWay'];
-            $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
-            $side = $relationship->getAttribute('options')['side'];
+            $key = $relationship['key'];
+            $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
+            $relationType = $relationship['options']['relationType'];
+            $twoWay = $relationship['options']['twoWay'];
+            $twoWayKey = $relationship['options']['twoWayKey'];
+            $side = $relationship['options']['side'];
             $queries = $selects[$key] ?? [];
 
             // Skip if we should not fetch this relationship based on current fetch stack
@@ -3642,11 +3642,11 @@ class Database
      */
     private function shouldSkipRelationshipFetchBatch(Document $relationship, Document $collection): bool
     {
-        $key = $relationship->getAttribute('key');
-        $twoWay = $relationship->getAttribute('options')['twoWay'];
-        $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
-        $side = $relationship->getAttribute('options')['side'];
-        $relatedCollectionId = $relationship->getAttribute('options')['relatedCollection'];
+        $key = $relationship['key'];
+        $twoWay = $relationship['options']['twoWay'];
+        $twoWayKey = $relationship['options']['twoWayKey'];
+        $side = $relationship['options']['side'];
+        $relatedCollectionId = $relationship['options']['relatedCollection'];
 
         if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH)) {
             return true;
@@ -3705,8 +3705,8 @@ class Database
      */
     private function populateOneToOneRelationshipsBatch(array $documents, Document $relationship, Document $relatedCollection, array $queries): void
     {
-        $key = $relationship->getAttribute('key');
-        $twoWay = $relationship->getAttribute('options')['twoWay'];
+        $key = $relationship['key'];
+        $twoWay = $relationship['options']['twoWay'];
         
         if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH)) {
             foreach ($documents as $document) {
@@ -3777,10 +3777,10 @@ class Database
      */
     private function populateOneToManyRelationshipsBatch(array $documents, Document $relationship, Document $relatedCollection, array $queries, Document $collection): void
     {
-        $key = $relationship->getAttribute('key');
-        $twoWay = $relationship->getAttribute('options')['twoWay'];
-        $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
-        $side = $relationship->getAttribute('options')['side'];
+        $key = $relationship['key'];
+        $twoWay = $relationship['options']['twoWay'];
+        $twoWayKey = $relationship['options']['twoWayKey'];
+        $side = $relationship['options']['side'];
 
         if ($side === Database::RELATION_SIDE_CHILD) {
             // Child side - treat like one-to-one
@@ -3858,10 +3858,10 @@ class Database
      */
     private function populateManyToOneRelationshipsBatch(array $documents, Document $relationship, Document $relatedCollection, array $queries, Document $collection): void
     {
-        $key = $relationship->getAttribute('key');
-        $twoWay = $relationship->getAttribute('options')['twoWay'];
-        $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
-        $side = $relationship->getAttribute('options')['side'];
+        $key = $relationship['key'];
+        $twoWay = $relationship['options']['twoWay'];
+        $twoWayKey = $relationship['options']['twoWayKey'];
+        $side = $relationship['options']['side'];
 
         if ($side === Database::RELATION_SIDE_PARENT) {
             // Parent side - treat like one-to-one
@@ -3946,10 +3946,10 @@ class Database
      */
     private function populateManyToManyRelationshipsBatch(array $documents, Document $relationship, Document $relatedCollection, array $queries, Document $collection): void
     {
-        $key = $relationship->getAttribute('key');
-        $twoWay = $relationship->getAttribute('options')['twoWay'];
-        $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
-        $side = $relationship->getAttribute('options')['side'];
+        $key = $relationship['key'];
+        $twoWay = $relationship['options']['twoWay'];
+        $twoWayKey = $relationship['options']['twoWayKey'];
+        $side = $relationship['options']['side'];
 
         if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
             return;
@@ -6612,14 +6612,11 @@ class Database
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        // Use batch relationship population for better performance when dealing with multiple documents
+        // Use batch relationship population for better performance
         if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
-            if (count($results) > 1) {
-                // Use batch processing for multiple documents
+            if (count($results) > 0) {
+                // Use batch processing for all cases (handles single and multiple documents)
                 $results = $this->silent(fn () => $this->populateDocumentsRelationships($collection, $results, $nestedSelections));
-            } else if (count($results) === 1) {
-                // Use single document processing for one document
-                $results[0] = $this->silent(fn () => $this->populateDocumentRelationships($collection, $results[0], $nestedSelections));
             }
         }
 

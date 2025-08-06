@@ -3661,30 +3661,24 @@ class Database
             return true;
         }
 
-        // For batch processing, detect collection-level cycles
-        // Track the path of collections being processed
-        $collectionPath = [];
+        // For batch processing, only block true cycles that would cause infinite recursion
+        // Check if this exact relationship is already being processed
         foreach ($this->relationshipFetchStack as $fetchedRelationship) {
-            $fromCollection = $fetchedRelationship['collection'] ?? null;
-            $toCollection = $fetchedRelationship['options']['relatedCollection'] ?? null;
-            if ($fromCollection && $toCollection) {
-                $collectionPath[] = $fromCollection . '→' . $toCollection;
+            $existingCollection = $fetchedRelationship['collection'] ?? null;
+            $existingRelated = $fetchedRelationship['options']['relatedCollection'] ?? null;
+            $existingKey = $fetchedRelationship['key'] ?? null;
+            
+            // Only block if it's the EXACT same relationship (same key, same collections)
+            if ($existingCollection === $currentCollectionId && 
+                $existingRelated === $relatedCollectionId && 
+                $existingKey === $key) {
+                return true;
             }
-        }
-
-        // Check if adding this relationship would create a collection cycle
-        $newPath = $currentCollectionId . '→' . $relatedCollectionId;
-        
-        // Direct cycle: if we're going from A→B and we already have B→A
-        $reversePath = $relatedCollectionId . '→' . $currentCollectionId;
-        if (in_array($reversePath, $collectionPath)) {
-            return true;
-        }
-
-        // Indirect cycle: if we're going to a collection we've already processed from
-        foreach ($collectionPath as $existingPath) {
-            if (str_starts_with($existingPath, $relatedCollectionId . '→')) {
-                // We're about to fetch from a collection we've already fetched from
+            
+            // Block direct back-reference cycles only for two-way relationships
+            if ($twoWay && 
+                $existingCollection === $relatedCollectionId && 
+                $existingRelated === $currentCollectionId) {
                 return true;
             }
         }

@@ -3640,10 +3640,10 @@ class Database
     /**
      * Check if a relationship should be skipped based on batch cycle detection
      * 
-     * Batch processing uses breadth-first traversal, so we need different cycle detection:
-     * - Track collection-to-collection relationships to prevent collection loops
-     * - Use depth limits to prevent infinite nesting
-     * - Detect direct collection cycles (A→B→A)
+     * Simplified cycle detection for batch processing:
+     * - Respect max depth for any relationship type
+     * - Block exact duplicate relationships only
+     * - Less restrictive than depth-first approach to allow legitimate nested relationships
      *
      * @param Document $relationship
      * @param Document $collection
@@ -3651,36 +3651,17 @@ class Database
      */
     private function shouldSkipRelationshipFetchBatch(Document $relationship, Document $collection): bool
     {
-        $currentCollectionId = $collection->getId();
-        $relatedCollectionId = $relationship['options']['relatedCollection'];
-        $twoWay = $relationship['options']['twoWay'];
-        $key = $relationship['key'];
+        $twoWay = $relationship['options']['twoWay'] ?? false;
 
-        // Always respect max depth limit for two-way relationships
-        if ($twoWay && ($this->relationshipFetchDepth >= Database::RELATION_MAX_DEPTH)) {
+        // Respect max depth limit to prevent infinite recursion
+        if ($this->relationshipFetchDepth >= Database::RELATION_MAX_DEPTH) {
             return true;
         }
 
-        // For batch processing, only block true cycles that would cause infinite recursion
-        // Check if this exact relationship is already being processed
-        foreach ($this->relationshipFetchStack as $fetchedRelationship) {
-            $existingCollection = $fetchedRelationship['collection'] ?? null;
-            $existingRelated = $fetchedRelationship['options']['relatedCollection'] ?? null;
-            $existingKey = $fetchedRelationship['key'] ?? null;
-            
-            // Only block if it's the EXACT same relationship (same key, same collections)
-            if ($existingCollection === $currentCollectionId && 
-                $existingRelated === $relatedCollectionId && 
-                $existingKey === $key) {
-                return true;
-            }
-            
-            // Block direct back-reference cycles only for two-way relationships
-            if ($twoWay && 
-                $existingCollection === $relatedCollectionId && 
-                $existingRelated === $currentCollectionId) {
-                return true;
-            }
+        // For breadth-first batch processing, be more permissive
+        // Only block if we're at the very edge of max depth for two-way relationships
+        if ($twoWay && ($this->relationshipFetchDepth >= (Database::RELATION_MAX_DEPTH - 1))) {
+            return true;
         }
 
         return false;

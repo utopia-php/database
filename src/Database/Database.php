@@ -4399,13 +4399,16 @@ class Database
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException("Cursor document must be from the same Collection.");
         }
+
         unset($updates['$id']);
         unset($updates['$tenant']);
+
         if (($updates->getCreatedAt() === null || !$this->preserveDates)) {
             unset($updates['$createdAt']);
         } else {
             $updates['$createdAt'] = $updates->getCreatedAt();
         }
+
         if ($this->adapter->getSharedTables()) {
             $updates['$tenant'] = $this->adapter->getTenant();
         }
@@ -4455,8 +4458,27 @@ class Database
                 break;
             }
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch) {
-                foreach ($batch as &$document) {
+            $currentPermissions  = $updates->getPermissions();
+            sort($currentPermissions);
+
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
+                foreach ($batch as $index => $document) {
+
+                    $skipPermissionsUpdate = true;
+
+                    if ($updates->offsetExists('$permissions')) {
+                        if (!$document->offsetExists('$permissions')) {
+                            throw new QueryException('Permission document missing in select');
+                        }
+
+                        $originalPermissions = $document->getPermissions();
+                        sort($originalPermissions);
+
+                        $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+                    }
+
+                    $document->setAttribute('$skipPermissionsUpdate', $skipPermissionsUpdate);
+
                     $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
 
                     if ($this->resolveRelationships) {
@@ -4476,14 +4498,9 @@ class Database
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
 
-                    $document = $this->encode($collection, $document);
-                    $document = $this->adapter->castingBefore($collection, $document);
-
+                    $batch[$index] = $this->encode($collection, $document);
+                    $batch[$index] = $this->adapter->castingBefore($collection, $document);
                 }
-
-                unset($document);
-
-                $updates = $this->adapter->castingBefore($collection, $updates);
 
                 $this->adapter->updateDocuments(
                     $collection->getId(),
@@ -4492,8 +4509,13 @@ class Database
                 );
             });
 
+            $updates = $this->adapter->castingBefore($collection, $updates);
+
+
             foreach ($batch as $doc) {
                 $doc = $this->adapter->castingAfter($collection, $doc);
+                $doc->removeAttribute('$skipPermissionsUpdate');
+
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
                 try {
@@ -5236,7 +5258,7 @@ class Database
                 }
             }
 
-            if ($max && ($document->getAttribute($attribute) + $value > $max)) {
+            if (!\is_null($max) && ($document->getAttribute($attribute) + $value > $max)) {
                 throw new LimitException('Attribute value exceeds maximum limit: ' . $max);
             }
 
@@ -5335,7 +5357,7 @@ class Database
                 }
             }
 
-            if ($min && ($document->getAttribute($attribute) - $value < $min)) {
+            if (!\is_null($min) && ($document->getAttribute($attribute) - $value < $min)) {
                 throw new LimitException('Attribute value exceeds minimum limit: ' . $min);
             }
 

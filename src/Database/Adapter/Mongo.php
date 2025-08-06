@@ -1297,6 +1297,10 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
+        foreach ($sequences as $index => $sequence) {
+            $sequences[$index] = new ObjectId($sequence);
+        }
+
         $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_id', $sequences)]);
 
         if ($this->sharedTables) {

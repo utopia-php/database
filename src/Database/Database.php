@@ -374,8 +374,6 @@ class Database
      */
     protected array $relationshipFetchStack = [];
 
-    protected bool $batchRelationshipProcessing = false;
-
     /**
      * @var array<Document>
      */
@@ -6614,18 +6612,19 @@ class Database
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        // Use batch relationship population for better performance (but not if already in batch processing)
-        if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections)) && !$this->batchRelationshipProcessing) {
+        // Use batch relationship population for better performance
+        // But only if we're not already in relationship processing (depth 1 means no nesting)
+        if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             if (count($results) > 0) {
-                // Use batch processing for all cases (handles single and multiple documents)
-                $this->batchRelationshipProcessing = true;
-                $results = $this->silent(fn () => $this->populateDocumentsRelationships($collection, $results, $nestedSelections));
-                $this->batchRelationshipProcessing = false;
-            }
-        } else if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections)) && $this->batchRelationshipProcessing) {
-            // If we're already in batch processing, fall back to original method for nested calls
-            foreach ($results as $index => $node) {
-                $results[$index] = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
+                if ($this->relationshipFetchDepth === 1) {
+                    // Use batch processing only for top-level calls
+                    $results = $this->silent(fn () => $this->populateDocumentsRelationships($collection, $results, $nestedSelections));
+                } else {
+                    // Use original single-document processing for nested relationship calls
+                    foreach ($results as $index => $node) {
+                        $results[$index] = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
+                    }
+                }
             }
         }
 

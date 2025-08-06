@@ -3584,7 +3584,7 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
         $relationships = \array_filter($attributes, function ($attribute) {
-            return $attribute['type'] === Database::VAR_RELATIONSHIP;
+            return $attribute->getAttribute('type') === Database::VAR_RELATIONSHIP;
         });
 
         if (empty($relationships)) {
@@ -3592,12 +3592,12 @@ class Database
         }
 
         foreach ($relationships as $relationship) {
-            $key = $relationship['key'];
-            $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
-            $relationType = $relationship['options']['relationType'];
-            $twoWay = $relationship['options']['twoWay'];
-            $twoWayKey = $relationship['options']['twoWayKey'];
-            $side = $relationship['options']['side'];
+            $key = $relationship->getAttribute('key');
+            $relatedCollection = $this->getCollection($relationship->getAttribute('options')['relatedCollection']);
+            $relationType = $relationship->getAttribute('options')['relationType'];
+            $twoWay = $relationship->getAttribute('options')['twoWay'];
+            $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+            $side = $relationship->getAttribute('options')['side'];
             $queries = $selects[$key] ?? [];
 
             // Skip if we should not fetch this relationship based on current fetch stack
@@ -3636,17 +3636,17 @@ class Database
     /**
      * Check if a relationship should be skipped based on fetch stack and depth (batch version)
      *
-     * @param array<string, mixed> $relationship
+     * @param Document $relationship
      * @param Document $collection
      * @return bool
      */
-    private function shouldSkipRelationshipFetchBatch(array $relationship, Document $collection): bool
+    private function shouldSkipRelationshipFetchBatch(Document $relationship, Document $collection): bool
     {
-        $key = $relationship['key'];
-        $twoWay = $relationship['options']['twoWay'];
-        $twoWayKey = $relationship['options']['twoWayKey'];
-        $side = $relationship['options']['side'];
-        $relatedCollectionId = $relationship['options']['relatedCollection'];
+        $key = $relationship->getAttribute('key');
+        $twoWay = $relationship->getAttribute('options')['twoWay'];
+        $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+        $side = $relationship->getAttribute('options')['side'];
+        $relatedCollectionId = $relationship->getAttribute('options')['relatedCollection'];
 
         if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH)) {
             return true;
@@ -3660,7 +3660,7 @@ class Database
             $existingSide = $fetchedRelationship['options']['side'];
 
             // If this relationship has already been fetched for this document, skip it
-            $reflexive = $fetchedRelationship == $relationship;
+            $reflexive = $fetchedRelationship == $relationship->getArrayCopy();
 
             // If this relationship is the same as a previously fetched relationship, but on the other side, skip it
             $symmetric = $existingKey === $twoWayKey
@@ -3697,16 +3697,16 @@ class Database
      * Populate one-to-one relationships in batch
      *
      * @param array<Document> $documents
-     * @param array<string, mixed> $relationship
+     * @param Document $relationship
      * @param Document $relatedCollection
      * @param array<Query> $queries
      * @return void
      * @throws DatabaseException
      */
-    private function populateOneToOneRelationshipsBatch(array $documents, array $relationship, Document $relatedCollection, array $queries): void
+    private function populateOneToOneRelationshipsBatch(array $documents, Document $relationship, Document $relatedCollection, array $queries): void
     {
-        $key = $relationship['key'];
-        $twoWay = $relationship['options']['twoWay'];
+        $key = $relationship->getAttribute('key');
+        $twoWay = $relationship->getAttribute('options')['twoWay'];
         
         if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH)) {
             foreach ($documents as $document) {
@@ -3737,8 +3737,9 @@ class Database
 
         // Fetch all related documents in a single query
         $this->relationshipFetchDepth++;
-        $relationship['collection'] = $relatedCollection->getId();
-        $this->relationshipFetchStack[] = $relationship;
+        $relationshipArray = $relationship->getArrayCopy();
+        $relationshipArray['collection'] = $relatedCollection->getId();
+        $this->relationshipFetchStack[] = $relationshipArray;
 
         $relatedDocuments = $this->find($relatedCollection->getId(), [
             Query::equal('$id', array_unique($relatedIds)),
@@ -3767,19 +3768,19 @@ class Database
      * Populate one-to-many relationships in batch
      *
      * @param array<Document> $documents
-     * @param array<string, mixed> $relationship
+     * @param Document $relationship
      * @param Document $relatedCollection
      * @param array<Query> $queries
      * @param Document $collection
      * @return void
      * @throws DatabaseException
      */
-    private function populateOneToManyRelationshipsBatch(array $documents, array $relationship, Document $relatedCollection, array $queries, Document $collection): void
+    private function populateOneToManyRelationshipsBatch(array $documents, Document $relationship, Document $relatedCollection, array $queries, Document $collection): void
     {
-        $key = $relationship['key'];
-        $twoWay = $relationship['options']['twoWay'];
-        $twoWayKey = $relationship['options']['twoWayKey'];
-        $side = $relationship['options']['side'];
+        $key = $relationship->getAttribute('key');
+        $twoWay = $relationship->getAttribute('options')['twoWay'];
+        $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+        $side = $relationship->getAttribute('options')['side'];
 
         if ($side === Database::RELATION_SIDE_CHILD) {
             // Child side - treat like one-to-one
@@ -3810,8 +3811,9 @@ class Database
 
         // Fetch all related documents for all parents in a single query
         $this->relationshipFetchDepth++;
-        $relationship['collection'] = $collection->getId();
-        $this->relationshipFetchStack[] = $relationship;
+        $relationshipArray = $relationship->getArrayCopy();
+        $relationshipArray['collection'] = $collection->getId();
+        $this->relationshipFetchStack[] = $relationshipArray;
 
         $relatedDocuments = $this->find($relatedCollection->getId(), [
             Query::equal($twoWayKey, $parentIds),
@@ -3847,19 +3849,19 @@ class Database
      * Populate many-to-one relationships in batch
      *
      * @param array<Document> $documents
-     * @param array<string, mixed> $relationship
+     * @param Document $relationship
      * @param Document $relatedCollection
      * @param array<Query> $queries
      * @param Document $collection
      * @return void
      * @throws DatabaseException
      */
-    private function populateManyToOneRelationshipsBatch(array $documents, array $relationship, Document $relatedCollection, array $queries, Document $collection): void
+    private function populateManyToOneRelationshipsBatch(array $documents, Document $relationship, Document $relatedCollection, array $queries, Document $collection): void
     {
-        $key = $relationship['key'];
-        $twoWay = $relationship['options']['twoWay'];
-        $twoWayKey = $relationship['options']['twoWayKey'];
-        $side = $relationship['options']['side'];
+        $key = $relationship->getAttribute('key');
+        $twoWay = $relationship->getAttribute('options')['twoWay'];
+        $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+        $side = $relationship->getAttribute('options')['side'];
 
         if ($side === Database::RELATION_SIDE_PARENT) {
             // Parent side - treat like one-to-one
@@ -3897,8 +3899,9 @@ class Database
 
         // Fetch all related documents for all children in a single query
         $this->relationshipFetchDepth++;
-        $relationship['collection'] = $collection->getId();
-        $this->relationshipFetchStack[] = $relationship;
+        $relationshipArray = $relationship->getArrayCopy();
+        $relationshipArray['collection'] = $collection->getId();
+        $this->relationshipFetchStack[] = $relationshipArray;
 
         $relatedDocuments = $this->find($relatedCollection->getId(), [
             Query::equal($twoWayKey, $childIds),
@@ -3934,19 +3937,19 @@ class Database
      * Populate many-to-many relationships in batch
      *
      * @param array<Document> $documents
-     * @param array<string, mixed> $relationship
+     * @param Document $relationship
      * @param Document $relatedCollection
      * @param array<Query> $queries
      * @param Document $collection
      * @return void
      * @throws DatabaseException
      */
-    private function populateManyToManyRelationshipsBatch(array $documents, array $relationship, Document $relatedCollection, array $queries, Document $collection): void
+    private function populateManyToManyRelationshipsBatch(array $documents, Document $relationship, Document $relatedCollection, array $queries, Document $collection): void
     {
-        $key = $relationship['key'];
-        $twoWay = $relationship['options']['twoWay'];
-        $twoWayKey = $relationship['options']['twoWayKey'];
-        $side = $relationship['options']['side'];
+        $key = $relationship->getAttribute('key');
+        $twoWay = $relationship->getAttribute('options')['twoWay'];
+        $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+        $side = $relationship->getAttribute('options')['side'];
 
         if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
             return;
@@ -3967,8 +3970,9 @@ class Database
         }
 
         $this->relationshipFetchDepth++;
-        $relationship['collection'] = $collection->getId();
-        $this->relationshipFetchStack[] = $relationship;
+        $relationshipArray = $relationship->getArrayCopy();
+        $relationshipArray['collection'] = $collection->getId();
+        $this->relationshipFetchStack[] = $relationshipArray;
 
         $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 

@@ -3604,8 +3604,8 @@ class Database
             // Add collection attribute for proper cycle detection - this is critical!
             $relationship->setAttribute('collection', $collection->getId());
 
-            // Use simpler cycle detection - only check max depth for two-way relationships
-            $skipFetch = $twoWay && ($this->relationshipFetchDepth >= Database::RELATION_MAX_DEPTH);
+            // Use batch-aware cycle detection designed for breadth-first traversal
+            $skipFetch = $this->shouldSkipRelationshipFetchBatch($relationship, $collection);
             
             if ($skipFetch) {
                 // Remove the relationship attribute from all documents
@@ -3638,7 +3638,12 @@ class Database
     }
 
     /**
-     * Check if a relationship should be skipped based on fetch stack and depth (batch version)
+     * Check if a relationship should be skipped based on batch cycle detection
+     * 
+     * Batch processing uses breadth-first traversal, so we need different cycle detection:
+     * - Track collection-to-collection relationships to prevent collection loops
+     * - Use depth limits to prevent infinite nesting
+     * - Detect direct collection cycles (A→B→A)
      *
      * @param Document $relationship
      * @param Document $collection
@@ -3646,53 +3651,40 @@ class Database
      */
     private function shouldSkipRelationshipFetchBatch(Document $relationship, Document $collection): bool
     {
-        $key = $relationship['key'];
-        $twoWay = $relationship['options']['twoWay'];
-        $twoWayKey = $relationship['options']['twoWayKey'];
-        $side = $relationship['options']['side'];
+        $currentCollectionId = $collection->getId();
         $relatedCollectionId = $relationship['options']['relatedCollection'];
+        $twoWay = $relationship['options']['twoWay'];
+        $key = $relationship['key'];
 
-        if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH)) {
+        // Always respect max depth limit for two-way relationships
+        if ($twoWay && ($this->relationshipFetchDepth >= Database::RELATION_MAX_DEPTH)) {
             return true;
         }
 
+        // For batch processing, detect collection-level cycles
+        // Track the path of collections being processed
+        $collectionPath = [];
         foreach ($this->relationshipFetchStack as $fetchedRelationship) {
-            $existingKey = $fetchedRelationship['key'];
-            $existingCollection = $fetchedRelationship['collection'];
-            $existingRelatedCollection = $fetchedRelationship['options']['relatedCollection'];
-            $existingTwoWayKey = $fetchedRelationship['options']['twoWayKey'];
-            $existingSide = $fetchedRelationship['options']['side'];
+            $fromCollection = $fetchedRelationship['collection'] ?? null;
+            $toCollection = $fetchedRelationship['options']['relatedCollection'] ?? null;
+            if ($fromCollection && $toCollection) {
+                $collectionPath[] = $fromCollection . '→' . $toCollection;
+            }
+        }
 
-            // If this relationship has already been fetched for this document, skip it
-            // Compare by key identifying properties instead of full Document comparison
-            $reflexive = ($fetchedRelationship['key'] === $relationship['key'] &&
-                         $fetchedRelationship['collection'] === $relationship['collection'] &&
-                         $fetchedRelationship['options']['relatedCollection'] === $relationship['options']['relatedCollection']);
+        // Check if adding this relationship would create a collection cycle
+        $newPath = $currentCollectionId . '→' . $relatedCollectionId;
+        
+        // Direct cycle: if we're going from A→B and we already have B→A
+        $reversePath = $relatedCollectionId . '→' . $currentCollectionId;
+        if (in_array($reversePath, $collectionPath)) {
+            return true;
+        }
 
-            // If this relationship is the same as a previously fetched relationship, but on the other side, skip it
-            $symmetric = $existingKey === $twoWayKey
-                && $existingTwoWayKey === $key
-                && $existingRelatedCollection === $collection->getId()
-                && $existingCollection === $relatedCollectionId
-                && $existingSide !== $side;
-
-            // Transitive relationship detection
-            $transitive = (($existingKey === $twoWayKey
-                    && $existingCollection === $relatedCollectionId
-                    && $existingSide !== $side)
-                || ($existingTwoWayKey === $key
-                    && $existingRelatedCollection === $collection->getId()
-                    && $existingSide !== $side)
-                || ($existingKey === $key
-                    && $existingTwoWayKey !== $twoWayKey
-                    && $existingRelatedCollection === $relatedCollectionId
-                    && $existingSide !== $side)
-                || ($existingKey !== $key
-                    && $existingTwoWayKey === $twoWayKey
-                    && $existingRelatedCollection === $relatedCollectionId
-                    && $existingSide !== $side));
-
-            if ($reflexive || $symmetric || $transitive) {
+        // Indirect cycle: if we're going to a collection we've already processed from
+        foreach ($collectionPath as $existingPath) {
+            if (str_starts_with($existingPath, $relatedCollectionId . '→')) {
+                // We're about to fetch from a collection we've already fetched from
                 return true;
             }
         }

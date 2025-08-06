@@ -3604,10 +3604,10 @@ class Database
             // Add collection attribute for proper cycle detection - this is critical!
             $relationship->setAttribute('collection', $collection->getId());
 
-            // In breadth-first batch processing, cycle detection is not needed:
-            // - Depth control prevents infinite recursion 
-            // - Map prevents duplicate fetches
-            // - Level-by-level processing can't create cycles
+            // In breadth-first batch processing, rely only on depth control:
+            // - Level-by-level processing prevents infinite cycles naturally
+            // - Depth limit prevents infinite recursion
+            // - Map tracking in individual methods prevents duplicate fetches  
             $skipFetch = false;
             
             if ($skipFetch) {
@@ -3777,10 +3777,15 @@ class Database
             return;
         }
 
-        // Collect all parent document IDs
+        // Collect all parent document IDs and track in map
         $parentIds = [];
         foreach ($documents as $document) {
-            $parentIds[] = $document->getId();
+            $parentId = $document->getId();
+            $parentIds[] = $parentId;
+            
+            // Add to map for duplicate prevention (one-to-many: parent -> children)
+            $k = $collection->getId() . ':' . $parentId . '=>' . $relatedCollection->getId() . ':*';
+            $this->map[$k] = true;
         }
 
         if (empty($parentIds)) {
@@ -3865,10 +3870,15 @@ class Database
             return;
         }
 
-        // Collect all child document IDs
+        // Collect all child document IDs and track in map
         $childIds = [];
         foreach ($documents as $document) {
-            $childIds[] = $document->getId();
+            $childId = $document->getId();
+            $childIds[] = $childId;
+            
+            // Add to map for duplicate prevention (many-to-one: children -> parents)
+            $k = $collection->getId() . ':' . $childId . '=>' . $relatedCollection->getId() . ':*';
+            $this->map[$k] = true;
         }
 
         if (empty($childIds)) {
@@ -3937,10 +3947,15 @@ class Database
             return;
         }
 
-        // Collect all document IDs
+        // Collect all document IDs and track in map
         $documentIds = [];
         foreach ($documents as $document) {
-            $documentIds[] = $document->getId();
+            $documentId = $document->getId();
+            $documentIds[] = $documentId;
+            
+            // Add to map for duplicate prevention (many-to-many: documents -> related)
+            $k = $collection->getId() . ':' . $documentId . '=>' . $relatedCollection->getId() . ':*';
+            $this->map[$k] = true;
         }
 
         if (empty($documentIds)) {

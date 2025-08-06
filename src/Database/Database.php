@@ -3689,6 +3689,11 @@ class Database
         foreach ($documents as $document) {
             $value = $document->getAttribute($key);
             if (!\is_null($value)) {
+                // Skip if value is already a Document object (already populated)
+                if ($value instanceof Document) {
+                    continue;
+                }
+                
                 // Check if this relationship has already been processed
                 $k = $relatedCollection->getId() . ':' . $value . '=>' . $document->getCollection() . ':' . $document->getId();
                 if (!isset($this->map[$k])) {
@@ -3771,6 +3776,12 @@ class Database
         // Collect all parent document IDs, checking map to avoid duplicates
         $parentIds = [];
         foreach ($documents as $document) {
+            // Skip if relationship is already populated (array of Documents)
+            $existingValue = $document->getAttribute($key);
+            if (!empty($existingValue) && is_array($existingValue) && !empty($existingValue[0]) && $existingValue[0] instanceof Document) {
+                continue;
+            }
+            
             $parentId = $document->getId();
             
             // Check if this parent->children relationship has already been processed
@@ -3866,6 +3877,12 @@ class Database
         // Collect all child document IDs, checking map to avoid duplicates
         $childIds = [];
         foreach ($documents as $document) {
+            // Skip if relationship is already populated (array of Documents)
+            $existingValue = $document->getAttribute($key);
+            if (!empty($existingValue) && is_array($existingValue) && !empty($existingValue[0]) && $existingValue[0] instanceof Document) {
+                continue;
+            }
+            
             $childId = $document->getId();
             
             // Check if this child->parent relationship has already been processed
@@ -3945,6 +3962,12 @@ class Database
         // Collect all document IDs, checking map to avoid duplicates
         $documentIds = [];
         foreach ($documents as $document) {
+            // Skip if relationship is already populated (array of Documents)
+            $existingValue = $document->getAttribute($key);
+            if (!empty($existingValue) && is_array($existingValue) && !empty($existingValue[0]) && $existingValue[0] instanceof Document) {
+                continue;
+            }
+            
             $documentId = $document->getId();
             
             // Check if this document->related relationship has already been processed

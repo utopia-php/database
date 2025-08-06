@@ -3604,17 +3604,16 @@ class Database
             // Add collection attribute for proper cycle detection - this is critical!
             $relationship->setAttribute('collection', $collection->getId());
 
-            // TEMP: Disable cycle detection to test if that's the issue
             // Skip if we should not fetch this relationship based on current fetch stack
-            // $skipFetch = $this->shouldSkipRelationshipFetchBatch($relationship, $collection);
-            // 
-            // if ($skipFetch) {
-            //     // Remove the relationship attribute from all documents
-            //     foreach ($documents as $document) {
-            //         $document->removeAttribute($key);
-            //     }
-            //     continue;
-            // }
+            $skipFetch = $this->shouldSkipRelationshipFetchBatch($relationship, $collection);
+            
+            if ($skipFetch) {
+                // Remove the relationship attribute from all documents
+                foreach ($documents as $document) {
+                    $document->removeAttribute($key);
+                }
+                continue;
+            }
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
@@ -3833,12 +3832,14 @@ class Database
         foreach ($relatedDocuments as $related) {
             $parentId = $related->getAttribute($twoWayKey);
             if (!\is_null($parentId)) {
-                if (!isset($relatedByParentId[$parentId])) {
-                    $relatedByParentId[$parentId] = [];
+                // Handle case where parentId might be a Document object instead of string
+                $parentKey = $parentId instanceof Document ? $parentId->getId() : $parentId;
+                if (!isset($relatedByParentId[$parentKey])) {
+                    $relatedByParentId[$parentKey] = [];
                 }
                 // Remove the back-reference to avoid cycles
                 $related->removeAttribute($twoWayKey);
-                $relatedByParentId[$parentId][] = $related;
+                $relatedByParentId[$parentKey][] = $related;
             }
         }
 
@@ -3919,12 +3920,14 @@ class Database
         foreach ($relatedDocuments as $related) {
             $childId = $related->getAttribute($twoWayKey);
             if (!\is_null($childId)) {
-                if (!isset($relatedByChildId[$childId])) {
-                    $relatedByChildId[$childId] = [];
+                // Handle case where childId might be a Document object instead of string
+                $childKey = $childId instanceof Document ? $childId->getId() : $childId;
+                if (!isset($relatedByChildId[$childKey])) {
+                    $relatedByChildId[$childKey] = [];
                 }
                 // Remove the back-reference to avoid cycles
                 $related->removeAttribute($twoWayKey);
-                $relatedByChildId[$childId][] = $related;
+                $relatedByChildId[$childKey][] = $related;
             }
         }
 

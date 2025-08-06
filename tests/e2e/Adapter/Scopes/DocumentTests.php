@@ -43,8 +43,8 @@ trait DocumentTests
         $this->assertEquals(true, $database->createAttribute('documents', 'id', Database::VAR_ID, 0, false, null));
 
         $sequence = '1000000';
-        if($database->getAdapter()->getIdAttributeType()== Database::VAR_OBJECT_ID){
-            $sequence= '6890c1e3c00288c2470de7a0' ;
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
+            $sequence = '6890c1e3c00288c2470de7a0' ;
         }
 
         $document = $database->createDocument('documents', new Document([
@@ -102,8 +102,8 @@ trait DocumentTests
 
 
         $sequence = '56000';
-        if($database->getAdapter()->getIdAttributeType()== Database::VAR_OBJECT_ID){
-            $sequence= '6890c1e3c00288c2470de7b3' ;
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
+            $sequence = '6890c1e3c00288c2470de7b3' ;
         }
 
         // Test create document with manual internal id
@@ -279,8 +279,8 @@ trait DocumentTests
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $sequence = '0';
-        if($database->getAdapter()->getIdAttributeType()== Database::VAR_OBJECT_ID){
-            $sequence='6890c1e3c00288c0000de7b3';
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
+            $sequence = '6890c1e3c00288c0000de7b3';
         }
 
         /**
@@ -400,10 +400,10 @@ trait DocumentTests
         /** @var array<Document> $documents */
         $documents = [];
         $offset = 1000000;
-        for ($i = $offset; $i <= ($offset+10); $i++) {
+        for ($i = $offset; $i <= ($offset + 10); $i++) {
             $sequence = (string)$i;
-            if($database->getAdapter()->getIdAttributeType()== Database::VAR_OBJECT_ID){
-                $sequence='689000288c0000de7'.$i;
+            if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
+                $sequence = '689000288c0000de7'.$i;
             }
 
             $hash[$i] = $sequence;
@@ -419,7 +419,7 @@ trait DocumentTests
                 'string' => 'text',
             ]);
         }
-       
+
         $count = $database->createDocuments(__FUNCTION__, $documents, 6);
         $this->assertEquals($count, \count($documents));
 
@@ -428,7 +428,7 @@ trait DocumentTests
         ]);
 
         foreach ($documents as $index => $document) {
-            $this->assertEquals($hash[$index+$offset], $document->getSequence());
+            $this->assertEquals($hash[$index + $offset], $document->getSequence());
             $this->assertNotEmpty(true, $document->getId());
             $this->assertEquals('text', $document->getAttribute('string'));
         }
@@ -551,7 +551,7 @@ trait DocumentTests
         ];
 
         $documents = array_map(fn ($d) => new Document($d), $data);
-      
+
         Authorization::disable();
 
         $results = [];
@@ -4712,8 +4712,8 @@ trait DocumentTests
         $database = static::getDatabase();
 
         $sequence = '200';
-        if($database->getAdapter()->getIdAttributeType()== Database::VAR_OBJECT_ID){
-            $sequence= '6890c1e3c00288c2470de7a0' ;
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
+            $sequence = '6890c1e3c00288c2470de7a0' ;
         }
 
         $document->setAttribute('$id', 'caseSensitive');

@@ -761,7 +761,7 @@ class Mongo extends Adapter
         if (empty($result)) {
             return new Document([]);
         }
-      
+
         $result = $this->replaceChars('_', '$', (array)$result[0]);
 
         return new Document($result);
@@ -778,7 +778,7 @@ class Mongo extends Adapter
      */
     public function createDocument(string $collection, Document $document): Document
     {
-       
+
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $sequence = $document->getSequence();
@@ -795,9 +795,9 @@ class Mongo extends Adapter
         if (!empty($sequence)) {
             $record['_id'] = $sequence;
         }
-        
+
         $result = $this->insertDocument($name, $this->removeNullKeys($record));
-      
+
         $result = $this->replaceChars('_', '$', $result);
 
         return new Document($result);
@@ -1001,7 +1001,7 @@ class Mongo extends Adapter
                 $filters,
                 ['limit' => 1]
             )->cursor->firstBatch[0];
-            
+
             return $this->client->toArray($result);
         } catch (MongoException $e) {
             throw new Duplicate($e->getMessage());
@@ -1027,7 +1027,7 @@ class Mongo extends Adapter
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
 
-    
+
         $filters = [];
         $filters['_uid'] = $id;
         if ($this->sharedTables) {
@@ -1115,7 +1115,7 @@ class Mongo extends Adapter
 
                 if (!empty($document->getSequence())) {
                     $attributes['_id'] = new ObjectId($document->getSequence());
-                } 
+                }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();
@@ -1126,7 +1126,7 @@ class Mongo extends Adapter
 
                 // Build filter for upsert
                 $filter = ['_uid' => $document->getId()];
-                
+
                 if ($this->sharedTables) {
                     $filter['_tenant'] = $document->getTenant();
                 }
@@ -1140,7 +1140,7 @@ class Mongo extends Adapter
                     // Remove the attribute from $set since we're incrementing it
                     // it is requierd to mimic the behaver of SQL on duplicate key update
                     unset($record[$attribute]);
-                    
+
                     // Increment the specific attribute and update all other fields
                     $update = [
                         '$inc' => [$attribute => $attributeValue],
@@ -1168,7 +1168,7 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
-      
+
         return \array_map(fn ($change) => $change->getNew(), $changes);
     }
 
@@ -1206,12 +1206,12 @@ class Mongo extends Adapter
             $filters['_tenant'] = ['$in' => $documentTenants];
         }
 
-            $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
+        $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
 
-            foreach ($results->cursor->firstBatch as $result) {
-                $sequences[$result->_uid] = (string)$result->_id;
-            }
-    
+        foreach ($results->cursor->firstBatch as $result) {
+            $sequences[$result->_uid] = (string)$result->_id;
+        }
+
         foreach ($documents as $document) {
             if (isset($sequences[$document->getId()])) {
                 $document['$sequence'] = $sequences[$document->getId()];
@@ -1301,7 +1301,7 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
-        foreach($sequences as $index => $sequence) {
+        foreach ($sequences as $index => $sequence) {
             $sequences[$index] = new ObjectId($sequence);
         }
 
@@ -2293,9 +2293,9 @@ class Mongo extends Adapter
         return true;
     }
 
-  /**
-     * @return string
-     */
+    /**
+       * @return string
+       */
     public function getIdAttributeType(): string
     {
         return Database::VAR_OBJECT_ID;

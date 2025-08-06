@@ -3741,9 +3741,7 @@ class Database
 
         // Fetch all related documents in a single query
         $this->relationshipFetchDepth++;
-        $relationshipArray = $relationship->getArrayCopy();
-        $relationshipArray['collection'] = $relatedCollection->getId();
-        $this->relationshipFetchStack[] = $relationshipArray;
+        $this->relationshipFetchStack[] = $relationship;
 
         $relatedDocuments = $this->find($relatedCollection->getId(), [
             Query::equal('$id', array_unique($relatedIds)),
@@ -3818,9 +3816,7 @@ class Database
 
         // Fetch all related documents for all parents in a single query
         $this->relationshipFetchDepth++;
-        $relationshipArray = $relationship->getArrayCopy();
-        $relationshipArray['collection'] = $collection->getId();
-        $this->relationshipFetchStack[] = $relationshipArray;
+        $this->relationshipFetchStack[] = $relationship;
 
         $relatedDocuments = $this->find($relatedCollection->getId(), [
             Query::equal($twoWayKey, $parentIds),
@@ -3906,9 +3902,7 @@ class Database
 
         // Fetch all related documents for all children in a single query
         $this->relationshipFetchDepth++;
-        $relationshipArray = $relationship->getArrayCopy();
-        $relationshipArray['collection'] = $collection->getId();
-        $this->relationshipFetchStack[] = $relationshipArray;
+        $this->relationshipFetchStack[] = $relationship;
 
         $relatedDocuments = $this->find($relatedCollection->getId(), [
             Query::equal($twoWayKey, $childIds),
@@ -3977,9 +3971,7 @@ class Database
         }
 
         $this->relationshipFetchDepth++;
-        $relationshipArray = $relationship->getArrayCopy();
-        $relationshipArray['collection'] = $collection->getId();
-        $this->relationshipFetchStack[] = $relationshipArray;
+        $this->relationshipFetchStack[] = $relationship;
 
         $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 

@@ -5258,7 +5258,7 @@ class Database
                 }
             }
 
-            if ($max && ($document->getAttribute($attribute) + $value > $max)) {
+            if (!\is_null($max) && ($document->getAttribute($attribute) + $value > $max)) {
                 throw new LimitException('Attribute value exceeds maximum limit: ' . $max);
             }
 
@@ -5357,7 +5357,7 @@ class Database
                 }
             }
 
-            if ($min && ($document->getAttribute($attribute) - $value < $min)) {
+            if (!\is_null($min) && ($document->getAttribute($attribute) - $value < $min)) {
                 throw new LimitException('Attribute value exceeds minimum limit: ' . $min);
             }
 

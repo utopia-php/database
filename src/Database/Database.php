@@ -3290,7 +3290,8 @@ class Database
         $this->map = [];
 
         if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
+            $documents = $this->silent(fn () => $this->populateDocumentsRelationships($collection, [$document], $nestedSelections));
+            $document = $documents[0];
         }
 
         $relationships = \array_filter(
@@ -4130,7 +4131,8 @@ class Database
         });
 
         if ($this->resolveRelationships) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+            $documents = $this->silent(fn () => $this->populateDocumentsRelationships($collection, [$document]));
+            $document = $documents[0];
         }
 
         $document = $this->casting($collection, $document);
@@ -4773,7 +4775,8 @@ class Database
         });
 
         if ($this->resolveRelationships) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+            $documents = $this->silent(fn () => $this->populateDocumentsRelationships($collection, [$document]));
+            $document = $documents[0];
         }
 
         $document = $this->decode($collection, $document);

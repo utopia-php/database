@@ -3610,18 +3610,6 @@ class Database
             
             error_log("Processing relationship '$key' of type '$relationType' for collection '" . $collection->getId() . "' with " . count($documents) . " documents at depth " . $this->relationshipFetchDepth);
             error_log("Select queries for '$key': " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
-            
-            // Debug: Show what documents look like before processing this relationship
-            foreach ($documents as $idx => $doc) {
-                $currentValue = $doc->getAttribute($key);
-                if ($currentValue !== null) {
-                    $valueType = is_object($currentValue) ? get_class($currentValue) : gettype($currentValue);
-                    if (is_array($currentValue)) {
-                        $valueType .= '[' . count($currentValue) . ']';
-                    }
-                    error_log("Doc $idx before '$key': current value type = $valueType");
-                }
-            }
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
@@ -3643,25 +3631,6 @@ class Database
                     error_log("Calling populateManyToManyRelationshipsBatch for '$key' with queries: " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
                     $this->populateManyToManyRelationshipsBatch($documents, $relationship, $relatedCollection, $queries, $collection);
                     break;
-            }
-            
-            // Debug: Show what documents look like after processing this relationship
-            foreach ($documents as $idx => $doc) {
-                $currentValue = $doc->getAttribute($key);
-                if ($currentValue !== null) {
-                    $valueType = is_object($currentValue) ? get_class($currentValue) : gettype($currentValue);
-                    if (is_array($currentValue)) {
-                        $valueType .= '[' . count($currentValue) . ']';
-                        if (!empty($currentValue) && is_object($currentValue[0])) {
-                            $firstItemType = get_class($currentValue[0]);
-                            error_log("Doc $idx after '$key': $valueType, first item = $firstItemType");
-                        } else {
-                            error_log("Doc $idx after '$key': $valueType");
-                        }
-                    } else {
-                        error_log("Doc $idx after '$key': $valueType");
-                    }
-                }
             }
         }
 
@@ -3848,9 +3817,6 @@ class Database
                 continue;
             }
             
-            // TEMPORARY: Debug what the existing value looks like when not skipped
-            error_log("OneToMany: Processing '$key' for document " . $document->getId() . ", existingValue type: " . gettype($existingValue) . ", value: " . json_encode($existingValue));
-            
             $parentId = $document->getId();
             
             // Check if this parent->children relationship has already been processed
@@ -3858,12 +3824,6 @@ class Database
             if (!isset($this->map[$k])) {
                 $parentIds[] = $parentId;
                 $this->map[$k] = true;
-            }
-            
-            // TEMPORARY: Always include to debug map issues
-            if (!in_array($parentId, $parentIds)) {
-                $parentIds[] = $parentId;
-                error_log("OneToMany: Force-added parentId $parentId (was blocked by map)");
             }
         }
 
@@ -3883,27 +3843,33 @@ class Database
         
         error_log("OneToMany: Executing find with queries: " . json_encode(array_map(fn($q) => $q->toString(), $queryParams)));
         
-        $relatedDocuments = $this->find($relatedCollection->getId(), $queryParams);
-
-        error_log("OneToMany: Found " . count($relatedDocuments) . " related docs for '$key'");
+        // CRITICAL DEBUG: Before the nested find call
+        error_log("OneToMany: About to call find('" . $relatedCollection->getId() . "') with relationshipFetchDepth=" . $this->relationshipFetchDepth);
+        error_log("OneToMany: Current resolveRelationships=" . ($this->resolveRelationships ? 'true' : 'false'));
         
-        // Debug: check what the related documents look like
+        $relatedDocuments = $this->find($relatedCollection->getId(), $queryParams);
+        
+        // CRITICAL DEBUG: After the nested find call
+        error_log("OneToMany: find() returned " . count($relatedDocuments) . " documents");
         if (!empty($relatedDocuments)) {
             foreach ($relatedDocuments as $idx => $doc) {
-                $attrs = $doc->getArrayCopy();
-                $attrSummary = [];
-                foreach ($attrs as $attrKey => $attrValue) {
-                    if (is_object($attrValue)) {
-                        $attrSummary[$attrKey] = get_class($attrValue);
-                    } elseif (is_array($attrValue)) {
-                        $attrSummary[$attrKey] = 'array[' . count($attrValue) . ']';
-                    } else {
-                        $attrSummary[$attrKey] = gettype($attrValue) . ':' . $attrValue;
-                    }
+                $relatedId = $doc->getId();
+                // Check key relationships that should be populated
+                $zoo = $doc->getAttribute('zoo');
+                $president = $doc->getAttribute('president');
+                $zooType = is_object($zoo) ? get_class($zoo) : gettype($zoo);
+                $presType = is_object($president) ? get_class($president) : gettype($president);
+                error_log("OneToMany: Related doc $idx (ID=$relatedId): zoo=$zooType, president=$presType");
+                if (is_string($zoo)) {
+                    error_log("OneToMany: WARNING - zoo is still string: '$zoo'");
                 }
-                error_log("OneToMany: Related doc $idx ID=" . $doc->getId() . " attrs=" . json_encode($attrSummary));
+                if (is_string($president)) {
+                    error_log("OneToMany: WARNING - president is still string: '$president'");
+                }
             }
         }
+
+        error_log("OneToMany: Found " . count($relatedDocuments) . " related docs for '$key'");
 
         $this->relationshipFetchDepth--;
         \array_pop($this->relationshipFetchStack);
@@ -7464,6 +7430,8 @@ class Database
         array $queries,
     ): array {
         $nestedSelections = [];
+        
+        error_log("processRelationshipQueries: Starting with " . count($queries) . " queries: " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
 
         foreach ($queries as $query) {
             if ($query->getMethod() !== Query::TYPE_SELECT) {
@@ -7485,6 +7453,7 @@ class Database
                 ))[0] ?? null;
 
                 if (!$relationship) {
+                    error_log("processRelationshipQueries: No relationship found for key '$selectedKey' in value '$value'");
                     continue;
                 }
 
@@ -7493,6 +7462,8 @@ class Database
 
                 $nestingPath = \implode('.', $nesting);
                 $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
+                
+                error_log("processRelationshipQueries: Added nested selection for '$selectedKey': '$nestingPath'");
 
                 $type = $relationship->getAttribute('options')['relationType'];
                 $side = $relationship->getAttribute('options')['side'];
@@ -7523,6 +7494,10 @@ class Database
 
             $query->setValues(\array_values($values));
         }
+        
+        error_log("processRelationshipQueries: Final nestedSelections: " . json_encode(array_map(function($queries) {
+            return array_map(fn($q) => $q->toString(), $queries);
+        }, $nestedSelections)));
 
         return $nestedSelections;
     }

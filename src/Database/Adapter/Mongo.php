@@ -800,7 +800,7 @@ class Mongo extends Adapter
             $record['_id'] = $sequence;
         }
 
-        $result = $this->insertDocument($name, $this->removeNullKeys($record));
+        $result = $this->insertDocument($name, $record);
 
         $result = $this->replaceChars('_', '$', $result);
 
@@ -956,7 +956,7 @@ class Mongo extends Adapter
                 $record['_id'] = $sequence;
             }
 
-            $records[] = $this->removeNullKeys($record);
+            $records[] = $record;
         }
 
         $documents = $this->client->insertMany($name, $records);
@@ -1115,7 +1115,6 @@ class Mongo extends Adapter
                 }
 
                 $record = $this->replaceChars('$', '_', $attributes);
-                $record = $this->removeNullKeys($record);
 
                 // Build filter for upsert
                 $filters = ['_uid' => $document->getId()];

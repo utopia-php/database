@@ -108,6 +108,10 @@ class Database
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
 
+    // FNV-1a 64-bit constants
+    private const FNV164_PRIME = 0x100000001b3;
+    private const FNV164_OFFSET_BASIS = 0xcbf29ce484222325;
+
     // Events
     public const EVENT_ALL = '*';
 
@@ -378,6 +382,11 @@ class Database
      * @var array<Document>
      */
     protected array $relationshipDeleteStack = [];
+
+    /**
+     * Collection version tracking for cache invalidation
+     */
+    protected array $collectionVersions = [];
 
     /**
      * @param Adapter $adapter
@@ -5998,6 +6007,9 @@ class Database
 
         $this->cache->purge($collectionKey);
 
+        // Increment collection version for O(1) find cache invalidation
+        $this->incrementCollectionVersion($collectionId);
+
         return true;
     }
 
@@ -6016,6 +6028,10 @@ class Database
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
+
+        // Increment collection version for aggressive find cache invalidation
+        // This ensures that any cached find results become invalid when any document changes
+        $this->incrementCollectionVersion($collectionId);
 
         $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
             '$id' => $id,
@@ -6125,6 +6141,39 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
+        // Generate cache key using FNV164 hash
+        $cacheKey = $this->getFindCacheKey(
+            $collection->getId(),
+            $queries,
+            $limit ?? 25,
+            $offset ?? 0,
+            $orderAttributes,
+            $orderTypes,
+            $cursor,
+            $cursorDirection,
+            $forPermission
+        );
+
+        // Get collection version for cache validation
+        $collectionVersion = $this->getCollectionVersion($collection->getId());
+        $versionedCacheKey = $cacheKey . ':v' . $collectionVersion;
+
+        // Try to load from cache
+        $cached = null;
+        try {
+            $cached = $this->cache->load($versionedCacheKey, self::TTL);
+        } catch (Exception $e) {
+            Console::warning('Warning: Failed to get find results from cache: ' . $e->getMessage());
+        }
+
+        if ($cached !== null) {
+            // Convert cached array back to Document objects
+            $results = \array_map(fn($item) => new Document($item), $cached);
+            
+            $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
+            return $results;
+        }
+
         $getResults = fn () => $this->adapter->find(
             $collection->getId(),
             $queries,
@@ -6152,6 +6201,17 @@ class Database
             }
 
             $results[$index] = $node;
+        }
+
+        // Cache the results if no relationships were populated (to avoid caching incomplete data)
+        if (empty($relationships)) {
+            try {
+                // Convert Document objects to arrays for caching
+                $cacheData = \array_map(fn($doc) => $doc->getArrayCopy(), $results);
+                $this->cache->save($versionedCacheKey, $cacheData);
+            } catch (Exception $e) {
+                Console::warning('Failed to save find results to cache: ' . $e->getMessage());
+            }
         }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
@@ -6920,5 +6980,145 @@ class Database
         }
 
         return $nestedSelections;
+    }
+
+    /**
+     * Generate FNV164 hash for consistent cache keys
+     * 
+     * @param string $data
+     * @return string
+     */
+    private function fnv164Hash(string $data): string
+    {
+        $hash = self::FNV164_OFFSET_BASIS;
+        $length = \strlen($data);
+        
+        for ($i = 0; $i < $length; $i++) {
+            $hash ^= \ord($data[$i]);
+            $hash = ($hash * self::FNV164_PRIME) & 0x7FFFFFFFFFFFFFFF; // Keep it within PHP int limits
+        }
+        
+        return \dechex($hash);
+    }
+
+    /**
+     * Generate cache key for find queries using FNV164 hash
+     * 
+     * @param string $collectionId
+     * @param array $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array $orderAttributes
+     * @param array $orderTypes
+     * @param array $cursor
+     * @param string $cursorDirection
+     * @param string $forPermission
+     * @return string
+     */
+    private function getFindCacheKey(
+        string $collectionId,
+        array $queries,
+        ?int $limit,
+        ?int $offset,
+        array $orderAttributes,
+        array $orderTypes,
+        array $cursor,
+        string $cursorDirection,
+        string $forPermission
+    ): string {
+        // Create a deterministic string representation of the query
+        $queryData = [
+            'collection' => $collectionId,
+            'queries' => \array_map(fn($q) => $q instanceof Query ? $q->toString() : (string)$q, $queries),
+            'limit' => $limit,
+            'offset' => $offset,
+            'orderAttributes' => $orderAttributes,
+            'orderTypes' => $orderTypes,
+            'cursor' => $cursor,
+            'cursorDirection' => $cursorDirection,
+            'permission' => $forPermission
+        ];
+        
+        $queryString = \json_encode($queryData, JSON_SORT_KEYS);
+        $queryHash = $this->fnv164Hash($queryString);
+        
+        if ($this->adapter->getSupportForHostname()) {
+            $hostname = $this->adapter->getHostname();
+        }
+        
+        $tenantSegment = $this->adapter->getTenant();
+        
+        return \sprintf(
+            '%s-cache-%s:%s:%s:find:%s:%s',
+            $this->cacheName,
+            $hostname ?? '',
+            $this->getNamespace(),
+            $tenantSegment,
+            $collectionId,
+            $queryHash
+        );
+    }
+
+    /**
+     * Get collection version for cache invalidation
+     * 
+     * @param string $collectionId
+     * @return int
+     */
+    private function getCollectionVersion(string $collectionId): int
+    {
+        if (!isset($this->collectionVersions[$collectionId])) {
+            // Try to load from cache first
+            $versionKey = $this->getCollectionVersionKey($collectionId);
+            $version = $this->cache->load($versionKey, self::TTL * 365); // Store versions for a year
+            
+            if ($version === null) {
+                $version = \time(); // Use current timestamp as initial version
+                $this->cache->save($versionKey, $version, null, self::TTL * 365);
+            }
+            
+            $this->collectionVersions[$collectionId] = (int)$version;
+        }
+        
+        return $this->collectionVersions[$collectionId];
+    }
+
+    /**
+     * Increment collection version for cache invalidation
+     * 
+     * @param string $collectionId
+     * @return void
+     */
+    private function incrementCollectionVersion(string $collectionId): void
+    {
+        $newVersion = \time();
+        $this->collectionVersions[$collectionId] = $newVersion;
+        
+        $versionKey = $this->getCollectionVersionKey($collectionId);
+        $this->cache->save($versionKey, $newVersion, null, self::TTL * 365);
+    }
+
+    /**
+     * Get collection version cache key
+     * 
+     * @param string $collectionId
+     * @return string
+     */
+    private function getCollectionVersionKey(string $collectionId): string
+    {
+        if ($this->adapter->getSupportForHostname()) {
+            $hostname = $this->adapter->getHostname();
+        }
+        
+        $tenantSegment = $this->adapter->getTenant();
+        
+        return \sprintf(
+            '%s-cache-%s:%s:%s:version:%s',
+            $this->cacheName,
+            $hostname ?? '',
+            $this->getNamespace(),
+            $tenantSegment,
+            $collectionId
+        );
     }
 }

@@ -104,11 +104,8 @@ trait RelationshipTests
             'name' => 'Bronx Zoo'
         ]));
 
-        var_dump($zoo);
         $this->assertEquals('zoo1', $zoo->getId());
         $this->assertArrayHasKey('animals', $zoo);
-
-        $this->assertEquals('shmuel', 'fogel');
 
         $animal1 = $database->createDocument('__animals', new Document([
             '$id' => 'iguana',
@@ -238,6 +235,105 @@ trait RelationshipTests
                 ])
             ]
         );
+
+
+        /**
+         * Check Zoo data
+         */
+        $zoo = $database->getDocument('zoo', 'zoo1');
+
+        $this->assertEquals('zoo1', $zoo->getId());
+        $this->assertEquals('Bronx Zoo', $zoo->getAttribute('name'));
+        $this->assertArrayHasKey('animals', $zoo);
+        $this->assertEquals(2, count($zoo->getAttribute('animals')));
+        $this->assertArrayHasKey('president', $zoo->getAttribute('animals')[0]);
+        $this->assertArrayHasKey('veterinarian', $zoo->getAttribute('animals')[0]);
+
+        $zoo = $database->findOne('zoo');
+
+        $this->assertEquals('zoo1', $zoo->getId());
+        $this->assertEquals('Bronx Zoo', $zoo->getAttribute('name'));
+        $this->assertArrayHasKey('animals', $zoo);
+        $this->assertEquals(2, count($zoo->getAttribute('animals')));
+        $this->assertArrayHasKey('president', $zoo->getAttribute('animals')[0]);
+        $this->assertArrayHasKey('veterinarian', $zoo->getAttribute('animals')[0]);
+
+        /**
+         * Check Veterinarians data
+         */
+        $veterinarian = $database->getDocument('veterinarians', 'dr.pol');
+
+        $this->assertEquals('dr.pol', $veterinarian->getId());
+        $this->assertArrayHasKey('presidents', $veterinarian);
+        $this->assertEquals(1, count($veterinarian->getAttribute('presidents')));
+        $this->assertArrayHasKey('animal', $veterinarian->getAttribute('presidents')[0]);
+        $this->assertArrayHasKey('animals', $veterinarian);
+        $this->assertEquals(1, count($veterinarian->getAttribute('animals')));
+        $this->assertArrayHasKey('zoo', $veterinarian->getAttribute('animals')[0]);
+        $this->assertArrayHasKey('president', $veterinarian->getAttribute('animals')[0]);
+
+        $veterinarian = $database->findOne('veterinarians', [
+            Query::equal('$id', ['dr.pol'])
+        ]);
+
+        $this->assertEquals('dr.pol', $veterinarian->getId());
+        $this->assertArrayHasKey('presidents', $veterinarian);
+        $this->assertEquals(1, count($veterinarian->getAttribute('presidents')));
+        $this->assertArrayHasKey('animal', $veterinarian->getAttribute('presidents')[0]);
+        $this->assertArrayHasKey('animals', $veterinarian);
+        $this->assertEquals(1, count($veterinarian->getAttribute('animals')));
+        $this->assertArrayHasKey('zoo', $veterinarian->getAttribute('animals')[0]);
+        $this->assertArrayHasKey('president', $veterinarian->getAttribute('animals')[0]);
+
+        /**
+         * Check Animals data
+         */
+        $animal = $database->getDocument('__animals', 'iguana');
+
+        $this->assertEquals('iguana', $animal->getId());
+        $this->assertArrayHasKey('zoo', $animal);
+        $this->assertEquals('Bronx Zoo', $animal['zoo']->getAttribute('name'));
+        $this->assertArrayHasKey('veterinarian', $animal);
+        $this->assertEquals('dr.pol', $animal['veterinarian']->getId());
+        $this->assertArrayHasKey('presidents', $animal['veterinarian']);
+        $this->assertArrayHasKey('president', $animal);
+        $this->assertEquals('bush', $animal['president']->getId());
+
+        $animal = $database->findOne('__animals', [
+            Query::equal('$id', ['tiger'])
+        ]);
+
+        $this->assertEquals('tiger', $animal->getId());
+        $this->assertArrayHasKey('zoo', $animal);
+        $this->assertEquals('Bronx Zoo', $animal['zoo']->getAttribute('name'));
+        $this->assertArrayHasKey('veterinarian', $animal);
+        $this->assertEquals('dr.seuss', $animal['veterinarian']->getId());
+        $this->assertArrayHasKey('presidents', $animal['veterinarian']);
+        $this->assertArrayHasKey('president', $animal);
+        $this->assertEquals('biden', $animal['president']->getId());
+
+        /**
+         * Check President data
+         */
+        $president = $database->getDocument('presidents', 'trump');
+
+        $this->assertEquals('trump', $president->getId());
+        $this->assertArrayHasKey('animal', $president);
+        $this->assertArrayHasKey('votes', $president);
+        $this->assertEquals(2, count($president['votes']));
+
+        /**
+         * Check President data
+         */
+        $president = $database->findOne('presidents', [
+            Query::equal('$id', ['bush'])
+        ]);
+
+        $this->assertEquals('bush', $president->getId());
+        $this->assertArrayHasKey('animal', $president);
+        $this->assertArrayHasKey('votes', $president);
+        $this->assertEquals(0, count($president['votes']));
+
 
         $this->assertEquals('shmuel', 'fogel');
     }

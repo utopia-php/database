@@ -1815,7 +1815,7 @@ class Postgres extends SQL
             case Query::TYPE_CONTAINS:
             case Query::TYPE_NOT_CONTAINS:
                 if ($query->onArray()) {
-                    $operator = $query->getMethod() === Query::TYPE_NOT_CONTAINS ? 'NOT @>' : '@>';
+                    $operator = '@>';
                 } else {
                     $operator = null;
                 }
@@ -1843,7 +1843,10 @@ class Postgres extends SQL
 
                     $binds[":{$placeholder}_{$key}"] = $value;
 
-                    if ($isNotQuery && !$query->onArray()) {
+                    if ($isNotQuery && $query->onArray()) {
+                        // For array NOT queries, wrap the entire condition in NOT()
+                        $conditions[] = "NOT ({$alias}.{$attribute} {$operator} :{$placeholder}_{$key})";
+                    } elseif ($isNotQuery && !$query->onArray()) {
                         $conditions[] = "{$alias}.{$attribute} NOT {$operator} :{$placeholder}_{$key}";
                     } else {
                         $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key}";

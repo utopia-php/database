@@ -41,6 +41,8 @@ class Database
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
+    public const VAR_ID = 'id';
+    public const VAR_OBJECT_ID = 'objectId';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
@@ -167,8 +169,8 @@ class Database
         ],
         [
             '$id' => '$sequence',
-            'type' => self::VAR_STRING,
-            'size' => Database::LENGTH_KEY,
+            'type' => self::VAR_ID,
+            'size' => 0,
             'required' => true,
             'signed' => true,
             'array' => false,
@@ -186,6 +188,7 @@ class Database
         [
             '$id' => '$tenant',
             'type' => self::VAR_INTEGER,
+            //'type' => self::VAR_ID, // Inconsistency with other VAR_ID since this is an INT
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -1789,6 +1792,9 @@ class Database
         $this->checkAttribute($collection, $attribute);
 
         switch ($type) {
+            case self::VAR_ID:
+
+                break;
             case self::VAR_STRING:
                 if ($size > $this->adapter->getLimitForString()) {
                     throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
@@ -3609,6 +3615,10 @@ class Database
             ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
             ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
 
+        if (empty($document->getPermissions())) {
+            $document->setAttribute('$permissions', []);
+        }
+
         if ($this->adapter->getSharedTables()) {
             if ($this->adapter->getTenantPerDocument()) {
                 if (
@@ -3633,6 +3643,7 @@ class Database
 
         $structure = new Structure(
             $collection,
+            $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
         );
@@ -3708,6 +3719,10 @@ class Database
                 ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
                 ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
 
+            if (empty($document->getPermissions())) {
+                $document->setAttribute('$permissions', []);
+            }
+
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {
                     if ($document->getTenant() === null) {
@@ -3722,6 +3737,7 @@ class Database
 
             $validator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -4266,6 +4282,7 @@ class Database
 
             $structureValidator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -4350,6 +4367,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -4367,13 +4385,16 @@ class Database
         if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException("Cursor document must be from the same Collection.");
         }
+
         unset($updates['$id']);
         unset($updates['$tenant']);
+
         if (($updates->getCreatedAt() === null || !$this->preserveDates)) {
             unset($updates['$createdAt']);
         } else {
             $updates['$createdAt'] = $updates->getCreatedAt();
         }
+
         if ($this->adapter->getSharedTables()) {
             $updates['$tenant'] = $this->adapter->getTenant();
         }
@@ -4385,6 +4406,7 @@ class Database
         // Check new document structure
         $validator = new PartialStructure(
             $collection,
+            $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
         );
@@ -4422,8 +4444,27 @@ class Database
                 break;
             }
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch) {
-                foreach ($batch as &$document) {
+            $currentPermissions  = $updates->getPermissions();
+            sort($currentPermissions);
+
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
+                foreach ($batch as $index => $document) {
+
+                    $skipPermissionsUpdate = true;
+
+                    if ($updates->offsetExists('$permissions')) {
+                        if (!$document->offsetExists('$permissions')) {
+                            throw new QueryException('Permission document missing in select');
+                        }
+
+                        $originalPermissions = $document->getPermissions();
+                        sort($originalPermissions);
+
+                        $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+                    }
+
+                    $document->setAttribute('$skipPermissionsUpdate', $skipPermissionsUpdate);
+
                     $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
 
                     if ($this->resolveRelationships) {
@@ -4443,8 +4484,9 @@ class Database
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
 
-                    $document = $this->encode($collection, $document);
+                    $batch[$index] = $this->encode($collection, $document);
                 }
+
                 $this->adapter->updateDocuments(
                     $collection->getId(),
                     $updates,
@@ -4453,6 +4495,8 @@ class Database
             });
 
             foreach ($batch as $doc) {
+                $doc->removeAttribute('$skipPermissionsUpdate');
+
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
                 try {
@@ -5034,6 +5078,7 @@ class Database
 
             $validator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -5188,7 +5233,7 @@ class Database
                 }
             }
 
-            if ($max && ($document->getAttribute($attribute) + $value > $max)) {
+            if (!\is_null($max) && ($document->getAttribute($attribute) + $value > $max)) {
                 throw new LimitException('Attribute value exceeds maximum limit: ' . $max);
             }
 
@@ -5287,7 +5332,7 @@ class Database
                 }
             }
 
-            if ($min && ($document->getAttribute($attribute) - $value < $min)) {
+            if (!\is_null($min) && ($document->getAttribute($attribute) - $value < $min)) {
                 throw new LimitException('Attribute value exceeds minimum limit: ' . $min);
             }
 
@@ -5814,6 +5859,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime()
@@ -6009,6 +6055,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -6219,6 +6266,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -6269,6 +6317,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -6334,9 +6383,6 @@ class Database
             }
 
             if ($key === '$permissions') {
-                if (empty($value)) {
-                    $document->setAttribute('$permissions', []); // set default value
-                }
                 continue;
             }
 
@@ -6417,6 +6463,10 @@ class Database
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
+            if ($key === '$permissions') {
+                continue;
+            }
+
             if (\is_null($value)) {
                 $value = $document->getAttribute($this->adapter->filter($key));
 
@@ -6476,6 +6526,10 @@ class Database
                 continue;
             }
 
+            if ($key === '$permissions') {
+                continue;
+            }
+
             if ($array) {
                 $value = !is_string($value)
                     ? $value
@@ -6486,6 +6540,12 @@ class Database
 
             foreach ($value as $index => $node) {
                 switch ($type) {
+                    case self::VAR_ID:
+                        // Disabled until Appwrite migrates to use real int ID's for MySQL
+                        //$type = $this->adapter->getIdAttributeType();
+                        //\settype($node, $type);
+                        $node = (string)$node;
+                        break;
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;
                         break;

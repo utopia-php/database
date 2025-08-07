@@ -14,6 +14,160 @@ use Utopia\Database\Validator\Authorization;
 
 trait PermissionTests
 {
+    public function testUnsetPermissions(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $this->assertTrue($database->createAttribute(
+            collection: __FUNCTION__,
+            id: 'president',
+            type: Database::VAR_STRING,
+            size: 255,
+            required: false
+        ));
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $documents = [];
+
+        for ($i = 0; $i < 3; $i++) {
+            $documents[] = new Document([
+                '$permissions' => $permissions,
+                'president' => 'Donald Trump'
+            ]);
+        }
+
+        $results = [];
+        $count = $database->createDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
+
+        $this->assertEquals(3, $count);
+
+        foreach ($results as $result) {
+            $this->assertEquals('Donald Trump', $result->getAttribute('president'));
+            $this->assertEquals($permissions, $result->getPermissions());
+        }
+
+        /**
+         * No permissions passed, Check old is preserved
+         */
+        $updates = new Document([
+            'president' => 'George Washington'
+        ]);
+
+        $results = [];
+        $modified = $database->updateDocuments(
+            __FUNCTION__,
+            $updates,
+            onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+            }
+        );
+
+        $this->assertEquals(3, $modified);
+
+        foreach ($results as $result) {
+            $this->assertEquals('George Washington', $result->getAttribute('president'));
+            $this->assertEquals($permissions, $result->getPermissions());
+        }
+
+        $documents = $database->find(__FUNCTION__);
+
+        $this->assertEquals(3, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertEquals('George Washington', $document->getAttribute('president'));
+            $this->assertEquals($permissions, $document->getPermissions());
+        }
+
+        /**
+         * Change permissions remove delete
+         */
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        $updates = new Document([
+            '$permissions' => $permissions,
+            'president' => 'Joe biden'
+        ]);
+
+        $results = [];
+        $modified = $database->updateDocuments(
+            __FUNCTION__,
+            $updates,
+            onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+            }
+        );
+
+        $this->assertEquals(3, $modified);
+
+        foreach ($results as $result) {
+            $this->assertEquals('Joe biden', $result->getAttribute('president'));
+            $this->assertEquals($permissions, $result->getPermissions());
+            $this->assertArrayNotHasKey('$skipPermissionsUpdate', $result);
+        }
+
+        $documents = $database->find(__FUNCTION__);
+
+        $this->assertEquals(3, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertEquals('Joe biden', $document->getAttribute('president'));
+            $this->assertEquals($permissions, $document->getPermissions());
+        }
+
+        /**
+         * Unset permissions
+         */
+        $updates = new Document([
+            '$permissions' => [],
+            'president' => 'Richard Nixon'
+        ]);
+
+        $results = [];
+        $modified = $database->updateDocuments(
+            __FUNCTION__,
+            $updates,
+            onNext: function ($doc) use (&$results) {
+                $results[] = $doc;
+            }
+        );
+
+        $this->assertEquals(3, $modified);
+
+        foreach ($results as $result) {
+            $this->assertEquals('Richard Nixon', $result->getAttribute('president'));
+            $this->assertEquals([], $result->getPermissions());
+        }
+
+        $documents = $database->find(__FUNCTION__);
+        $this->assertEquals(0, count($documents));
+
+        Authorization::disable();
+        $documents = $database->find(__FUNCTION__);
+        Authorization::reset();
+
+        $this->assertEquals(3, count($documents));
+
+        foreach ($documents as $document) {
+            $this->assertEquals('Richard Nixon', $document->getAttribute('president'));
+            $this->assertEquals([], $document->getPermissions());
+            $this->assertArrayNotHasKey('$skipPermissionsUpdate', $document);
+        }
+    }
+
     public function testCreateDocumentsEmptyPermission(): void
     {
         /** @var Database $database */

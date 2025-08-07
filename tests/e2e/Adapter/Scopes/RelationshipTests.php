@@ -107,7 +107,7 @@ trait RelationshipTests
         $this->assertEquals('zoo1', $zoo->getId());
         $this->assertArrayHasKey('animals', $zoo);
 
-        $animal1 = $database->createDocument('__animals', new Document([
+        $iguana = $database->createDocument('__animals', new Document([
             '$id' => 'iguana',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -127,7 +127,7 @@ trait RelationshipTests
             'zoo' => $zoo->getId(),
         ]));
 
-        $animal2 = $database->createDocument('__animals', new Document([
+        $tiger = $database->createDocument('__animals', new Document([
             '$id' => 'tiger',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -147,7 +147,7 @@ trait RelationshipTests
             'zoo' => $zoo->getId(),
         ]));
 
-        $animal3 = $database->createDocument('__animals', new Document([
+        $lama = $database->createDocument('__animals', new Document([
             '$id' => 'lama',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -186,7 +186,7 @@ trait RelationshipTests
             'animals' => ['tiger'],
         ]));
 
-        $president1 = $database->createDocument('presidents', new Document([
+        $trump = $database->createDocument('presidents', new Document([
             '$id' => 'trump',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -200,7 +200,7 @@ trait RelationshipTests
             ],
         ]));
 
-        $president2 = $database->createDocument('presidents', new Document([
+        $bush = $database->createDocument('presidents', new Document([
             '$id' => 'bush',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -211,7 +211,7 @@ trait RelationshipTests
             'animal' => 'iguana',
         ]));
 
-        $president3 = $database->createDocument('presidents', new Document([
+        $biden = $database->createDocument('presidents', new Document([
             '$id' => 'biden',
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -221,21 +221,6 @@ trait RelationshipTests
             'last_name' => 'Biden',
             'animal' => 'tiger',
         ]));
-
-        var_dump('=== start === === start === === start === === start === === start === === start === === start === === start === === start ===');
-
-        $docs = $database->find(
-            'veterinarians',
-            [
-                Query::select([
-                    '*',
-                    'animals.*',
-                    'animals.zoo.*',
-                    //'animals.president.*',
-                ])
-            ]
-        );
-
 
         /**
          * Check Zoo data
@@ -334,8 +319,63 @@ trait RelationshipTests
         $this->assertArrayHasKey('votes', $president);
         $this->assertEquals(0, count($president['votes']));
 
+        /**
+         * Check Selects queries
+         */
+        $veterinarian = $database->findOne('veterinarians', [
+            Query::select(['*']), // No resolving
+            Query::equal('$id', ['dr.pol']),
+        ]);
 
-        $this->assertEquals('shmuel', 'fogel');
+        $this->assertEquals('dr.pol', $veterinarian->getId());
+        $this->assertArrayNotHasKey('presidents', $veterinarian);
+        $this->assertArrayNotHasKey('animals', $veterinarian);
+
+
+        $veterinarian = $database->findOne(
+            'veterinarians',
+            [
+                Query::select([
+                    '*',
+                    'animals.*',
+                ])
+            ]
+        );
+
+        $this->assertEquals('dr.pol', $veterinarian->getId());
+        $this->assertArrayHasKey('animals', $veterinarian);
+        //$this->assertArrayNotHasKey('presidents', $veterinarian); // ???
+
+        $animal = $veterinarian['animals'][0];
+
+        $this->assertArrayHasKey('president', $animal);
+        $this->assertEquals('bush', $animal->getAttribute('president')); // Check president is a value
+        $this->assertArrayHasKey('zoo', $animal);
+        $this->assertEquals('zoo1', $animal->getAttribute('zoo')); // Check zoo is a value
+
+        $veterinarian = $database->findOne(
+            'veterinarians',
+            [
+                Query::select([
+                    '*',
+                    'animals.*',
+                    'animals.zoo.*',
+                    'animals.president.*',
+                ])
+            ]
+        );
+
+        $this->assertEquals('dr.pol', $veterinarian->getId());
+        $this->assertArrayHasKey('animals', $veterinarian);
+
+        $animal = $veterinarian['animals'][0];
+
+        $this->assertArrayHasKey('president', $animal);
+        $this->assertEquals('Bush', $animal->getAttribute('president')->getAttribute('last_name')); // Check president is an object
+        $this->assertArrayHasKey('zoo', $animal);
+        $this->assertEquals('Bronx Zoo', $animal->getAttribute('zoo')->getAttribute('name')); // Check zoo is an object
+
+        // $this->assertEquals('shmuel', 'fogel');
     }
 
     public function testDeleteRelatedCollection(): void

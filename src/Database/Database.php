@@ -3714,6 +3714,9 @@ class Database
         }
         
         error_log("OneToOne: Fetching " . count($relatedIds) . " related docs for key '$key': " . implode(', ', $relatedIds));
+        if ($key === 'animal') {
+            var_dump("DEBUG OneToOne: About to fetch animals with IDs: " . implode(', ', $relatedIds));
+        }
 
         // Fetch all related documents in a single query
         $this->relationshipFetchDepth++;
@@ -3726,6 +3729,10 @@ class Database
         ]);
         
         error_log("OneToOne: Found " . count($relatedDocuments) . " related docs for key '$key'");
+        if ($key === 'animal') {
+            var_dump("DEBUG OneToOne: Found " . count($relatedDocuments) . " animals");
+            var_dump($relatedDocuments);
+        }
 
         $this->relationshipFetchDepth--;
         \array_pop($this->relationshipFetchStack);

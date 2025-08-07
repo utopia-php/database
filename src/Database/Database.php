@@ -3811,8 +3811,12 @@ class Database
             // Skip if relationship is already populated (array of Documents)
             $existingValue = $document->getAttribute($key);
             if (!empty($existingValue) && is_array($existingValue) && !empty($existingValue[0]) && $existingValue[0] instanceof Document) {
+                error_log("OneToMany: Skipping already populated relationship '$key' for document " . $document->getId());
                 continue;
             }
+            
+            // TEMPORARY: Debug what the existing value looks like when not skipped
+            error_log("OneToMany: Processing '$key' for document " . $document->getId() . ", existingValue type: " . gettype($existingValue) . ", value: " . json_encode($existingValue));
             
             $parentId = $document->getId();
             
@@ -3821,6 +3825,12 @@ class Database
             if (!isset($this->map[$k])) {
                 $parentIds[] = $parentId;
                 $this->map[$k] = true;
+            }
+            
+            // TEMPORARY: Always include to debug map issues
+            if (!in_array($parentId, $parentIds)) {
+                $parentIds[] = $parentId;
+                error_log("OneToMany: Force-added parentId $parentId (was blocked by map)");
             }
         }
 
@@ -3864,7 +3874,9 @@ class Database
         // Assign related documents to their parent documents
         foreach ($documents as $document) {
             $parentId = $document->getId();
-            $document->setAttribute($key, $relatedByParentId[$parentId] ?? []);
+            $relatedDocs = $relatedByParentId[$parentId] ?? [];
+            error_log("OneToMany: Assigning " . count($relatedDocs) . " related docs to '$key' for document $parentId");
+            $document->setAttribute($key, $relatedDocs);
         }
     }
 
@@ -3926,6 +3938,12 @@ class Database
             if (!isset($this->map[$k])) {
                 $childIds[] = $childId;
                 $this->map[$k] = true;
+            }
+            
+            // TEMPORARY: Always include to debug map issues
+            if (!in_array($childId, $childIds)) {
+                $childIds[] = $childId;
+                error_log("ManyToOne: Force-added childId $childId (was blocked by map)");
             }
         }
 
@@ -4011,6 +4029,12 @@ class Database
             if (!isset($this->map[$k])) {
                 $documentIds[] = $documentId;
                 $this->map[$k] = true;
+            }
+            
+            // TEMPORARY: Always include to debug map issues
+            if (!in_array($documentId, $documentIds)) {
+                $documentIds[] = $documentId;
+                error_log("ManyToMany: Force-added documentId $documentId (was blocked by map)");
             }
         }
 

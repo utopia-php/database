@@ -169,6 +169,32 @@ class QueryTest extends TestCase
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals(8.5, $query->getValues()[0]);
 
+        // Test new NOT query types parsing
+        $query = Query::parse(Query::notContains('tags', ['unwanted', 'spam'])->toString());
+        $this->assertEquals('notContains', $query->getMethod());
+        $this->assertEquals('tags', $query->getAttribute());
+        $this->assertEquals(['unwanted', 'spam'], $query->getValues());
+
+        $query = Query::parse(Query::notSearch('content', 'unwanted content')->toString());
+        $this->assertEquals('notSearch', $query->getMethod());
+        $this->assertEquals('content', $query->getAttribute());
+        $this->assertEquals(['unwanted content'], $query->getValues());
+
+        $query = Query::parse(Query::notStartsWith('title', 'temp')->toString());
+        $this->assertEquals('notStartsWith', $query->getMethod());
+        $this->assertEquals('title', $query->getAttribute());
+        $this->assertEquals(['temp'], $query->getValues());
+
+        $query = Query::parse(Query::notEndsWith('filename', '.tmp')->toString());
+        $this->assertEquals('notEndsWith', $query->getMethod());
+        $this->assertEquals('filename', $query->getAttribute());
+        $this->assertEquals(['.tmp'], $query->getValues());
+
+        $query = Query::parse(Query::notBetween('score', 0, 50)->toString());
+        $this->assertEquals('notBetween', $query->getMethod());
+        $this->assertEquals('score', $query->getAttribute());
+        $this->assertEquals([0, 50], $query->getValues());
+
         $query = Query::parse(Query::notEqual('director', 'null')->toString());
         $this->assertEquals('notEqual', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
@@ -333,5 +359,15 @@ class QueryTest extends TestCase
 
         $this->assertFalse(Query::isMethod('invalid'));
         $this->assertFalse(Query::isMethod('lte '));
+    }
+
+    public function testNewQueryTypesInTypesArray(): void
+    {
+        // Test that all new query types are included in the TYPES array
+        $this->assertContains(Query::TYPE_NOT_CONTAINS, Query::TYPES);
+        $this->assertContains(Query::TYPE_NOT_SEARCH, Query::TYPES);
+        $this->assertContains(Query::TYPE_NOT_STARTS_WITH, Query::TYPES);
+        $this->assertContains(Query::TYPE_NOT_ENDS_WITH, Query::TYPES);
+        $this->assertContains(Query::TYPE_NOT_BETWEEN, Query::TYPES);
     }
 }

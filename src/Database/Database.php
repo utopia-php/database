@@ -3607,6 +3607,8 @@ class Database
             // EXPERIMENT: Pure breadth-first processing with NO cycle detection
             // Theory: Level-by-level processing + depth control prevents infinite recursion
             // Map tracking prevents duplicate fetches, reverse mapping handles result assignment
+            
+            error_log("Processing relationship '$key' of type '$relationType' for collection '" . $collection->getId() . "' with " . count($documents) . " documents at depth " . $this->relationshipFetchDepth);
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
@@ -3700,13 +3702,18 @@ class Database
                     $relatedIds[] = $value;
                     $documentsByRelatedId[$value] = $document;
                     $this->map[$k] = true;
+                } else {
+                    error_log("OneToOne: Skipping already processed relationship '$k'");
                 }
             }
         }
 
         if (empty($relatedIds)) {
+            error_log("OneToOne: No related IDs to fetch for key '$key'");
             return;
         }
+        
+        error_log("OneToOne: Fetching " . count($relatedIds) . " related docs for key '$key': " . implode(', ', $relatedIds));
 
         // Fetch all related documents in a single query
         $this->relationshipFetchDepth++;
@@ -3717,6 +3724,8 @@ class Database
             Query::limit(PHP_INT_MAX),
             ...$queries
         ]);
+        
+        error_log("OneToOne: Found " . count($relatedDocuments) . " related docs for key '$key'");
 
         $this->relationshipFetchDepth--;
         \array_pop($this->relationshipFetchStack);

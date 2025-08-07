@@ -228,12 +228,20 @@ trait RelationshipTests
                     '*',
                     'animals.*',
                     'animals.zoo.*',
-                    //'animals.president.*',
+                    'animals.president.*',
+                    'presidents.*',
+                    'presidents.animal.*',
                 ])
             ]
         );
 
+        var_dump('=== VETERINARIANS RESULT ===');
         var_dump($docs);
+        
+        // Let's also check what presidents look like directly
+        $presidents = $database->find('presidents');
+        var_dump('=== PRESIDENTS DIRECTLY ===');
+        var_dump($presidents);
 
         //$this->assertEquals('shmuel', 'fogel');
     }

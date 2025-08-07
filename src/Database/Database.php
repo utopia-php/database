@@ -3609,7 +3609,19 @@ class Database
             // Map tracking prevents duplicate fetches, reverse mapping handles result assignment
             
             error_log("Processing relationship '$key' of type '$relationType' for collection '" . $collection->getId() . "' with " . count($documents) . " documents at depth " . $this->relationshipFetchDepth);
-        error_log("Select queries for '$key': " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
+            error_log("Select queries for '$key': " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
+            
+            // Debug: Show what documents look like before processing this relationship
+            foreach ($documents as $idx => $doc) {
+                $currentValue = $doc->getAttribute($key);
+                if ($currentValue !== null) {
+                    $valueType = is_object($currentValue) ? get_class($currentValue) : gettype($currentValue);
+                    if (is_array($currentValue)) {
+                        $valueType .= '[' . count($currentValue) . ']';
+                    }
+                    error_log("Doc $idx before '$key': current value type = $valueType");
+                }
+            }
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
@@ -3631,6 +3643,25 @@ class Database
                     error_log("Calling populateManyToManyRelationshipsBatch for '$key' with queries: " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
                     $this->populateManyToManyRelationshipsBatch($documents, $relationship, $relatedCollection, $queries, $collection);
                     break;
+            }
+            
+            // Debug: Show what documents look like after processing this relationship
+            foreach ($documents as $idx => $doc) {
+                $currentValue = $doc->getAttribute($key);
+                if ($currentValue !== null) {
+                    $valueType = is_object($currentValue) ? get_class($currentValue) : gettype($currentValue);
+                    if (is_array($currentValue)) {
+                        $valueType .= '[' . count($currentValue) . ']';
+                        if (!empty($currentValue) && is_object($currentValue[0])) {
+                            $firstItemType = get_class($currentValue[0]);
+                            error_log("Doc $idx after '$key': $valueType, first item = $firstItemType");
+                        } else {
+                            error_log("Doc $idx after '$key': $valueType");
+                        }
+                    } else {
+                        error_log("Doc $idx after '$key': $valueType");
+                    }
+                }
             }
         }
 
@@ -3787,6 +3818,8 @@ class Database
         $twoWay = $relationship['options']['twoWay'];
         $twoWayKey = $relationship['options']['twoWayKey'];
         $side = $relationship['options']['side'];
+        
+        error_log("OneToMany: Starting batch for '$key', nested queries: " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
 
         if ($side === Database::RELATION_SIDE_CHILD) {
             // Child side - treat like one-to-one
@@ -3851,6 +3884,26 @@ class Database
         error_log("OneToMany: Executing find with queries: " . json_encode(array_map(fn($q) => $q->toString(), $queryParams)));
         
         $relatedDocuments = $this->find($relatedCollection->getId(), $queryParams);
+
+        error_log("OneToMany: Found " . count($relatedDocuments) . " related docs for '$key'");
+        
+        // Debug: check what the related documents look like
+        if (!empty($relatedDocuments)) {
+            foreach ($relatedDocuments as $idx => $doc) {
+                $attrs = $doc->getArrayCopy();
+                $attrSummary = [];
+                foreach ($attrs as $attrKey => $attrValue) {
+                    if (is_object($attrValue)) {
+                        $attrSummary[$attrKey] = get_class($attrValue);
+                    } elseif (is_array($attrValue)) {
+                        $attrSummary[$attrKey] = 'array[' . count($attrValue) . ']';
+                    } else {
+                        $attrSummary[$attrKey] = gettype($attrValue) . ':' . $attrValue;
+                    }
+                }
+                error_log("OneToMany: Related doc $idx ID=" . $doc->getId() . " attrs=" . json_encode($attrSummary));
+            }
+        }
 
         $this->relationshipFetchDepth--;
         \array_pop($this->relationshipFetchStack);

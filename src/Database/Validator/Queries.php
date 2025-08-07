@@ -97,6 +97,7 @@ class Queries extends Validator
                 Query::TYPE_IS_NULL,
                 Query::TYPE_IS_NOT_NULL,
                 Query::TYPE_BETWEEN,
+                Query::TYPE_NOT_BETWEEN,
                 Query::TYPE_STARTS_WITH,
                 Query::TYPE_NOT_STARTS_WITH,
                 Query::TYPE_CONTAINS,

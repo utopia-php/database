@@ -260,6 +260,7 @@ class Filter extends Base
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_BETWEEN:
+            case Query::TYPE_NOT_BETWEEN:
                 if (count($value->getValues()) != 2) {
                     $this->message = \ucfirst($method) . ' queries require exactly two values.';
                     return false;

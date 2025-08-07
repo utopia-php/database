@@ -1803,17 +1803,21 @@ class Postgres extends SQL
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
                 return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
+            case Query::TYPE_NOT_BETWEEN:
+                $binds[":{$placeholder}_0"] = $query->getValues()[0];
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+                return "{$alias}.{$attribute} NOT BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
-                $operator = $query->onArray() ? '@>' : null;
-
-                // no break
             case Query::TYPE_NOT_CONTAINS:
-                if ($query->getMethod() === Query::TYPE_NOT_CONTAINS) {
-                    $operator = $query->onArray() ? 'NOT @>' : null;
+                if ($query->onArray()) {
+                    $operator = $query->getMethod() === Query::TYPE_NOT_CONTAINS ? 'NOT @>' : '@>';
+                } else {
+                    $operator = null;
                 }
 
                 // no break

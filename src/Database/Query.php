@@ -21,6 +21,7 @@ class Query
     public const TYPE_IS_NULL = 'isNull';
     public const TYPE_IS_NOT_NULL = 'isNotNull';
     public const TYPE_BETWEEN = 'between';
+    public const TYPE_NOT_BETWEEN = 'notBetween';
     public const TYPE_STARTS_WITH = 'startsWith';
     public const TYPE_NOT_STARTS_WITH = 'notStartsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
@@ -58,6 +59,7 @@ class Query
         self::TYPE_IS_NULL,
         self::TYPE_IS_NOT_NULL,
         self::TYPE_BETWEEN,
+        self::TYPE_NOT_BETWEEN,
         self::TYPE_STARTS_WITH,
         self::TYPE_NOT_STARTS_WITH,
         self::TYPE_ENDS_WITH,
@@ -226,6 +228,7 @@ class Query
             self::TYPE_IS_NULL,
             self::TYPE_IS_NOT_NULL,
             self::TYPE_BETWEEN,
+            self::TYPE_NOT_BETWEEN,
             self::TYPE_STARTS_WITH,
             self::TYPE_NOT_STARTS_WITH,
             self::TYPE_ENDS_WITH,
@@ -464,6 +467,19 @@ class Query
     public static function between(string $attribute, string|int|float|bool $start, string|int|float|bool $end): self
     {
         return new self(self::TYPE_BETWEEN, $attribute, [$start, $end]);
+    }
+
+    /**
+     * Helper method to create Query with notBetween method
+     *
+     * @param string $attribute
+     * @param string|int|float|bool $start
+     * @param string|int|float|bool $end
+     * @return Query
+     */
+    public static function notBetween(string $attribute, string|int|float|bool $start, string|int|float|bool $end): self
+    {
+        return new self(self::TYPE_NOT_BETWEEN, $attribute, [$start, $end]);
     }
 
     /**

@@ -85,6 +85,37 @@ class QueryTest extends TestCase
         $this->assertEquals(Query::TYPE_IS_NOT_NULL, $query->getMethod());
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
+
+        // Test new NOT query types
+        $query = Query::notContains('tags', ['test', 'example']);
+
+        $this->assertEquals(Query::TYPE_NOT_CONTAINS, $query->getMethod());
+        $this->assertEquals('tags', $query->getAttribute());
+        $this->assertEquals(['test', 'example'], $query->getValues());
+
+        $query = Query::notSearch('content', 'keyword');
+
+        $this->assertEquals(Query::TYPE_NOT_SEARCH, $query->getMethod());
+        $this->assertEquals('content', $query->getAttribute());
+        $this->assertEquals(['keyword'], $query->getValues());
+
+        $query = Query::notStartsWith('title', 'prefix');
+
+        $this->assertEquals(Query::TYPE_NOT_STARTS_WITH, $query->getMethod());
+        $this->assertEquals('title', $query->getAttribute());
+        $this->assertEquals(['prefix'], $query->getValues());
+
+        $query = Query::notEndsWith('url', '.html');
+
+        $this->assertEquals(Query::TYPE_NOT_ENDS_WITH, $query->getMethod());
+        $this->assertEquals('url', $query->getAttribute());
+        $this->assertEquals(['.html'], $query->getValues());
+
+        $query = Query::notBetween('score', 10, 20);
+
+        $this->assertEquals(Query::TYPE_NOT_BETWEEN, $query->getMethod());
+        $this->assertEquals('score', $query->getAttribute());
+        $this->assertEquals([10, 20], $query->getValues());
     }
 
     /**
@@ -251,7 +282,13 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('greaterThan'));
         $this->assertTrue(Query::isMethod('greaterThanEqual'));
         $this->assertTrue(Query::isMethod('contains'));
+        $this->assertTrue(Query::isMethod('notContains'));
         $this->assertTrue(Query::isMethod('search'));
+        $this->assertTrue(Query::isMethod('notSearch'));
+        $this->assertTrue(Query::isMethod('startsWith'));
+        $this->assertTrue(Query::isMethod('notStartsWith'));
+        $this->assertTrue(Query::isMethod('endsWith'));
+        $this->assertTrue(Query::isMethod('notEndsWith'));
         $this->assertTrue(Query::isMethod('orderDesc'));
         $this->assertTrue(Query::isMethod('orderAsc'));
         $this->assertTrue(Query::isMethod('limit'));
@@ -261,6 +298,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('isNull'));
         $this->assertTrue(Query::isMethod('isNotNull'));
         $this->assertTrue(Query::isMethod('between'));
+        $this->assertTrue(Query::isMethod('notBetween'));
         $this->assertTrue(Query::isMethod('select'));
         $this->assertTrue(Query::isMethod('or'));
         $this->assertTrue(Query::isMethod('and'));
@@ -272,7 +310,13 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(Query::TYPE_GREATER));
         $this->assertTrue(Query::isMethod(Query::TYPE_GREATER_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_CONTAINS));
+        $this->assertTrue(Query::isMethod(Query::TYPE_NOT_CONTAINS));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SEARCH));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_NOT_SEARCH));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_STARTS_WITH));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_NOT_STARTS_WITH));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_ENDS_WITH));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_NOT_ENDS_WITH));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDER_ASC));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDER_DESC));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_LIMIT));
@@ -282,6 +326,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NOT_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_BETWEEN));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_NOT_BETWEEN));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SELECT));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_OR));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_AND));

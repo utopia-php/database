@@ -1707,22 +1707,25 @@ class MariaDB extends SQL
 
                 return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
 
+            case Query::TYPE_NOT_BETWEEN:
+                $binds[":{$placeholder}_0"] = $query->getValues()[0];
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+
+                return "{$alias}.{$attribute} NOT BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
+
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
 
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
             case Query::TYPE_CONTAINS:
-                if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
-                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
-                    return "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
-                }
-
-                // no break! continue to default case
             case Query::TYPE_NOT_CONTAINS:
                 if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
                     $binds[":{$placeholder}_0"] = json_encode($query->getValues());
-                    return "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))";
+                    $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
+                    return $isNot 
+                        ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
+                        : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
                 }
 
                 // no break! continue to default case

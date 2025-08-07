@@ -1736,7 +1736,7 @@ class MariaDB extends SQL
                     Query::TYPE_NOT_ENDS_WITH,
                     Query::TYPE_NOT_CONTAINS
                 ]);
-                
+
                 foreach ($query->getValues() as $key => $value) {
                     $value = match ($query->getMethod()) {
                         Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
@@ -1749,7 +1749,7 @@ class MariaDB extends SQL
                     };
 
                     $binds[":{$placeholder}_{$key}"] = $value;
-                    
+
                     if ($isNotQuery) {
                         $conditions[] = "{$alias}.{$attribute} NOT {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
                     } else {

@@ -1842,7 +1842,7 @@ class Postgres extends SQL
                     };
 
                     $binds[":{$placeholder}_{$key}"] = $value;
-                    
+
                     if ($isNotQuery && !$query->onArray()) {
                         $conditions[] = "{$alias}.{$attribute} NOT {$operator} :{$placeholder}_{$key}";
                     } else {

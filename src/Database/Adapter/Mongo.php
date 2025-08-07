@@ -1115,7 +1115,7 @@ class Mongo extends Adapter
                 }
 
                 $record = $this->replaceChars('$', '_', $attributes);
-    
+
                 // Build filter for upsert
                 $filters = ['_uid' => $document->getId()];
 

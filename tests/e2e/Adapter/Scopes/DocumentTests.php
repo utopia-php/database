@@ -3214,7 +3214,7 @@ trait DocumentTests
         // Test notStartsWith combined with other queries
         $documents = $database->find('movies', [
             Query::notStartsWith('name', 'Work'),
-            Query::equal('year', 2006)
+            Query::equal('year', [2006])
         ]);
         $this->assertLessThanOrEqual(4, count($documents)); // Subset of non-Work movies from 2006
     }

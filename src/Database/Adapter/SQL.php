@@ -1501,6 +1501,9 @@ abstract class SQL extends Adapter
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
             case Query::TYPE_CONTAINS:
+            case Query::TYPE_NOT_STARTS_WITH:
+            case Query::TYPE_NOT_ENDS_WITH:
+            case Query::TYPE_NOT_CONTAINS:
                 return $this->getLikeOperator();
             default:
                 throw new DatabaseException('Unknown method: ' . $method);

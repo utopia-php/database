@@ -15,12 +15,16 @@ class Query
     public const TYPE_GREATER = 'greaterThan';
     public const TYPE_GREATER_EQUAL = 'greaterThanEqual';
     public const TYPE_CONTAINS = 'contains';
+    public const TYPE_NOT_CONTAINS = 'notContains';
     public const TYPE_SEARCH = 'search';
+    public const TYPE_NOT_SEARCH = 'notSearch';
     public const TYPE_IS_NULL = 'isNull';
     public const TYPE_IS_NOT_NULL = 'isNotNull';
     public const TYPE_BETWEEN = 'between';
     public const TYPE_STARTS_WITH = 'startsWith';
+    public const TYPE_NOT_STARTS_WITH = 'notStartsWith';
     public const TYPE_ENDS_WITH = 'endsWith';
+    public const TYPE_NOT_ENDS_WITH = 'notEndsWith';
 
     public const TYPE_SELECT = 'select';
 
@@ -48,12 +52,16 @@ class Query
         self::TYPE_GREATER,
         self::TYPE_GREATER_EQUAL,
         self::TYPE_CONTAINS,
+        self::TYPE_NOT_CONTAINS,
         self::TYPE_SEARCH,
+        self::TYPE_NOT_SEARCH,
         self::TYPE_IS_NULL,
         self::TYPE_IS_NOT_NULL,
         self::TYPE_BETWEEN,
         self::TYPE_STARTS_WITH,
+        self::TYPE_NOT_STARTS_WITH,
         self::TYPE_ENDS_WITH,
+        self::TYPE_NOT_ENDS_WITH,
         self::TYPE_SELECT,
         self::TYPE_ORDER_DESC,
         self::TYPE_ORDER_ASC,
@@ -206,7 +214,9 @@ class Query
             self::TYPE_GREATER,
             self::TYPE_GREATER_EQUAL,
             self::TYPE_CONTAINS,
+            self::TYPE_NOT_CONTAINS,
             self::TYPE_SEARCH,
+            self::TYPE_NOT_SEARCH,
             self::TYPE_ORDER_ASC,
             self::TYPE_ORDER_DESC,
             self::TYPE_LIMIT,
@@ -217,7 +227,9 @@ class Query
             self::TYPE_IS_NOT_NULL,
             self::TYPE_BETWEEN,
             self::TYPE_STARTS_WITH,
+            self::TYPE_NOT_STARTS_WITH,
             self::TYPE_ENDS_WITH,
+            self::TYPE_NOT_ENDS_WITH,
             self::TYPE_OR,
             self::TYPE_AND,
             self::TYPE_SELECT => true,
@@ -430,6 +442,18 @@ class Query
     }
 
     /**
+     * Helper method to create Query with notContains method
+     *
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
+     */
+    public static function notContains(string $attribute, array $values): self
+    {
+        return new self(self::TYPE_NOT_CONTAINS, $attribute, $values);
+    }
+
+    /**
      * Helper method to create Query with between method
      *
      * @param string $attribute
@@ -452,6 +476,18 @@ class Query
     public static function search(string $attribute, string $value): self
     {
         return new self(self::TYPE_SEARCH, $attribute, [$value]);
+    }
+
+    /**
+     * Helper method to create Query with notSearch method
+     *
+     * @param string $attribute
+     * @param string $value
+     * @return Query
+     */
+    public static function notSearch(string $attribute, string $value): self
+    {
+        return new self(self::TYPE_NOT_SEARCH, $attribute, [$value]);
     }
 
     /**
@@ -558,9 +594,19 @@ class Query
         return new self(self::TYPE_STARTS_WITH, $attribute, [$value]);
     }
 
+    public static function notStartsWith(string $attribute, string $value): self
+    {
+        return new self(self::TYPE_NOT_STARTS_WITH, $attribute, [$value]);
+    }
+
     public static function endsWith(string $attribute, string $value): self
     {
         return new self(self::TYPE_ENDS_WITH, $attribute, [$value]);
+    }
+
+    public static function notEndsWith(string $attribute, string $value): self
+    {
+        return new self(self::TYPE_NOT_ENDS_WITH, $attribute, [$value]);
     }
 
     /**

@@ -1696,6 +1696,11 @@ class MariaDB extends SQL
 
                 return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
+            case Query::TYPE_NOT_SEARCH:
+                $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
+
+                return "NOT (MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE))";
+
             case Query::TYPE_BETWEEN:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
@@ -1714,21 +1719,43 @@ class MariaDB extends SQL
                 }
 
                 // no break! continue to default case
+            case Query::TYPE_NOT_CONTAINS:
+                if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
+                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+                    return "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))";
+                }
+
+                // no break! continue to default case
             default:
                 $conditions = [];
+                $isNotQuery = in_array($query->getMethod(), [
+                    Query::TYPE_NOT_STARTS_WITH,
+                    Query::TYPE_NOT_ENDS_WITH,
+                    Query::TYPE_NOT_CONTAINS
+                ]);
+                
                 foreach ($query->getValues() as $key => $value) {
                     $value = match ($query->getMethod()) {
                         Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
+                        Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                        Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_NOT_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
 
                     $binds[":{$placeholder}_{$key}"] = $value;
-                    $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    
+                    if ($isNotQuery) {
+                        $conditions[] = "{$alias}.{$attribute} NOT {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    } else {
+                        $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    }
                 }
 
-                return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
+                $separator = $isNotQuery ? ' AND ' : ' OR ';
+                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
         }
     }
 

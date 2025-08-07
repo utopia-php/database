@@ -626,6 +626,50 @@ class Query
     }
 
     /**
+     * Helper method to create Query for documents created before a specific date
+     *
+     * @param string $isoDateString
+     * @return Query
+     */
+    public static function createdBefore(string $isoDateString): self
+    {
+        return self::lessThan('$createdAt', $isoDateString);
+    }
+
+    /**
+     * Helper method to create Query for documents created after a specific date
+     *
+     * @param string $isoDateString
+     * @return Query
+     */
+    public static function createdAfter(string $isoDateString): self
+    {
+        return self::greaterThan('$createdAt', $isoDateString);
+    }
+
+    /**
+     * Helper method to create Query for documents updated before a specific date
+     *
+     * @param string $isoDateString
+     * @return Query
+     */
+    public static function updatedBefore(string $isoDateString): self
+    {
+        return self::lessThan('$updatedAt', $isoDateString);
+    }
+
+    /**
+     * Helper method to create Query for documents updated after a specific date
+     *
+     * @param string $isoDateString
+     * @return Query
+     */
+    public static function updatedAfter(string $isoDateString): self
+    {
+        return self::greaterThan('$updatedAt', $isoDateString);
+    }
+
+    /**
      * @param array<Query> $queries
      * @return Query
      */

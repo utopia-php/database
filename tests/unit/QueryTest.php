@@ -116,6 +116,31 @@ class QueryTest extends TestCase
         $this->assertEquals(Query::TYPE_NOT_BETWEEN, $query->getMethod());
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals([10, 20], $query->getValues());
+
+        // Test new date query wrapper methods
+        $query = Query::createdBefore('2023-01-01T00:00:00.000Z');
+
+        $this->assertEquals(Query::TYPE_LESSER, $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+
+        $query = Query::createdAfter('2023-01-01T00:00:00.000Z');
+
+        $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+
+        $query = Query::updatedBefore('2023-12-31T23:59:59.999Z');
+
+        $this->assertEquals(Query::TYPE_LESSER, $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::updatedAfter('2023-12-31T23:59:59.999Z');
+
+        $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
     }
 
     /**
@@ -224,6 +249,27 @@ class QueryTest extends TestCase
         $this->assertEquals('select', $query->getMethod());
         $this->assertEquals(null, $query->getAttribute());
         $this->assertEquals(['title', 'director'], $query->getValues());
+
+        // Test new date query wrapper methods parsing
+        $query = Query::parse(Query::createdBefore('2023-01-01T00:00:00.000Z')->toString());
+        $this->assertEquals('lessThan', $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+
+        $query = Query::parse(Query::createdAfter('2023-01-01T00:00:00.000Z')->toString());
+        $this->assertEquals('greaterThan', $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+
+        $query = Query::parse(Query::updatedBefore('2023-12-31T23:59:59.999Z')->toString());
+        $this->assertEquals('lessThan', $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::parse(Query::updatedAfter('2023-12-31T23:59:59.999Z')->toString());
+        $this->assertEquals('greaterThan', $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
 
         $query = Query::parse(Query::between('age', 15, 18)->toString());
         $this->assertEquals('between', $query->getMethod());

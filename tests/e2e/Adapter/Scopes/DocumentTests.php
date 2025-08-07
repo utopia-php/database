@@ -2644,6 +2644,110 @@ trait DocumentTests
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
+    public function testFindCreatedBefore(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        /**
+         * Test Query::createdBefore wrapper
+         */
+        $futureDate = '2050-01-01T00:00:00.000Z';
+        $pastDate = '1900-01-01T00:00:00.000Z';
+
+        $documents = $database->find('movies', [
+            Query::createdBefore($futureDate),
+            Query::limit(1)
+        ]);
+
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::createdBefore($pastDate),
+            Query::limit(1)
+        ]);
+
+        $this->assertEquals(0, count($documents));
+    }
+
+    public function testFindCreatedAfter(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        /**
+         * Test Query::createdAfter wrapper
+         */
+        $futureDate = '2050-01-01T00:00:00.000Z';
+        $pastDate = '1900-01-01T00:00:00.000Z';
+
+        $documents = $database->find('movies', [
+            Query::createdAfter($pastDate),
+            Query::limit(1)
+        ]);
+
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::createdAfter($futureDate),
+            Query::limit(1)
+        ]);
+
+        $this->assertEquals(0, count($documents));
+    }
+
+    public function testFindUpdatedBefore(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        /**
+         * Test Query::updatedBefore wrapper
+         */
+        $futureDate = '2050-01-01T00:00:00.000Z';
+        $pastDate = '1900-01-01T00:00:00.000Z';
+
+        $documents = $database->find('movies', [
+            Query::updatedBefore($futureDate),
+            Query::limit(1)
+        ]);
+
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::updatedBefore($pastDate),
+            Query::limit(1)
+        ]);
+
+        $this->assertEquals(0, count($documents));
+    }
+
+    public function testFindUpdatedAfter(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        /**
+         * Test Query::updatedAfter wrapper
+         */
+        $futureDate = '2050-01-01T00:00:00.000Z';
+        $pastDate = '1900-01-01T00:00:00.000Z';
+
+        $documents = $database->find('movies', [
+            Query::updatedAfter($pastDate),
+            Query::limit(1)
+        ]);
+
+        $this->assertGreaterThan(0, count($documents));
+
+        $documents = $database->find('movies', [
+            Query::updatedAfter($futureDate),
+            Query::limit(1)
+        ]);
+
+        $this->assertEquals(0, count($documents));
+    }
+
     public function testFindLimit(): void
     {
         /** @var Database $database */

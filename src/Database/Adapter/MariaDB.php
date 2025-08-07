@@ -1723,7 +1723,7 @@ class MariaDB extends SQL
                 if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
                     $binds[":{$placeholder}_0"] = json_encode($query->getValues());
                     $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
-                    return $isNot 
+                    return $isNot
                         ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
                         : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
                 }

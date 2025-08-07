@@ -374,8 +374,6 @@ trait RelationshipTests
         $this->assertEquals('Bush', $animal->getAttribute('president')->getAttribute('last_name')); // Check president is an object
         $this->assertArrayHasKey('zoo', $animal);
         $this->assertEquals('Bronx Zoo', $animal->getAttribute('zoo')->getAttribute('name')); // Check zoo is an object
-
-        // $this->assertEquals('shmuel', 'fogel');
     }
 
     public function testDeleteRelatedCollection(): void

@@ -3696,15 +3696,17 @@ class Database
                     continue;
                 }
                 
-                // Check if this relationship has already been processed
-                $k = $relatedCollection->getId() . ':' . $value . '=>' . $document->getCollection() . ':' . $document->getId();
-                if (!isset($this->map[$k])) {
-                    $relatedIds[] = $value;
-                    $documentsByRelatedId[$value] = $document;
-                    $this->map[$k] = true;
-                } else {
-                    error_log("OneToOne: Skipping already processed relationship '$k'");
+                // For one-to-one, multiple documents can reference the same related ID
+                // We need to track ALL documents that reference each related ID
+                $relatedIds[] = $value;
+                if (!isset($documentsByRelatedId[$value])) {
+                    $documentsByRelatedId[$value] = [];
                 }
+                $documentsByRelatedId[$value][] = $document;
+                
+                // Map tracks that we're processing this specific document->related relationship
+                $k = $relatedCollection->getId() . ':' . $value . '=>' . $document->getCollection() . ':' . $document->getId();
+                $this->map[$k] = true;
             }
         }
 
@@ -3744,12 +3746,17 @@ class Database
         }
 
         // Assign related documents to their parent documents
-        foreach ($documentsByRelatedId as $relatedId => $document) {
+        foreach ($documentsByRelatedId as $relatedId => $documents) {
             if (isset($relatedById[$relatedId])) {
-                $document->setAttribute($key, $relatedById[$relatedId]);
+                // Set the relationship for all documents that reference this related ID
+                foreach ($documents as $document) {
+                    $document->setAttribute($key, $relatedById[$relatedId]);
+                }
             } else {
                 // If related document not found, set to null instead of leaving the string ID
-                $document->setAttribute($key, null);
+                foreach ($documents as $document) {
+                    $document->setAttribute($key, null);
+                }
             }
         }
     }

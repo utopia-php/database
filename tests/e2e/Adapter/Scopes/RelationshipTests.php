@@ -220,6 +220,10 @@ trait RelationshipTests
         ]));
 
         var_dump('=== start === === start === === start === === start === === start === === start === === start === === start === === start ===');
+        
+        // Clear error log and start fresh
+        file_put_contents('/tmp/debug.log', '');
+        ini_set('error_log', '/tmp/debug.log');
 
         $docs = $database->find(
             'veterinarians',
@@ -242,6 +246,10 @@ trait RelationshipTests
         $presidents = $database->find('presidents');
         var_dump('=== PRESIDENTS DIRECTLY ===');
         var_dump($presidents);
+        
+        // Dump error log contents
+        var_dump('=== ERROR LOG ===');
+        var_dump(file_get_contents('/tmp/debug.log'));
 
         //$this->assertEquals('shmuel', 'fogel');
     }

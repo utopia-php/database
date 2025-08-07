@@ -3609,21 +3609,26 @@ class Database
             // Map tracking prevents duplicate fetches, reverse mapping handles result assignment
             
             error_log("Processing relationship '$key' of type '$relationType' for collection '" . $collection->getId() . "' with " . count($documents) . " documents at depth " . $this->relationshipFetchDepth);
+        error_log("Select queries for '$key': " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
 
             switch ($relationType) {
                 case Database::RELATION_ONE_TO_ONE:
+                    error_log("Calling populateOneToOneRelationshipsBatch for '$key' with queries: " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
                     $this->populateOneToOneRelationshipsBatch($documents, $relationship, $relatedCollection, $queries);
                     break;
                     
                 case Database::RELATION_ONE_TO_MANY:
+                    error_log("Calling populateOneToManyRelationshipsBatch for '$key' with queries: " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
                     $this->populateOneToManyRelationshipsBatch($documents, $relationship, $relatedCollection, $queries, $collection);
                     break;
                     
                 case Database::RELATION_MANY_TO_ONE:
+                    error_log("Calling populateManyToOneRelationshipsBatch for '$key' with queries: " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
                     $this->populateManyToOneRelationshipsBatch($documents, $relationship, $relatedCollection, $queries, $collection);
                     break;
                     
                 case Database::RELATION_MANY_TO_MANY:
+                    error_log("Calling populateManyToManyRelationshipsBatch for '$key' with queries: " . json_encode(array_map(fn($q) => $q->toString(), $queries)));
                     $this->populateManyToManyRelationshipsBatch($documents, $relationship, $relatedCollection, $queries, $collection);
                     break;
             }
@@ -3721,13 +3726,24 @@ class Database
         $this->relationshipFetchDepth++;
         $this->relationshipFetchStack[] = $relationship;
 
-        $relatedDocuments = $this->find($relatedCollection->getId(), [
+        $queryParams = [
             Query::equal('$id', array_unique($relatedIds)),
             Query::limit(PHP_INT_MAX),
             ...$queries
-        ]);
+        ];
+        
+        error_log("OneToOne: Executing find with queries: " . json_encode(array_map(fn($q) => $q->toString(), $queryParams)));
+        
+        $relatedDocuments = $this->find($relatedCollection->getId(), $queryParams);
         
         error_log("OneToOne: Found " . count($relatedDocuments) . " related docs for key '$key'");
+        
+        // Debug: check if the related documents have their relationships populated
+        if (!empty($relatedDocuments)) {
+            foreach ($relatedDocuments as $idx => $doc) {
+                error_log("OneToOne: Related doc $idx ID=" . $doc->getId() . " attrs=" . json_encode($doc->getArrayCopy()));
+            }
+        }
 
         $this->relationshipFetchDepth--;
         \array_pop($this->relationshipFetchStack);
@@ -3816,11 +3832,15 @@ class Database
         $this->relationshipFetchDepth++;
         $this->relationshipFetchStack[] = $relationship;
 
-        $relatedDocuments = $this->find($relatedCollection->getId(), [
+        $queryParams = [
             Query::equal($twoWayKey, $parentIds),
             Query::limit(PHP_INT_MAX),
             ...$queries
-        ]);
+        ];
+        
+        error_log("OneToMany: Executing find with queries: " . json_encode(array_map(fn($q) => $q->toString(), $queryParams)));
+        
+        $relatedDocuments = $this->find($relatedCollection->getId(), $queryParams);
 
         $this->relationshipFetchDepth--;
         \array_pop($this->relationshipFetchStack);
@@ -6644,6 +6664,8 @@ class Database
         // Use batch relationship population for better performance at all levels
         if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             if (count($results) > 0) {
+                error_log("find(): About to populate relationships for collection '" . $collection->getId() . "' with " . count($results) . " results at depth " . $this->relationshipFetchDepth);
+                error_log("find(): nestedSelections = " . json_encode($nestedSelections));
                 // Always use batch processing for all cases (single and multiple documents, nested or top-level)
                 $results = $this->silent(fn () => $this->populateDocumentsRelationships($collection, $results, $nestedSelections));
             }

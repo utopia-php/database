@@ -2328,16 +2328,17 @@ class Mongo extends Adapter
     /**
      * @param string $collection
      * @param array<int> $tenants
-     * @return int|array<string, array<int>>
+     * @return int|null|array<string, array<int>>
      */
     public function getTenantFilters(
         string $collection,
         array $tenants = [],
-    ): int|array {
+    ): int|null|array {
         $values = [];
         if (!$this->sharedTables) {
             return $values;
         }
+
 
         if (\count($tenants) === 0) {
             $values[] = $this->getTenant();

@@ -181,16 +181,17 @@ class Filter extends Base
 
         if (
             !$array &&
-            $method === Query::TYPE_CONTAINS &&
+            in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
             $attributeSchema['type'] !==  Database::VAR_STRING
         ) {
-            $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array or string.';
+            $queryType = $method === Query::TYPE_NOT_CONTAINS ? 'notContains' : 'contains';
+            $this->message = 'Cannot query ' . $queryType . ' on attribute "' . $attribute . '" because it is not an array or string.';
             return false;
         }
 
         if (
             $array &&
-            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
+            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
         ) {
             $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
             return false;
@@ -233,6 +234,7 @@ class Filter extends Base
         switch ($method) {
             case Query::TYPE_EQUAL:
             case Query::TYPE_CONTAINS:
+            case Query::TYPE_NOT_CONTAINS:
                 if ($this->isEmpty($value->getValues())) {
                     $this->message = \ucfirst($method) . ' queries require at least one value.';
                     return false;
@@ -246,8 +248,11 @@ class Filter extends Base
             case Query::TYPE_GREATER:
             case Query::TYPE_GREATER_EQUAL:
             case Query::TYPE_SEARCH:
+            case Query::TYPE_NOT_SEARCH:
             case Query::TYPE_STARTS_WITH:
+            case Query::TYPE_NOT_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
+            case Query::TYPE_NOT_ENDS_WITH:
                 if (count($value->getValues()) != 1) {
                     $this->message = \ucfirst($method) . ' queries require exactly one value.';
                     return false;
@@ -256,6 +261,7 @@ class Filter extends Base
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_BETWEEN:
+            case Query::TYPE_NOT_BETWEEN:
                 if (count($value->getValues()) != 2) {
                     $this->message = \ucfirst($method) . ' queries require exactly two values.';
                     return false;

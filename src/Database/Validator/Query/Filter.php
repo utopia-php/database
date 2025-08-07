@@ -184,7 +184,8 @@ class Filter extends Base
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
             $attributeSchema['type'] !==  Database::VAR_STRING
         ) {
-            $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array or string.';
+            $queryType = $method === Query::TYPE_NOT_CONTAINS ? 'notContains' : 'contains';
+            $this->message = 'Cannot query ' . $queryType . ' on attribute "' . $attribute . '" because it is not an array or string.';
             return false;
         }
 

@@ -1,15 +1,16 @@
 # Find Method Caching Implementation Summary
 
 ## Overview
-This implementation adds efficient caching to the `find` method in the Database class using FNV164 hashing for consistent cache keys and version tracking for O(1) cache invalidation.
+This implementation adds efficient caching to the `find` method in the Database class using xxh3 hashing for consistent cache keys and version tracking for O(1) cache invalidation.
 
 ## Key Features
 
-### 1. FNV164 Hash Function
+### 1. xxh3 Hash Function
 - **Purpose**: Generate consistent and efficient hash keys for complex query parameters
-- **Implementation**: 64-bit FNV-1a hash algorithm with PHP-specific optimizations
-- **Location**: `fnv164Hash()` method in Database.php
-- **Benefits**: Fast, consistent hashing with good distribution characteristics
+- **Implementation**: PHP's built-in xxh3 hash algorithm via `hash()` function (PHP 8.1+)
+- **Fallback**: SHA256 for PHP versions < 8.1
+- **Location**: `generateCacheHash()` method in Database.php
+- **Benefits**: Extremely fast, well-tested hashing with excellent distribution characteristics
 
 ### 2. Version Tracking for O(1) Invalidation
 - **Purpose**: Enable aggressive cache invalidation without expensive cache scanning
@@ -18,7 +19,7 @@ This implementation adds efficient caching to the `find` method in the Database 
 - **Benefits**: O(1) invalidation time complexity
 
 ### 3. Find Method Caching
-- **Cache Key Generation**: Uses FNV164 hash of all query parameters plus collection version
+- **Cache Key Generation**: Uses xxh3 hash of all query parameters plus collection version
 - **Cache Storage**: Results are stored as arrays and converted back to Document objects on retrieval
 - **Cache Validation**: Version-based keys ensure stale data is never returned
 - **Safety**: Only caches results without relationships to avoid incomplete data
@@ -33,9 +34,8 @@ This implementation adds efficient caching to the `find` method in the Database 
 
 ### Constants Added
 ```php
-// FNV-1a 64-bit constants
-private const FNV164_PRIME = 0x100000001b3;
-private const FNV164_OFFSET_BASIS = 0xcbf29ce484222325;
+// Hash algorithm for cache keys
+private const CACHE_HASH_ALGO = 'xxh3';
 ```
 
 ### New Properties
@@ -47,7 +47,7 @@ protected array $collectionVersions = [];
 ```
 
 ### New Methods
-1. `fnv164Hash(string $data): string` - FNV164 hash implementation
+1. `generateCacheHash(string $data): string` - xxh3 hash implementation using PHP's built-in hash function
 2. `getFindCacheKey(...)` - Generate cache keys for find queries
 3. `getCollectionVersion(string $collectionId): int` - Get/initialize collection version
 4. `incrementCollectionVersion(string $collectionId): void` - Increment version for invalidation
@@ -76,7 +76,7 @@ default-cache-:::find:users:7a8b9c2d1e3f4567:v1691234567
 - **Network**: Single cache read operation
 
 ### Cache Miss Performance
-- **Additional Overhead**: FNV164 hash calculation (~O(k) where k is query string length)
+- **Additional Overhead**: xxh3/sha256 hash calculation (~O(k) where k is query string length)
 - **Cache Write**: Single operation after query execution
 - **No degradation**: Database query performance unchanged
 
@@ -122,6 +122,7 @@ $results3 = $database->find('users', [
 - **TTL**: Uses existing `Database::TTL` constant (24 hours)
 - **Version Storage**: 1-year TTL for version numbers
 - **Cache Backend**: Uses existing cache infrastructure
+- **Hash Algorithm**: xxh3 (PHP 8.1+) with SHA256 fallback for older versions
 
 ## Monitoring
 

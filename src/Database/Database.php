@@ -108,9 +108,8 @@ class Database
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
 
-    // FNV-1a 64-bit constants
-    private const FNV164_PRIME = 0x100000001b3;
-    private const FNV164_OFFSET_BASIS = 0xcbf29ce484222325;
+    // Hash algorithm for cache keys
+    private const CACHE_HASH_ALGO = 'xxh3';
 
     // Events
     public const EVENT_ALL = '*';
@@ -6141,7 +6140,7 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
-        // Generate cache key using FNV164 hash
+        // Generate cache key using xxh3 hash
         $cacheKey = $this->getFindCacheKey(
             $collection->getId(),
             $queries,
@@ -6983,26 +6982,24 @@ class Database
     }
 
     /**
-     * Generate FNV164 hash for consistent cache keys
+     * Generate xxh3 hash for consistent cache keys
      * 
      * @param string $data
      * @return string
      */
-    private function fnv164Hash(string $data): string
+    private function generateCacheHash(string $data): string
     {
-        $hash = self::FNV164_OFFSET_BASIS;
-        $length = \strlen($data);
-        
-        for ($i = 0; $i < $length; $i++) {
-            $hash ^= \ord($data[$i]);
-            $hash = ($hash * self::FNV164_PRIME) & 0x7FFFFFFFFFFFFFFF; // Keep it within PHP int limits
+        // Use xxh3 if available (PHP 8.1+), fallback to sha256 for compatibility
+        if (\in_array(self::CACHE_HASH_ALGO, \hash_algos())) {
+            return \hash(self::CACHE_HASH_ALGO, $data);
         }
         
-        return \dechex($hash);
+        // Fallback to sha256 for older PHP versions
+        return \hash('sha256', $data);
     }
 
     /**
-     * Generate cache key for find queries using FNV164 hash
+     * Generate cache key for find queries using xxh3 hash
      * 
      * @param string $collectionId
      * @param array $queries
@@ -7040,7 +7037,7 @@ class Database
         ];
         
         $queryString = \json_encode($queryData, JSON_SORT_KEYS);
-        $queryHash = $this->fnv164Hash($queryString);
+        $queryHash = $this->generateCacheHash($queryString);
         
         if ($this->adapter->getSupportForHostname()) {
             $hostname = $this->adapter->getHostname();

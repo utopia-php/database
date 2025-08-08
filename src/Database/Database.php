@@ -6142,8 +6142,8 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
-        // Only use caching for normal collections, not metadata or during silent operations
-        $useCache = $collection->getId() !== self::METADATA && $this->silentListeners === null;
+        // Only use caching for normal collections, not metadata
+        $useCache = $collection->getId() !== self::METADATA;
         $cached = null;
         $versionedCacheKey = null;
 

@@ -6140,37 +6140,43 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
-        // Generate cache key using xxh3 hash
-        $cacheKey = $this->getFindCacheKey(
-            $collection->getId(),
-            $queries,
-            $limit ?? 25,
-            $offset ?? 0,
-            $orderAttributes,
-            $orderTypes,
-            $cursor,
-            $cursorDirection,
-            $forPermission
-        );
-
-        // Get collection version for cache validation
-        $collectionVersion = $this->getCollectionVersion($collection->getId());
-        $versionedCacheKey = $cacheKey . ':v' . $collectionVersion;
-
-        // Try to load from cache
+        // Only use caching for normal collections, not metadata or during silent operations
+        $useCache = $collection->getId() !== self::METADATA && $this->silentListeners !== null;
         $cached = null;
-        try {
-            $cached = $this->cache->load($versionedCacheKey, self::TTL);
-        } catch (Exception $e) {
-            Console::warning('Warning: Failed to get find results from cache: ' . $e->getMessage());
-        }
+        $versionedCacheKey = null;
 
-        if ($cached !== null) {
-            // Convert cached array back to Document objects
-            $results = \array_map(fn($item) => new Document($item), $cached);
-            
-            $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
-            return $results;
+        if ($useCache) {
+            // Generate cache key using xxh3 hash
+            $cacheKey = $this->getFindCacheKey(
+                $collection->getId(),
+                $queries,
+                $limit ?? 25,
+                $offset ?? 0,
+                $orderAttributes,
+                $orderTypes,
+                $cursor,
+                $cursorDirection,
+                $forPermission
+            );
+
+            // Get collection version for cache validation
+            $collectionVersion = $this->getCollectionVersion($collection->getId());
+            $versionedCacheKey = $cacheKey . ':v' . $collectionVersion;
+
+            // Try to load from cache
+            try {
+                $cached = $this->cache->load($versionedCacheKey, self::TTL);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get find results from cache: ' . $e->getMessage());
+            }
+
+            if ($cached !== null) {
+                // Convert cached array back to Document objects
+                $results = \array_map(fn($item) => new Document($item), $cached);
+                
+                $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
+                return $results;
+            }
         }
 
         $getResults = fn () => $this->adapter->find(
@@ -6202,8 +6208,8 @@ class Database
             $results[$index] = $node;
         }
 
-        // Cache the results if no relationships were populated (to avoid caching incomplete data)
-        if (empty($relationships)) {
+        // Cache the results if caching is enabled, no relationships were populated, and we have a cache key
+        if ($useCache && empty($relationships) && $versionedCacheKey !== null) {
             try {
                 // Convert Document objects to arrays for caching
                 $cacheData = \array_map(fn($doc) => $doc->getArrayCopy(), $results);

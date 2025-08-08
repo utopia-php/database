@@ -6006,8 +6006,8 @@ class Database
 
         $this->cache->purge($collectionKey);
 
-        // Increment collection version for O(1) find cache invalidation
-        $this->incrementCollectionVersion($collectionId);
+        // Temporarily disabled: Increment collection version for O(1) find cache invalidation
+        // $this->incrementCollectionVersion($collectionId);
 
         return true;
     }
@@ -6028,9 +6028,9 @@ class Database
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
 
-        // Increment collection version for aggressive find cache invalidation
+        // Temporarily disabled: Increment collection version for aggressive find cache invalidation
         // This ensures that any cached find results become invalid when any document changes
-        $this->incrementCollectionVersion($collectionId);
+        // $this->incrementCollectionVersion($collectionId);
 
         $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
             '$id' => $id,
@@ -6140,8 +6140,8 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
-        // Only use caching for normal collections, not metadata or during silent operations
-        $useCache = $collection->getId() !== self::METADATA && $this->silentListeners !== null;
+        // Temporarily disable caching to isolate test issues
+        $useCache = false; // $collection->getId() !== self::METADATA && $this->silentListeners !== null;
         $cached = null;
         $versionedCacheKey = null;
 

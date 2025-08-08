@@ -14,9 +14,10 @@ This implementation adds efficient caching to the `find` method in the Database 
 
 ### 2. Version Tracking for O(1) Invalidation
 - **Purpose**: Enable aggressive cache invalidation without expensive cache scanning
-- **Implementation**: Each collection has a version number that increments on any change
-- **Storage**: Version numbers are cached persistently with 1-year TTL
-- **Benefits**: O(1) invalidation time complexity
+- **Implementation**: Each collection has a version string that changes on any modification
+- **Format**: `{microtime}-{random_hex}` for sub-second precision and uniqueness
+- **Storage**: Version strings are cached persistently with 1-year TTL
+- **Benefits**: O(1) invalidation time complexity with sub-second granularity
 
 ### 3. Find Method Caching
 - **Cache Key Generation**: Uses xxh3 hash of all query parameters plus collection version
@@ -26,7 +27,8 @@ This implementation adds efficient caching to the `find` method in the Database 
 
 ### 4. Aggressive Invalidation
 - **Trigger Points**: Any document create, update, or delete operation
-- **Method**: Increments collection version, making all cached queries invalid
+- **Method**: Changes collection version, making all cached queries invalid instantly
+- **Granularity**: Sub-second precision prevents cache inconsistencies during rapid operations
 - **Priority**: Correctness over performance (as requested)
 - **Implementation**: Updated `purgeCachedDocument()` and `purgeCachedCollection()` methods
 
@@ -49,8 +51,8 @@ protected array $collectionVersions = [];
 ### New Methods
 1. `generateCacheHash(string $data): string` - xxh3 hash implementation using PHP's built-in hash function
 2. `getFindCacheKey(...)` - Generate cache keys for find queries
-3. `getCollectionVersion(string $collectionId): int` - Get/initialize collection version
-4. `incrementCollectionVersion(string $collectionId): void` - Increment version for invalidation
+3. `getCollectionVersion(string $collectionId): string` - Get/initialize collection version
+4. `incrementCollectionVersion(string $collectionId): void` - Change version for invalidation
 5. `getCollectionVersionKey(string $collectionId): string` - Generate version cache key
 
 ### Modified Methods
@@ -65,7 +67,7 @@ protected array $collectionVersions = [];
 
 Example:
 ```
-default-cache-:::find:users:7a8b9c2d1e3f4567:v1691234567
+default-cache-:::find:users:7a8b9c2d1e3f4567:v1691234567.123456-a1b2c3d4
 ```
 
 ## Performance Characteristics
@@ -81,8 +83,9 @@ default-cache-:::find:users:7a8b9c2d1e3f4567:v1691234567
 - **No degradation**: Database query performance unchanged
 
 ### Invalidation Performance
-- **Time Complexity**: O(1) for version increment
+- **Time Complexity**: O(1) for version change
 - **Space Complexity**: O(1) additional storage per collection
+- **Granularity**: Sub-second precision with microsecond accuracy
 - **Immediate**: All cached queries become invalid instantly
 
 ## Usage Example
@@ -104,6 +107,7 @@ $results2 = $database->find('users', [
 $database->updateDocument('users', 'user_id', $updatedDoc);
 
 // Next call - cache miss (version changed), queries database
+// Works correctly even for rapid successive operations within the same second
 $results3 = $database->find('users', [
     Query::equal('status', 'active'),
     Query::limit(25)

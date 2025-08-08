@@ -7060,9 +7060,9 @@ class Database
      * Get collection version for cache invalidation
      * 
      * @param string $collectionId
-     * @return int
+     * @return string
      */
-    private function getCollectionVersion(string $collectionId): int
+    private function getCollectionVersion(string $collectionId): string
     {
         if (!isset($this->collectionVersions[$collectionId])) {
             // Try to load from cache first
@@ -7070,11 +7070,12 @@ class Database
             $version = $this->cache->load($versionKey, self::TTL * 365); // Store versions for a year
             
             if ($version === null) {
-                $version = \time(); // Use current timestamp as initial version
+                // Use microtime + random component for sub-second precision and uniqueness
+                $version = \sprintf('%.6f-%s', \microtime(true), \bin2hex(\random_bytes(4)));
                 $this->cache->save($versionKey, $version, null, self::TTL * 365);
             }
             
-            $this->collectionVersions[$collectionId] = (int)$version;
+            $this->collectionVersions[$collectionId] = $version;
         }
         
         return $this->collectionVersions[$collectionId];
@@ -7088,7 +7089,8 @@ class Database
      */
     private function incrementCollectionVersion(string $collectionId): void
     {
-        $newVersion = \time();
+        // Generate new version with microtime + random component for uniqueness
+        $newVersion = \sprintf('%.6f-%s', \microtime(true), \bin2hex(\random_bytes(4)));
         $this->collectionVersions[$collectionId] = $newVersion;
         
         $versionKey = $this->getCollectionVersionKey($collectionId);

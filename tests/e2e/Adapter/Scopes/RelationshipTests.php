@@ -220,6 +220,10 @@ trait RelationshipTests
         ]));
 
         var_dump('=== start === === start === === start === === start === === start === === start === === start === === start === === start ===');
+        
+        // Clear error log and start fresh
+        file_put_contents('/tmp/debug.log', '');
+        ini_set('error_log', '/tmp/debug.log');
 
         $docs = $database->find(
             'veterinarians',
@@ -228,14 +232,110 @@ trait RelationshipTests
                     '*',
                     'animals.*',
                     'animals.zoo.*',
-                    //'animals.president.*',
+                    'animals.president.*',
+                    'presidents.*',
+                    'presidents.animal.*',
                 ])
             ]
         );
 
+        var_dump('=== VETERINARIANS RESULT ===');
         var_dump($docs);
+        
+        // Let's also check what presidents look like directly
+        $presidents = $database->find('presidents');
+        var_dump('=== PRESIDENTS DIRECTLY ===');
+        var_dump($presidents);
+        
+        // Dump error log contents
+        var_dump('=== ERROR LOG ===');
+        var_dump(file_get_contents('/tmp/debug.log'));
 
         //$this->assertEquals('shmuel', 'fogel');
+    }
+
+    public function testSimpleRelationshipPopulation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Simple test case: user -> post (one-to-many)
+        $database->createCollection('users_simple');
+        $database->createCollection('posts_simple');
+
+        $database->createAttribute('users_simple', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('posts_simple', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'users_simple',
+            relatedCollection: 'posts_simple',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'posts',
+            twoWayKey: 'author'
+        );
+
+        // Create some data
+        $user = $database->createDocument('users_simple', new Document([
+            '$id' => 'user1',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'John Doe',
+        ]));
+
+        $post1 = $database->createDocument('posts_simple', new Document([
+            '$id' => 'post1',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'First Post',
+            'author' => 'user1',
+        ]));
+
+        $post2 = $database->createDocument('posts_simple', new Document([
+            '$id' => 'post2', 
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Second Post',
+            'author' => 'user1',
+        ]));
+
+        // Test: fetch user with posts populated
+        $fetchedUser = $database->getDocument('users_simple', 'user1');
+        
+        var_dump('=== SIMPLE TEST USER ===');
+        var_dump($fetchedUser);
+        
+        $posts = $fetchedUser->getAttribute('posts', []);
+        var_dump('=== USER POSTS ===');
+        var_dump($posts);
+        
+        // Basic assertions
+        $this->assertIsArray($posts, 'Posts should be an array');
+        $this->assertCount(2, $posts, 'Should have 2 posts');
+        
+        if (!empty($posts)) {
+            $this->assertInstanceOf(Document::class, $posts[0], 'First post should be a Document object');
+            $this->assertEquals('First Post', $posts[0]->getAttribute('title'), 'First post title should be populated');
+        }
+
+        // Test: fetch posts with author populated  
+        $fetchedPosts = $database->find('posts_simple');
+        
+        var_dump('=== SIMPLE TEST POSTS ===');
+        var_dump($fetchedPosts);
+        
+        $this->assertCount(2, $fetchedPosts, 'Should fetch 2 posts');
+        
+        if (!empty($fetchedPosts)) {
+            $author = $fetchedPosts[0]->getAttribute('author');
+            var_dump('=== POST AUTHOR ===');
+            var_dump($author);
+            
+            $this->assertInstanceOf(Document::class, $author, 'Author should be a Document object');
+            $this->assertEquals('John Doe', $author->getAttribute('name'), 'Author name should be populated');
+        }
     }
 
     public function testDeleteRelatedCollection(): void

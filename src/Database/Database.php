@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use RuntimeException;
 use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
@@ -384,6 +385,7 @@ class Database
 
     /**
      * Collection version tracking for cache invalidation
+     * @var array<string, string>
      */
     protected array $collectionVersions = [];
 
@@ -6006,8 +6008,8 @@ class Database
 
         $this->cache->purge($collectionKey);
 
-        // Temporarily disabled: Increment collection version for O(1) find cache invalidation
-        // $this->incrementCollectionVersion($collectionId);
+        // Increment collection version for O(1) find cache invalidation
+        $this->incrementCollectionVersion($collectionId);
 
         return true;
     }
@@ -6028,9 +6030,9 @@ class Database
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
 
-        // Temporarily disabled: Increment collection version for aggressive find cache invalidation
+        // Increment collection version for aggressive find cache invalidation
         // This ensures that any cached find results become invalid when any document changes
-        // $this->incrementCollectionVersion($collectionId);
+        $this->incrementCollectionVersion($collectionId);
 
         $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
             '$id' => $id,
@@ -6140,8 +6142,8 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
-        // Temporarily disable caching to isolate test issues
-        $useCache = false; // $collection->getId() !== self::METADATA && $this->silentListeners !== null;
+        // Only use caching for normal collections, not metadata or during silent operations
+        $useCache = $collection->getId() !== self::METADATA && $this->silentListeners !== null;
         $cached = null;
         $versionedCacheKey = null;
 
@@ -7008,12 +7010,12 @@ class Database
      * Generate cache key for find queries using xxh3 hash
      * 
      * @param string $collectionId
-     * @param array $queries
+     * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
-     * @param array $orderAttributes
-     * @param array $orderTypes
-     * @param array $cursor
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
      * @return string
@@ -7042,7 +7044,10 @@ class Database
             'permission' => $forPermission
         ];
         
-        $queryString = \json_encode($queryData, JSON_SORT_KEYS);
+        $queryString = \json_encode($queryData, \JSON_SORT_KEYS);
+        if ($queryString === false) {
+            throw new RuntimeException('Failed to encode query data for cache key generation');
+        }
         $queryHash = $this->generateCacheHash($queryString);
         
         if ($this->adapter->getSupportForHostname()) {
@@ -7078,7 +7083,7 @@ class Database
             if ($version === null) {
                 // Use microtime + random component for sub-second precision and uniqueness
                 $version = \sprintf('%.6f-%s', \microtime(true), \bin2hex(\random_bytes(4)));
-                $this->cache->save($versionKey, $version, null, self::TTL * 365);
+                $this->cache->save($versionKey, $version);
             }
             
             $this->collectionVersions[$collectionId] = $version;
@@ -7100,7 +7105,7 @@ class Database
         $this->collectionVersions[$collectionId] = $newVersion;
         
         $versionKey = $this->getCollectionVersionKey($collectionId);
-        $this->cache->save($versionKey, $newVersion, null, self::TTL * 365);
+        $this->cache->save($versionKey, $newVersion);
     }
 
     /**

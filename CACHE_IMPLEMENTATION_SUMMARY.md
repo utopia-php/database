@@ -117,9 +117,11 @@ $results3 = $database->find('users', [
 ## Safety Features
 
 1. **Relationship Exclusion**: Results with populated relationships are not cached to avoid incomplete data
-2. **Error Handling**: Cache failures gracefully fallback to database queries
+2. **Error Handling**: Cache failures gracefully fallback to database queries  
 3. **Version Consistency**: Impossible to serve stale data due to version-based keys
 4. **Aggressive Invalidation**: Any collection change invalidates ALL cached queries for that collection
+5. **Silent Operation Awareness**: Caching is disabled during silent operations to avoid test interference
+6. **Metadata Collection Exclusion**: No caching for metadata collections to prevent system conflicts
 
 ## Configuration
 

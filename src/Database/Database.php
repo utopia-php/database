@@ -3580,19 +3580,29 @@ class Database
      */
     private function populateDocumentsRelationships(array $documents, Collection $collection, int $relationshipFetchDepth = 0, array $relationshipFetchStack = [], array $selects = []): array
     {
-        // Debug logging temporarily removed for cleaner output
+        // Debug: Track relationship population calls
+        error_log("=== populateDocumentsRelationships ===");
+        error_log("Collection: " . $collection->getId());
+        error_log("Documents: " . count($documents));
+        error_log("Fetch depth: " . $relationshipFetchDepth);
+        error_log("Stack depth: " . count($relationshipFetchStack));
+        error_log("Selects: " . json_encode(array_keys($selects)));
         
         if ($relationshipFetchDepth >= self::RELATION_MAX_DEPTH) {
+            error_log("Max depth reached, stopping");
             return $documents;
         }
 
         $relationships = $collection->getAttribute('relationships', []);
+        error_log("Found " . count($relationships) . " relationships to process");
 
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
             $relationType = $relationship['type'];
             $side = $relationship['options']['side'];
             $queries = $selects[$key] ?? [];
+
+            error_log("Processing relationship '$key' (type: $relationType, side: $side)");
 
             // Add collection attribute for relationship context
             $relationship->setAttribute('collection', $collection->getId());
@@ -3615,8 +3625,11 @@ class Database
                     $documents = $this->populateManyToManyRelationshipsBatch($documents, $relationship, $relationshipFetchDepth, $relationshipFetchStack, $queries);
                     break;
             }
+            
+            error_log("Finished processing relationship '$key'");
         }
 
+        error_log("=== END populateDocumentsRelationships ===");
         return $documents;
     }
 
@@ -3788,8 +3801,8 @@ class Database
         }
 
         // Parent side - fetch multiple related documents
-        if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH) {
-            return;
+        if ($relationshipFetchDepth === Database::RELATION_MAX_DEPTH) {
+            return $documents;
         }
 
         // Collect all parent document IDs, checking map to avoid duplicates
@@ -3812,7 +3825,7 @@ class Database
         }
 
         if (empty($parentIds)) {
-            return;
+            return $documents;
         }
 
         // Fetch all related documents for all parents in a single query

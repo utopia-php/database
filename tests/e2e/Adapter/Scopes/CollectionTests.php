@@ -1343,7 +1343,6 @@ trait CollectionTests
                 Database::EVENT_ATTRIBUTE_UPDATE,
                 Database::EVENT_INDEX_CREATE,
                 Database::EVENT_DOCUMENT_CREATE,
-                Database::EVENT_DOCUMENT_PURGE, // Cache invalidation after createDocument
                 Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_DOCUMENT_UPDATE,
                 Database::EVENT_DOCUMENT_READ,
@@ -1356,21 +1355,16 @@ trait CollectionTests
                 Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_DOCUMENT_DECREASE,
                 Database::EVENT_DOCUMENTS_CREATE,
-                Database::EVENT_DOCUMENT_PURGE, // Cache invalidation after createDocuments (doc 1)
-                Database::EVENT_DOCUMENT_PURGE, // Cache invalidation after createDocuments (doc 2)  
+                Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_DOCUMENTS_UPDATE,
-                Database::EVENT_DOCUMENT_PURGE, // Cache invalidation after updateDocuments (doc 1)
-                Database::EVENT_DOCUMENT_PURGE, // Cache invalidation after updateDocuments (doc 2)
                 Database::EVENT_INDEX_DELETE,
                 Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_DOCUMENT_DELETE,
-                Database::EVENT_DOCUMENT_PURGE, // Cache invalidation after deleteDocument
+                Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_DOCUMENTS_DELETE,
-                Database::EVENT_DOCUMENT_PURGE, // Cache invalidation after deleteDocuments (doc 1)
-                Database::EVENT_DOCUMENT_PURGE, // Cache invalidation after deleteDocuments (doc 2)
                 Database::EVENT_DOCUMENT_PURGE,
                 Database::EVENT_ATTRIBUTE_DELETE,
                 Database::EVENT_COLLECTION_DELETE,

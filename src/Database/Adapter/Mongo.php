@@ -859,7 +859,7 @@ class Mongo extends Adapter
 
         $result = $this->insertDocument($name, $record);
         $result = $this->replaceChars('_', '$', $result);
-
+        // in order to keep the original object refrence.
         foreach ($result as $key => $value) {
             $document->setAttribute($key, $value);
         }

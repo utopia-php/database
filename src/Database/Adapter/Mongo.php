@@ -251,6 +251,8 @@ class Mongo extends Adapter
              */
             $newIndexes = [];
 
+            $collectionAttributes = $attributes;
+            
             // using $i and $j as counters to distinguish from $key
             foreach ($indexes as $i => $index) {
 
@@ -293,6 +295,29 @@ class Mongo extends Adapter
                     'name' => $this->filter($index->getId()),
                     'unique' => $unique
                 ];
+
+                // Add partial filter for indexes to avoid indexing null values
+                if (in_array($index->getAttribute('type'), [
+                    Database::INDEX_UNIQUE,
+                     Database::INDEX_KEY
+                      ])) {
+                    $partialFilter = [];
+                    foreach ($attributes as $attr) {
+                        // Find the matching attribute in collectionAttributes to get its type
+                        $attrType = 'string'; // Default fallback
+                        foreach ($collectionAttributes as $collectionAttr) {
+                            if ($collectionAttr->getId() === $attr) {
+                                $attrType = $this->getMongoTypeCode($collectionAttr->getAttribute('type'));
+                                break;
+                            }
+                        }
+                        // Use both $exists: true and $type to exclude nulls and ensure correct type
+                        $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
+                    }
+                    if (!empty($partialFilter)) {
+                        $newIndexes[$i]['partialFilterExpression'] = $partialFilter;
+                    }
+                }
             }
 
             if (!$this->getClient()->createIndexes($id, $newIndexes)) {
@@ -620,7 +645,7 @@ class Mongo extends Adapter
      * @return bool
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collation = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
@@ -670,6 +695,19 @@ class Mongo extends Adapter
             ];
         }
 
+        // Add partial filter for indexes to avoid indexing null values
+        if (in_array($type, [Database::INDEX_UNIQUE, Database::INDEX_KEY])) {
+            $partialFilter = [];
+            foreach ($attributes as $i => $attr) {
+                $attrType = $indexAttributeTypes[$i] ?? 'string'; // Default to string if type not provided
+                $attrType = $this->getMongoTypeCode($attrType);
+                $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
+            }
+            if (!empty($partialFilter)) {
+                $indexes['partialFilterExpression'] = $partialFilter;
+            }
+        }
+
         return $this->client->createIndexes($name, [$indexes], $options);
     }
 
@@ -699,6 +737,23 @@ class Mongo extends Adapter
             }
         }
 
+        // Extract attribute types from the collection document
+        $indexAttributeTypes = [];
+        if (isset($collectionDocument['attributes'])) {
+            $attributes = json_decode($collectionDocument['attributes'], true);
+            if ($attributes && $index) {
+                // Map index attributes to their types
+                foreach ($index['attributes'] as $attrName) {
+                    foreach ($attributes as $attr) {
+                        if ($attr['key'] === $attrName) {
+                            $indexAttributeTypes[] = $attr['type'];
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         if ($index
             && $this->deleteIndex($collection, $old)
             && $this->createIndex(
@@ -708,6 +763,8 @@ class Mongo extends Adapter
                 $index['attributes'],
                 $index['lengths'] ?? [],
                 $index['orders'] ?? [],
+                $indexAttributeTypes, // Use extracted attribute types
+               []  
             )) {
             return true;
         }
@@ -801,10 +858,13 @@ class Mongo extends Adapter
         }
 
         $result = $this->insertDocument($name, $record);
-
         $result = $this->replaceChars('_', '$', $result);
 
-        return new Document($result);
+        foreach ($result as $key => $value) {
+            $document->setAttribute($key, $value);
+        }
+    
+        return $document;
     }
 
     /**
@@ -1517,6 +1577,26 @@ class Mongo extends Adapter
         return $found;
     }
 
+
+    /**
+     * Converts Appwrite database type to MongoDB BSON type code.
+     *
+     * @param string $appwriteType
+     * @return string
+     */
+    private function getMongoTypeCode(string $appwriteType): string
+    {
+        return match ($appwriteType) {
+            Database::VAR_STRING => 'string',
+            Database::VAR_INTEGER => 'int',
+            Database::VAR_FLOAT => 'double',
+            Database::VAR_BOOLEAN => 'bool',
+            Database::VAR_DATETIME => 'date',
+            Database::VAR_ID => 'string',
+            Database::VAR_OBJECT_ID => 'objectId',
+            default => 'string'
+        };
+    }
 
     /**
      * Converts timestamp to Mongo\BSON datetime format.
@@ -2338,7 +2418,6 @@ class Mongo extends Adapter
             return $values;
         }
 
-
         if (\count($tenants) === 0) {
             $values[] = $this->getTenant();
         } else {
@@ -2355,6 +2434,7 @@ class Mongo extends Adapter
             return $values[0];
         }
 
+       
         return ['$in' => $values];
     }
 }

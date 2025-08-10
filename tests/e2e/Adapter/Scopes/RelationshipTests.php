@@ -319,6 +319,33 @@ trait RelationshipTests
         $this->assertArrayHasKey('votes', $president);
         $this->assertEquals(0, count($president['votes']));
 
+        $president = $database->findOne('presidents', [
+            Query::select([
+                '*',
+                'votes.*',
+            ]),
+            Query::equal('$id', ['trump'])
+        ]);
+
+        $this->assertEquals('trump', $president->getId());
+        $this->assertArrayHasKey('votes', $president);
+        $this->assertEquals(2, count($president['votes']));
+        $this->assertArrayNotHasKey('animals', $president['votes'][0]); // Not exist
+
+        $president = $database->findOne('presidents', [
+            Query::select([
+                '*',
+                'votes.*',
+                'votes.animals.*',
+            ]),
+            Query::equal('$id', ['trump'])
+        ]);
+
+        $this->assertEquals('trump', $president->getId());
+        $this->assertArrayHasKey('votes', $president);
+        $this->assertEquals(2, count($president['votes']));
+        $this->assertArrayHasKey('animals', $president['votes'][0]); // Exist
+
         /**
          * Check Selects queries
          */
@@ -331,12 +358,10 @@ trait RelationshipTests
         $this->assertArrayNotHasKey('presidents', $veterinarian);
         $this->assertArrayNotHasKey('animals', $veterinarian);
 
-
         $veterinarian = $database->findOne(
             'veterinarians',
             [
                 Query::select([
-                    '*',
                     'animals.*',
                 ])
             ]
@@ -344,7 +369,7 @@ trait RelationshipTests
 
         $this->assertEquals('dr.pol', $veterinarian->getId());
         $this->assertArrayHasKey('animals', $veterinarian);
-        //$this->assertArrayNotHasKey('presidents', $veterinarian); // ???
+        $this->assertArrayNotHasKey('presidents', $veterinarian);
 
         $animal = $veterinarian['animals'][0];
 
@@ -357,7 +382,6 @@ trait RelationshipTests
             'veterinarians',
             [
                 Query::select([
-                    '*',
                     'animals.*',
                     'animals.zoo.*',
                     'animals.president.*',
@@ -367,6 +391,7 @@ trait RelationshipTests
 
         $this->assertEquals('dr.pol', $veterinarian->getId());
         $this->assertArrayHasKey('animals', $veterinarian);
+        $this->assertArrayNotHasKey('presidents', $veterinarian);
 
         $animal = $veterinarian['animals'][0];
 

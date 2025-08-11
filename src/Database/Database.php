@@ -348,13 +348,6 @@ class Database
 
     protected bool $filter = true;
 
-    /**
-     * Array in which the keys are the names of filters that
-     * should be skipped when decoding attributes. null $disabledFilters
-     * will skip all filters.
-     *
-     * @var ?array<string, bool>
-     */
     protected ?array $disabledFilters = [];
 
     protected bool $validate = true;
@@ -815,31 +808,17 @@ class Database
         return $this;
     }
 
-    /**
-     * Skip filters
-     *
-     * Execute a callback without filters, or with specific filters disabled
-     *
-     * @template T
-     * @param callable(): T $callback
-     * @param array<string>|null $filterNames List of filter names to skip; if null, all filters will be skipped
-     * @return T
-     */
     public function skipFilters(callable $callback, ?array $filterNames = null): mixed
     {
         $previousFilter = $this->filter;
         $previousDisabledFilters = $this->disabledFilters;
 
-        if (is_null($filterNames)) {
-            // Skip all filters - existing behavior
+        if (\is_null($filterNames)) {
             $this->disableFilters();
         } else {
-            // Skip specific filters - new behavior
-            if (empty($filterNames)) {
-                // Empty array means skip no filters (keep current behavior)
+            if (\count($filterNames) === 0) {
                 $this->disabledFilters = [];
             } else {
-                // Create fast lookup map: value => true
                 $disabledFilters = [];
                 foreach ($filterNames as $filterName) {
                     $disabledFilters[$filterName] = true;
@@ -6654,8 +6633,7 @@ class Database
             return $value;
         }
 
-        // Skip filters that are disabled
-        if (!is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
+        if (!\is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
             return $value;
         }
 

@@ -1595,6 +1595,7 @@ class Database
         );
 
         $created = false;
+        $metadataModified = false;
         try {
             $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
@@ -1604,6 +1605,7 @@ class Database
 
             if ($collection->getId() !== self::METADATA) {
                 $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
             }
 
             $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
@@ -1617,14 +1619,15 @@ class Database
 
             if ($collection->getId() !== self::METADATA) {
                 $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
             }
 
             $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
 
             return true;
         } finally {
-            // Ensure collection cache is cleared even if trigger fails after adapter changes
-            if ($created) {
+            // Ensure collection cache is cleared if either adapter succeeded OR metadata was modified
+            if ($created || $metadataModified) {
                 $this->purgeCachedCollection($collection->getId());
             }
         }
@@ -1713,6 +1716,7 @@ class Database
         }
 
         $created = false;
+        $metadataModified = false;
         try {
             $created = $this->adapter->createAttributes($collection->getId(), $attributes);
 
@@ -1722,6 +1726,7 @@ class Database
             
             if ($collection->getId() !== self::METADATA) {
                 $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
             }
 
             $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
@@ -1736,14 +1741,15 @@ class Database
             
             if ($collection->getId() !== self::METADATA) {
                 $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
             }
 
             $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
 
             return true;
         } finally {
-            // Ensure cache is cleared even if trigger fails after adapter changes
-            if ($created) {
+            // Ensure cache is cleared if either adapter succeeded OR metadata was modified
+            if ($created || $metadataModified) {
                 $this->purgeCachedCollection($collection->getId());
                 $this->purgeCachedDocument(self::METADATA, $collection->getId());
             }
@@ -3180,6 +3186,7 @@ class Database
         }
 
         $created = false;
+        $metadataModified = false;
         try {
             $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);
 
@@ -3189,6 +3196,7 @@ class Database
 
             if ($collection->getId() !== self::METADATA) {
                 $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
             }
 
             $this->trigger(self::EVENT_INDEX_CREATE, $index);
@@ -3202,14 +3210,15 @@ class Database
 
             if ($collection->getId() !== self::METADATA) {
                 $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
             }
 
             $this->trigger(self::EVENT_INDEX_CREATE, $index);
 
             return true;
         } finally {
-            // Ensure collection cache is cleared even if trigger fails after adapter changes
-            if ($created) {
+            // Ensure collection cache is cleared if either adapter succeeded OR metadata was modified
+            if ($created || $metadataModified) {
                 $this->purgeCachedCollection($collection->getId());
             }
         }

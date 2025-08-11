@@ -91,7 +91,10 @@ class IndexedQueries extends Queries
         $filters = $grouped['filters'];
 
         foreach ($filters as $filter) {
-            if ($filter->getMethod() === Query::TYPE_SEARCH) {
+            if (
+                $filter->getMethod() === Query::TYPE_SEARCH ||
+                $filter->getMethod() === Query::TYPE_NOT_SEARCH
+            ) {
                 $matched = false;
 
                 foreach ($this->indexes as $index) {

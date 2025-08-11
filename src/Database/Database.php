@@ -819,21 +819,28 @@ class Database
      */
     public function skipFilters(callable $callback, ?array $filterNames = null): mixed
     {
+        if (\is_null($filterNames)) {
+            $initial = $this->filter;
+            $this->disableFilters();
+
+            try {
+                return $callback();
+            } finally {
+                $this->filter = $initial;
+            }
+        }
+
         $previousFilter = $this->filter;
         $previousDisabledFilters = $this->disabledFilters;
 
-        if (\is_null($filterNames)) {
-            $this->disableFilters();
+        if (\count($filterNames) === 0) {
+            $this->disabledFilters = [];
         } else {
-            if (\count($filterNames) === 0) {
-                $this->disabledFilters = [];
-            } else {
-                $disabledFilters = [];
-                foreach ($filterNames as $filterName) {
-                    $disabledFilters[$filterName] = true;
-                }
-                $this->disabledFilters = $disabledFilters;
+            $disabledFilters = [];
+            foreach ($filterNames as $filterName) {
+                $disabledFilters[$filterName] = true;
             }
+            $this->disabledFilters = $disabledFilters;
         }
 
         try {

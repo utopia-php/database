@@ -348,6 +348,15 @@ class Database
 
     protected bool $filter = true;
 
+    /**
+     * Array in which the keys are the names of filters that
+     * should be skipped when decoding attributes. null $disabledFilters
+     * will skip all filters.
+     *
+     * @var ?array<string, bool>
+     */
+    protected ?array $disabledFilters = [];
+
     protected bool $validate = true;
 
     protected bool $preserveDates = false;
@@ -809,21 +818,41 @@ class Database
     /**
      * Skip filters
      *
-     * Execute a callback without filters
+     * Execute a callback without filters, or with specific filters disabled
      *
      * @template T
      * @param callable(): T $callback
+     * @param array<string>|null $filterNames List of filter names to skip; if null, all filters will be skipped
      * @return T
      */
-    public function skipFilters(callable $callback): mixed
+    public function skipFilters(callable $callback, ?array $filterNames = null): mixed
     {
-        $initial = $this->filter;
-        $this->disableFilters();
+        $previousFilter = $this->filter;
+        $previousDisabledFilters = $this->disabledFilters;
+
+        if (is_null($filterNames)) {
+            // Skip all filters - existing behavior
+            $this->disableFilters();
+        } else {
+            // Skip specific filters - new behavior
+            if (empty($filterNames)) {
+                // Empty array means skip no filters (keep current behavior)
+                $this->disabledFilters = [];
+            } else {
+                // Create fast lookup map: value => true
+                $disabledFilters = [];
+                foreach ($filterNames as $filterName) {
+                    $disabledFilters[$filterName] = true;
+                }
+                $this->disabledFilters = $disabledFilters;
+            }
+        }
 
         try {
             return $callback();
         } finally {
-            $this->filter = $initial;
+            $this->filter = $previousFilter;
+            $this->disabledFilters = $previousDisabledFilters;
         }
     }
 
@@ -6622,6 +6651,11 @@ class Database
     protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {
         if (!$this->filter) {
+            return $value;
+        }
+
+        // Skip filters that are disabled
+        if (!is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
             return $value;
         }
 

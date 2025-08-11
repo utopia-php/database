@@ -808,6 +808,15 @@ class Database
         return $this;
     }
 
+    /**
+     * Skip filters
+     *
+     * Execute a callback without filters
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
     public function skipFilters(callable $callback, ?array $filterNames = null): mixed
     {
         $previousFilter = $this->filter;

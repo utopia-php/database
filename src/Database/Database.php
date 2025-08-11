@@ -1594,26 +1594,40 @@ class Database
             Document::SET_TYPE_APPEND
         );
 
+        $created = false;
         try {
             $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create attribute');
             }
+
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+
+            return true;
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
+
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+
+            return true;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            if ($created) {
+                $this->purgeCachedCollection($collection->getId());
+            }
         }
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
-
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
-
-        return true;
     }
 
     /**
@@ -2320,24 +2334,32 @@ class Database
             }
         }
 
+        $deleted = false;
         try {
-            if (!$this->adapter->deleteAttribute($collection->getId(), $id)) {
+            $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
+            if (!$deleted) {
                 throw new DatabaseException('Failed to delete attribute');
             }
+
+            $collection->setAttribute('attributes', \array_values($attributes));
+            $collection->setAttribute('indexes', \array_values($indexes));
+
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
+
+            return true;
         } catch (NotFoundException) {
-            // Ignore
+            // Ignore - attribute doesn't exist
+            return true;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            if ($deleted) {
+                $this->purgeCachedCollection($collection->getId());
+            }
         }
-
-        $collection->setAttribute('attributes', \array_values($attributes));
-        $collection->setAttribute('indexes', \array_values($indexes));
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
-
-        $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
-
-        return true;
     }
 
     /**
@@ -3120,27 +3142,40 @@ class Database
             }
         }
 
+        $created = false;
         try {
             $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create index');
             }
+
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_INDEX_CREATE, $index);
+
+            return true;
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
+
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_INDEX_CREATE, $index);
+
+            return true;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            if ($created) {
+                $this->purgeCachedCollection($collection->getId());
+            }
         }
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
-
-        $this->trigger(self::EVENT_INDEX_CREATE, $index);
-
-        return true;
     }
 
     /**
@@ -3169,17 +3204,25 @@ class Database
             }
         }
 
-        $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+        $deleted = false;
+        try {
+            $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
 
-        $collection->setAttribute('indexes', \array_values($indexes));
+            $collection->setAttribute('indexes', \array_values($indexes));
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
+
+            return $deleted;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            if ($deleted) {
+                $this->purgeCachedCollection($collection->getId());
+            }
         }
-
-        $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
-
-        return $deleted;
     }
 
     /**

@@ -3324,9 +3324,15 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = \array_filter($attributes, function ($attribute) {
-            return $attribute['type'] === Database::VAR_RELATIONSHIP;
-        });
+        $relationships = [];
+
+        foreach ($attributes as $attribute) {
+            if ($attribute['type'] === Database::VAR_RELATIONSHIP) {
+                if (empty($selects) || array_key_exists($attribute['key'], $selects)) {
+                    $relationships[] = $attribute;
+                }
+            }
+        }
 
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];

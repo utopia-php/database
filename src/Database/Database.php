@@ -348,6 +348,11 @@ class Database
 
     protected bool $filter = true;
 
+    /**
+     * @var array<string, bool>|null
+     */
+    protected ?array $disabledFilters = [];
+
     protected bool $validate = true;
 
     protected bool $preserveDates = false;
@@ -813,17 +818,35 @@ class Database
      *
      * @template T
      * @param callable(): T $callback
+     * @param array<string>|null $filters
      * @return T
      */
-    public function skipFilters(callable $callback): mixed
+    public function skipFilters(callable $callback, ?array $filters = null): mixed
     {
-        $initial = $this->filter;
-        $this->disableFilters();
+        if (empty($filters)) {
+            $initial = $this->filter;
+            $this->disableFilters();
+
+            try {
+                return $callback();
+            } finally {
+                $this->filter = $initial;
+            }
+        }
+
+        $previous = $this->filter;
+        $previousDisabled = $this->disabledFilters;
+        $disabled = [];
+        foreach ($filters as $name) {
+            $disabled[$name] = true;
+        }
+        $this->disabledFilters = $disabled;
 
         try {
             return $callback();
         } finally {
-            $this->filter = $initial;
+            $this->filter = $previous;
+            $this->disabledFilters = $previousDisabled;
         }
     }
 
@@ -6622,6 +6645,10 @@ class Database
     protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {
         if (!$this->filter) {
+            return $value;
+        }
+
+        if (!\is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
             return $value;
         }
 

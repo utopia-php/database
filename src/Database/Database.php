@@ -1712,27 +1712,42 @@ class Database
             $attributeDocuments[] = $attributeDocument;
         }
 
+        $created = false;
         try {
             $created = $this->adapter->createAttributes($collection->getId(), $attributes);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create attributes');
             }
+            
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+
+            return true;
         } catch (DuplicateException $e) {
             // No attributes were in a metadata, but at least one of them was present on the table
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
+            
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+
+            return true;
+        } finally {
+            // Ensure cache is cleared even if trigger fails after adapter changes
+            if ($created) {
+                $this->purgeCachedCollection($collection->getId());
+                $this->purgeCachedDocument(self::METADATA, $collection->getId());
+            }
         }
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
-
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
-
-        return true;
     }
 
     /**

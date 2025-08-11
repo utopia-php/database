@@ -348,6 +348,9 @@ class Database
 
     protected bool $filter = true;
 
+    /**
+     * @var array<string, bool>|null
+     */
     protected ?array $disabledFilters = [];
 
     protected bool $validate = true;
@@ -815,11 +818,12 @@ class Database
      *
      * @template T
      * @param callable(): T $callback
+     * @param array<string>|null $filters
      * @return T
      */
-    public function skipFilters(callable $callback, ?array $filterNames = null): mixed
+    public function skipFilters(callable $callback, ?array $filters = null): mixed
     {
-        if (\is_null($filterNames)) {
+        if (empty($filters)) {
             $initial = $this->filter;
             $this->disableFilters();
 
@@ -830,24 +834,19 @@ class Database
             }
         }
 
-        $previousFilter = $this->filter;
-        $previousDisabledFilters = $this->disabledFilters;
-
-        if (\count($filterNames) === 0) {
-            $this->disabledFilters = [];
-        } else {
-            $disabledFilters = [];
-            foreach ($filterNames as $filterName) {
-                $disabledFilters[$filterName] = true;
-            }
-            $this->disabledFilters = $disabledFilters;
+        $previous = $this->filter;
+        $previousDisabled = $this->disabledFilters;
+        $disabled = [];
+        foreach ($filters as $name) {
+            $disabled[$name] = true;
         }
+        $this->disabledFilters = $disabled;
 
         try {
             return $callback();
         } finally {
-            $this->filter = $previousFilter;
-            $this->disabledFilters = $previousDisabledFilters;
+            $this->filter = $previous;
+            $this->disabledFilters = $previousDisabled;
         }
     }
 

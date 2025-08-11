@@ -1306,41 +1306,24 @@ class Database
             }
         }
 
-        $createdCollection = null;
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
-
-            if ($id === self::METADATA) {
-                $createdCollection = new Document(self::COLLECTION);
-            } else {
-                $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
-            }
-
-            $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
-
-            return $createdCollection;
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
-            
-            if ($id === self::METADATA) {
-                $createdCollection = new Document(self::COLLECTION);
-            } else {
-                $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
-            }
-
-            $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
-
-            return $createdCollection;
-        } finally {
-            // Ensure cache is cleared even if exceptions occur
-            if ($id !== self::METADATA) {
-                $this->purgeCachedCollection($id);
-                $this->purgeCachedDocument(self::METADATA, $id);
-            }
         }
+
+        if ($id === self::METADATA) {
+            return new Document(self::COLLECTION);
+        }
+
+        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+
+        $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
+
+        return $createdCollection;
     }
 
     /**
@@ -1380,18 +1363,11 @@ class Database
             ->setAttribute('$permissions', $permissions)
             ->setAttribute('documentSecurity', $documentSecurity);
 
-        $collectionId = $collection->getId();
-        try {
-            $collection = $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $collection = $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
-            $this->trigger(self::EVENT_COLLECTION_UPDATE, $collection);
+        $this->trigger(self::EVENT_COLLECTION_UPDATE, $collection);
 
-            return $collection;
-        } finally {
-            // Ensure cache is cleared even if exceptions occur
-            $this->purgeCachedCollection($collectionId);
-            $this->purgeCachedDocument(self::METADATA, $collectionId);
-        }
+        return $collection;
     }
 
     /**
@@ -1530,42 +1506,28 @@ class Database
             $this->deleteRelationship($collection->getId(), $relationship->getId());
         }
 
-        $deleted = false;
         try {
             $this->adapter->deleteCollection($id);
-
-            if ($id === self::METADATA) {
-                $deleted = true;
-            } else {
-                $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
-            }
-
-            if ($deleted) {
-                $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
-            }
-
-            return $deleted;
         } catch (NotFoundException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
-            
-            if ($id === self::METADATA) {
-                $deleted = true;
-            } else {
-                $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
-            }
-
-            if ($deleted) {
-                $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
-            }
-
-            return $deleted;
-        } finally {
-            // Ensure cache is cleared even if exceptions occur
-            $this->purgeCachedCollection($id);
         }
+
+        if ($id === self::METADATA) {
+            $deleted = true;
+        } else {
+            $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
+        }
+
+        if ($deleted) {
+            $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+        }
+
+        $this->purgeCachedCollection($id);
+
+        return $deleted;
     }
 
     /**
@@ -1626,32 +1588,20 @@ class Database
             if (!$created) {
                 throw new DatabaseException('Failed to create attribute');
             }
-
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
-
-            return true;
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
-            
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
-
-            return true;
-        } finally {
-            // Ensure cache is cleared even if exceptions occur
-            $this->purgeCachedCollection($collection->getId());
-            $this->purgeCachedDocument(self::METADATA, $collection->getId());
         }
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        }
+
+        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+
+        return true;
     }
 
     /**
@@ -1742,33 +1692,21 @@ class Database
             if (!$created) {
                 throw new DatabaseException('Failed to create attributes');
             }
-
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
-
-            return true;
         } catch (DuplicateException $e) {
             // No attributes were in a metadata, but at least one of them was present on the table
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
-            
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
-
-            return true;
-        } finally {
-            // Ensure cache is cleared even if exceptions occur
-            $this->purgeCachedCollection($collection->getId());
-            $this->purgeCachedDocument(self::METADATA, $collection->getId());
         }
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        }
+
+        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+
+        return true;
     }
 
     /**
@@ -1968,24 +1906,17 @@ class Database
             throw new NotFoundException('Index not found');
         }
 
-        $collectionId = $collection->getId();
-        try {
-            // Execute update from callback
-            $updateCallback($indexes[$index], $collection, $index);
+        // Execute update from callback
+        $updateCallback($indexes[$index], $collection, $index);
 
-            // Save
-            $collection->setAttribute('indexes', $indexes);
+        // Save
+        $collection->setAttribute('indexes', $indexes);
 
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
-            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $indexes[$index]);
+        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $indexes[$index]);
 
-            return $indexes[$index];
-        } finally {
-            // Ensure cache is cleared even if exceptions occur during schema changes
-            $this->purgeCachedCollection($collectionId);
-            $this->purgeCachedDocument(self::METADATA, $collectionId);
-        }
+        return $indexes[$index];
     }
 
     /**
@@ -2014,24 +1945,17 @@ class Database
             throw new NotFoundException('Attribute not found');
         }
 
-        $collectionId = $collection->getId();
-        try {
-            // Execute update from callback
-            $updateCallback($attributes[$index], $collection, $index);
+        // Execute update from callback
+        $updateCallback($attributes[$index], $collection, $index);
 
-            // Save
-            $collection->setAttribute('attributes', $attributes);
+        // Save
+        $collection->setAttribute('attributes', $attributes);
 
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
-            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$index]);
+        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attributes[$index]);
 
-            return $attributes[$index];
-        } finally {
-            // Ensure cache is cleared even if exceptions occur during schema changes
-            $this->purgeCachedCollection($collectionId);
-            $this->purgeCachedDocument(self::METADATA, $collectionId);
-        }
+        return $attributes[$index];
     }
 
     /**
@@ -2388,34 +2312,20 @@ class Database
             if (!$this->adapter->deleteAttribute($collection->getId(), $id)) {
                 throw new DatabaseException('Failed to delete attribute');
             }
-
-            $collection->setAttribute('attributes', \array_values($attributes));
-            $collection->setAttribute('indexes', \array_values($indexes));
-
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
-
-            return true;
         } catch (NotFoundException) {
-            // Ignore - still update metadata and clear cache
-            $collection->setAttribute('attributes', \array_values($attributes));
-            $collection->setAttribute('indexes', \array_values($indexes));
-
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
-
-            return true;
-        } finally {
-            // Ensure cache is cleared even if exceptions occur
-            $this->purgeCachedCollection($collection->getId());
-            $this->purgeCachedDocument(self::METADATA, $collection->getId());
+            // Ignore
         }
+
+        $collection->setAttribute('attributes', \array_values($attributes));
+        $collection->setAttribute('indexes', \array_values($indexes));
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        }
+
+        $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
+
+        return true;
     }
 
     /**
@@ -2483,25 +2393,18 @@ class Database
             $index->setAttribute('attributes', $indexAttributes);
         }
 
-        $collectionId = $collection->getId();
-        try {
-            $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
 
-            $collection->setAttribute('attributes', $attributes);
-            $collection->setAttribute('indexes', $indexes);
+        $collection->setAttribute('attributes', $attributes);
+        $collection->setAttribute('indexes', $indexes);
 
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
-
-            return $renamed;
-        } finally {
-            // Ensure cache is cleared even if exceptions occur
-            $this->purgeCachedCollection($collectionId);
-            $this->purgeCachedDocument(self::METADATA, $collectionId);
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
+
+        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
+
+        return $renamed;
     }
 
     /**
@@ -2601,10 +2504,6 @@ class Database
         $collection->setAttribute('attributes', $relationship, Document::SET_TYPE_APPEND);
         $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
 
-        $collectionId = $collection->getId();
-        $relatedCollectionId = $relatedCollection->getId();
-        try {
-
         if ($type === self::RELATION_MANY_TO_MANY) {
             $this->silent(fn () => $this->createCollection('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence(), [
                 new Document([
@@ -2700,14 +2599,9 @@ class Database
             }
         });
 
-            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
+        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
 
-            return true;
-        } finally {
-            // Ensure cache is cleared for both collections even if exceptions occur
-            $this->purgeCachedCollection($collectionId);
-            $this->purgeCachedCollection($relatedCollectionId);
-        }
+        return true;
     }
 
     /**
@@ -2763,10 +2657,6 @@ class Database
         $relatedCollectionId = $attribute['options']['relatedCollection'];
         $relatedCollection = $this->getCollection($relatedCollectionId);
         
-        $collectionId = $collection->getId();
-        $relatedCollectionId = $relatedCollection->getId();
-        try {
-
         $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete, $type, $side) {
             $altering = (!\is_null($newKey) && $newKey !== $id)
                 || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
@@ -2910,13 +2800,7 @@ class Database
                 throw new RelationshipException('Invalid relationship type.');
         }
 
-            // Cache clearing is handled by the finally block for both collections
-            return true;
-        } finally {
-            // Ensure cache is cleared for both collections even if exceptions occur
-            $this->purgeCachedCollection($collectionId);
-            $this->purgeCachedCollection($relatedCollectionId);
-        }
+        return true;
     }
 
     /**
@@ -2968,10 +2852,6 @@ class Database
         }
 
         $relatedCollection->setAttribute('attributes', \array_values($relatedAttributes));
-
-        $collectionId = $collection->getId();
-        $relatedCollectionId = $relatedCollection->getId();
-        try {
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
             try {
@@ -3039,18 +2919,13 @@ class Database
             $side
         );
 
-            if (!$deleted) {
-                throw new DatabaseException('Failed to delete relationship');
-            }
-
-            $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
-
-            return true;
-        } finally {
-            // Ensure cache is cleared for both collections even if exceptions occur
-            $this->purgeCachedCollection($collectionId);
-            $this->purgeCachedCollection($relatedCollectionId);
+        if (!$deleted) {
+            throw new DatabaseException('Failed to delete relationship');
         }
+
+        $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
+
+        return true;
     }
 
     /**
@@ -3094,24 +2969,17 @@ class Database
             }
         }
 
-        $collectionId = $collection->getId();
-        try {
-            $collection->setAttribute('indexes', $indexes);
+        $collection->setAttribute('indexes', $indexes);
 
-            $this->adapter->renameIndex($collection->getId(), $old, $new);
+        $this->adapter->renameIndex($collection->getId(), $old, $new);
 
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
-
-            return true;
-        } finally {
-            // Ensure cache is cleared even if exceptions occur
-            $this->purgeCachedCollection($collectionId);
-            $this->purgeCachedDocument(self::METADATA, $collectionId);
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
+
+        $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
+
+        return true;
     }
 
     /**
@@ -3230,39 +3098,27 @@ class Database
             }
         }
 
-        $collectionId = $collection->getId();
         try {
             $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create index');
             }
-
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_INDEX_CREATE, $index);
-
-            return true;
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
-
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_INDEX_CREATE, $index);
-
-            return true;
-        } finally {
-            // Ensure cache is cleared even if exceptions occur
-            $this->purgeCachedCollection($collectionId);
-            $this->purgeCachedDocument(self::METADATA, $collectionId);
         }
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        }
+
+        $this->trigger(self::EVENT_INDEX_CREATE, $index);
+
+        return true;
     }
 
     /**
@@ -3291,24 +3147,17 @@ class Database
             }
         }
 
-        $collectionId = $collection->getId();
-        try {
-            $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+        $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
 
-            $collection->setAttribute('indexes', \array_values($indexes));
+        $collection->setAttribute('indexes', \array_values($indexes));
 
-            if ($collection->getId() !== self::METADATA) {
-                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-            }
-
-            $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
-
-            return $deleted;
-        } finally {
-            // Ensure cache is cleared even if exceptions occur
-            $this->purgeCachedCollection($collectionId);
-            $this->purgeCachedDocument(self::METADATA, $collectionId);
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
         }
+
+        $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
+
+        return $deleted;
     }
 
     /**

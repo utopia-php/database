@@ -1328,7 +1328,6 @@ class Database
             // Ensure collection cache is cleared even if trigger fails after adapter changes
             if ($createdCollection !== null) {
                 $this->purgeCachedCollection($id);
-                $this->purgeCachedDocument(self::METADATA, $id);
             }
         }
     }
@@ -1751,7 +1750,6 @@ class Database
             // Ensure cache is cleared if either adapter succeeded OR metadata was modified
             if ($created || $metadataModified) {
                 $this->purgeCachedCollection($collection->getId());
-                $this->purgeCachedDocument(self::METADATA, $collection->getId());
             }
         }
     }
@@ -2973,7 +2971,7 @@ class Database
                             $side
                         );
 
-                        $this->deleteDocument(self::METADATA, $junction);
+                        $this->deleteCollection($junction);
                         break;
                     default:
                         throw new RelationshipException('Invalid relationship type.');
@@ -6114,11 +6112,6 @@ class Database
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
-
-        $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
-            '$id' => $id,
-            '$collection' => $collectionId
-        ]));
 
         return true;
     }

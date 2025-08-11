@@ -2001,9 +2001,6 @@ class MariaDB extends SQL
 
     public function getSupportForIndexArray(): bool
     {
-        /**
-         * Disabled to be compatible with Mysql adapter
-         */
-        return false;
+        return true;
     }
 }

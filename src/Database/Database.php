@@ -1319,11 +1319,18 @@ class Database
             return new Document(self::COLLECTION);
         }
 
-        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
-
-        $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
-
-        return $createdCollection;
+        $createdCollection = null;
+        try {
+            $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+            $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
+            return $createdCollection;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            if ($createdCollection !== null) {
+                $this->purgeCachedCollection($id);
+                $this->purgeCachedDocument(self::METADATA, $id);
+            }
+        }
     }
 
     /**
@@ -2398,18 +2405,23 @@ class Database
             $index->setAttribute('attributes', $indexAttributes);
         }
 
-        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+        try {
+            $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
 
-        $collection->setAttribute('attributes', $attributes);
-        $collection->setAttribute('indexes', $indexes);
+            $collection->setAttribute('attributes', $attributes);
+            $collection->setAttribute('indexes', $indexes);
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
+
+            return $renamed;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            $this->purgeCachedCollection($collection->getId());
         }
-
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
-
-        return $renamed;
     }
 
     /**
@@ -2976,15 +2988,20 @@ class Database
 
         $collection->setAttribute('indexes', $indexes);
 
-        $this->adapter->renameIndex($collection->getId(), $old, $new);
+        try {
+            $this->adapter->renameIndex($collection->getId(), $old, $new);
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
+
+            return true;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            $this->purgeCachedCollection($collection->getId());
         }
-
-        $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
-
-        return true;
     }
 
     /**

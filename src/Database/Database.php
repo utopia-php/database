@@ -1515,19 +1515,24 @@ class Database
             }
         }
 
-        if ($id === self::METADATA) {
-            $deleted = true;
-        } else {
-            $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
+        $deleted = false;
+        try {
+            if ($id === self::METADATA) {
+                $deleted = true;
+            } else {
+                $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
+            }
+
+            if ($deleted) {
+                $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+            }
+
+            return $deleted;
+        } finally {
+            // Ensure cache is cleared even if trigger fails
+            // Since adapter.deleteCollection() was called, cache should be cleared regardless
+            $this->purgeCachedCollection($id);
         }
-
-        if ($deleted) {
-            $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
-        }
-
-        $this->purgeCachedCollection($id);
-
-        return $deleted;
     }
 
     /**

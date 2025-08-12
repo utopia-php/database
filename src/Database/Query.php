@@ -285,6 +285,33 @@ class Query
     }
 
     /**
+     * Check if method is a spatial-only query method
+     *
+     * @param string $value
+     * @return bool
+     */
+    public static function isSpatialQuery(string $value): bool
+    {
+        return match ($value) {
+            self::TYPE_SPATIAL_CONTAINS,
+            self::TYPE_SPATIAL_NOT_CONTAINS,
+            self::TYPE_CROSSES,
+            self::TYPE_NOT_CROSSES,
+            self::TYPE_DISTANCE,
+            self::TYPE_NOT_DISTANCE,
+            self::TYPE_EQUALS,
+            self::TYPE_NOT_EQUALS,
+            self::TYPE_INTERSECTS,
+            self::TYPE_NOT_INTERSECTS,
+            self::TYPE_OVERLAPS,
+            self::TYPE_NOT_OVERLAPS,
+            self::TYPE_TOUCHES,
+            self::TYPE_NOT_TOUCHES => true,
+            default => false,
+        };
+    }
+
+    /**
      * Parse query
      *
      * @param string $query

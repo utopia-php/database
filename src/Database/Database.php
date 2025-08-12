@@ -6964,22 +6964,7 @@ class Database
             }
         } else if ($attributeSchema) {
             // This query is on a non-spatial attribute, reject spatial-only methods
-            if (in_array($query->getMethod(), [
-                Query::TYPE_SPATIAL_CONTAINS,
-                Query::TYPE_SPATIAL_NOT_CONTAINS,
-                Query::TYPE_CROSSES,
-                Query::TYPE_NOT_CROSSES,
-                Query::TYPE_DISTANCE,
-                Query::TYPE_NOT_DISTANCE,
-                Query::TYPE_EQUALS,
-                Query::TYPE_NOT_EQUALS,
-                Query::TYPE_INTERSECTS,
-                Query::TYPE_NOT_INTERSECTS,
-                Query::TYPE_OVERLAPS,
-                Query::TYPE_NOT_OVERLAPS,
-                Query::TYPE_TOUCHES,
-                Query::TYPE_NOT_TOUCHES,
-            ])) {
+            if (Query::isSpatialQuery($query->getMethod())) {
                 throw new QueryException('Spatial query "' . $query->getMethod() . '" cannot be applied on non-spatial attribute "' . $queryAttribute . '"');
             }
         }

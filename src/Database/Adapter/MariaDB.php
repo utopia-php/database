@@ -1795,15 +1795,16 @@ class MariaDB extends SQL
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_SPATIAL_CROSSES:
+            // Spatial query methods
+            case Query::TYPE_CROSSES:
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_SPATIAL_NOT_CROSSES:
+            case Query::TYPE_NOT_CROSSES:
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_SPATIAL_DISTANCE:
+            case Query::TYPE_DISTANCE:
                 if (count($query->getValues()) !== 2) {
                     throw new DatabaseException('Distance query requires [geometry, distance] parameters');
                 }
@@ -1811,7 +1812,7 @@ class MariaDB extends SQL
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
                 return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) <= :{$placeholder}_1";
 
-            case Query::TYPE_SPATIAL_NOT_DISTANCE:
+            case Query::TYPE_NOT_DISTANCE:
                 if (count($query->getValues()) !== 2) {
                     throw new DatabaseException('Distance query requires [geometry, distance] parameters');
                 }
@@ -1819,35 +1820,35 @@ class MariaDB extends SQL
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
                 return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
 
-            case Query::TYPE_SPATIAL_EQUALS:
+            case Query::TYPE_EQUALS:
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_SPATIAL_NOT_EQUALS:
+            case Query::TYPE_NOT_EQUALS:
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_SPATIAL_INTERSECTS:
+            case Query::TYPE_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_SPATIAL_NOT_INTERSECTS:
+            case Query::TYPE_NOT_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_SPATIAL_OVERLAPS:
+            case Query::TYPE_OVERLAPS:
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_SPATIAL_NOT_OVERLAPS:
+            case Query::TYPE_NOT_OVERLAPS:
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_SPATIAL_TOUCHES:
+            case Query::TYPE_TOUCHES:
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_SPATIAL_NOT_TOUCHES:
+            case Query::TYPE_NOT_TOUCHES:
                 $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
                 return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
         }

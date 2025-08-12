@@ -232,20 +232,20 @@ trait SpatialTests
         $this->assertInstanceOf(\Utopia\Database\Document::class, $database->createDocument('spatial_queries', $document2));
 
         // Test spatial queries
-        // Test contains query
-        $containsQuery = Query::spatialContains('polygon', [[5, 5]]);
+        // Test contains query - works on both spatial and non-spatial attributes
+        $containsQuery = Query::contains('polygon', [[5, 5]]);
         $containsResults = $database->find('spatial_queries', [$containsQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $containsResults);
         $this->assertEquals('Center Point', $containsResults[0]->getAttribute('name'));
 
-        // Test intersects query
-        $intersectsQuery = Query::spatialIntersects('polygon', [[5, 5]]); // Simplified to single point
+        // Test intersects query - spatial-only method
+        $intersectsQuery = Query::intersects('polygon', [[5, 5]]); // Simplified to single point
         $intersectsResults = $database->find('spatial_queries', [$intersectsQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $intersectsResults); // Point [5,5] only intersects with Document 1's polygon
         $this->assertEquals('Center Point', $intersectsResults[0]->getAttribute('name'));
 
-        // Test equals query
-        $equalsQuery = Query::spatialEquals('point', [[5, 5]]);
+        // Test equals query - spatial-only method
+        $equalsQuery = Query::equals('point', [[5, 5]]);
         $equalsResults = $database->find('spatial_queries', [$equalsQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $equalsResults);
         $this->assertEquals('Center Point', $equalsResults[0]->getAttribute('name'));
@@ -301,20 +301,20 @@ trait SpatialTests
         $this->assertInstanceOf(\Utopia\Database\Document::class, $database->createDocument('spatial_negations', $document1));
         $this->assertInstanceOf(\Utopia\Database\Document::class, $database->createDocument('spatial_negations', $document2));
 
-        // Test notContains query
-        $notContainsQuery = Query::spatialNotContains('polygon', [[15, 15]]);
+        // Test notContains query - works on both spatial and non-spatial attributes
+        $notContainsQuery = Query::notContains('polygon', [[15, 15]]);
         $notContainsResults = $database->find('spatial_negations', [$notContainsQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $notContainsResults);
         $this->assertEquals('Document 1', $notContainsResults[0]->getAttribute('name'));
 
-        // Test notEquals query
-        $notEqualsQuery = Query::spatialNotEquals('point', [[5, 5]]); // Use spatialNotEquals for spatial data
+        // Test notEquals query - spatial-only method
+        $notEqualsQuery = Query::notEquals('point', [[5, 5]]); // Use notEquals for spatial data
         $notEqualsResults = $database->find('spatial_negations', [$notEqualsQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $notEqualsResults);
         $this->assertEquals('Document 2', $notEqualsResults[0]->getAttribute('name'));
 
-        // Test notIntersects query
-        $notIntersectsQuery = Query::spatialNotIntersects('polygon', [[[25, 25], [35, 35]]]);
+        // Test notIntersects query - spatial-only method
+        $notIntersectsQuery = Query::notIntersects('polygon', [[[25, 25], [35, 35]]]);
         $notIntersectsResults = $database->find('spatial_negations', [$notIntersectsQuery], Database::PERMISSION_READ);
         $this->assertCount(2, $notIntersectsResults);
     }
@@ -370,8 +370,8 @@ trait SpatialTests
         $this->assertInstanceOf(\Utopia\Database\Document::class, $database->createDocument('spatial_combinations', $document2));
 
         // Test AND combination
-        $pointQuery = Query::spatialEquals('point', [[5, 5]]);
-        $polygonQuery = Query::spatialContains('polygon', [[5, 5]]);
+        $pointQuery = Query::equals('point', [[5, 5]]);
+        $polygonQuery = Query::contains('polygon', [[5, 5]]);
         $andQuery = Query::and([$pointQuery, $polygonQuery]);
         
         $andResults = $database->find('spatial_combinations', [$andQuery], Database::PERMISSION_READ);
@@ -379,8 +379,8 @@ trait SpatialTests
         $this->assertEquals('Center Document', $andResults[0]->getAttribute('name'));
 
         // Test OR combination
-        $pointQuery2 = Query::spatialEquals('point', [[5, 5]]);
-        $pointQuery3 = Query::spatialEquals('point', [[15, 15]]);
+        $pointQuery2 = Query::equals('point', [[5, 5]]);
+        $pointQuery3 = Query::equals('point', [[15, 15]]);
         $orQuery = Query::or([$pointQuery2, $pointQuery3]);
         
         $orResults = $database->find('spatial_combinations', [$orQuery], Database::PERMISSION_READ);
@@ -584,7 +584,7 @@ trait SpatialTests
         }
 
         // Test spatial queries on bulk-created data
-        $containsQuery = Query::spatialContains('polygon', [[12, 12]]);
+        $containsQuery = Query::contains('polygon', [[12, 12]]);
         $containsResults = $database->find('spatial_bulk', [$containsQuery], Database::PERMISSION_READ);
         $this->assertCount(3, $containsResults); // All 3 documents now have the same polygon that contains [12, 12]
         $this->assertEquals('Updated Document', $containsResults[0]->getAttribute('name'));
@@ -730,7 +730,7 @@ trait SpatialTests
         }
 
         // Test find with spatial query
-        $containsQuery = Query::spatialContains('polygon', [[2, 2]]);
+        $containsQuery = Query::contains('polygon', [[2, 2]]);
         $filteredDocs = $database->find('spatial_list', [$containsQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $filteredDocs);
         $this->assertEquals('List Document 1', $filteredDocs[0]->getAttribute('name'));
@@ -1034,7 +1034,7 @@ trait SpatialTests
         $this->assertEquals('Child Outside', $childrenInside[2]->getAttribute('name'));
 
         // Test basic spatial query on child location attribute
-        $locationQuery = Query::spatialEquals('location', [[25, 25]]);
+        $locationQuery = Query::equals('location', [[25, 25]]);
         $specificChild = $database->find('spatial_child', [
             Query::equal('spatial_parent', [$createdParent->getId()]),
             $locationQuery
@@ -1164,7 +1164,7 @@ trait SpatialTests
 
         // Test spatial query performance
         $startTime = microtime(true);
-        $containsQuery = Query::spatialContains('polygon', [[15, 15]]);
+        $containsQuery = Query::contains('polygon', [[15, 15]]);
         $filteredDocs = $database->find('spatial_performance', [$containsQuery], Database::PERMISSION_READ);
         $queryTime = microtime(true) - $startTime;
         
@@ -1238,25 +1238,25 @@ trait SpatialTests
 
         // Test spatial queries for each type
         // Test POINT queries
-        $pointQuery = Query::spatialEquals('point', [[20, 20]]);
+        $pointQuery = Query::equals('point', [[20, 20]]);
         $pointResults = $database->find('spatial_crud', [$pointQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $pointResults);
         $this->assertEquals('Spatial CRUD Test Document', $pointResults[0]->getAttribute('name'));
 
         // Test LINESTRING queries
-        $linestringQuery = Query::spatialContains('linestring', [[5, 5]]);
+        $linestringQuery = Query::contains('linestring', [[5, 5]]);
         $linestringResults = $database->find('spatial_crud', [$linestringQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $linestringResults);
         $this->assertEquals('Spatial CRUD Test Document', $linestringResults[0]->getAttribute('name'));
 
         // Test POLYGON queries
-        $polygonQuery = Query::spatialContains('polygon', [[5, 5]]);
+        $polygonQuery = Query::contains('polygon', [[5, 5]]);
         $polygonResults = $database->find('spatial_crud', [$polygonQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $polygonResults);
         $this->assertEquals('Spatial CRUD Test Document', $polygonResults[0]->getAttribute('name'));
 
         // Test GEOMETRY queries (should work like POINT for simple coordinates)
-        $geometryQuery = Query::spatialEquals('geometry', [[10, 10]]);
+        $geometryQuery = Query::equals('geometry', [[10, 10]]);
         $geometryResults = $database->find('spatial_crud', [$geometryQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $geometryResults);
         $this->assertEquals('Spatial CRUD Test Document', $geometryResults[0]->getAttribute('name'));
@@ -1291,7 +1291,7 @@ trait SpatialTests
         $this->assertIsArray($updatedDoc->getAttribute('polygon'));
 
         // Test spatial queries on updated data
-        $updatedPointQuery = Query::spatialEquals('point', [[40, 40]]);
+        $updatedPointQuery = Query::equals('point', [[40, 40]]);
         $updatedPointResults = $database->find('spatial_crud', [$updatedPointQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $updatedPointResults);
         $this->assertEquals('Updated Spatial CRUD Document', $updatedPointResults[0]->getAttribute('name'));

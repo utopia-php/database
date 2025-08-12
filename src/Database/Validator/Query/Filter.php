@@ -101,8 +101,38 @@ class Filter extends Base
             return false;
         }
 
-        // Extract the type of desired attribute from collection $schema
         $attributeType = $attributeSchema['type'];
+
+        // If the query method is spatial-only, the attribute must be a spatial type
+        $spatialOnlyMethods = [
+            // Spatial contains methods (explicit spatial operations)
+            Query::TYPE_SPATIAL_CONTAINS,
+            Query::TYPE_SPATIAL_NOT_CONTAINS,
+            // General spatial methods that are only for spatial attributes
+            Query::TYPE_CROSSES,
+            Query::TYPE_NOT_CROSSES,
+            Query::TYPE_DISTANCE,
+            Query::TYPE_NOT_DISTANCE,
+            Query::TYPE_EQUALS,
+            Query::TYPE_NOT_EQUALS,
+            Query::TYPE_INTERSECTS,
+            Query::TYPE_NOT_INTERSECTS,
+            Query::TYPE_OVERLAPS,
+            Query::TYPE_NOT_OVERLAPS,
+            Query::TYPE_TOUCHES,
+            Query::TYPE_NOT_TOUCHES,
+        ];
+        $spatialAttributeTypes = [
+            Database::VAR_GEOMETRY,
+            Database::VAR_POINT,
+            Database::VAR_LINESTRING,
+            Database::VAR_POLYGON,
+        ];
+
+        if (in_array($method, $spatialOnlyMethods, true) && !in_array($attributeType, $spatialAttributeTypes, true)) {
+            $this->message = 'Spatial query "' . $method . '" cannot be applied on non-spatial attribute: ' . $attribute;
+            return false;
+        }
 
         foreach ($values as $value) {
             $validator = null;
@@ -262,6 +292,15 @@ class Filter extends Base
 
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
+            case Query::TYPE_SPATIAL_CONTAINS:
+            case Query::TYPE_SPATIAL_NOT_CONTAINS:
+                if ($this->isEmpty($value->getValues())) {
+                    $this->message = \ucfirst($method) . ' queries require at least one value.';
+                    return false;
+                }
+
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+
             case Query::TYPE_NOT_EQUAL:
             case Query::TYPE_LESSER:
             case Query::TYPE_LESSER_EQUAL:
@@ -310,20 +349,18 @@ class Filter extends Base
                 return true;
 
             // Handle spatial query types
-            case Query::TYPE_SPATIAL_CONTAINS:
-            case Query::TYPE_SPATIAL_NOT_CONTAINS:
-            case Query::TYPE_SPATIAL_CROSSES:
-            case Query::TYPE_SPATIAL_NOT_CROSSES:
-            case Query::TYPE_SPATIAL_DISTANCE:
-            case Query::TYPE_SPATIAL_NOT_DISTANCE:
-            case Query::TYPE_SPATIAL_EQUALS:
-            case Query::TYPE_SPATIAL_NOT_EQUALS:
-            case Query::TYPE_SPATIAL_INTERSECTS:
-            case Query::TYPE_SPATIAL_NOT_INTERSECTS:
-            case Query::TYPE_SPATIAL_OVERLAPS:
-            case Query::TYPE_SPATIAL_NOT_OVERLAPS:
-            case Query::TYPE_SPATIAL_TOUCHES:
-            case Query::TYPE_SPATIAL_NOT_TOUCHES:
+            case Query::TYPE_CROSSES:
+            case Query::TYPE_NOT_CROSSES:
+            case Query::TYPE_DISTANCE:
+            case Query::TYPE_NOT_DISTANCE:
+            case Query::TYPE_EQUALS:
+            case Query::TYPE_NOT_EQUALS:
+            case Query::TYPE_INTERSECTS:
+            case Query::TYPE_NOT_INTERSECTS:
+            case Query::TYPE_OVERLAPS:
+            case Query::TYPE_NOT_OVERLAPS:
+            case Query::TYPE_TOUCHES:
+            case Query::TYPE_NOT_TOUCHES:
                 if ($this->isEmpty($value->getValues())) {
                     $this->message = \ucfirst($method) . ' queries require at least one value.';
                     return false;

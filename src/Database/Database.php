@@ -6889,7 +6889,7 @@ class Database
                 Database::VAR_POINT, 
                 Database::VAR_LINESTRING, 
                 Database::VAR_POLYGON
-            ])) {
+                ])) {
                 foreach ($queries as $index => $query) {
                     if ($query->getAttribute() === $attribute->getId()) {
                         $method = $query->getMethod();
@@ -6897,9 +6897,7 @@ class Database
                                             // Map standard query methods to spatial equivalents
                         $spatialMethodMap = [
                             Query::TYPE_CONTAINS => Query::TYPE_SPATIAL_CONTAINS,
-                            Query::TYPE_NOT_CONTAINS => Query::TYPE_SPATIAL_NOT_CONTAINS,
-                            Query::TYPE_EQUAL => Query::TYPE_SPATIAL_EQUALS,
-                            Query::TYPE_NOT_EQUAL => Query::TYPE_SPATIAL_NOT_EQUALS,
+                            Query::TYPE_NOT_CONTAINS => Query::TYPE_SPATIAL_NOT_CONTAINS
                         ];
                     
                         if (isset($spatialMethodMap[$method])) {
@@ -6911,7 +6909,82 @@ class Database
             }
         }
 
+        // Convert standard queries to spatial queries when used on spatial attributes
+        foreach ($queries as $index => $query) {
+            $queries[$index] = $this->convertSpatialQueries($attributes, $query);
+        }
+
         return $queries;
+    }
+
+    /**
+     * Recursively convert spatial queries
+     */
+    private function convertSpatialQueries(array $attributes, Query $query): Query
+    {
+        // Handle logical queries (AND, OR) recursively
+        if (in_array($query->getMethod(), [Query::TYPE_AND, Query::TYPE_OR])) {
+            $nestedQueries = $query->getValues();
+            $convertedNestedQueries = [];
+            foreach ($nestedQueries as $nestedQuery) {
+                $convertedNestedQueries[] = $this->convertSpatialQueries($attributes, $nestedQuery);
+            }
+            $query->setValues($convertedNestedQueries);
+            return $query;
+        }
+
+        // Process individual queries
+        $queryAttribute = $query->getAttribute();
+        
+        // Find the attribute schema for this query
+        $attributeSchema = null;
+        foreach ($attributes as $attribute) {
+            if ($attribute->getId() === $queryAttribute) {
+                $attributeSchema = $attribute;
+                break;
+            }
+        }
+        
+        if ($attributeSchema && in_array($attributeSchema->getAttribute('type'), [
+            Database::VAR_GEOMETRY, 
+            Database::VAR_POINT, 
+            Database::VAR_LINESTRING, 
+            Database::VAR_POLYGON
+        ])) {
+            // This query is on a spatial attribute, convert CONTAINS/NOT_CONTAINS to spatial methods
+            $method = $query->getMethod();
+            
+            $spatialMethodMap = [
+                Query::TYPE_CONTAINS => Query::TYPE_SPATIAL_CONTAINS,
+                Query::TYPE_NOT_CONTAINS => Query::TYPE_SPATIAL_NOT_CONTAINS
+            ];
+            
+            if (isset($spatialMethodMap[$method])) {
+                $query->setMethod($spatialMethodMap[$method]);
+            }
+        } else if ($attributeSchema) {
+            // This query is on a non-spatial attribute, reject spatial-only methods
+            if (in_array($query->getMethod(), [
+                Query::TYPE_SPATIAL_CONTAINS,
+                Query::TYPE_SPATIAL_NOT_CONTAINS,
+                Query::TYPE_CROSSES,
+                Query::TYPE_NOT_CROSSES,
+                Query::TYPE_DISTANCE,
+                Query::TYPE_NOT_DISTANCE,
+                Query::TYPE_EQUALS,
+                Query::TYPE_NOT_EQUALS,
+                Query::TYPE_INTERSECTS,
+                Query::TYPE_NOT_INTERSECTS,
+                Query::TYPE_OVERLAPS,
+                Query::TYPE_NOT_OVERLAPS,
+                Query::TYPE_TOUCHES,
+                Query::TYPE_NOT_TOUCHES,
+            ])) {
+                throw new QueryException('Spatial query "' . $query->getMethod() . '" cannot be applied on non-spatial attribute "' . $queryAttribute . '"');
+            }
+        }
+
+        return $query;
     }
 
     /**

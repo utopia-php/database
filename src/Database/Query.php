@@ -27,21 +27,23 @@ class Query
     public const TYPE_ENDS_WITH = 'endsWith';
     public const TYPE_NOT_ENDS_WITH = 'notEndsWith';
 
-    // Spatial methods
+    // Spatial contains methods (for explicit spatial operations)
     public const TYPE_SPATIAL_CONTAINS = 'spatialContains';
     public const TYPE_SPATIAL_NOT_CONTAINS = 'spatialNotContains';
-    public const TYPE_SPATIAL_CROSSES = 'spatialCrosses';
-    public const TYPE_SPATIAL_NOT_CROSSES = 'spatialNotCrosses';
-    public const TYPE_SPATIAL_DISTANCE = 'spatialDistance';
-    public const TYPE_SPATIAL_NOT_DISTANCE = 'spatialNotDistance';
-    public const TYPE_SPATIAL_EQUALS = 'spatialEquals';
-    public const TYPE_SPATIAL_NOT_EQUALS = 'spatialNotEquals';
-    public const TYPE_SPATIAL_INTERSECTS = 'spatialIntersects';
-    public const TYPE_SPATIAL_NOT_INTERSECTS = 'spatialNotIntersects';
-    public const TYPE_SPATIAL_OVERLAPS = 'spatialOverlaps';
-    public const TYPE_SPATIAL_NOT_OVERLAPS = 'spatialNotOverlaps';
-    public const TYPE_SPATIAL_TOUCHES = 'spatialTouches';
-    public const TYPE_SPATIAL_NOT_TOUCHES = 'spatialNotTouches';
+
+    // General spatial method constants (for spatial-only operations)
+    public const TYPE_CROSSES = 'crosses';
+    public const TYPE_NOT_CROSSES = 'notCrosses';
+    public const TYPE_DISTANCE = 'distance';
+    public const TYPE_NOT_DISTANCE = 'notDistance';
+    public const TYPE_EQUALS = 'equals';
+    public const TYPE_NOT_EQUALS = 'notEquals';
+    public const TYPE_INTERSECTS = 'intersects';
+    public const TYPE_NOT_INTERSECTS = 'notIntersects';
+    public const TYPE_OVERLAPS = 'overlaps';
+    public const TYPE_NOT_OVERLAPS = 'notOverlaps';
+    public const TYPE_TOUCHES = 'touches';
+    public const TYPE_NOT_TOUCHES = 'notTouches';
 
     public const TYPE_SELECT = 'select';
 
@@ -82,18 +84,18 @@ class Query
         self::TYPE_NOT_ENDS_WITH,
         self::TYPE_SPATIAL_CONTAINS,
         self::TYPE_SPATIAL_NOT_CONTAINS,
-        self::TYPE_SPATIAL_CROSSES,
-        self::TYPE_SPATIAL_NOT_CROSSES,
-        self::TYPE_SPATIAL_DISTANCE,
-        self::TYPE_SPATIAL_NOT_DISTANCE,
-        self::TYPE_SPATIAL_EQUALS,
-        self::TYPE_SPATIAL_NOT_EQUALS,
-        self::TYPE_SPATIAL_INTERSECTS,
-        self::TYPE_SPATIAL_NOT_INTERSECTS,
-        self::TYPE_SPATIAL_OVERLAPS,
-        self::TYPE_SPATIAL_NOT_OVERLAPS,
-        self::TYPE_SPATIAL_TOUCHES,
-        self::TYPE_SPATIAL_NOT_TOUCHES,
+        self::TYPE_CROSSES,
+        self::TYPE_NOT_CROSSES,
+        self::TYPE_DISTANCE,
+        self::TYPE_NOT_DISTANCE,
+        self::TYPE_EQUALS,
+        self::TYPE_NOT_EQUALS,
+        self::TYPE_INTERSECTS,
+        self::TYPE_NOT_INTERSECTS,
+        self::TYPE_OVERLAPS,
+        self::TYPE_NOT_OVERLAPS,
+        self::TYPE_TOUCHES,
+        self::TYPE_NOT_TOUCHES,
         self::TYPE_SELECT,
         self::TYPE_ORDER_DESC,
         self::TYPE_ORDER_ASC,
@@ -263,20 +265,18 @@ class Query
             self::TYPE_NOT_STARTS_WITH,
             self::TYPE_ENDS_WITH,
             self::TYPE_NOT_ENDS_WITH,
-            self::TYPE_SPATIAL_CONTAINS,
-            self::TYPE_SPATIAL_NOT_CONTAINS,
-            self::TYPE_SPATIAL_CROSSES,
-            self::TYPE_SPATIAL_NOT_CROSSES,
-            self::TYPE_SPATIAL_DISTANCE,
-            self::TYPE_SPATIAL_NOT_DISTANCE,
-            self::TYPE_SPATIAL_EQUALS,
-            self::TYPE_SPATIAL_NOT_EQUALS,
-            self::TYPE_SPATIAL_INTERSECTS,
-            self::TYPE_SPATIAL_NOT_INTERSECTS,
-            self::TYPE_SPATIAL_OVERLAPS,
-            self::TYPE_SPATIAL_NOT_OVERLAPS,
-            self::TYPE_SPATIAL_TOUCHES,
-            self::TYPE_SPATIAL_NOT_TOUCHES,
+            self::TYPE_CROSSES,
+            self::TYPE_NOT_CROSSES,
+            self::TYPE_DISTANCE,
+            self::TYPE_NOT_DISTANCE,
+            self::TYPE_EQUALS,
+            self::TYPE_NOT_EQUALS,
+            self::TYPE_INTERSECTS,
+            self::TYPE_NOT_INTERSECTS,
+            self::TYPE_OVERLAPS,
+            self::TYPE_NOT_OVERLAPS,
+            self::TYPE_TOUCHES,
+            self::TYPE_NOT_TOUCHES,
             self::TYPE_OR,
             self::TYPE_AND,
             self::TYPE_SELECT => true,
@@ -881,199 +881,7 @@ class Query
     // Spatial query methods
 
     /**
-     * Helper method to create Query with spatialContains method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialContains(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_CONTAINS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialNotContains method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialNotContains(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_NOT_CONTAINS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialCrosses method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialCrosses(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_CROSSES, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialNotCrosses method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialNotCrosses(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_NOT_CROSSES, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialDistance method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialDistance(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_DISTANCE, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialNotDistance method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialNotDistance(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_NOT_DISTANCE, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialEquals method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialEquals(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_EQUALS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialNotEquals method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialNotEquals(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_NOT_EQUALS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialIntersects method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialIntersects(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_INTERSECTS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialNotIntersects method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialNotIntersects(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_NOT_INTERSECTS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialOverlaps method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialOverlaps(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_OVERLAPS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialNotOverlaps method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialNotOverlaps(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_NOT_OVERLAPS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialTouches method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialTouches(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_TOUCHES, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with spatialNotTouches method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function spatialNotTouches(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_NOT_TOUCHES, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with intersects method for spatial data
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function intersects(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_INTERSECTS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with notIntersects method for spatial data
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function notIntersects(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_SPATIAL_NOT_INTERSECTS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with distance method for spatial data
+     * Helper method to create Query with distance method
      *
      * @param string $attribute
      * @param array<mixed> $values
@@ -1081,11 +889,11 @@ class Query
      */
     public static function distance(string $attribute, array $values): self
     {
-        return new self(self::TYPE_SPATIAL_DISTANCE, $attribute, $values);
+        return new self(self::TYPE_DISTANCE, $attribute, $values);
     }
 
     /**
-     * Helper method to create Query with notDistance method for spatial data
+     * Helper method to create Query with notDistance method
      *
      * @param string $attribute
      * @param array<mixed> $values
@@ -1093,11 +901,61 @@ class Query
      */
     public static function notDistance(string $attribute, array $values): self
     {
-        return new self(self::TYPE_SPATIAL_NOT_DISTANCE, $attribute, $values);
+        return new self(self::TYPE_NOT_DISTANCE, $attribute, $values);
     }
 
     /**
-     * Helper method to create Query with crosses method for spatial data
+     * Helper method to create Query with equals method
+     *
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
+     */
+    public static function equals(string $attribute, array $values): self
+    {
+        return new self(self::TYPE_EQUALS, $attribute, $values);
+    }
+
+    /**
+     * Helper method to create Query with notEquals method
+     *
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
+     */
+    public static function notEquals(string $attribute, array $values): self
+    {
+        return new self(self::TYPE_NOT_EQUALS, $attribute, $values);
+    }
+
+    /**
+     * Helper method to create Query with intersects method
+     *
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
+     */
+    public static function intersects(string $attribute, array $values): self
+    {
+        return new self(self::TYPE_INTERSECTS, $attribute, $values);
+    }
+
+    /**
+     * Helper method to create Query with notIntersects method
+     *
+     * @param string $attribute
+     * @param array<mixed> $values
+     * @return Query
+     */
+    public static function notIntersects(string $attribute, array $values): self
+    {
+        return new self(self::TYPE_NOT_INTERSECTS, $attribute, $values);
+    }
+
+    
+
+    /**
+     * Helper method to create Query with crosses method
      *
      * @param string $attribute
      * @param array<mixed> $values
@@ -1105,11 +963,11 @@ class Query
      */
     public static function crosses(string $attribute, array $values): self
     {
-        return new self(self::TYPE_SPATIAL_CROSSES, $attribute, $values);
+        return new self(self::TYPE_CROSSES, $attribute, $values);
     }
 
     /**
-     * Helper method to create Query with notCrosses method for spatial data
+     * Helper method to create Query with notCrosses method
      *
      * @param string $attribute
      * @param array<mixed> $values
@@ -1117,11 +975,11 @@ class Query
      */
     public static function notCrosses(string $attribute, array $values): self
     {
-        return new self(self::TYPE_SPATIAL_NOT_CROSSES, $attribute, $values);
+        return new self(self::TYPE_NOT_CROSSES, $attribute, $values);
     }
 
     /**
-     * Helper method to create Query with overlaps method for spatial data
+     * Helper method to create Query with overlaps method
      *
      * @param string $attribute
      * @param array<mixed> $values
@@ -1129,11 +987,11 @@ class Query
      */
     public static function overlaps(string $attribute, array $values): self
     {
-        return new self(self::TYPE_SPATIAL_OVERLAPS, $attribute, $values);
+        return new self(self::TYPE_OVERLAPS, $attribute, $values);
     }
 
     /**
-     * Helper method to create Query with notOverlaps method for spatial data
+     * Helper method to create Query with notOverlaps method
      *
      * @param string $attribute
      * @param array<mixed> $values
@@ -1141,11 +999,11 @@ class Query
      */
     public static function notOverlaps(string $attribute, array $values): self
     {
-        return new self(self::TYPE_SPATIAL_NOT_OVERLAPS, $attribute, $values);
+        return new self(self::TYPE_NOT_OVERLAPS, $attribute, $values);
     }
 
     /**
-     * Helper method to create Query with touches method for spatial data
+     * Helper method to create Query with touches method
      *
      * @param string $attribute
      * @param array<mixed> $values
@@ -1153,11 +1011,11 @@ class Query
      */
     public static function touches(string $attribute, array $values): self
     {
-        return new self(self::TYPE_SPATIAL_TOUCHES, $attribute, $values);
+        return new self(self::TYPE_TOUCHES, $attribute, $values);
     }
 
     /**
-     * Helper method to create Query with notTouches method for spatial data
+     * Helper method to create Query with notTouches method
      *
      * @param string $attribute
      * @param array<mixed> $values
@@ -1165,6 +1023,8 @@ class Query
      */
     public static function notTouches(string $attribute, array $values): self
     {
-        return new self(self::TYPE_SPATIAL_NOT_TOUCHES, $attribute, $values);
+        return new self(self::TYPE_NOT_TOUCHES, $attribute, $values);
     }
+
+    
 }

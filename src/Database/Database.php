@@ -7087,35 +7087,21 @@ class Database
      */
     protected function encodeSpatialData(mixed $value, string $type): string
     {
-        if (!is_array($value)) {
-            throw new DatabaseException('Spatial data must be provided as an array');
-        }
+        // Validate first using the dedicated Spatial validator
+        \Utopia\Database\Validator\Spatial::validate($value, $type);
 
         switch ($type) {
             case self::VAR_POINT:
-                if (count($value) !== 2 || !is_numeric($value[0]) || !is_numeric($value[1])) {
-                    throw new DatabaseException('Point must be an array of two numeric values [x, y]');
-                }
                 return "POINT({$value[0]} {$value[1]})";
 
             case self::VAR_LINESTRING:
-                if (empty($value) || !is_array($value[0])) {
-                    throw new DatabaseException('LineString must be an array of points');
-                }
                 $points = [];
                 foreach ($value as $point) {
-                    if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
-                        throw new DatabaseException('Each point in LineString must be an array of two numeric values [x, y]');
-                    }
                     $points[] = "{$point[0]} {$point[1]}";
                 }
                 return 'LINESTRING(' . implode(', ', $points) . ')';
 
             case self::VAR_POLYGON:
-                if (empty($value) || !is_array($value)) {
-                    throw new DatabaseException('Polygon must be an array');
-                }
-                
                 // Check if this is a single ring (flat array of points) or multiple rings
                 $isSingleRing = count($value) > 0 && is_array($value[0]) && 
                               count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
@@ -7127,14 +7113,8 @@ class Database
                 
                 $rings = [];
                 foreach ($value as $ring) {
-                    if (!is_array($ring) || empty($ring)) {
-                        throw new DatabaseException('Each ring in Polygon must be an array of points');
-                    }
                     $points = [];
                     foreach ($ring as $point) {
-                        if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
-                            throw new DatabaseException('Each point in Polygon ring must be an array of two numeric values [x, y]');
-                        }
                         $points[] = "{$point[0]} {$point[1]}";
                     }
                     $rings[] = '(' . implode(', ', $points) . ')';
@@ -7142,16 +7122,8 @@ class Database
                 return 'POLYGON(' . implode(', ', $rings) . ')';
 
             case self::VAR_GEOMETRY:
-                // For geometry, we can accept both WKT strings and arrays
-                if (is_string($value)) {
-                    return $value; // Already in WKT format
-                }
                 // If it's an array, convert it to GEOMETRY WKT format
-                // This allows VAR_GEOMETRY to work with coordinate arrays while preserving the geometry type
-                if (count($value) === 2 && is_numeric($value[0]) && is_numeric($value[1])) {
-                    return "POINT({$value[0]} {$value[1]})";
-                }
-                throw new DatabaseException('Geometry type requires WKT string or array of two numeric values [x, y]');
+                return "POINT({$value[0]} {$value[1]})";
 
             default:
                 throw new DatabaseException('Unknown spatial type: ' . $type);
@@ -7191,31 +7163,38 @@ class Database
             return $result;
         }
         
-        // Try to parse POLYGON format
-        if (stripos($wkt, 'POLYGON') === 0) {
-            // Extract the content between the outer parentheses
-            $start = strpos($wkt, '((');
-            $end = strrpos($wkt, '))');
+        if (preg_match('/^POLYGON\(\(([^)]+)\)\)$/i', $wkt, $matches)) {
+            $content = substr($wkt, 8, -1); // Remove POLYGON(( and ))
+            $rings = explode('),(', $content);
+            $result = [];
             
-            if ($start !== false && $end !== false && $end > $start) {
-                $content = substr($wkt, $start + 2, $end - $start - 2);
-                // Split by comma to get individual points
-                $points = explode(',', $content);
-                $ring = [];
+            foreach ($rings as $ring) {
+                $ring = trim($ring, '()');
+                $points = explode(',', $ring);
+                $ringPoints = [];
                 
                 foreach ($points as $point) {
                     $coords = preg_split('/\s+/', trim($point));
                     if (count($coords) !== 2) {
-                        continue;
+                        throw new DatabaseException('Invalid POLYGON WKT format');
                     }
-                    $ring[] = [(float)$coords[0], (float)$coords[1]];
+                    $ringPoints[] = [(float)$coords[0], (float)$coords[1]];
                 }
                 
-                if (!empty($ring)) {
-                    return [$ring];
-                }
+                $result[] = $ringPoints;
             }
+            
+            return $result;
         }
+        
+        if (preg_match('/^GEOMETRY\(POINT\(([^)]+)\)\)$/i', $wkt, $matches)) {
+            $coords = explode(' ', trim($matches[1]));
+            if (count($coords) !== 2) {
+                throw new DatabaseException('Invalid GEOMETRY POINT WKT format');
+            }
+            return [(float)$coords[0], (float)$coords[1]];
+        }
+        
         // For other geometry types, return as-is for now
         return [$wkt];
     }

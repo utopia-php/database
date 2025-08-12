@@ -395,52 +395,9 @@ abstract class SQL extends Adapter
             unset($document['_permissions']);
         }
 
-        // Process spatial attributes - convert from raw binary/WKT to arrays
-        if (!empty($spatialAttributes)) {
-            // For spatial attributes, we need to run another query using ST_AsText() 
-            // to get WKT format that we can convert to arrays
-            $spatialProjections = [];
-            foreach ($spatialAttributes as $spatialAttr) {
-                $filteredAttr = $this->filter($spatialAttr);
-                $quotedAttr = $this->quote($filteredAttr);
-                $spatialProjections[] = "ST_AsText({$quotedAttr}) AS {$quotedAttr}";
-            }
-            
-            if (!empty($spatialProjections)) {
-                $spatialSql = "
-                    SELECT " . implode(', ', $spatialProjections) . "
-                    FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
-                    WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
-                    {$this->getTenantQuery($collection, $alias)}
-                ";
-                
-                $spatialStmt = $this->getPDO()->prepare($spatialSql);
-                $spatialStmt->bindValue(':_uid', $id);
-                
-                if ($this->sharedTables) {
-                    $spatialStmt->bindValue(':_tenant', $this->getTenant());
-                }
-                
-                $spatialStmt->execute();
-                $spatialData = $spatialStmt->fetchAll();
-                $spatialStmt->closeCursor();
-                
-                if (!empty($spatialData)) {
-                    $spatialRow = $spatialData[0];
-                    // Replace the binary spatial data with WKT data
-                    foreach ($spatialAttributes as $spatialAttr) {
-                        if (array_key_exists($spatialAttr, $spatialRow)) {
-                            $document[$spatialAttr] = $spatialRow[$spatialAttr];
-                        }
-                    }
-                }
-            }
-            
-            // Now process spatial attributes to convert WKT to arrays
-            foreach ($spatialAttributes as $spatialAttr) {
-                if (array_key_exists($spatialAttr, $document) && !is_null($document[$spatialAttr])) {
-                    $document[$spatialAttr] = $this->processSpatialValue($document[$spatialAttr]);
-                }
+        foreach ($spatialAttributes as $spatialAttr) {
+            if (array_key_exists($spatialAttr, $document) && !is_null($document[$spatialAttr])) {
+                $document[$spatialAttr] = $this->processSpatialValue($document[$spatialAttr]);
             }
         }
 
@@ -2100,15 +2057,13 @@ abstract class SQL extends Adapter
                     if (is_string($value) && $this->isWKTString($value)) {
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
-                        $bindValues[$bindKey] = $value;
-                        $bindIndex++;
                     } else {
                         $value = (\is_bool($value)) ? (int)$value : $value;
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = ':' . $bindKey;
-                        $bindValues[$bindKey] = $value;
-                        $bindIndex++;
                     }
+                    $bindValues[$bindKey] = $value;
+                    $bindIndex++;
                 }
 
                 $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
@@ -2227,15 +2182,13 @@ abstract class SQL extends Adapter
                     if (is_string($attrValue) && $this->isWKTString($attrValue)) {
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
-                        $bindValues[$bindKey] = $attrValue;
-                        $bindIndex++;
                     } else {
                         $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = ':' . $bindKey;
-                        $bindValues[$bindKey] = $attrValue;
-                        $bindIndex++;
                     }
+                    $bindValues[$bindKey] = $attrValue;
+                    $bindIndex++;
                 }
 
                 $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';

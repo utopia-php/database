@@ -354,24 +354,7 @@ class Structure extends Validator
                 case Database::VAR_POINT:
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:
-                    // Spatial types can be arrays (input) or strings (encoded WKT) or null
-                    $validators[] = new class extends Validator {
-                        public function getDescription(): string {
-                            return 'Value must be an array or WKT string representing spatial data';
-                        }
-
-                        public function isArray(): bool {
-                            return false;
-                        }
-
-                        public function getType(): string {
-                            return 'spatial';
-                        }
-
-                        public function isValid($value): bool {
-                            return is_array($value) || is_string($value) || is_null($value);
-                        }
-                    };
+                    $validators[] = new \Utopia\Database\Validator\Spatial($type);
                     break;
 
                 default:

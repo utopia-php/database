@@ -963,6 +963,11 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForSpatialAttributes(): bool
+    {
+        return false; // SQLite doesn't have native spatial support
+    }
+
     /**
      * Get SQL Index Type
      *

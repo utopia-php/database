@@ -138,6 +138,20 @@ class Filter extends Base
                 case Database::VAR_RELATIONSHIP:
                     $validator = new Text(255, 0); // The query is always on uid
                     break;
+
+                case Database::VAR_GEOMETRY:
+                case Database::VAR_POINT:
+                case Database::VAR_LINESTRING:
+                case Database::VAR_POLYGON:
+                    // Spatial queries accept flexible geometry data (arrays)
+                    // Basic validation: ensure it's an array since spatial data is passed as arrays
+                    if (!is_array($value)) {
+                        $this->message = 'Spatial data must be an array';
+                        return false;
+                    }
+                    // Skip further validation for spatial data as it will be handled by the database
+                    continue 2; // Continue to next value in the foreach loop
+
                 default:
                     $this->message = 'Unknown Data type';
                     return false;
@@ -182,7 +196,13 @@ class Filter extends Base
         if (
             !$array &&
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
-            $attributeSchema['type'] !==  Database::VAR_STRING
+            $attributeSchema['type'] !== Database::VAR_STRING &&
+            !in_array($attributeSchema['type'], [
+                Database::VAR_GEOMETRY, 
+                Database::VAR_POINT, 
+                Database::VAR_LINESTRING, 
+                Database::VAR_POLYGON
+            ])
         ) {
             $queryType = $method === Query::TYPE_NOT_CONTAINS ? 'notContains' : 'contains';
             $this->message = 'Cannot query ' . $queryType . ' on attribute "' . $attribute . '" because it is not an array or string.';
@@ -288,6 +308,28 @@ class Filter extends Base
                 }
 
                 return true;
+
+            // Handle spatial query types
+            case Query::TYPE_SPATIAL_CONTAINS:
+            case Query::TYPE_SPATIAL_NOT_CONTAINS:
+            case Query::TYPE_SPATIAL_CROSSES:
+            case Query::TYPE_SPATIAL_NOT_CROSSES:
+            case Query::TYPE_SPATIAL_DISTANCE:
+            case Query::TYPE_SPATIAL_NOT_DISTANCE:
+            case Query::TYPE_SPATIAL_EQUALS:
+            case Query::TYPE_SPATIAL_NOT_EQUALS:
+            case Query::TYPE_SPATIAL_INTERSECTS:
+            case Query::TYPE_SPATIAL_NOT_INTERSECTS:
+            case Query::TYPE_SPATIAL_OVERLAPS:
+            case Query::TYPE_SPATIAL_NOT_OVERLAPS:
+            case Query::TYPE_SPATIAL_TOUCHES:
+            case Query::TYPE_SPATIAL_NOT_TOUCHES:
+                if ($this->isEmpty($value->getValues())) {
+                    $this->message = \ucfirst($method) . ' queries require at least one value.';
+                    return false;
+                }
+
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             default:
                 return false;

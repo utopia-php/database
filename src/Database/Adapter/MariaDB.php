@@ -748,12 +748,13 @@ class MariaDB extends SQL
             Database::INDEX_KEY => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
             Database::INDEX_FULLTEXT => 'FULLTEXT INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT),
+            Database::INDEX_SPATIAL => 'SPATIAL INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL),
         };
 
         $attributes = \implode(', ', $attributes);
 
-        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT) {
+        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT && $type !== Database::INDEX_SPATIAL) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }
@@ -836,7 +837,20 @@ class MariaDB extends SQL
                 $column = $this->filter($attribute);
                 $bindKey = 'key_' . $bindIndex;
                 $columns .= "`{$column}`, ";
+                
+                // Check if this is spatial data (WKT string)
+                $isSpatialData = is_string($value) && (
+                    strpos($value, 'POINT(') === 0 ||
+                    strpos($value, 'LINESTRING(') === 0 ||
+                    strpos($value, 'POLYGON(') === 0 ||
+                    strpos($value, 'GEOMETRY(') === 0
+                );
+                
+                if ($isSpatialData) {
+                    $columnNames .= 'ST_GeomFromText(:' . $bindKey . '), ';
+                } else {
                 $columnNames .= ':' . $bindKey . ', ';
+                }
                 $bindIndex++;
             }
 
@@ -863,13 +877,12 @@ class MariaDB extends SQL
             }
 
             $attributeIndex = 0;
-            foreach ($attributes as $value) {
+            foreach ($attributes as $attributeName => $value) {
                 if (\is_array($value)) {
                     $value = \json_encode($value);
                 }
 
                 $bindKey = 'key_' . $attributeIndex;
-                $attribute = $this->filter($attribute);
                 $value = (\is_bool($value)) ? (int)$value : $value;
                 $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
                 $attributeIndex++;
@@ -1099,7 +1112,20 @@ class MariaDB extends SQL
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
                 $bindKey = 'key_' . $bindIndex;
-                $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+                
+                // Check if this is spatial data (WKT string)
+                $isSpatialData = is_string($value) && (
+                    strpos($value, 'POINT(') === 0 ||
+                    strpos($value, 'LINESTRING(') === 0 ||
+                    strpos($value, 'POLYGON(') === 0 ||
+                    strpos($value, 'GEOMETRY(') === 0
+                );
+                
+                if ($isSpatialData) {
+                    $columns .= "`{$column}`" . '=ST_GeomFromText(:' . $bindKey . '),';
+                } else {
+                    $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+                }
                 $bindIndex++;
             }
 
@@ -1350,7 +1376,7 @@ class MariaDB extends SQL
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $spatialAttributes = []): array
     {
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1455,7 +1481,7 @@ class MariaDB extends SQL
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias)}
+            SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlWhere}
             {$sqlOrder}
@@ -1759,7 +1785,125 @@ class MariaDB extends SQL
 
                 $separator = $isNotQuery ? ' AND ' : ' OR ';
                 return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
+
+            // Spatial query methods
+            case Query::TYPE_SPATIAL_CONTAINS:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_NOT_CONTAINS:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_CROSSES:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_NOT_CROSSES:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_DISTANCE:
+                if (count($query->getValues()) !== 2) {
+                    throw new DatabaseException('Distance query requires [geometry, distance] parameters');
+                }
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) <= :{$placeholder}_1";
+
+            case Query::TYPE_SPATIAL_NOT_DISTANCE:
+                if (count($query->getValues()) !== 2) {
+                    throw new DatabaseException('Distance query requires [geometry, distance] parameters');
+                }
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
+
+            case Query::TYPE_SPATIAL_EQUALS:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_NOT_EQUALS:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_INTERSECTS:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_NOT_INTERSECTS:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_OVERLAPS:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_NOT_OVERLAPS:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_TOUCHES:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_SPATIAL_NOT_TOUCHES:
+                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
         }
+    }
+
+    /**
+     * Build geometry WKT string from array input for spatial queries
+     *
+     * @param array<mixed> $geometry
+     * @return string
+     * @throws DatabaseException
+     */
+    protected function buildGeometryFromArray(array $geometry): string
+    {
+        // Handle different input formats for spatial queries
+        if (empty($geometry)) {
+            throw new DatabaseException('Empty geometry array provided');
+        }
+
+        // Check if it's a simple point [x, y]
+        if (count($geometry) === 2 && is_numeric($geometry[0]) && is_numeric($geometry[1])) {
+            return "POINT({$geometry[0]} {$geometry[1]})";
+        }
+
+        // Check if it's a linestring [[x1, y1], [x2, y2], ...]
+        if (is_array($geometry[0]) && count($geometry[0]) === 2 && is_numeric($geometry[0][0])) {
+            $points = [];
+            foreach ($geometry as $point) {
+                if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
+                    throw new DatabaseException('Invalid point format in geometry array');
+                }
+                $points[] = "{$point[0]} {$point[1]}";
+            }
+            return 'LINESTRING(' . implode(', ', $points) . ')';
+        }
+
+        // Check if it's a polygon [[[x1, y1], [x2, y2], ...], ...]
+        if (is_array($geometry[0]) && is_array($geometry[0][0]) && count($geometry[0][0]) === 2) {
+            $rings = [];
+            foreach ($geometry as $ring) {
+                if (!is_array($ring)) {
+                    throw new DatabaseException('Invalid ring format in polygon geometry');
+                }
+                $points = [];
+                foreach ($ring as $point) {
+                    if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
+                        throw new DatabaseException('Invalid point format in polygon ring');
+                    }
+                    $points[] = "{$point[0]} {$point[1]}";
+                }
+                $rings[] = '(' . implode(', ', $points) . ')';
+            }
+            return 'POLYGON(' . implode(', ', $rings) . ')';
+        }
+
+        throw new DatabaseException('Unrecognized geometry array format');
     }
 
     /**
@@ -1820,8 +1964,20 @@ class MariaDB extends SQL
             case Database::VAR_DATETIME:
                 return 'DATETIME(3)';
 
+            case Database::VAR_GEOMETRY:
+                return 'GEOMETRY NOT NULL';
+
+            case Database::VAR_POINT:
+                return 'POINT NOT NULL';
+
+            case Database::VAR_LINESTRING:
+                return 'LINESTRING NOT NULL';
+
+            case Database::VAR_POLYGON:
+                return 'POLYGON NOT NULL';
+
             default:
-                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_GEOMETRY . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 
@@ -2003,4 +2159,17 @@ class MariaDB extends SQL
     {
         return true;
     }
+
+    public function getSupportForSpatialAttributes(): bool
+    {
+        return true;
+    }
+
+
+
+
+
+
+
+
 }

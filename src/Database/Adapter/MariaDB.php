@@ -1788,27 +1788,27 @@ class MariaDB extends SQL
 
             // Spatial query methods
             case Query::TYPE_SPATIAL_CONTAINS:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_SPATIAL_NOT_CONTAINS:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             // Spatial query methods
             case Query::TYPE_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_DISTANCE:
                 if (count($query->getValues()) !== 2) {
                     throw new DatabaseException('Distance query requires [geometry, distance] parameters');
                 }
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
                 return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) <= :{$placeholder}_1";
 
@@ -1816,95 +1816,42 @@ class MariaDB extends SQL
                 if (count($query->getValues()) !== 2) {
                     throw new DatabaseException('Distance query requires [geometry, distance] parameters');
                 }
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
                 return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
 
             case Query::TYPE_EQUALS:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_EQUALS:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->buildGeometryFromArray($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
         }
-    }
-
-    /**
-     * Build geometry WKT string from array input for spatial queries
-     *
-     * @param array<mixed> $geometry
-     * @return string
-     * @throws DatabaseException
-     */
-    protected function buildGeometryFromArray(array $geometry): string
-    {
-        // Handle different input formats for spatial queries
-        if (empty($geometry)) {
-            throw new DatabaseException('Empty geometry array provided');
-        }
-
-        // Check if it's a simple point [x, y]
-        if (count($geometry) === 2 && is_numeric($geometry[0]) && is_numeric($geometry[1])) {
-            return "POINT({$geometry[0]} {$geometry[1]})";
-        }
-
-        // Check if it's a linestring [[x1, y1], [x2, y2], ...]
-        if (is_array($geometry[0]) && count($geometry[0]) === 2 && is_numeric($geometry[0][0])) {
-            $points = [];
-            foreach ($geometry as $point) {
-                if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
-                    throw new DatabaseException('Invalid point format in geometry array');
-                }
-                $points[] = "{$point[0]} {$point[1]}";
-            }
-            return 'LINESTRING(' . implode(', ', $points) . ')';
-        }
-
-        // Check if it's a polygon [[[x1, y1], [x2, y2], ...], ...]
-        if (is_array($geometry[0]) && is_array($geometry[0][0]) && count($geometry[0][0]) === 2) {
-            $rings = [];
-            foreach ($geometry as $ring) {
-                if (!is_array($ring)) {
-                    throw new DatabaseException('Invalid ring format in polygon geometry');
-                }
-                $points = [];
-                foreach ($ring as $point) {
-                    if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
-                        throw new DatabaseException('Invalid point format in polygon ring');
-                    }
-                    $points[] = "{$point[0]} {$point[1]}";
-                }
-                $rings[] = '(' . implode(', ', $points) . ')';
-            }
-            return 'POLYGON(' . implode(', ', $rings) . ')';
-        }
-
-        throw new DatabaseException('Unrecognized geometry array format');
     }
 
     /**

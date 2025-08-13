@@ -6748,52 +6748,82 @@ class Database
         return $this->adapter->getLimitForIndexes() - $this->adapter->getCountOfDefaultIndexes();
     }
 
-    /**
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @return array<Query>
-     * @throws QueryException
-     * @throws Exception
-     */
-    public function convertQueries(Document $collection, array $queries): array
-    {
-        $attributes = $collection->getAttribute('attributes', []);
+  /**
+ * @param Document $collection
+ * @param array<Query> $queries
+ * @return array<Query>
+ * @throws QueryException
+ */
+public function convertQueries(Document $collection, array $queries): array
+{
 
-        foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
-            $attributes[] = new Document($attribute);
-        }
-
-        foreach ($attributes as $attribute) {
-            foreach ($queries as $query) {
-                if ($query->getAttribute() === $attribute->getId()) {
-                    $query->setOnArray($attribute->getAttribute('array', false));
-                }
-            }
-
-            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
-                foreach ($queries as $index => $query) {
-                    if ($query->getAttribute() === $attribute->getId()) {
-                        $values = $query->getValues();
-                        foreach ($values as $valueIndex => $value) {
-                            try {
-                                if ($this->adapter->isMongo()) {
-                                    $values[$valueIndex] = $this->adapter->setUTCDatetime($value);
-                                } else {
-                                    $values[$valueIndex] = DateTime::setTimezone($value);
-                                }
-                            } catch (\Throwable $e) {
-                                throw new QueryException($e->getMessage(), $e->getCode(), $e);
-                            }
-                        }
-                        $query->setValues($values);
-                        $queries[$index] = $query;
-                    }
-                }
-            }
-        }
-
-        return $queries;
+    $attributes = $collection->getAttribute('attributes', []);
+    foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
+        $attributes[] = new Document($attribute);
     }
+
+    $map = [];
+    foreach ($attributes as $attribute) {
+        $map[$attribute->getId()] = $attribute;
+    }
+
+    foreach ($queries as $i => $query) {
+        $queries[$i] = $this->processQuery($query, $map);
+    }
+
+    return $queries;
+}
+
+/**
+ * Recursively normalizes a single Query (and any nested Query objects inside its values).
+ *
+ * @param \Utopia\Database\Query $query
+ * @param array<string,Document> $map
+ * @return \Utopia\Database\Query
+ * @throws QueryException
+ */
+private function processQuery(\Utopia\Database\Query $query, array $map): \Utopia\Database\Query
+{
+    $attrId = $query->getAttribute();
+
+    if (!empty($map[$attrId])) {
+        $attr = $map[$attrId];
+
+        $query->setOnArray((bool) $attr->getAttribute('array', false));
+
+        // Normalize datetime values if needed
+        if ($attr->getAttribute('type') === Database::VAR_DATETIME) {
+            $values = $query->getValues();
+            foreach ($values as $idx => $val) {
+                try {
+                    $values[$idx] = $this->adapter->isMongo()
+                        ? $this->adapter->setUTCDatetime($val)
+                        : DateTime::setTimezone($val);
+                } catch (\Throwable $e) {
+                    throw new QueryException($e->getMessage(), (int) $e->getCode(), $e);
+                }
+            }
+            $query->setValues($values);
+        }
+    }
+
+    $values = $query->getValues();
+    foreach ($values as $i => $v) {
+        if ($v instanceof \Utopia\Database\Query) {
+            $values[$i] = $this->processQuery($v, $map);
+        } elseif (is_array($v)) {
+            foreach ($v as $j => $vv) {
+                if ($vv instanceof \Utopia\Database\Query) {
+                    $v[$j] = $this->processQuery($vv, $map);
+                }
+            }
+            $values[$i] = $v;
+        }
+    }
+    $query->setValues($values);
+
+    return $query;
+}
 
     /**
      * @return  array<array<string, mixed>>

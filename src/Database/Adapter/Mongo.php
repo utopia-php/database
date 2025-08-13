@@ -267,7 +267,7 @@ class Mongo extends Adapter
                 }
 
                 foreach ($attributes as $attribute) {
-                    $attribute = $this->filter($attribute);
+                    $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
 
                     switch ($index->getAttribute('type')) {
                         case Database::INDEX_KEY:
@@ -661,8 +661,7 @@ class Mongo extends Adapter
         }
 
         foreach ($attributes as $i => $attribute) {
-            $attribute = $this->filter($attribute);
-
+            $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
             $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
             $indexes['key'][$attribute] = $orderType;
 

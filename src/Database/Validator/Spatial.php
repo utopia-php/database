@@ -9,12 +9,12 @@ use Utopia\Validator;
 class Spatial extends Validator
 {
     private string $spatialType;
-    
+
     public function __construct(string $spatialType)
     {
         $this->spatialType = $spatialType;
     }
-    
+
     /**
      * Validate spatial data according to its type
      *
@@ -105,20 +105,20 @@ class Spatial extends Validator
         if (empty($value)) {
             throw new Exception('Polygon must contain at least one ring');
         }
-    
+
         // Detect single-ring polygon: [[x, y], [x, y], ...]
         $isSingleRing = isset($value[0]) && is_array($value[0]) &&
                         count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
-    
+
         if ($isSingleRing) {
             $value = [$value]; // Wrap single ring into multi-ring format
         }
-    
+
         foreach ($value as $ring) {
             if (!is_array($ring) || empty($ring)) {
                 throw new Exception('Each ring in Polygon must be an array of points');
             }
-    
+
             foreach ($ring as $point) {
                 if (!is_array($point) || count($point) !== 2) {
                     throw new Exception('Each point in Polygon ring must be an array of two values [x, y]');
@@ -128,7 +128,7 @@ class Spatial extends Validator
                 }
             }
         }
-    
+
         return true;
     }
 
@@ -202,12 +202,12 @@ class Spatial extends Validator
         if (is_null($value)) {
             return true;
         }
-        
+
         if (is_string($value)) {
             // Check if it's a valid WKT string
             return self::isWKTString($value);
         }
-        
+
         if (is_array($value)) {
             // Validate the array format according to the specific spatial type
             try {
@@ -217,7 +217,7 @@ class Spatial extends Validator
                 return false;
             }
         }
-        
+
         return false;
     }
-} 
+}

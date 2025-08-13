@@ -3121,10 +3121,12 @@ class Database
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];
+        $indexAttributesRequired = [];
         foreach ($attributes as $i => $attr) {
             foreach ($collectionAttributes as $collectionAttribute) {
                 if ($collectionAttribute->getAttribute('key') === $attr) {
                     $indexAttributesWithTypes[$attr] = $collectionAttribute->getAttribute('type');
+                    $indexAttributesRequired[$attr] = $collectionAttribute->getAttribute('required', false);
 
                     /**
                      * mysql does not save length in collection when length = attributes size
@@ -3153,10 +3155,19 @@ class Database
                 if (!isset($indexAttributesWithTypes[$attr])) {
                     throw new DatabaseException('Attribute "' . $attr . '" not found in collection');
                 }
-                
+
                 $attributeType = $indexAttributesWithTypes[$attr];
                 if (!in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
                     throw new DatabaseException('Spatial index can only be created on spatial attributes (geometry, point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                }
+            }
+
+            // Check spatial index null constraints for adapters that don't support null values
+            if (!$this->adapter->getSupportForSpatialIndexNull()) {
+                foreach ($attributes as $attr) {
+                    if (!$indexAttributesRequired[$attr]) {
+                        throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attr . '" as required or create the index on a column with no null values.');
+                    }
                 }
             }
         }
@@ -6518,7 +6529,7 @@ class Database
                             $node = $this->encodeSpatialData($node, $attributeType);
                         }
                     }
-                    
+
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
@@ -6601,7 +6612,7 @@ class Database
                 if (is_string($node) && in_array($type, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
                     $node = $this->decodeSpatialData($node);
                 }
-                
+
                 foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
@@ -6881,25 +6892,25 @@ class Database
                     }
                 }
             }
-            
+
             // Convert standard queries to spatial queries when used on spatial attributes
             $attributeType = $attribute->getAttribute('type');
             if (in_array($attributeType, [
-                Database::VAR_GEOMETRY, 
-                Database::VAR_POINT, 
-                Database::VAR_LINESTRING, 
+                Database::VAR_GEOMETRY,
+                Database::VAR_POINT,
+                Database::VAR_LINESTRING,
                 Database::VAR_POLYGON
-                ])) {
+            ])) {
                 foreach ($queries as $index => $query) {
                     if ($query->getAttribute() === $attribute->getId()) {
                         $method = $query->getMethod();
-                    
-                                            // Map standard query methods to spatial equivalents
+
+                        // Map standard query methods to spatial equivalents
                         $spatialMethodMap = [
                             Query::TYPE_CONTAINS => Query::TYPE_SPATIAL_CONTAINS,
                             Query::TYPE_NOT_CONTAINS => Query::TYPE_SPATIAL_NOT_CONTAINS
                         ];
-                    
+
                         if (isset($spatialMethodMap[$method])) {
                             $query->setMethod($spatialMethodMap[$method]);
                             $queries[$index] = $query;
@@ -6935,7 +6946,7 @@ class Database
 
         // Process individual queries
         $queryAttribute = $query->getAttribute();
-        
+
         // Find the attribute schema for this query
         $attributeSchema = null;
         foreach ($attributes as $attribute) {
@@ -6944,25 +6955,25 @@ class Database
                 break;
             }
         }
-        
+
         if ($attributeSchema && in_array($attributeSchema->getAttribute('type'), [
-            Database::VAR_GEOMETRY, 
-            Database::VAR_POINT, 
-            Database::VAR_LINESTRING, 
+            Database::VAR_GEOMETRY,
+            Database::VAR_POINT,
+            Database::VAR_LINESTRING,
             Database::VAR_POLYGON
         ])) {
             // This query is on a spatial attribute, convert CONTAINS/NOT_CONTAINS to spatial methods
             $method = $query->getMethod();
-            
+
             $spatialMethodMap = [
                 Query::TYPE_CONTAINS => Query::TYPE_SPATIAL_CONTAINS,
                 Query::TYPE_NOT_CONTAINS => Query::TYPE_SPATIAL_NOT_CONTAINS
             ];
-            
+
             if (isset($spatialMethodMap[$method])) {
                 $query->setMethod($spatialMethodMap[$method]);
             }
-        } else if ($attributeSchema) {
+        } elseif ($attributeSchema) {
             // This query is on a non-spatial attribute, reject spatial-only methods
             if (Query::isSpatialQuery($query->getMethod())) {
                 throw new QueryException('Spatial query "' . $query->getMethod() . '" cannot be applied on non-spatial attribute "' . $queryAttribute . '"');
@@ -7161,14 +7172,14 @@ class Database
 
             case self::VAR_POLYGON:
                 // Check if this is a single ring (flat array of points) or multiple rings
-                $isSingleRing = count($value) > 0 && is_array($value[0]) && 
+                $isSingleRing = count($value) > 0 && is_array($value[0]) &&
                               count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
-                
+
                 if ($isSingleRing) {
                     // Convert single ring format [[x1,y1], [x2,y2], ...] to multi-ring format
                     $value = [$value];
                 }
-                
+
                 $rings = [];
                 foreach ($value as $ring) {
                     $points = [];
@@ -7198,7 +7209,7 @@ class Database
     protected function decodeSpatialData(string $wkt): array
     {
         $wkt = trim($wkt);
-        
+
         if (preg_match('/^POINT\(([^)]+)\)$/i', $wkt, $matches)) {
             $coords = explode(' ', trim($matches[1]));
             if (count($coords) !== 2) {
@@ -7206,7 +7217,7 @@ class Database
             }
             return [(float)$coords[0], (float)$coords[1]];
         }
-        
+
         if (preg_match('/^LINESTRING\(([^)]+)\)$/i', $wkt, $matches)) {
             $coordsString = trim($matches[1]);
             $points = explode(',', $coordsString);
@@ -7220,17 +7231,17 @@ class Database
             }
             return $result;
         }
-        
+
         if (preg_match('/^POLYGON\(\(([^)]+)\)\)$/i', $wkt, $matches)) {
             $content = substr($wkt, 8, -1); // Remove POLYGON(( and ))
             $rings = explode('),(', $content);
             $result = [];
-            
+
             foreach ($rings as $ring) {
                 $ring = trim($ring, '()');
                 $points = explode(',', $ring);
                 $ringPoints = [];
-                
+
                 foreach ($points as $point) {
                     $coords = preg_split('/\s+/', trim($point));
                     if (count($coords) !== 2) {
@@ -7238,13 +7249,13 @@ class Database
                     }
                     $ringPoints[] = [(float)$coords[0], (float)$coords[1]];
                 }
-                
+
                 $result[] = $ringPoints;
             }
-            
+
             return $result;
         }
-        
+
         if (preg_match('/^GEOMETRY\(POINT\(([^)]+)\)\)$/i', $wkt, $matches)) {
             $coords = explode(' ', trim($matches[1]));
             if (count($coords) !== 2) {
@@ -7252,7 +7263,7 @@ class Database
             }
             return [(float)$coords[0], (float)$coords[1]];
         }
-        
+
         // For other geometry types, return as-is for now
         return [$wkt];
     }

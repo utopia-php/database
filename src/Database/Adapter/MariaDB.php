@@ -94,7 +94,8 @@ class MariaDB extends SQL
                 $attribute->getAttribute('type'),
                 $attribute->getAttribute('size', 0),
                 $attribute->getAttribute('signed', true),
-                $attribute->getAttribute('array', false)
+                $attribute->getAttribute('array', false),
+                $attribute->getAttribute('required', false)
             );
 
             // Ignore relationships with virtual attributes
@@ -415,7 +416,7 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $type = $this->getSQLType($type, $size, $signed, $array);
+        $type = $this->getSQLType($type, $size, $signed, $array, false);
 
         if (!empty($newKey)) {
             $sql = "ALTER TABLE {$this->getSQLTable($name)} CHANGE COLUMN `{$id}` `{$newKey}` {$type};";
@@ -458,7 +459,7 @@ class MariaDB extends SQL
         $relatedTable = $this->getSQLTable($relatedName);
         $id = $this->filter($id);
         $twoWayKey = $this->filter($twoWayKey);
-        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
+        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false, false, false);
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
@@ -837,7 +838,7 @@ class MariaDB extends SQL
                 $column = $this->filter($attribute);
                 $bindKey = 'key_' . $bindIndex;
                 $columns .= "`{$column}`, ";
-                
+
                 // Check if this is spatial data (WKT string)
                 $isSpatialData = is_string($value) && (
                     strpos($value, 'POINT(') === 0 ||
@@ -845,11 +846,11 @@ class MariaDB extends SQL
                     strpos($value, 'POLYGON(') === 0 ||
                     strpos($value, 'GEOMETRY(') === 0
                 );
-                
+
                 if ($isSpatialData) {
                     $columnNames .= 'ST_GeomFromText(:' . $bindKey . '), ';
                 } else {
-                $columnNames .= ':' . $bindKey . ', ';
+                    $columnNames .= ':' . $bindKey . ', ';
                 }
                 $bindIndex++;
             }
@@ -1112,7 +1113,7 @@ class MariaDB extends SQL
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
                 $bindKey = 'key_' . $bindIndex;
-                
+
                 // Check if this is spatial data (WKT string)
                 $isSpatialData = is_string($value) && (
                     strpos($value, 'POINT(') === 0 ||
@@ -1120,7 +1121,7 @@ class MariaDB extends SQL
                     strpos($value, 'POLYGON(') === 0 ||
                     strpos($value, 'GEOMETRY(') === 0
                 );
-                
+
                 if ($isSpatialData) {
                     $columns .= "`{$column}`" . '=ST_GeomFromText(:' . $bindKey . '),';
                 } else {
@@ -1786,7 +1787,7 @@ class MariaDB extends SQL
                 $separator = $isNotQuery ? ' AND ' : ' OR ';
                 return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
 
-            // Spatial query methods
+                // Spatial query methods
             case Query::TYPE_SPATIAL_CONTAINS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
@@ -1795,7 +1796,7 @@ class MariaDB extends SQL
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            // Spatial query methods
+                // Spatial query methods
             case Query::TYPE_CROSSES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
@@ -1861,10 +1862,11 @@ class MariaDB extends SQL
      * @param int $size
      * @param bool $signed
      * @param bool $array
+     * @param bool $required
      * @return string
      * @throws DatabaseException
      */
-    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
+    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if ($array === true) {
             return 'JSON';
@@ -1913,16 +1915,16 @@ class MariaDB extends SQL
                 return 'DATETIME(3)';
 
             case Database::VAR_GEOMETRY:
-                return 'GEOMETRY NOT NULL';
+                return 'GEOMETRY' . ($required && !$this->getSupportForSpatialIndexNull() ? ' NOT NULL' : '');
 
             case Database::VAR_POINT:
-                return 'POINT NOT NULL';
+                return 'POINT' . ($required && !$this->getSupportForSpatialIndexNull() ? ' NOT NULL' : '');
 
             case Database::VAR_LINESTRING:
-                return 'LINESTRING NOT NULL';
+                return 'LINESTRING' . ($required && !$this->getSupportForSpatialIndexNull() ? ' NOT NULL' : '');
 
             case Database::VAR_POLYGON:
-                return 'POLYGON NOT NULL';
+                return 'POLYGON' . ($required && !$this->getSupportForSpatialIndexNull() ? ' NOT NULL' : '');
 
             default:
                 throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_GEOMETRY . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
@@ -2111,6 +2113,16 @@ class MariaDB extends SQL
     public function getSupportForSpatialAttributes(): bool
     {
         return true;
+    }
+
+    /**
+     * Get Support for Null Values in Spatial Indexes
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialIndexNull(): bool
+    {
+        return false;
     }
 
 

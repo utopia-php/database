@@ -208,9 +208,9 @@ class Filter extends Base
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
             $attributeSchema['type'] !== Database::VAR_STRING &&
             !in_array($attributeSchema['type'], [
-                Database::VAR_GEOMETRY, 
-                Database::VAR_POINT, 
-                Database::VAR_LINESTRING, 
+                Database::VAR_GEOMETRY,
+                Database::VAR_POINT,
+                Database::VAR_LINESTRING,
                 Database::VAR_POLYGON
             ])
         ) {
@@ -337,7 +337,7 @@ class Filter extends Base
                     }
                     return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
                 }
-                
+
                 return false;
         }
     }

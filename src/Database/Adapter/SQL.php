@@ -217,7 +217,7 @@ abstract class SQL extends Adapter
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
         $id = $this->quote($this->filter($id));
-        $type = $this->getSQLType($type, $size, $signed, $array);
+        $type = $this->getSQLType($type, $size, $signed, $array, false);
 
         $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
@@ -249,6 +249,7 @@ abstract class SQL extends Adapter
                 $attribute['size'],
                 $attribute['signed'] ?? true,
                 $attribute['array'] ?? false,
+                $attribute['required'] ?? false,
             );
             $parts[] = "{$id} {$type}";
         }
@@ -419,9 +420,9 @@ abstract class SQL extends Adapter
 
         // Check if it's already a WKT string (from ST_AsText), convert to array
         if (is_string($value)) {
-            if (strpos($value, 'POINT(') === 0 || 
-                strpos($value, 'LINESTRING(') === 0 || 
-                strpos($value, 'POLYGON(') === 0 || 
+            if (strpos($value, 'POINT(') === 0 ||
+                strpos($value, 'LINESTRING(') === 0 ||
+                strpos($value, 'POLYGON(') === 0 ||
                 strpos($value, 'GEOMETRY(') === 0) {
                 try {
                     return $this->convertWKTToArray($value);
@@ -447,7 +448,7 @@ abstract class SQL extends Adapter
             $coords = explode(' ', trim($matches[1]));
             return [(float)$coords[0], (float)$coords[1]];
         }
-        
+
         if (preg_match('/^LINESTRING\(([^)]+)\)$/i', $wkt, $matches)) {
             $coordsString = trim($matches[1]);
             $points = explode(',', $coordsString);
@@ -458,7 +459,7 @@ abstract class SQL extends Adapter
             }
             return $result;
         }
-        
+
         if (preg_match('/^POLYGON\(\(([^)]+)\)\)$/i', $wkt, $matches)) {
             $pointsString = trim($matches[1]);
             $points = explode(',', $pointsString);
@@ -473,7 +474,7 @@ abstract class SQL extends Adapter
             // Return as array of rings (single ring for simple polygons)
             return [$result];
         }
-        
+
         // If we can't parse it, return the original WKT as a single-element array
         return [$wkt];
     }
@@ -531,7 +532,7 @@ abstract class SQL extends Adapter
         $columns = '';
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            
+
             // Check if this is spatial data (WKT string)
             $isSpatialData = is_string($value) && $this->isWKTString($value);
             if ($isSpatialData) {
@@ -572,7 +573,7 @@ abstract class SQL extends Adapter
         foreach ($attributes as $attributeName => $value) {
             // Check if this is spatial data (WKT string)
             $isSpatialData = is_string($value) && $this->isWKTString($value);
-            
+
             if (!$isSpatialData && is_array($value)) {
                 $value = json_encode($value);
             }
@@ -1548,6 +1549,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Does the adapter support null values in spatial indexes?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialIndexNull(): bool
+    {
+        return false; // Default to false, subclasses override as needed
+    }
+
+    /**
      * @param string $tableName
      * @param string $columns
      * @param array<string> $batchKeys
@@ -1635,7 +1646,8 @@ abstract class SQL extends Adapter
         string $type,
         int $size,
         bool $signed = true,
-        bool $array = false
+        bool $array = false,
+        bool $required = false
     ): string;
 
     /**
@@ -1875,7 +1887,7 @@ abstract class SQL extends Adapter
 
             // Build complete projection: regular columns + ST_AsText() for spatial columns
             $projections = [];
-            
+
             // Add internal/system columns
             $internalColumns = ['_id', '_uid', '_createdAt', '_updatedAt', '_permissions'];
             if ($this->sharedTables) {
@@ -1884,14 +1896,14 @@ abstract class SQL extends Adapter
             foreach ($internalColumns as $col) {
                 $projections[] = "{$this->quote($prefix)}.{$this->quote($col)}";
             }
-            
+
             // Add spatial columns with ST_AsText conversion
             foreach ($spatialAttributes as $spatialAttr) {
                 $filteredAttr = $this->filter($spatialAttr);
                 $quotedAttr = $this->quote($filteredAttr);
                 $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedAttr}) AS {$quotedAttr}";
             }
-            
+
             // Add ALL other non-spatial columns by getting them from schema
             // For now, add common test columns manually
             $commonColumns = ['name']; // Add known test columns
@@ -1900,7 +1912,7 @@ abstract class SQL extends Adapter
                     $projections[] = "{$this->quote($prefix)}.{$this->quote($col)}";
                 }
             }
-            
+
             return implode(', ', $projections);
         }
 
@@ -1923,7 +1935,7 @@ abstract class SQL extends Adapter
         foreach ($selections as $selection) {
             $filteredSelection = $this->filter($selection);
             $quotedSelection = $this->quote($filteredSelection);
-            
+
             // Check if this selection is a spatial attribute
             if (in_array($selection, $spatialAttributes)) {
                 $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedSelection}) AS {$quotedSelection}";
@@ -2052,7 +2064,7 @@ abstract class SQL extends Adapter
                     if (\is_array($value)) {
                         $value = \json_encode($value);
                     }
-                    
+
                     // Check if this is a WKT string that should be wrapped with ST_GeomFromText
                     if (is_string($value) && $this->isWKTString($value)) {
                         $bindKey = 'key_' . $bindIndex;
@@ -2177,7 +2189,7 @@ abstract class SQL extends Adapter
                     if (\is_array($attrValue)) {
                         $attrValue = \json_encode($attrValue);
                     }
-                    
+
                     // Check if this is a WKT string that should be wrapped with ST_GeomFromText
                     if (is_string($attrValue) && $this->isWKTString($attrValue)) {
                         $bindKey = 'key_' . $bindIndex;

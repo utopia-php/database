@@ -203,7 +203,8 @@ class Postgres extends SQL
                 $attribute->getAttribute('type'),
                 $attribute->getAttribute('size', 0),
                 $attribute->getAttribute('signed', true),
-                $attribute->getAttribute('array', false)
+                $attribute->getAttribute('array', false),
+                $attribute->getAttribute('required', false)
             );
 
             // Ignore relationships with virtual attributes
@@ -441,7 +442,7 @@ class Postgres extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed, $array);
+        $type = $this->getSQLType($type, $size, $signed, $array, false);
 
         $sql = "
 			ALTER TABLE {$this->getSQLTable($name)}
@@ -538,7 +539,7 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $type = $this->getSQLType($type, $size, $signed, $array);
+        $type = $this->getSQLType($type, $size, $signed, $array, false);
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
@@ -605,7 +606,7 @@ class Postgres extends SQL
         $relatedTable = $this->getSQLTable($relatedName);
         $id = $this->filter($id);
         $twoWayKey = $this->filter($twoWayKey);
-        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
+        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false, false, false);
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
@@ -873,12 +874,12 @@ class Postgres extends SQL
         }
 
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)}";
-        
+
         // Add USING GIST for spatial indexes
         if ($type === Database::INDEX_SPATIAL) {
             $sql .= " USING GIST";
         }
-        
+
         $sql .= " ({$attributes});";
 
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
@@ -1554,7 +1555,7 @@ class Postgres extends SQL
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias,$spatialAttributes)}
+            SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlWhere}
             {$sqlOrder}
@@ -1864,7 +1865,7 @@ class Postgres extends SQL
                 $separator = $isNotQuery ? ' AND ' : ' OR ';
                 return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
 
-            // Spatial query methods
+                // Spatial query methods
             case Query::TYPE_SPATIAL_CONTAINS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
@@ -1956,10 +1957,11 @@ class Postgres extends SQL
      * @param int $size in chars
      * @param bool $signed
      * @param bool $array
+     * @param bool $required
      * @return string
      * @throws DatabaseException
      */
-    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
+    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if ($array === true) {
             return 'JSONB';
@@ -2228,6 +2230,16 @@ class Postgres extends SQL
      * @return bool
      */
     public function getSupportForSpatialAttributes(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get Support for Null Values in Spatial Indexes
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialIndexNull(): bool
     {
         return true;
     }

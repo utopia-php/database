@@ -979,7 +979,7 @@ class Query
         return new self(self::TYPE_NOT_INTERSECTS, $attribute, $values);
     }
 
-    
+
 
     /**
      * Helper method to create Query with crosses method
@@ -1053,5 +1053,5 @@ class Query
         return new self(self::TYPE_NOT_TOUCHES, $attribute, $values);
     }
 
-    
+
 }

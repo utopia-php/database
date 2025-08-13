@@ -1038,6 +1038,13 @@ abstract class Adapter
     abstract public function getSupportForSpatialAttributes(): bool;
 
     /**
+     * Does the adapter support null values in spatial indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialIndexNull(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

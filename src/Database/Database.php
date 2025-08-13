@@ -3347,7 +3347,7 @@ class Database
             if ($attribute instanceof Document) {
                 $attributeType = $attribute->getAttribute('type');
                 if (in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    $spatialAttributes[] = $attribute->getAttribute('key');
+                    $spatialAttributes[] = $attribute->getId();
                 }
             }
         }
@@ -3363,7 +3363,6 @@ class Database
         if ($document->isEmpty()) {
             return $document;
         }
-
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
@@ -6239,7 +6238,7 @@ class Database
             if ($attribute instanceof Document) {
                 $attributeType = $attribute->getAttribute('type');
                 if (in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    $spatialAttributes[] = $attribute->getAttribute('key');
+                    $spatialAttributes[] = $attribute->getId();
                 }
             }
         }

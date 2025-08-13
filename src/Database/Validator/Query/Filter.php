@@ -281,6 +281,14 @@ class Filter extends Base
 
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
+            case Query::TYPE_DISTANCE:
+            case Query::TYPE_NOT_DISTANCE:
+                if (count($value->getValues()) !== 1 || !is_array($value->getValues()[0]) || count($value->getValues()[0]) !== 2) {
+                    $this->message = 'Distance query requires [[geometry, distance]] parameters';
+                    return false;
+                }
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+
             case Query::TYPE_NOT_EQUAL:
             case Query::TYPE_LESSER:
             case Query::TYPE_LESSER_EQUAL:

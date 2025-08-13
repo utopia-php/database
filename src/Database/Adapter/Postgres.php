@@ -1891,19 +1891,15 @@ class Postgres extends SQL
                 return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_DISTANCE:
-                if (count($query->getValues()) !== 2) {
-                    throw new DatabaseException('Distance query requires [geometry, distance] parameters');
-                }
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
-                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+                $distanceParams = $query->getValues()[0];
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0], $attributeType);
+                $binds[":{$placeholder}_1"] = $distanceParams[1];
                 return "ST_DWithin({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), :{$placeholder}_1)";
 
             case Query::TYPE_NOT_DISTANCE:
-                if (count($query->getValues()) !== 2) {
-                    throw new DatabaseException('Distance query requires [geometry, distance] parameters');
-                }
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
-                $binds[":{$placeholder}_1"] = $query->getValues()[1];
+                $distanceParams = $query->getValues()[0];
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0], $attributeType);
+                $binds[":{$placeholder}_1"] = $distanceParams[1];
                 return "NOT ST_DWithin({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), :{$placeholder}_1)";
 
             case Query::TYPE_EQUALS:

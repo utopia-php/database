@@ -1905,14 +1905,6 @@ abstract class SQL extends Adapter
                 $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedAttr}) AS {$quotedAttr}";
             }
 
-            // Add ALL other non-spatial columns by getting them from schema
-            // For now, add common test columns manually
-            $commonColumns = ['name']; // Add known test columns
-            foreach ($commonColumns as $col) {
-                if (!in_array($col, $spatialAttributes)) { // Don't duplicate spatial columns
-                    $projections[] = "{$this->quote($prefix)}.{$this->quote($col)}";
-                }
-            }
 
             return implode(', ', $projections);
         }

@@ -438,7 +438,7 @@ class Postgres extends SQL
      * @return bool
      * @throws DatabaseException
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, $required=false): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
@@ -1450,6 +1450,9 @@ class Postgres extends SQL
      * @throws TimeoutException
      * @throws Exception
      */
+    /**
+     * @param array $spatialAttributes
+     */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $spatialAttributes = []): array
     {
         $name = $this->filter($collection);
@@ -1786,7 +1789,7 @@ class Postgres extends SQL
         $attribute = $this->quote($attribute);
         $alias = $this->quote(Query::DEFAULT_ALIAS);
         $placeholder = ID::unique();
-        
+
         // Get attribute type for spatial queries
         $attributeType = $this->getAttributeType($query->getAttribute(), $attributes);
         $operator = null;
@@ -2215,11 +2218,11 @@ class Postgres extends SQL
     /**
      * Convert array to Well-Known Text (WKT)
      *
-     * @param array $geometry
+     * @param array<mixed> $geometry
      * @param string|null $type
      * @return string
      */
-    protected function convertArrayToWTK(array $geometry, string $type): string
+    protected function convertArrayToWTK(array $geometry, ?string $type = null): string
     {
         if (empty($geometry)) {
             throw new DatabaseException('Empty geometry array provided');

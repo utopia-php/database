@@ -1927,7 +1927,7 @@ class Database
                 if ($defaultType !== 'array') {
                     throw new DatabaseException('Default value for spatial type ' . $type . ' must be an array');
                 }
-                break;
+                // no break
             default:
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_GEOMETRY . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
@@ -6931,6 +6931,9 @@ class Database
     /**
      * Recursively convert spatial queries
      */
+    /**
+     * @param array $attributes
+     */
     private function convertSpatialQueries(array $attributes, Query $query): Query
     {
         // Handle logical queries (AND, OR) recursively
@@ -7212,7 +7215,7 @@ class Database
 
         if (preg_match('/^POINT\(([^)]+)\)$/i', $wkt, $matches)) {
             $coords = explode(' ', trim($matches[1]));
-            if (count($coords) !== 2) {
+            if ($coords === false || count($coords) !== 2) {
                 throw new DatabaseException('Invalid POINT WKT format');
             }
             return [(float)$coords[0], (float)$coords[1]];
@@ -7221,10 +7224,13 @@ class Database
         if (preg_match('/^LINESTRING\(([^)]+)\)$/i', $wkt, $matches)) {
             $coordsString = trim($matches[1]);
             $points = explode(',', $coordsString);
+            if ($points === false) {
+                throw new DatabaseException('Invalid LINESTRING WKT format');
+            }
             $result = [];
             foreach ($points as $point) {
                 $coords = explode(' ', trim($point));
-                if (count($coords) !== 2) {
+                if ($coords === false || count($coords) !== 2) {
                     throw new DatabaseException('Invalid LINESTRING WKT format');
                 }
                 $result[] = [(float)$coords[0], (float)$coords[1]];
@@ -7235,16 +7241,22 @@ class Database
         if (preg_match('/^POLYGON\(\(([^)]+)\)\)$/i', $wkt, $matches)) {
             $content = substr($wkt, 8, -1); // Remove POLYGON(( and ))
             $rings = explode('),(', $content);
+            if ($rings === false) {
+                throw new DatabaseException('Invalid POLYGON WKT format');
+            }
             $result = [];
 
             foreach ($rings as $ring) {
                 $ring = trim($ring, '()');
                 $points = explode(',', $ring);
+                if ($points === false) {
+                    throw new DatabaseException('Invalid POLYGON WKT format');
+                }
                 $ringPoints = [];
 
                 foreach ($points as $point) {
                     $coords = preg_split('/\s+/', trim($point));
-                    if (count($coords) !== 2) {
+                    if ($coords === false || count($coords) !== 2) {
                         throw new DatabaseException('Invalid POLYGON WKT format');
                     }
                     $ringPoints[] = [(float)$coords[0], (float)$coords[1]];
@@ -7258,7 +7270,7 @@ class Database
 
         if (preg_match('/^GEOMETRY\(POINT\(([^)]+)\)\)$/i', $wkt, $matches)) {
             $coords = explode(' ', trim($matches[1]));
-            if (count($coords) !== 2) {
+            if ($coords === false || count($coords) !== 2) {
                 throw new DatabaseException('Invalid GEOMETRY POINT WKT format');
             }
             return [(float)$coords[0], (float)$coords[1]];

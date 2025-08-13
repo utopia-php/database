@@ -3,18 +3,12 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
-use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Exception\Limit as LimitException;
-use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Index;
 
 trait SpatialTests
 {
@@ -49,10 +43,10 @@ trait SpatialTests
     public function testSpatialAttributeSupport(): void
     {
         $database = $this->getDatabase();
-        
+
         // Check if the adapter supports spatial attributes
         $this->assertIsBool($database->getAdapter()->getSupportForSpatialAttributes());
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -184,7 +178,7 @@ trait SpatialTests
     public function testSpatialQueries(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -254,7 +248,7 @@ trait SpatialTests
     public function testSpatialQueryNegations(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -322,7 +316,7 @@ trait SpatialTests
     public function testSpatialQueryCombinations(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -373,7 +367,7 @@ trait SpatialTests
         $pointQuery = Query::equals('point', [[5, 5]]);
         $polygonQuery = Query::contains('polygon', [[5, 5]]);
         $andQuery = Query::and([$pointQuery, $polygonQuery]);
-        
+
         $andResults = $database->find('spatial_combinations', [$andQuery], Database::PERMISSION_READ);
         $this->assertCount(1, $andResults);
         $this->assertEquals('Center Document', $andResults[0]->getAttribute('name'));
@@ -382,7 +376,7 @@ trait SpatialTests
         $pointQuery2 = Query::equals('point', [[5, 5]]);
         $pointQuery3 = Query::equals('point', [[15, 15]]);
         $orQuery = Query::or([$pointQuery2, $pointQuery3]);
-        
+
         $orResults = $database->find('spatial_combinations', [$orQuery], Database::PERMISSION_READ);
         $this->assertCount(2, $orResults);
     }
@@ -390,7 +384,7 @@ trait SpatialTests
     public function testSpatialDataUpdate(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -432,7 +426,7 @@ trait SpatialTests
 
         // Retrieve and verify updated data
         $updatedDocument = $database->getDocument('spatial_update', $document->getId());
-        
+
         $this->assertEquals([25, 25], $updatedDocument->getAttribute('point'));
         $this->assertEquals([[[20, 20], [30, 20], [30, 30], [20, 30], [20, 20]]], $updatedDocument->getAttribute('polygon')); // Array of rings
         $this->assertEquals('Updated Document', $updatedDocument->getAttribute('name'));
@@ -441,7 +435,7 @@ trait SpatialTests
     public function testSpatialIndexDeletion(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -473,7 +467,7 @@ trait SpatialTests
     public function testSpatialDataCleanup(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -483,19 +477,19 @@ trait SpatialTests
         if (!$database->exists(null, 'spatial_validation')) {
             $database->createCollection('spatial_validation');
         }
-        
+
         $collection = $database->getCollection('spatial_validation');
         $this->assertNotNull($collection);
-        
+
         $database->deleteCollection($collection->getId());
-        
+
         $this->assertTrue(true, 'Cleanup completed');
     }
 
     public function testSpatialBulkOperations(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -554,7 +548,7 @@ trait SpatialTests
 
         $createdCount = $database->createDocuments('spatial_bulk', $documents);
         $this->assertEquals(3, $createdCount);
-        
+
         // Verify all documents were created with correct spatial data
         $allDocs = $database->find('spatial_bulk', [], Database::PERMISSION_READ);
         foreach ($allDocs as $doc) {
@@ -601,7 +595,7 @@ trait SpatialTests
     public function testSpatialIndividualDelete(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -651,7 +645,7 @@ trait SpatialTests
     public function testSpatialListDocuments(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -661,7 +655,7 @@ trait SpatialTests
         if ($database->exists(null, 'spatial_list')) {
             $database->deleteCollection('spatial_list');
         }
-        
+
         $database->createCollection('spatial_list');
 
         // Create spatial attributes
@@ -746,7 +740,7 @@ trait SpatialTests
     public function testSpatialUpsertDocuments(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -756,7 +750,7 @@ trait SpatialTests
         if ($database->exists(null, 'spatial_upsert')) {
             $database->deleteCollection('spatial_upsert');
         }
-        
+
         $database->createCollection('spatial_upsert');
 
         // Create spatial attributes
@@ -821,7 +815,7 @@ trait SpatialTests
     public function testSpatialBatchOperations(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -831,7 +825,7 @@ trait SpatialTests
         if ($database->exists(null, 'spatial_batch')) {
             $database->deleteCollection('spatial_batch');
         }
-        
+
         $database->createCollection('spatial_batch');
 
         // Create spatial attributes
@@ -925,7 +919,7 @@ trait SpatialTests
     public function testSpatialRelationships(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -938,7 +932,7 @@ trait SpatialTests
         if ($database->exists(null, 'spatial_child')) {
             $database->deleteCollection('spatial_child');
         }
-        
+
         // Create parent collection with spatial attributes
         $database->createCollection('spatial_parent');
         $this->assertEquals(true, $database->createAttribute('spatial_parent', 'boundary', Database::VAR_POLYGON, 0, true));
@@ -1027,7 +1021,7 @@ trait SpatialTests
         $childrenInside = $database->find('spatial_child', [
             Query::equal('spatial_parent', [$createdParent->getId()])
         ], Database::PERMISSION_READ);
-        
+
         $this->assertCount(3, $childrenInside);
         $this->assertEquals('Child Inside 1', $childrenInside[0]->getAttribute('name'));
         $this->assertEquals('Child Inside 2', $childrenInside[1]->getAttribute('name'));
@@ -1039,7 +1033,7 @@ trait SpatialTests
             Query::equal('spatial_parent', [$createdParent->getId()]),
             $locationQuery
         ], Database::PERMISSION_READ);
-        
+
         $this->assertCount(1, $specificChild);
         $this->assertEquals('Child Inside 1', $specificChild[0]->getAttribute('name'));
     }
@@ -1047,7 +1041,7 @@ trait SpatialTests
     public function testSpatialDataValidation(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -1057,7 +1051,7 @@ trait SpatialTests
         if ($database->exists(null, 'spatial_validation')) {
             $database->deleteCollection('spatial_validation');
         }
-        
+
         $database->createCollection('spatial_validation');
 
         // Create spatial attributes
@@ -1104,8 +1098,8 @@ trait SpatialTests
             // Expected if database enforces validation - check for any validation-related error
             $errorMessage = strtolower($e->getMessage());
             $this->assertTrue(
-                strpos($errorMessage, 'spatial') !== false || 
-                strpos($errorMessage, 'point') !== false || 
+                strpos($errorMessage, 'spatial') !== false ||
+                strpos($errorMessage, 'point') !== false ||
                 strpos($errorMessage, 'array') !== false,
                 'Error message should contain spatial, point, or array information'
             );
@@ -1115,7 +1109,7 @@ trait SpatialTests
     public function testSpatialPerformanceQueries(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -1125,7 +1119,7 @@ trait SpatialTests
         if ($database->exists(null, 'spatial_performance')) {
             $database->deleteCollection('spatial_performance');
         }
-        
+
         $database->createCollection('spatial_performance');
 
         // Create spatial attributes
@@ -1158,7 +1152,7 @@ trait SpatialTests
         $startTime = microtime(true);
         $createdCount = $database->createDocuments('spatial_performance', $documents);
         $createTime = microtime(true) - $startTime;
-        
+
         $this->assertEquals(10, $createdCount);
         $this->assertLessThan(1.0, $createTime, 'Batch create should complete within 1 second');
 
@@ -1167,7 +1161,7 @@ trait SpatialTests
         $containsQuery = Query::contains('polygon', [[15, 15]]);
         $filteredDocs = $database->find('spatial_performance', [$containsQuery], Database::PERMISSION_READ);
         $queryTime = microtime(true) - $startTime;
-        
+
         $this->assertLessThan(0.5, $queryTime, 'Spatial query should complete within 0.5 seconds');
         $this->assertGreaterThan(0, count($filteredDocs), 'Should find at least one document');
     }
@@ -1175,7 +1169,7 @@ trait SpatialTests
     public function testSpatialCRUDOperations(): void
     {
         $database = $this->getDatabase();
-        
+
         // Skip tests if spatial attributes are not supported
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->markTestSkipped('Spatial attributes not supported by this adapter');
@@ -1185,7 +1179,7 @@ trait SpatialTests
         if ($database->exists(null, 'spatial_crud')) {
             $database->deleteCollection('spatial_crud');
         }
-        
+
         $database->createCollection('spatial_crud');
 
         // Create spatial attributes for all types
@@ -1202,7 +1196,7 @@ trait SpatialTests
         $this->assertEquals(true, $database->createIndex('spatial_crud', 'polygon_spatial', Database::INDEX_SPATIAL, ['polygon']));
 
         // ===== CREATE OPERATIONS =====
-        
+
         // Create document with all spatial types
         $document = new Document([
             '$id' => ID::unique(),
@@ -1224,12 +1218,12 @@ trait SpatialTests
         $this->assertEquals($document->getId(), $createdDoc->getId());
 
         // ===== READ OPERATIONS =====
-        
+
         // Read the created document
         $retrievedDoc = $database->getDocument('spatial_crud', $createdDoc->getId());
         $this->assertInstanceOf(\Utopia\Database\Document::class, $retrievedDoc);
         $this->assertEquals('Spatial CRUD Test Document', $retrievedDoc->getAttribute('name'));
-        
+
         // Verify spatial data was stored correctly
         $this->assertIsArray($retrievedDoc->getAttribute('geometry'));
         $this->assertIsArray($retrievedDoc->getAttribute('point'));
@@ -1262,7 +1256,7 @@ trait SpatialTests
         $this->assertEquals('Spatial CRUD Test Document', $geometryResults[0]->getAttribute('name'));
 
         // ===== UPDATE OPERATIONS =====
-        
+
         // Update spatial data
         $updateDoc = new Document([
             '$id' => $createdDoc->getId(),
@@ -1297,7 +1291,7 @@ trait SpatialTests
         $this->assertEquals('Updated Spatial CRUD Document', $updatedPointResults[0]->getAttribute('name'));
 
         // ===== DELETE OPERATIONS =====
-        
+
         // Delete the document
         $deleteResult = $database->deleteDocument('spatial_crud', $createdDoc->getId());
         $this->assertTrue($deleteResult);
@@ -1311,7 +1305,7 @@ trait SpatialTests
         $this->assertCount(0, $emptyResults);
 
         // ===== BATCH CRUD OPERATIONS =====
-        
+
         // Create multiple documents with different spatial data
         $batchDocuments = [
             new Document([
@@ -1394,4 +1388,39 @@ trait SpatialTests
         $remainingDocs = $database->find('spatial_crud', [], Database::PERMISSION_READ);
         $this->assertCount(0, $remainingDocs);
     }
-} 
+
+    public function testFlow(): void
+    {
+        $database = $this->getDatabase();
+        $result = $database->createCollection('test_basic', permissions:[Permission::read(Role::any()),Permission::create(Role::any())]);
+        $result = $database->createCollection('spatial_data');
+        $this->assertInstanceOf(\Utopia\Database\Document::class, $result);
+
+        $this->assertEquals(true, $database->createAttribute('spatial_data', 'point', Database::VAR_POINT, 0, true));
+        $this->assertEquals(true, $database->createAttribute('spatial_data', 'linestring', Database::VAR_LINESTRING, 0, true));
+        $this->assertEquals(true, $database->createAttribute('spatial_data', 'polygon', Database::VAR_POLYGON, 0, true));
+        $this->assertEquals(true, $database->createAttribute('spatial_data', 'name', Database::VAR_STRING, 255, true));
+
+        // Insert documents with spatial data
+        $doc1 = $database->createDocument('spatial_data', new \Utopia\Database\Document([
+            '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any()),Permission::write(Role::any()),Permission::update(Role::any())],
+            'name' => 'Point Document',
+            'point' => [1,2],
+            'linestring' => [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]],
+            'polygon' => [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
+        ]));
+
+        $database->updateDocument('spatial_data', 'doc1', new \Utopia\Database\Document([
+            'name' => 'Point Document',
+            'point' => [1.0, 1.0],
+            'linestring' => [[0.0, 0.0], [1.0, 1.0]],
+            'polygon' => [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
+        ]));
+
+        // // Create spatial indexes
+        $this->assertEquals(true, $database->createIndex('spatial_data', 'point_spatial', Database::INDEX_SPATIAL, ['point']));
+        $this->assertEquals(true, $database->createIndex('spatial_data', 'linestring_spatial', Database::INDEX_SPATIAL, ['linestring']));
+        $this->assertEquals(true, $database->createIndex('spatial_data', 'polygon_spatial', Database::INDEX_SPATIAL, ['polygon']));
+    }
+}

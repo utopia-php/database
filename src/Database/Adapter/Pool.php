@@ -165,7 +165,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -470,6 +470,12 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * @param array $selections
+     * @param string $prefix
+     * @param array $spatialAttributes
+     * @return mixed
+     */
     protected function getAttributeProjection(array $selections, string $prefix, array $spatialAttributes = []): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

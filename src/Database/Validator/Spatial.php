@@ -158,7 +158,7 @@ class Spatial extends Validator
     public static function isWKTString(string $value): bool
     {
         $value = trim($value);
-        return preg_match('/^(POINT|LINESTRING|POLYGON|GEOMETRY)\s*\(/i', $value);
+        return (bool) preg_match('/^(POINT|LINESTRING|POLYGON|GEOMETRY)\s*\(/i', $value);
     }
 
     /**

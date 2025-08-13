@@ -1377,6 +1377,9 @@ class MariaDB extends SQL
      * @throws TimeoutException
      * @throws Exception
      */
+    /**
+     * @param array $spatialAttributes
+     */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $spatialAttributes = []): array
     {
         $name = $this->filter($collection);
@@ -1705,7 +1708,7 @@ class MariaDB extends SQL
         $attribute = $this->quote($attribute);
         $alias = $this->quote(Query::DEFAULT_ALIAS);
         $placeholder = ID::unique();
-        
+
         // Get attribute type for spatial queries
         $attributeType = $this->getAttributeType($query->getAttribute(), $attributes);
 
@@ -2153,10 +2156,10 @@ class MariaDB extends SQL
      * Build geometry WKT string from array input for spatial queries
      *
      * @param array<mixed> $geometry
-     * @return string
+     * @return string|null
      * @throws DatabaseException
      */
-    private function convertArrayToWTK(array $geometry, string $type): string
+    private function convertArrayToWTK(array $geometry, ?string $type = null): string
     {
         if (empty($geometry)) {
             throw new DatabaseException('Empty geometry array provided');

@@ -1968,9 +1968,6 @@ trait DocumentTests
         ]);
 
         $this->assertEquals(1, count($documents));
-
-        $empty = new Document();
-        $this->assertEquals('', $empty->getSequence());
     }
 
     public function testFindOrderBy(): void

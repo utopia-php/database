@@ -214,11 +214,10 @@ abstract class SQL extends Adapter
      * @throws Exception
      * @throws PDOException
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
         $id = $this->quote($this->filter($id));
-        $type = $this->getSQLType($type, $size, $signed, $array, false);
-
+        $type = $this->getSQLType($type, $size, $signed, $array, $required);
         $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
@@ -1785,19 +1784,21 @@ abstract class SQL extends Adapter
     /**
      * @param Query $query
      * @param array<string, mixed> $binds
+     * @param array<mixed> $attributes
      * @return string
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query, array &$binds): string;
+    abstract protected function getSQLCondition(Query $query, array &$binds, array $attributes = []): string;
 
     /**
      * @param array<Query> $queries
      * @param array<string, mixed> $binds
      * @param string $separator
+     * @param array<mixed> $attributes
      * @return string
      * @throws Exception
      */
-    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND', array $attributes = []): string
     {
         $conditions = [];
         foreach ($queries as $query) {
@@ -1806,9 +1807,9 @@ abstract class SQL extends Adapter
             }
 
             if ($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
+                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod(), $attributes);
             } else {
-                $conditions[] = $this->getSQLCondition($query, $binds);
+                $conditions[] = $this->getSQLCondition($query, $binds, $attributes);
             }
         }
 
@@ -2295,58 +2296,5 @@ abstract class SQL extends Adapter
         }
 
         return \array_map(fn ($change) => $change->getNew(), $changes);
-    }
-
-    /**
-     * Build geometry WKT string from array input for spatial queries
-     *
-     * @param array<mixed> $geometry
-     * @return string
-     * @throws DatabaseException
-     */
-    protected function convertArrayToWTK(array $geometry): string
-    {
-        // Handle different input formats for spatial queries
-        if (empty($geometry)) {
-            throw new DatabaseException('Empty geometry array provided');
-        }
-
-        // Check if it's a simple point [x, y]
-        if (count($geometry) === 2 && is_numeric($geometry[0]) && is_numeric($geometry[1])) {
-            return "POINT({$geometry[0]} {$geometry[1]})";
-        }
-
-        // Check if it's a linestring [[x1, y1], [x2, y2], ...]
-        if (is_array($geometry[0]) && count($geometry[0]) === 2 && is_numeric($geometry[0][0])) {
-            $points = [];
-            foreach ($geometry as $point) {
-                if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
-                    throw new DatabaseException('Invalid point format in geometry array');
-                }
-                $points[] = "{$point[0]} {$point[1]}";
-            }
-            return 'LINESTRING(' . implode(', ', $points) . ')';
-        }
-
-        // Check if it's a polygon [[[x1, y1], [x2, y2], ...], ...]
-        if (is_array($geometry[0]) && is_array($geometry[0][0]) && count($geometry[0][0]) === 2) {
-            $rings = [];
-            foreach ($geometry as $ring) {
-                if (!is_array($ring)) {
-                    throw new DatabaseException('Invalid ring format in polygon geometry');
-                }
-                $points = [];
-                foreach ($ring as $point) {
-                    if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
-                        throw new DatabaseException('Invalid point format in polygon ring');
-                    }
-                    $points[] = "{$point[0]} {$point[1]}";
-                }
-                $rings[] = '(' . implode(', ', $points) . ')';
-            }
-            return 'POLYGON(' . implode(', ', $rings) . ')';
-        }
-
-        throw new DatabaseException('Unrecognized geometry array format');
     }
 }

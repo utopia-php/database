@@ -1612,7 +1612,7 @@ class Database
         );
 
         try {
-            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array, $required);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create attribute');

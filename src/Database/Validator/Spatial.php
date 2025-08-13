@@ -50,7 +50,7 @@ class Spatial extends Validator
     /**
      * Validate POINT data
      *
-     * @param array $value
+     * @param array<mixed,mixed> $value
      * @return bool
      * @throws Exception
      */
@@ -70,7 +70,7 @@ class Spatial extends Validator
     /**
      * Validate LINESTRING data
      *
-     * @param array $value
+     * @param array<mixed,mixed> $value
      * @return bool
      * @throws Exception
      */
@@ -96,7 +96,7 @@ class Spatial extends Validator
     /**
      * Validate POLYGON data
      *
-     * @param array $value
+     * @param array<mixed,mixed> $value
      * @return bool
      * @throws Exception
      */
@@ -135,7 +135,7 @@ class Spatial extends Validator
     /**
      * Validate GEOMETRY data
      *
-     * @param array $value
+     * @param array<mixed,mixed> $value
      * @return bool
      * @throws Exception
      */

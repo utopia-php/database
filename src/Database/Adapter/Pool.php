@@ -471,9 +471,9 @@ class Pool extends Adapter
     }
 
     /**
-     * @param array $selections
+     * @param array<string,mixed> $selections
      * @param string $prefix
-     * @param array $spatialAttributes
+     * @param array<string,mixed> $spatialAttributes
      * @return mixed
      */
     protected function getAttributeProjection(array $selections, string $prefix, array $spatialAttributes = []): mixed

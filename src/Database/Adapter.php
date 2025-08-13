@@ -777,11 +777,8 @@ abstract class Adapter
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
-     *
+     * @param array<string,mixed> $spatialAttributes
      * @return array<Document>
-     */
-    /**
-     * @param array $spatialAttributes
      */
     abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $spatialAttributes = []): array;
 

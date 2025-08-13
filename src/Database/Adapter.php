@@ -1209,17 +1209,47 @@ abstract class Adapter
     abstract public function getSchemaAttributes(string $collection): array;
 
     /**
-     * Get the query to check for tenant when in shared tables mode
-     *
-     * @param string $collection   The collection being queried
-     * @param string $alias  The alias of the parent collection if in a subquery
-     * @return string
-     */
-    abstract public function getTenantQuery(string $collection, string $alias = ''): string;
-
-    /**
      * @param mixed $stmt
      * @return bool
      */
     abstract protected function execute(mixed $stmt): bool;
+
+    /**
+        * Returns the document after casting
+        * @param Document $collection
+        * @param Document $document
+        * @return Document
+        */
+    abstract public function castingBefore(Document $collection, Document $document): Document;
+
+    /**
+     * Returns the document after casting
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     */
+    abstract public function castingAfter(Document $collection, Document $document): Document;
+
+    /**
+     * Is Mongo?
+     *
+     * @return bool
+     */
+    abstract public function isMongo(): bool;
+
+    /**
+     * Is internal casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForInternalCasting(): bool;
+
+    /**
+    * Set UTC Datetime
+    *
+    * @param string $value
+    * @return mixed
+    */
+    abstract public function setUTCDatetime(string $value): mixed;
+
 }

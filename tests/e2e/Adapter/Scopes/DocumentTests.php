@@ -42,6 +42,11 @@ trait DocumentTests
         $this->assertEquals(true, $database->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
         $this->assertEquals(true, $database->createAttribute('documents', 'id', Database::VAR_ID, 0, false, null));
 
+        $sequence = '1000000';
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
+            $sequence = '6890c1e3c00288c2470de7a0' ;
+        }
+
         $document = $database->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -68,7 +73,7 @@ trait DocumentTests
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
             'with-dash' => 'Works',
-            'id' => '1000000',
+            'id' => $sequence,
         ]));
 
         $this->assertNotEmpty(true, $document->getId());
@@ -93,12 +98,18 @@ trait DocumentTests
         $this->assertEquals([], $document->getAttribute('empty'));
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
         $this->assertIsString($document->getAttribute('id'));
-        $this->assertEquals('1000000', $document->getAttribute('id'));
+        $this->assertEquals($sequence, $document->getAttribute('id'));
+
+
+        $sequence = '56000';
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
+            $sequence = '6890c1e3c00288c2470de7b3' ;
+        }
 
         // Test create document with manual internal id
         $manualIdDocument = $database->createDocument('documents', new Document([
             '$id' => '56000',
-            '$sequence' => '56000',
+            '$sequence' => $sequence,
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user(ID::custom('1'))),
@@ -126,7 +137,7 @@ trait DocumentTests
             'with-dash' => 'Works',
         ]));
 
-        $this->assertEquals('56000', $manualIdDocument->getSequence());
+        $this->assertEquals($sequence, $manualIdDocument->getSequence());
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
@@ -152,7 +163,7 @@ trait DocumentTests
 
         $manualIdDocument = $database->getDocument('documents', '56000');
 
-        $this->assertEquals('56000', $manualIdDocument->getSequence());
+        $this->assertEquals($sequence, $manualIdDocument->getSequence());
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
@@ -267,11 +278,16 @@ trait DocumentTests
         $this->assertNotEmpty(true, $documentIdNull->getId());
         $this->assertNull($documentIdNull->getAttribute('id'));
 
+        $sequence = '0';
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
+            $sequence = '6890c1e3c00288c0000de7b3';
+        }
+
         /**
          * Insert ID attribute with '0'
          */
         $documentId0 = $database->createDocument('documents', new Document([
-            'id' => '0',
+            'id' => $sequence,
             '$permissions' => [Permission::read(Role::any())],
             'string' => '',
             'integer_signed' => 1,
@@ -286,20 +302,21 @@ trait DocumentTests
             'with-dash' => '',
         ]));
         $this->assertNotEmpty(true, $documentId0->getSequence());
+
         $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals('0', $documentId0->getAttribute('id'));
+        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->getDocument('documents', $documentId0->getId());
         $this->assertNotEmpty(true, $documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals('0', $documentId0->getAttribute('id'));
+        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->findOne('documents', [
-            query::equal('id', ['0'])
+            query::equal('id', [$sequence])
         ]);
         $this->assertNotEmpty(true, $documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals('0', $documentId0->getAttribute('id'));
+        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
 
 
         return $document;
@@ -382,12 +399,17 @@ trait DocumentTests
 
         /** @var array<Document> $documents */
         $documents = [];
-        $count = 10;
-        $sequence = 1_000_000;
+        $offset = 1000000;
+        for ($i = $offset; $i <= ($offset + 10); $i++) {
+            $sequence = (string)$i;
+            if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
+                $sequence = '689000288c0000de7'.$i;
+            }
 
-        for ($i = $sequence; $i <= ($sequence + $count); $i++) {
+            $hash[$i] = $sequence;
+
             $documents[] = new Document([
-                '$sequence' => (string)$i,
+                '$sequence' => $sequence,
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::create(Role::any()),
@@ -404,8 +426,9 @@ trait DocumentTests
         $documents = $database->find(__FUNCTION__, [
             Query::orderAsc()
         ]);
+
         foreach ($documents as $index => $document) {
-            $this->assertEquals($sequence + $index, $document->getSequence());
+            $this->assertEquals($hash[$index + $offset], $document->getSequence());
             $this->assertNotEmpty(true, $document->getId());
             $this->assertEquals('text', $document->getAttribute('string'));
         }
@@ -5102,8 +5125,13 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
+        $sequence = '200';
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
+            $sequence = '6890c1e3c00288c2470de7a0' ;
+        }
+
         $document->setAttribute('$id', 'caseSensitive');
-        $document->setAttribute('$sequence', '200');
+        $document->setAttribute('$sequence', $sequence);
         $database->createDocument($document->getCollection(), $document);
 
         $document->setAttribute('$id', 'CaseSensitive');

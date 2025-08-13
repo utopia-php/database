@@ -485,11 +485,6 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function getTenantQuery(string $collection, string $alias = ''): string
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
     protected function execute(mixed $stmt): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -501,6 +496,31 @@ class Pool extends Adapter
     }
 
     public function getSequences(string $collection, array $documents): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingBefore(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForInternalCasting(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function isMongo(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setUTCDatetime(string $value): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

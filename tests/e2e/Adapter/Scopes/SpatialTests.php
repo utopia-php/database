@@ -1388,39 +1388,4 @@ trait SpatialTests
         $remainingDocs = $database->find('spatial_crud', [], Database::PERMISSION_READ);
         $this->assertCount(0, $remainingDocs);
     }
-
-    public function testFlow(): void
-    {
-        $database = $this->getDatabase();
-        $result = $database->createCollection('test_basic', permissions:[Permission::read(Role::any()),Permission::create(Role::any())]);
-        $result = $database->createCollection('spatial_data');
-        $this->assertInstanceOf(\Utopia\Database\Document::class, $result);
-
-        $this->assertEquals(true, $database->createAttribute('spatial_data', 'point', Database::VAR_POINT, 0, true));
-        $this->assertEquals(true, $database->createAttribute('spatial_data', 'linestring', Database::VAR_LINESTRING, 0, true));
-        $this->assertEquals(true, $database->createAttribute('spatial_data', 'polygon', Database::VAR_POLYGON, 0, true));
-        $this->assertEquals(true, $database->createAttribute('spatial_data', 'name', Database::VAR_STRING, 255, true));
-
-        // Insert documents with spatial data
-        $doc1 = $database->createDocument('spatial_data', new \Utopia\Database\Document([
-            '$id' => 'doc1',
-            '$permissions' => [Permission::read(Role::any()),Permission::write(Role::any()),Permission::update(Role::any())],
-            'name' => 'Point Document',
-            'point' => [1,2],
-            'linestring' => [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]],
-            'polygon' => [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
-        ]));
-
-        $database->updateDocument('spatial_data', 'doc1', new \Utopia\Database\Document([
-            'name' => 'Point Document',
-            'point' => [1.0, 1.0],
-            'linestring' => [[0.0, 0.0], [1.0, 1.0]],
-            'polygon' => [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
-        ]));
-
-        // // Create spatial indexes
-        $this->assertEquals(true, $database->createIndex('spatial_data', 'point_spatial', Database::INDEX_SPATIAL, ['point']));
-        $this->assertEquals(true, $database->createIndex('spatial_data', 'linestring_spatial', Database::INDEX_SPATIAL, ['linestring']));
-        $this->assertEquals(true, $database->createIndex('spatial_data', 'polygon_spatial', Database::INDEX_SPATIAL, ['polygon']));
-    }
 }

@@ -78,6 +78,14 @@ class MySQL extends MariaDB
         return $size;
     }
 
+    public function getSupportForIndexArray(): bool
+    {
+        /**
+         * @link https://bugs.mysql.com/bug.php?id=111037
+         */
+        return true;
+    }
+
     public function getSupportForCastIndexArray(): bool
     {
         if (!$this->getSupportForIndexArray()) {

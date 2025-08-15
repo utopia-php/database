@@ -1910,15 +1910,10 @@ class Database
         }
 
         if ($defaultType === 'array') {
-            // Skip recursion for vector types as they are meant to be flat arrays of numeric values
-            if ($type === self::VAR_VECTOR) {
-                // Vector validation will be handled in the switch statement
-            } else {
-                foreach ($default as $value) {
-                    $this->validateDefaultTypes($type, $value);
-                }
-                return;
+            foreach ($default as $value) {
+                $this->validateDefaultTypes($type, $value);
             }
+            return;
         }
 
         switch ($type) {
@@ -1936,13 +1931,9 @@ class Database
                 }
                 break;
             case self::VAR_VECTOR:
-                if ($defaultType !== 'array') {
-                    throw new DatabaseException('Default value for vector must be an array');
-                }
-                foreach ($default as $component) {
-                    if (!is_numeric($component)) {
-                        throw new DatabaseException('Vector default value must contain only numeric values');
-                    }
+                // When validating individual vector components (from recursion), they should be numeric
+                if ($defaultType !== 'double' && $defaultType !== 'integer') {
+                    throw new DatabaseException('Vector components must be numeric values (float or integer)');
                 }
                 break;
             default:

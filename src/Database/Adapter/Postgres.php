@@ -2086,6 +2086,16 @@ class Postgres extends SQL
     }
 
     /**
+     * Is vector type supported?
+     *
+     * @return bool
+     */
+    public function getSupportForVectors(): bool
+    {
+        return true;
+    }
+
+    /**
      * @return string
      */
     public function getLikeOperator(): string

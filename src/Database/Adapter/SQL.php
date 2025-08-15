@@ -1427,6 +1427,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Is vector type supported?
+     *
+     * @return bool
+     */
+    public function getSupportForVectors(): bool
+    {
+        return false;
+    }
+
+    /**
      * @param string $tableName
      * @param string $columns
      * @param array<string> $batchKeys

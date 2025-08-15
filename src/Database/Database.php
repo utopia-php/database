@@ -1836,7 +1836,7 @@ class Database
             case self::VAR_RELATIONSHIP:
                 break;
             case self::VAR_VECTOR:
-                if (!($this->adapter instanceof \Utopia\Database\Adapter\Postgres)) {
+                if (!$this->adapter->getSupportForVectors()) {
                     throw new DatabaseException('Vector type is only supported in PostgreSQL adapter');
                 }
                 if ($size <= 0) {

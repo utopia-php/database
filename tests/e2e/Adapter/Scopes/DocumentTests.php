@@ -5788,4 +5788,60 @@ trait DocumentTests
         $database->setPreserveDates(false);
         $database->deleteCollection($collection);
     }
+
+    public function testUpdateDocumentsCount(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForUpserts()) {
+            return;
+        }
+
+        $collectionName = "update_count";
+        $database->createCollection($collectionName);
+
+        $database->createAttribute($collectionName, 'key', Database::VAR_STRING, 60, false);
+        $database->createAttribute($collectionName, 'value', Database::VAR_STRING, 60, false);
+
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())];
+
+        $docs =  [
+            new Document([
+                '$id' => 'bulk_upsert1',
+                '$permissions' => $permissions,
+                'key' => 'bulk_upsert1_initial',
+            ]),
+            new Document([
+                '$id' => 'bulk_upsert2',
+                '$permissions' => $permissions,
+                'key' => 'bulk_upsert2_initial',
+            ]),
+            new Document([
+                '$id' => 'bulk_upsert3',
+                '$permissions' => $permissions,
+                'key' => 'bulk_upsert3_initial',
+            ]),
+            new Document([
+                '$id' => 'bulk_upsert4',
+                '$permissions' => $permissions,
+                'key' => 'bulk_upsert4_initial'
+            ])
+        ];
+        $upsertUpdateResults = [];
+        $count = $database->createOrUpdateDocuments($collectionName, $docs, onNext: function ($doc) use (&$upsertUpdateResults) {
+            $upsertUpdateResults[] = $doc;
+        });
+        $this->assertCount(4, $upsertUpdateResults);
+        $this->assertEquals(4, $count);
+
+        $updates = new Document(['value' => 'test']);
+        $newDocs = [];
+        $count = $database->updateDocuments($collectionName, $updates, onNext:function ($doc) use (&$newDocs) {
+            $newDocs[] = $doc;
+        });
+
+        $this->assertCount(4, $newDocs);
+        $this->assertEquals(4, $count);
+    }
 }

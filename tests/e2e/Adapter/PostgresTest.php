@@ -214,6 +214,77 @@ class PostgresTest extends Base
         ]);
 
         $this->assertCount(3, $results);
+
+        // Test vector queries with limit - should return only top results
+        $results = $database->find('vectorQueries', [
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
+            Query::limit(2)
+        ]);
+        
+        $this->assertCount(2, $results);
+        // The most similar vector should be the one closest to [1.0, 0.0, 0.0]
+        $this->assertEquals('Test 1', $results[0]->getAttribute('name'));
+
+        // Test vector query with limit of 1
+        $results = $database->find('vectorQueries', [
+            Query::vectorDot('embedding', [0.0, 1.0, 0.0]),
+            Query::limit(1)
+        ]);
+        
+        $this->assertCount(1, $results);
+        $this->assertEquals('Test 2', $results[0]->getAttribute('name'));
+
+        // Test vector query combined with other filters
+        $results = $database->find('vectorQueries', [
+            Query::vectorCosine('embedding', [0.5, 0.5, 0.0]),
+            Query::notEqual('name', 'Test 1')
+        ]);
+        
+        $this->assertCount(2, $results);
+        // Should not contain Test 1
+        foreach ($results as $result) {
+            $this->assertNotEquals('Test 1', $result->getAttribute('name'));
+        }
+
+        // Test vector query with specific name filter
+        $results = $database->find('vectorQueries', [
+            Query::vectorEuclidean('embedding', [0.7, 0.7, 0.0]),
+            Query::equal('name', 'Test 3')
+        ]);
+        
+        $this->assertCount(1, $results);
+        $this->assertEquals('Test 3', $results[0]->getAttribute('name'));
+
+        // Test vector query with offset - skip first result
+        $results = $database->find('vectorQueries', [
+            Query::vectorDot('embedding', [0.5, 0.5, 0.0]),
+            Query::limit(2),
+            Query::offset(1)
+        ]);
+        
+        $this->assertCount(2, $results);
+        // Should skip the most similar result
+
+        // Test empty result with impossible filter combination
+        $results = $database->find('vectorQueries', [
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
+            Query::equal('name', 'Test 2'),
+            Query::equal('name', 'Test 3')  // Impossible condition
+        ]);
+        
+        $this->assertCount(0, $results);
+
+        // Test vector query with custom ordering (reverse order by name)
+        $results = $database->find('vectorQueries', [
+            Query::vectorDot('embedding', [0.4, 0.6, 0.0]),
+            Query::orderDesc('name'),
+            Query::limit(2)
+        ]);
+        
+        $this->assertCount(2, $results);
+        // Should be ordered by name descending: Test 3, Test 2
+        $this->assertEquals('Test 3', $results[0]->getAttribute('name'));
+        $this->assertEquals('Test 2', $results[1]->getAttribute('name'));
     }
 
     public function testVectorQueryValidation(): void

@@ -350,6 +350,13 @@ class Structure extends Validator
                     );
                     break;
 
+                case Database::VAR_GEOMETRY:
+                case Database::VAR_POINT:
+                case Database::VAR_LINESTRING:
+                case Database::VAR_POLYGON:
+                    $validators[] = new \Utopia\Database\Validator\Spatial($type);
+                    break;
+
                 default:
                     $this->message = 'Unknown attribute type "'.$type.'"';
                     return false;

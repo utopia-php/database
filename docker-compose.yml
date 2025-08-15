@@ -30,7 +30,7 @@ services:
       - database
 
   postgres:
-    image: postgres:16.4
+    image: postgis/postgis:16-3.4
     container_name: utopia-postgres
     networks:
       - database
@@ -39,9 +39,12 @@ services:
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
+      POSTGRES_DB: root
+    volumes:
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
 
   postgres-mirror:
-    image: postgres:16.4
+    image: postgis/postgis:16-3.4
     container_name: utopia-postgres-mirror
     networks:
       - database
@@ -50,6 +53,9 @@ services:
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
+      POSTGRES_DB: root
+    volumes:
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
 
   mariadb:
     image: mariadb:10.11

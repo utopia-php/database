@@ -51,6 +51,12 @@ class Database
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
 
+    // Spatial Types
+    public const VAR_GEOMETRY = 'geometry';
+    public const VAR_POINT = 'point';
+    public const VAR_LINESTRING = 'linestring';
+    public const VAR_POLYGON = 'polygon';
+
     // Index Types
     public const INDEX_KEY = 'key';
     public const INDEX_FULLTEXT = 'fulltext';
@@ -1606,7 +1612,7 @@ class Database
         );
 
         try {
-            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array, $required);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create attribute');
@@ -1834,8 +1840,17 @@ class Database
             case self::VAR_DATETIME:
             case self::VAR_RELATIONSHIP:
                 break;
+            case self::VAR_GEOMETRY:
+            case self::VAR_POINT:
+            case self::VAR_LINESTRING:
+            case self::VAR_POLYGON:
+                // Check if adapter supports spatial attributes
+                if (!$this->adapter->getSupportForSpatialAttributes()) {
+                    throw new DatabaseException('Spatial attributes are not supported by this adapter');
+                }
+                break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_GEOMETRY . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
 
         // Only execute when $default is given
@@ -1904,8 +1919,17 @@ class Database
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
+            case self::VAR_GEOMETRY:
+            case self::VAR_POINT:
+            case self::VAR_LINESTRING:
+            case self::VAR_POLYGON:
+                // Spatial types expect arrays as default values
+                if ($defaultType !== 'array') {
+                    throw new DatabaseException('Default value for spatial type ' . $type . ' must be an array');
+                }
+                // no break
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_GEOMETRY . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
     }
 
@@ -3084,17 +3108,25 @@ class Database
                 }
                 break;
 
+            case self::INDEX_SPATIAL:
+                if (!$this->adapter->getSupportForSpatialAttributes()) {
+                    throw new DatabaseException('Spatial index is not supported');
+                }
+                break;
+
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL);
         }
 
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];
+        $indexAttributesRequired = [];
         foreach ($attributes as $i => $attr) {
             foreach ($collectionAttributes as $collectionAttribute) {
                 if ($collectionAttribute->getAttribute('key') === $attr) {
                     $indexAttributesWithTypes[$attr] = $collectionAttribute->getAttribute('type');
+                    $indexAttributesRequired[$attr] = $collectionAttribute->getAttribute('required', false);
 
                     /**
                      * mysql does not save length in collection when length = attributes size
@@ -3113,6 +3145,29 @@ class Database
                         $orders[$i] = null;
                     }
                     break;
+                }
+            }
+        }
+
+        // Validate spatial index constraints
+        if ($type === self::INDEX_SPATIAL) {
+            foreach ($attributes as $attr) {
+                if (!isset($indexAttributesWithTypes[$attr])) {
+                    throw new DatabaseException('Attribute "' . $attr . '" not found in collection');
+                }
+
+                $attributeType = $indexAttributesWithTypes[$attr];
+                if (!in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                    throw new DatabaseException('Spatial index can only be created on spatial attributes (geometry, point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                }
+            }
+
+            // Check spatial index null constraints for adapters that don't support null values
+            if (!$this->adapter->getSupportForSpatialIndexNull()) {
+                foreach ($attributes as $attr) {
+                    if (!$indexAttributesRequired[$attr]) {
+                        throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attr . '" as required or create the index on a column with no null values.');
+                    }
                 }
             }
         }
@@ -3286,17 +3341,28 @@ class Database
             return $document;
         }
 
+        // Extract spatial attributes for the adapter
+        $spatialAttributes = [];
+        foreach ($attributes as $attribute) {
+            if ($attribute instanceof Document) {
+                $attributeType = $attribute->getAttribute('type');
+                if (in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                    $spatialAttributes[] = $attribute->getId();
+                }
+            }
+        }
+
         $document = $this->adapter->getDocument(
             $collection->getId(),
             $id,
             $queries,
-            $forUpdate
+            $forUpdate,
+            $spatialAttributes
         );
 
         if ($document->isEmpty()) {
             return $document;
         }
-
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
@@ -3662,6 +3728,18 @@ class Database
         }
 
         $document = $this->encode($collection, $document);
+
+        // Debug: Check if spatial data is properly encoded
+        if ($this->adapter->getSupportForSpatialAttributes()) {
+            $attributes = $collection->getAttribute('attributes', []);
+            foreach ($attributes as $attribute) {
+                $key = $attribute['$id'] ?? '';
+                $type = $attribute['type'] ?? '';
+                if (in_array($type, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                    $value = $document->getAttribute($key);
+                }
+            }
+        }
 
         if ($this->validate) {
             $validator = new Permissions();
@@ -6154,6 +6232,19 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
+        /**
+         * @var array<string,mixed> $spatialAttributes
+         */
+        $spatialAttributes = [];
+        foreach ($attributes as $attribute) {
+            if ($attribute instanceof Document) {
+                $attributeType = $attribute->getAttribute('type');
+                if (in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                    $spatialAttributes[] = $attribute->getId();
+                }
+            }
+        }
+
         $getResults = fn () => $this->adapter->find(
             $collection->getId(),
             $queries,
@@ -6163,7 +6254,8 @@ class Database
             $orderTypes,
             $cursor,
             $cursorDirection,
-            $forPermission
+            $forPermission,
+            $spatialAttributes
         );
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
@@ -6431,6 +6523,14 @@ class Database
 
             foreach ($value as $index => $node) {
                 if ($node !== null) {
+                    // Handle spatial data encoding
+                    $attributeType = $attribute['type'] ?? '';
+                    if (in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                        if (is_array($node)) {
+                            $node = $this->encodeSpatialData($node, $attributeType);
+                        }
+                    }
+
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
@@ -6488,6 +6588,7 @@ class Database
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
+            $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
@@ -6508,6 +6609,11 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
+                // Auto-decode spatial data from WKT to arrays
+                if (is_string($node) && in_array($type, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                    $node = $this->decodeSpatialData($node);
+                }
+
                 foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
@@ -6787,9 +6893,98 @@ class Database
                     }
                 }
             }
+
+            // Convert standard queries to spatial queries when used on spatial attributes
+            $attributeType = $attribute->getAttribute('type');
+            if (in_array($attributeType, [
+                Database::VAR_GEOMETRY,
+                Database::VAR_POINT,
+                Database::VAR_LINESTRING,
+                Database::VAR_POLYGON
+            ])) {
+                foreach ($queries as $index => $query) {
+                    if ($query->getAttribute() === $attribute->getId()) {
+                        $method = $query->getMethod();
+
+                        // Map standard query methods to spatial equivalents
+                        $spatialMethodMap = [
+                            Query::TYPE_CONTAINS => Query::TYPE_SPATIAL_CONTAINS,
+                            Query::TYPE_NOT_CONTAINS => Query::TYPE_SPATIAL_NOT_CONTAINS
+                        ];
+
+                        if (isset($spatialMethodMap[$method])) {
+                            $query->setMethod($spatialMethodMap[$method]);
+                            $queries[$index] = $query;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Convert standard queries to spatial queries when used on spatial attributes
+        foreach ($queries as $index => $query) {
+            $queries[$index] = $this->convertSpatialQueries($attributes, $query);
         }
 
         return $queries;
+    }
+
+    /**
+     * Recursively convert spatial queries
+     */
+    /**
+     * @param array<string,mixed> $attributes
+     */
+    private function convertSpatialQueries(array $attributes, Query $query): Query
+    {
+        // Handle logical queries (AND, OR) recursively
+        if (in_array($query->getMethod(), [Query::TYPE_AND, Query::TYPE_OR])) {
+            $nestedQueries = $query->getValues();
+            $convertedNestedQueries = [];
+            foreach ($nestedQueries as $nestedQuery) {
+                $convertedNestedQueries[] = $this->convertSpatialQueries($attributes, $nestedQuery);
+            }
+            $query->setValues($convertedNestedQueries);
+            return $query;
+        }
+
+        // Process individual queries
+        $queryAttribute = $query->getAttribute();
+
+        // Find the attribute schema for this query
+        $attributeSchema = null;
+        foreach ($attributes as $attribute) {
+            if ($attribute->getId() === $queryAttribute) {
+                $attributeSchema = $attribute;
+                break;
+            }
+        }
+
+        if ($attributeSchema && in_array($attributeSchema->getAttribute('type'), [
+            Database::VAR_GEOMETRY,
+            Database::VAR_POINT,
+            Database::VAR_LINESTRING,
+            Database::VAR_POLYGON
+        ])) {
+            // This query is on a spatial attribute, convert CONTAINS/NOT_CONTAINS to spatial methods
+            $method = $query->getMethod();
+
+            $spatialMethodMap = [
+                Query::TYPE_CONTAINS => Query::TYPE_SPATIAL_CONTAINS,
+                Query::TYPE_NOT_CONTAINS => Query::TYPE_SPATIAL_NOT_CONTAINS
+            ];
+
+            if (isset($spatialMethodMap[$method])) {
+                $query->setMethod($spatialMethodMap[$method]);
+            }
+        } elseif ($attributeSchema) {
+            // This query is on a non-spatial attribute, reject spatial-only methods
+            if (Query::isSpatialQuery($query->getMethod())) {
+                throw new QueryException('Spatial query "' . $query->getMethod() . '" cannot be applied on non-spatial attribute "' . $queryAttribute . '"');
+            }
+        }
+
+        return $query;
     }
 
     /**
@@ -6953,5 +7148,119 @@ class Database
         }
 
         return $nestedSelections;
+    }
+
+    /**
+     * Encode spatial data from array format to WKT (Well-Known Text) format
+     *
+     * @param mixed $value
+     * @param string $type
+     * @return string
+     * @throws DatabaseException
+     */
+    protected function encodeSpatialData(mixed $value, string $type): string
+    {
+        // Validate first using the dedicated Spatial validator
+        \Utopia\Database\Validator\Spatial::validate($value, $type);
+
+        switch ($type) {
+            case self::VAR_POINT:
+                return "POINT({$value[0]} {$value[1]})";
+
+            case self::VAR_LINESTRING:
+                $points = [];
+                foreach ($value as $point) {
+                    $points[] = "{$point[0]} {$point[1]}";
+                }
+                return 'LINESTRING(' . implode(', ', $points) . ')';
+
+            case self::VAR_POLYGON:
+                // Check if this is a single ring (flat array of points) or multiple rings
+                $isSingleRing = count($value) > 0 && is_array($value[0]) &&
+                              count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
+
+                if ($isSingleRing) {
+                    // Convert single ring format [[x1,y1], [x2,y2], ...] to multi-ring format
+                    $value = [$value];
+                }
+
+                $rings = [];
+                foreach ($value as $ring) {
+                    $points = [];
+                    foreach ($ring as $point) {
+                        $points[] = "{$point[0]} {$point[1]}";
+                    }
+                    $rings[] = '(' . implode(', ', $points) . ')';
+                }
+                return 'POLYGON(' . implode(', ', $rings) . ')';
+
+            case self::VAR_GEOMETRY:
+                // If it's an array, convert it to GEOMETRY WKT format
+                return "POINT({$value[0]} {$value[1]})";
+
+            default:
+                throw new DatabaseException('Unknown spatial type: ' . $type);
+        }
+    }
+
+    /**
+     * Decode spatial data from WKT (Well-Known Text) format to array format
+     *
+     * @param string $wkt
+     * @return array<mixed>
+     * @throws DatabaseException
+     */
+    protected function decodeSpatialData(string $wkt): array
+    {
+        $wkt = trim($wkt);
+
+        if (preg_match('/^POINT\(([^)]+)\)$/i', $wkt, $matches)) {
+            $coords = explode(' ', trim($matches[1]));
+            if (count($coords) !== 2) {
+                throw new DatabaseException('Invalid POINT WKT format');
+            }
+            return [(float)$coords[0], (float)$coords[1]];
+        }
+
+        if (preg_match('/^LINESTRING\(([^)]+)\)$/i', $wkt, $matches)) {
+            $coordsString = trim($matches[1]);
+            $points = explode(',', $coordsString);
+            $result = [];
+            foreach ($points as $point) {
+                $coords = explode(' ', trim($point));
+                if (count($coords) !== 2) {
+                    throw new DatabaseException('Invalid LINESTRING WKT format');
+                }
+                $result[] = [(float)$coords[0], (float)$coords[1]];
+            }
+            return $result;
+        }
+
+        if (preg_match('/^POLYGON\(\(([^)]+)\)\)$/i', $wkt, $matches)) {
+            $content = substr($wkt, 8, -1); // Remove POLYGON(( and ))
+            $rings = explode('),(', $content);
+            $result = [];
+
+            foreach ($rings as $ring) {
+                $ring = trim($ring, '()');
+                $points = explode(',', $ring);
+
+                $ringPoints = [];
+
+                foreach ($points as $point) {
+                    $coords = preg_split('/\s+/', trim($point));
+                    if ($coords === false || count($coords) !== 2) {
+                        throw new DatabaseException('Invalid POLYGON WKT format');
+                    }
+                    $ringPoints[] = [(float)$coords[0], (float)$coords[1]];
+                }
+
+                $result[] = $ringPoints;
+            }
+
+            return $result;
+        }
+
+        return [$wkt];
     }
 }

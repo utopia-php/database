@@ -152,7 +152,8 @@ class SQLite extends MariaDB
                 $attribute->getAttribute('type'),
                 $attribute->getAttribute('size', 0),
                 $attribute->getAttribute('signed', true),
-                $attribute->getAttribute('array', false)
+                $attribute->getAttribute('array', false),
+                $attribute->getAttribute('required', false)
             );
 
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
@@ -961,6 +962,16 @@ class SQLite extends MariaDB
     public function getSupportForBatchCreateAttributes(): bool
     {
         return false;
+    }
+
+    public function getSupportForSpatialAttributes(): bool
+    {
+        return false; // SQLite doesn't have native spatial support
+    }
+
+    public function getSupportForSpatialIndexNull(): bool
+    {
+        return false; // SQLite doesn't have native spatial support
     }
 
     /**

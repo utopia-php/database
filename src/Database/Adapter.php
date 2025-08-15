@@ -534,7 +534,7 @@ abstract class Adapter
      * @throws TimeoutException
      * @throws DuplicateException
      */
-    abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
+    abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool;
 
     /**
      * Create Attributes
@@ -665,9 +665,10 @@ abstract class Adapter
      * @param string $id
      * @param array<Query> $queries
      * @param bool $forUpdate
+     * @param array<string> $spatialAttributes
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
+    abstract public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false, array $spatialAttributes = []): Document;
 
     /**
      * Create Document
@@ -776,10 +777,10 @@ abstract class Adapter
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
-     *
+     * @param array<string,mixed> $spatialAttributes
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
+    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $spatialAttributes = []): array;
 
     /**
      * Sum an attribute
@@ -1028,6 +1029,20 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForBatchCreateAttributes(): bool;
+
+    /**
+     * Is spatial attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialAttributes(): bool;
+
+    /**
+     * Does the adapter support null values in spatial indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialIndexNull(): bool;
 
     /**
      * Get current attribute count from collection document

@@ -5218,7 +5218,7 @@ class Database
         int|float|null $max = null
     ): Document {
         if ($value <= 0) { // Can be a float
-            throw new DatabaseException('Value must be numeric and greater than 0');
+            throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -5315,7 +5315,7 @@ class Database
         int|float|null $min = null
     ): Document {
         if ($value <= 0) { // Can be a float
-            throw new DatabaseException('Value must be numeric and greater than 0');
+            throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));

@@ -439,6 +439,11 @@ class Postgres extends SQL
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
     {
+        // Ensure pgvector extension is installed for vector types
+        if ($type === Database::VAR_VECTOR) {
+            $this->ensurePgVectorExtension();
+        }
+
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $type = $this->getSQLType($type, $size, $signed, $array);
@@ -1798,6 +1803,18 @@ class Postgres extends SQL
                 $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
                 return "NOT (to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0))";
 
+            case Query::TYPE_VECTOR_DOT:
+                $binds[":{$placeholder}_0"] = '[' . implode(',', $query->getValues()) . ']';
+                return "({$attribute} <#> :{$placeholder}_0)";
+
+            case Query::TYPE_VECTOR_COSINE:
+                $binds[":{$placeholder}_0"] = '[' . implode(',', $query->getValues()) . ']';
+                return "({$attribute} <=> :{$placeholder}_0)";
+
+            case Query::TYPE_VECTOR_EUCLIDEAN:
+                $binds[":{$placeholder}_0"] = '[' . implode(',', $query->getValues()) . ']';
+                return "({$attribute} <-> :{$placeholder}_0)";
+
             case Query::TYPE_BETWEEN:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
@@ -1924,6 +1941,9 @@ class Postgres extends SQL
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
 
+            case Database::VAR_VECTOR:
+                return "vector({$size})";
+
             default:
                 throw new DatabaseException('Unknown Type: ' . $type);
         }
@@ -1941,6 +1961,22 @@ class Postgres extends SQL
         }
 
         return "\"{$this->getDatabase()}\".";
+    }
+
+    /**
+     * Ensure pgvector extension is installed
+     *
+     * @return void
+     * @throws DatabaseException
+     */
+    private function ensurePgVectorExtension(): void
+    {
+        try {
+            $stmt = $this->getPDO()->prepare("CREATE EXTENSION IF NOT EXISTS vector");
+            $this->execute($stmt);
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to install pgvector extension: ' . $e->getMessage(), $e->getCode(), $e);
+        }
     }
 
     /**

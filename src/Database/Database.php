@@ -43,6 +43,7 @@ class Database
     public const VAR_DATETIME = 'datetime';
     public const VAR_ID = 'id';
     public const VAR_OBJECT_ID = 'objectId';
+    public const VAR_VECTOR = 'vector';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
@@ -1834,8 +1835,21 @@ class Database
             case self::VAR_DATETIME:
             case self::VAR_RELATIONSHIP:
                 break;
+            case self::VAR_VECTOR:
+                if (!($this->adapter instanceof \Utopia\Database\Adapter\Postgres)) {
+                    throw new DatabaseException('Vector type is only supported in PostgreSQL adapter');
+                }
+                if ($size <= 0) {
+                    throw new DatabaseException('Vector dimensions must be a positive integer');
+                }
+                if ($size > 16000) { // pgvector limit
+                    throw new DatabaseException('Vector dimensions cannot exceed 16000');
+                }
+                // Store dimensions in the size field for vectors
+                $attribute->setAttribute('dimensions', $size);
+                break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_VECTOR);
         }
 
         // Only execute when $default is given
@@ -1904,8 +1918,18 @@ class Database
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
+            case self::VAR_VECTOR:
+                if ($defaultType !== 'array') {
+                    throw new DatabaseException('Default value for vector must be an array');
+                }
+                foreach ($default as $component) {
+                    if (!is_numeric($component)) {
+                        throw new DatabaseException('Vector default value must contain only numeric values');
+                    }
+                }
+                break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_VECTOR);
         }
     }
 

@@ -27,6 +27,11 @@ class Query
     public const TYPE_ENDS_WITH = 'endsWith';
     public const TYPE_NOT_ENDS_WITH = 'notEndsWith';
 
+    // Vector query methods (PostgreSQL only)
+    public const TYPE_VECTOR_DOT = 'vectorDot';
+    public const TYPE_VECTOR_COSINE = 'vectorCosine';
+    public const TYPE_VECTOR_EUCLIDEAN = 'vectorEuclidean';
+
     public const TYPE_SELECT = 'select';
 
     // Order methods
@@ -64,6 +69,9 @@ class Query
         self::TYPE_NOT_STARTS_WITH,
         self::TYPE_ENDS_WITH,
         self::TYPE_NOT_ENDS_WITH,
+        self::TYPE_VECTOR_DOT,
+        self::TYPE_VECTOR_COSINE,
+        self::TYPE_VECTOR_EUCLIDEAN,
         self::TYPE_SELECT,
         self::TYPE_ORDER_DESC,
         self::TYPE_ORDER_ASC,
@@ -832,5 +840,41 @@ class Query
     public function setOnArray(bool $bool): void
     {
         $this->onArray = $bool;
+    }
+
+    /**
+     * Helper method to create Query with vectorDot method
+     *
+     * @param string $attribute
+     * @param array<float> $vector
+     * @return Query
+     */
+    public static function vectorDot(string $attribute, array $vector): self
+    {
+        return new self(self::TYPE_VECTOR_DOT, $attribute, $vector);
+    }
+
+    /**
+     * Helper method to create Query with vectorCosine method
+     *
+     * @param string $attribute
+     * @param array<float> $vector
+     * @return Query
+     */
+    public static function vectorCosine(string $attribute, array $vector): self
+    {
+        return new self(self::TYPE_VECTOR_COSINE, $attribute, $vector);
+    }
+
+    /**
+     * Helper method to create Query with vectorEuclidean method
+     *
+     * @param string $attribute
+     * @param array<float> $vector
+     * @return Query
+     */
+    public static function vectorEuclidean(string $attribute, array $vector): self
+    {
+        return new self(self::TYPE_VECTOR_EUCLIDEAN, $attribute, $vector);
     }
 }

@@ -138,6 +138,25 @@ class Filter extends Base
                 case Database::VAR_RELATIONSHIP:
                     $validator = new Text(255, 0); // The query is always on uid
                     break;
+                case Database::VAR_VECTOR:
+                    // For vector queries, validate that the value is an array of floats
+                    if (!is_array($value)) {
+                        $this->message = 'Vector query value must be an array';
+                        return false;
+                    }
+                    foreach ($value as $component) {
+                        if (!is_numeric($component)) {
+                            $this->message = 'Vector query value must contain only numeric values';
+                            return false;
+                        }
+                    }
+                    // Check dimensions match
+                    $expectedDimensions = $attributeSchema['dimensions'] ?? $attributeSchema['size'] ?? 0;
+                    if (count($value) !== $expectedDimensions) {
+                        $this->message = "Vector query value must have {$expectedDimensions} dimensions";
+                        return false;
+                    }
+                    break;
                 default:
                     $this->message = 'Unknown Data type';
                     return false;
@@ -195,6 +214,18 @@ class Filter extends Base
         ) {
             $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
             return false;
+        }
+
+        // Vector queries can only be used on vector attributes (not arrays)
+        if (in_array($method, [Query::TYPE_VECTOR_DOT, Query::TYPE_VECTOR_COSINE, Query::TYPE_VECTOR_EUCLIDEAN])) {
+            if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
+                $this->message = 'Vector queries can only be used on vector attributes';
+                return false;
+            }
+            if ($array) {
+                $this->message = 'Vector queries cannot be used on array attributes';
+                return false;
+            }
         }
 
         return true;
@@ -271,6 +302,27 @@ class Filter extends Base
 
             case Query::TYPE_IS_NULL:
             case Query::TYPE_IS_NOT_NULL:
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+
+            case Query::TYPE_VECTOR_DOT:
+            case Query::TYPE_VECTOR_COSINE:
+            case Query::TYPE_VECTOR_EUCLIDEAN:
+                // Validate that the attribute is a vector type
+                if (!$this->isValidAttribute($attribute)) {
+                    return false;
+                }
+                
+                $attributeSchema = $this->schema[$attribute];
+                if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
+                    $this->message = 'Vector queries can only be used on vector attributes';
+                    return false;
+                }
+                
+                if (count($value->getValues()) != 1) {
+                    $this->message = \ucfirst($method) . ' queries require exactly one vector value.';
+                    return false;
+                }
+
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
             case Query::TYPE_OR:

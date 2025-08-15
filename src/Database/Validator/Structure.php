@@ -8,6 +8,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Vector;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
@@ -348,6 +349,10 @@ class Structure extends Validator
                         min: $this->minAllowedDate,
                         max: $this->maxAllowedDate
                     );
+                    break;
+
+                case Database::VAR_VECTOR:
+                    $validators[] = new Vector($attribute['dimensions'] ?? 0);
                     break;
 
                 default:

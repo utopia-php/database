@@ -5847,7 +5847,7 @@ trait DocumentTests
         $database->deleteCollection($collectionName);
     }
 
-    public function testCreateUpdateDocumentsMismatch()
+    public function testCreateUpdateDocumentsMismatch(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();

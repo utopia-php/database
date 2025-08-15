@@ -1910,10 +1910,15 @@ class Database
         }
 
         if ($defaultType === 'array') {
-            foreach ($default as $value) {
-                $this->validateDefaultTypes($type, $value);
+            // Skip recursion for vector types as they are meant to be flat arrays of numeric values
+            if ($type === self::VAR_VECTOR) {
+                // Vector validation will be handled in the switch statement
+            } else {
+                foreach ($default as $value) {
+                    $this->validateDefaultTypes($type, $value);
+                }
+                return;
             }
-            return;
         }
 
         switch ($type) {

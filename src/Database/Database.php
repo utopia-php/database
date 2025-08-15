@@ -1840,6 +1840,9 @@ class Database
                 if (!$this->adapter->getSupportForVectors()) {
                     throw new DatabaseException('Vector type is only supported in PostgreSQL adapter');
                 }
+                if ($array) {
+                    throw new DatabaseException('Vector type cannot be an array');
+                }
                 if ($size <= 0) {
                     throw new DatabaseException('Vector size must be a positive integer');
                 }
@@ -2185,6 +2188,20 @@ class Database
                 case self::VAR_DATETIME:
                     if (!empty($size)) {
                         throw new DatabaseException('Size must be empty');
+                    }
+                    break;
+                case self::VAR_VECTOR:
+                    if (!$this->adapter->getSupportForVectors()) {
+                        throw new DatabaseException('Vector type is only supported in PostgreSQL adapter');
+                    }
+                    if ($array) {
+                        throw new DatabaseException('Vector type cannot be an array');
+                    }
+                    if ($size <= 0) {
+                        throw new DatabaseException('Vector size must be a positive integer');
+                    }
+                    if ($size > self::VECTOR_MAX_SIZE) {
+                        throw new DatabaseException('Vector size cannot exceed ' . self::VECTOR_MAX_SIZE);
                     }
                     break;
                 default:

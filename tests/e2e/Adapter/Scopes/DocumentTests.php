@@ -369,6 +369,38 @@ trait DocumentTests
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
         }
+
+        // with different set of attributes
+        $colName = "docs_with_diff";
+        $database->createCollection($colName);
+        $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
+        $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false);
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())];
+        $docs =  [
+            new Document([
+                '$id' => 'doc1',
+                'key' => 'doc1',
+            ]),
+            new Document([
+                '$id' => 'doc2',
+                'key' => 'doc2',
+            ]),
+            new Document([
+                '$id' => 'doc3',
+                '$permissions' => $permissions,
+                'key' => 'doc3',
+                'value' => 'test'
+            ]),
+        ];
+        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+        // we should get only one document as read permission provided to the last document only
+        $addedDocs = $database->find($colName);
+        $this->assertCount(1, $addedDocs);
+        $doc = $addedDocs[0];
+        $this->assertEquals('doc3', $doc->getId());
+        $this->assertNotEmpty($doc->getPermissions());
+        $this->assertCount(3, $doc->getPermissions());
+        $database->deleteCollection($colName);
     }
 
     public function testCreateDocumentsWithAutoIncrement(): void

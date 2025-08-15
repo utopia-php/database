@@ -1864,6 +1864,7 @@ abstract class SQL extends Adapter
             $batchKeys = [];
             $bindValues = [];
             $permissions = [];
+            $bindValuesPermissions = [];
 
             foreach ($documents as $index => $document) {
                 $attributes = $document->getAttributes();
@@ -1902,6 +1903,10 @@ abstract class SQL extends Adapter
                         $permission = \str_replace('"', '', $permission);
                         $permission = "('{$type}', '{$permission}', :_uid_{$index} {$tenantBind})";
                         $permissions[] = $permission;
+                        $bindValuesPermissions[":_uid_{$index}"] = $document->getId();
+                        if ($this->sharedTables) {
+                            $bindValuesPermissions[":_tenant_{$index}"] = $document->getTenant();
+                        }
                     }
                 }
             }
@@ -1930,11 +1935,8 @@ abstract class SQL extends Adapter
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
 
-                foreach ($documents as $index => $document) {
-                    $stmtPermissions->bindValue(":_uid_{$index}", $document->getId());
-                    if ($this->sharedTables) {
-                        $stmtPermissions->bindValue(":_tenant_{$index}", $document->getTenant());
-                    }
+                foreach ($bindValuesPermissions as $key => $value) {
+                    $stmtPermissions->bindValue($key, $value, $this->getPDOType($value));
                 }
 
                 $this->execute($stmtPermissions);

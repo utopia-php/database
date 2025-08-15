@@ -1841,13 +1841,11 @@ class Database
                     throw new DatabaseException('Vector type is only supported in PostgreSQL adapter');
                 }
                 if ($size <= 0) {
-                    throw new DatabaseException('Vector dimensions must be a positive integer');
+                    throw new DatabaseException('Vector size must be a positive integer');
                 }
                 if ($size > self::VECTOR_MAX_DIMENSIONS) {
-                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
+                    throw new DatabaseException('Vector size cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
                 }
-                // Store dimensions in the size field for vectors
-                $attribute->setAttribute('dimensions', $size);
                 break;
             default:
                 $supportedTypes = [

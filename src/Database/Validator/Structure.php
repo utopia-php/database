@@ -352,7 +352,7 @@ class Structure extends Validator
                     break;
 
                 case Database::VAR_VECTOR:
-                    $validators[] = new Vector($attribute['dimensions'] ?? 0);
+                    $validators[] = new Vector($attribute['size'] ?? 0);
                     break;
 
                 default:

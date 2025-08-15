@@ -150,10 +150,10 @@ class Filter extends Base
                             return false;
                         }
                     }
-                    // Check dimensions match
-                    $expectedDimensions = $attributeSchema['dimensions'] ?? $attributeSchema['size'] ?? 0;
-                    if (count($value) !== $expectedDimensions) {
-                        $this->message = "Vector query value must have {$expectedDimensions} dimensions";
+                    // Check size match
+                    $expectedSize = $attributeSchema['size'] ?? 0;
+                    if (count($value) !== $expectedSize) {
+                        $this->message = "Vector query value must have {$expectedSize} elements";
                         return false;
                     }
                     break;

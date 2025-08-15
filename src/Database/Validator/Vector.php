@@ -6,16 +6,16 @@ use Utopia\Validator;
 
 class Vector extends Validator
 {
-    protected int $dimensions;
+    protected int $size;
 
     /**
      * Vector constructor.
      *
-     * @param int $dimensions The number of dimensions the vector should have
+     * @param int $size The size (number of elements) the vector should have
      */
-    public function __construct(int $dimensions)
+    public function __construct(int $size)
     {
-        $this->dimensions = $dimensions;
+        $this->size = $size;
     }
 
     /**
@@ -27,7 +27,7 @@ class Vector extends Validator
      */
     public function getDescription(): string
     {
-        return "Value must be an array of floats with {$this->dimensions} dimensions";
+        return "Value must be an array of {$this->size} numeric values";
     }
 
     /**
@@ -44,7 +44,7 @@ class Vector extends Validator
             return false;
         }
 
-        if (count($value) !== $this->dimensions) {
+        if (count($value) !== $this->size) {
             return false;
         }
 

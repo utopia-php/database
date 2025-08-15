@@ -48,7 +48,7 @@ class Database
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
     public const DOUBLE_MAX = PHP_FLOAT_MAX;
-    public const VECTOR_MAX_DIMENSIONS = 16000; // pgvector limit
+    public const VECTOR_MAX_SIZE = 16000; // pgvector limit
 
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
@@ -1843,8 +1843,8 @@ class Database
                 if ($size <= 0) {
                     throw new DatabaseException('Vector size must be a positive integer');
                 }
-                if ($size > self::VECTOR_MAX_DIMENSIONS) {
-                    throw new DatabaseException('Vector size cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
+                if ($size > self::VECTOR_MAX_SIZE) {
+                    throw new DatabaseException('Vector size cannot exceed ' . self::VECTOR_MAX_SIZE);
                 }
                 break;
             default:

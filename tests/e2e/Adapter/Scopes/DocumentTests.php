@@ -5843,5 +5843,7 @@ trait DocumentTests
 
         $this->assertCount(4, $newDocs);
         $this->assertEquals(4, $count);
+
+        $database->deleteCollection($collectionName);
     }
 }

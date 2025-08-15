@@ -824,7 +824,7 @@ class Mirror extends Database
                 $clones[] = $clone;
             }
 
-            $this->destination->withPreserveDates(
+            $modified = $this->destination->withPreserveDates(
                 fn () =>
                 $this->destination->createOrUpdateDocuments(
                     $collection,

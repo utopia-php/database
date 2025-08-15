@@ -48,6 +48,7 @@ class Database
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
     public const DOUBLE_MAX = PHP_FLOAT_MAX;
+    public const VECTOR_MAX_DIMENSIONS = 16000; // pgvector limit
 
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
@@ -1842,14 +1843,25 @@ class Database
                 if ($size <= 0) {
                     throw new DatabaseException('Vector dimensions must be a positive integer');
                 }
-                if ($size > 16000) { // pgvector limit
-                    throw new DatabaseException('Vector dimensions cannot exceed 16000');
+                if ($size > self::VECTOR_MAX_DIMENSIONS) {
+                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
                 }
                 // Store dimensions in the size field for vectors
                 $attribute->setAttribute('dimensions', $size);
                 break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_VECTOR);
+                $supportedTypes = [
+                    self::VAR_STRING,
+                    self::VAR_INTEGER,
+                    self::VAR_FLOAT,
+                    self::VAR_BOOLEAN,
+                    self::VAR_DATETIME,
+                    self::VAR_RELATIONSHIP
+                ];
+                if ($this->adapter->getSupportForVectors()) {
+                    $supportedTypes[] = self::VAR_VECTOR;
+                }
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
         }
 
         // Only execute when $default is given
@@ -1929,7 +1941,18 @@ class Database
                 }
                 break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_VECTOR);
+                $supportedTypes = [
+                    self::VAR_STRING,
+                    self::VAR_INTEGER,
+                    self::VAR_FLOAT,
+                    self::VAR_BOOLEAN,
+                    self::VAR_DATETIME,
+                    self::VAR_RELATIONSHIP
+                ];
+                if ($this->adapter->getSupportForVectors()) {
+                    $supportedTypes[] = self::VAR_VECTOR;
+                }
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
         }
     }
 
@@ -2171,7 +2194,18 @@ class Database
                     }
                     break;
                 default:
-                    throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                    $supportedTypes = [
+                        self::VAR_STRING,
+                        self::VAR_INTEGER,
+                        self::VAR_FLOAT,
+                        self::VAR_BOOLEAN,
+                        self::VAR_DATETIME,
+                        self::VAR_RELATIONSHIP
+                    ];
+                    if ($this->adapter->getSupportForVectors()) {
+                        $supportedTypes[] = self::VAR_VECTOR;
+                    }
+                    throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
             }
 
             /** Ensure required filters for the attribute are passed */

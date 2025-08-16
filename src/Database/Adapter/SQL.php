@@ -1427,6 +1427,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Is vector type supported?
+     *
+     * @return bool
+     */
+    public function getSupportForVectors(): bool
+    {
+        return false;
+    }
+
+    /**
      * @param string $tableName
      * @param string $columns
      * @param array<string> $batchKeys
@@ -1505,6 +1515,10 @@ abstract class SQL extends Adapter
             case Query::TYPE_NOT_ENDS_WITH:
             case Query::TYPE_NOT_CONTAINS:
                 return $this->getLikeOperator();
+            case Query::TYPE_VECTOR_DOT:
+            case Query::TYPE_VECTOR_COSINE:
+            case Query::TYPE_VECTOR_EUCLIDEAN:
+                throw new DatabaseException('Vector queries are only supported in PostgreSQL adapter');
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }

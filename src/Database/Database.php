@@ -348,6 +348,11 @@ class Database
 
     protected bool $filter = true;
 
+    /**
+     * @var array<string, bool>|null
+     */
+    protected ?array $disabledFilters = [];
+
     protected bool $validate = true;
 
     protected bool $preserveDates = false;
@@ -813,17 +818,35 @@ class Database
      *
      * @template T
      * @param callable(): T $callback
+     * @param array<string>|null $filters
      * @return T
      */
-    public function skipFilters(callable $callback): mixed
+    public function skipFilters(callable $callback, ?array $filters = null): mixed
     {
-        $initial = $this->filter;
-        $this->disableFilters();
+        if (empty($filters)) {
+            $initial = $this->filter;
+            $this->disableFilters();
+
+            try {
+                return $callback();
+            } finally {
+                $this->filter = $initial;
+            }
+        }
+
+        $previous = $this->filter;
+        $previousDisabled = $this->disabledFilters;
+        $disabled = [];
+        foreach ($filters as $name) {
+            $disabled[$name] = true;
+        }
+        $this->disabledFilters = $disabled;
 
         try {
             return $callback();
         } finally {
-            $this->filter = $initial;
+            $this->filter = $previous;
+            $this->disabledFilters = $previousDisabled;
         }
     }
 
@@ -3326,9 +3349,15 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = \array_filter($attributes, function ($attribute) {
-            return $attribute['type'] === Database::VAR_RELATIONSHIP;
-        });
+        $relationships = [];
+
+        foreach ($attributes as $attribute) {
+            if ($attribute['type'] === Database::VAR_RELATIONSHIP) {
+                if (empty($selects) || array_key_exists($attribute['key'], $selects)) {
+                    $relationships[] = $attribute;
+                }
+            }
+        }
 
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
@@ -5214,7 +5243,7 @@ class Database
         int|float|null $max = null
     ): Document {
         if ($value <= 0) { // Can be a float
-            throw new DatabaseException('Value must be numeric and greater than 0');
+            throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -5311,7 +5340,7 @@ class Database
         int|float|null $min = null
     ): Document {
         if ($value <= 0) { // Can be a float
-            throw new DatabaseException('Value must be numeric and greater than 0');
+            throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -6648,6 +6677,10 @@ class Database
     protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {
         if (!$this->filter) {
+            return $value;
+        }
+
+        if (!\is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
             return $value;
         }
 

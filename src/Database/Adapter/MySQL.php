@@ -81,10 +81,9 @@ class MySQL extends MariaDB
     public function getSupportForIndexArray(): bool
     {
         /**
-         * Disabling index creation due to Mysql bug
          * @link https://bugs.mysql.com/bug.php?id=111037
          */
-        return false;
+        return true;
     }
 
     public function getSupportForCastIndexArray(): bool

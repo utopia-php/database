@@ -409,4 +409,12 @@ class DocumentTest extends TestCase
         ], $this->document->getArrayCopy());
         $this->assertEquals([], $this->empty->getArrayCopy());
     }
+
+    public function testEmptyDocumentSequence(): void
+    {
+        $empty = new Document();
+
+        $this->assertNull($empty->getSequence());
+        $this->assertNotSame('', $empty->getSequence());
+    }
 }

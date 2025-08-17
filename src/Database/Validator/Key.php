@@ -77,7 +77,7 @@ class Key extends Validator
             return false;
         }
         // Updated to 100 to suport mongodb ids
-        if (\mb_strlen($value) > 100) { 
+        if (\mb_strlen($value) > 100) {
             return false;
         }
 

@@ -202,7 +202,7 @@ class Mongo extends Adapter
             $this->getClient()->createCollection($id);
 
         } catch (MongoException $e) {
-            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
+            throw $this->processException($e);
         }
 
         $internalIndex = [
@@ -252,7 +252,7 @@ class Mongo extends Adapter
             $newIndexes = [];
 
             $collectionAttributes = $attributes;
-            
+
             // using $i and $j as counters to distinguish from $key
             foreach ($indexes as $i => $index) {
 
@@ -299,8 +299,8 @@ class Mongo extends Adapter
                 // Add partial filter for indexes to avoid indexing null values
                 if (in_array($index->getAttribute('type'), [
                     Database::INDEX_UNIQUE,
-                     Database::INDEX_KEY
-                      ])) {
+                    Database::INDEX_KEY
+                ])) {
                     $partialFilter = [];
                     foreach ($attributes as $attr) {
                         // Find the matching attribute in collectionAttributes to get its type
@@ -763,7 +763,7 @@ class Mongo extends Adapter
                 $index['lengths'] ?? [],
                 $index['orders'] ?? [],
                 $indexAttributeTypes, // Use extracted attribute types
-               []  
+                []
             )) {
             return true;
         }
@@ -862,7 +862,7 @@ class Mongo extends Adapter
         foreach ($result as $key => $value) {
             $document->setAttribute($key, $value);
         }
-    
+
         return $document;
     }
 
@@ -1017,9 +1017,11 @@ class Mongo extends Adapter
 
             $records[] = $record;
         }
-
-        $documents = $this->client->insertMany($name, $records);
-
+        try {
+            $documents = $this->client->insertMany($name, $records);
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
         foreach ($documents as $index => $document) {
             $documents[$index] = $this->replaceChars('_', '$', $this->client->toArray($document));
             $documents[$index] = new Document($documents[$index]);
@@ -1056,7 +1058,7 @@ class Mongo extends Adapter
 
             return $this->client->toArray($result);
         } catch (MongoException $e) {
-            throw new Duplicate($e->getMessage());
+            throw $this->processException($e);
         }
     }
 
@@ -1090,7 +1092,7 @@ class Mongo extends Adapter
 
             $this->client->update($name, $filters, $record);
         } catch (MongoException $e) {
-            throw new Duplicate($e->getMessage());
+            throw $this->processException($e);
         }
 
         return $document;
@@ -1134,7 +1136,7 @@ class Mongo extends Adapter
         try {
             $this->client->update($name, $filters, $updateQuery, multi: true);
         } catch (MongoException $e) {
-            throw new Duplicate($e->getMessage());
+            throw $this->processException($e);
         }
 
         return 1;
@@ -2351,8 +2353,29 @@ class Mongo extends Adapter
 
     protected function processException(Exception $e): \Exception
     {
+        // Timeout
         if ($e->getCode() === 50) {
             return new Timeout('Query timed out', $e->getCode(), $e);
+        }
+
+        // Duplicate key error (MongoDB error code 11000)
+        if ($e->getCode() === 11000) {
+            return new Duplicate('Document already exists', $e->getCode(), $e);
+        }
+
+        // Duplicate key error for unique index (MongoDB error code 11001)
+        if ($e->getCode() === 11001) {
+            return new Duplicate('Document already exists', $e->getCode(), $e);
+        }
+
+        // Collection already exists (MongoDB error code 48)
+        if ($e->getCode() === 48) {
+            return new Duplicate('Collection already exists', $e->getCode(), $e);
+        }
+
+        // Index already exists (MongoDB error code 85)
+        if ($e->getCode() === 85) {
+            return new Duplicate('Index already exists', $e->getCode(), $e);
         }
 
         return $e;
@@ -2433,7 +2456,7 @@ class Mongo extends Adapter
             return $values[0];
         }
 
-       
+
         return ['$in' => $values];
     }
 }

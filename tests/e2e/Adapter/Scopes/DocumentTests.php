@@ -251,8 +251,8 @@ trait DocumentTests
         $this->assertEquals($count, \count($results));
 
         foreach ($results as $document) {
-            $this->assertNotEmpty(true, $document->getId());
-            $this->assertNotEmpty(true, $document->getSequence());
+            $this->assertEquals(false, empty($document->getId()));
+            $this->assertEquals(false, empty($document->getSequence()));
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));

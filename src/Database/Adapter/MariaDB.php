@@ -1171,7 +1171,6 @@ class MariaDB extends SQL
             $bindIndex = 0;
             $batchKeys = [];
             $bindValues = [];
-            $documentIds = [];
             $documentTenants = [];
 
             foreach ($changes as $change) {
@@ -1184,8 +1183,6 @@ class MariaDB extends SQL
 
                 if (!empty($document->getSequence())) {
                     $attributes['_id'] = $document->getSequence();
-                } else {
-                    $documentIds[] = $document->getId();
                 }
 
                 if ($this->sharedTables) {
@@ -1348,18 +1345,6 @@ class MariaDB extends SQL
                     $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
                 }
                 $stmtAddPermissions->execute();
-            }
-
-            $sequences = $this->getSequences(
-                $collection,
-                $documentIds,
-                $documentTenants
-            );
-
-            foreach ($changes as $change) {
-                if (isset($sequences[$change->getNew()->getId()])) {
-                    $change->getNew()->setAttribute('$sequence', $sequences[$change->getNew()->getId()]);
-                }
             }
         } catch (PDOException $e) {
             throw $this->processException($e);

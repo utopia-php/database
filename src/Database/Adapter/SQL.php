@@ -1823,8 +1823,6 @@ abstract class SQL extends Adapter
             $batchKeys = [];
             $bindValues = [];
             $permissions = [];
-            $documentIds = [];
-            $documentTenants = [];
 
             foreach ($documents as $index => $document) {
                 $attributes = $document->getAttributes();
@@ -1835,13 +1833,10 @@ abstract class SQL extends Adapter
 
                 if (!empty($document->getSequence())) {
                     $attributes['_id'] = $document->getSequence();
-                } else {
-                    $documentIds[] = $document->getId();
                 }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();
-                    $documentTenants[] = $document->getTenant();
                 }
 
                 $bindKeys = [];
@@ -1902,18 +1897,6 @@ abstract class SQL extends Adapter
                 }
 
                 $this->execute($stmtPermissions);
-            }
-
-            $sequences = $this->getSequences(
-                $collection,
-                $documentIds,
-                $documentTenants
-            );
-
-            foreach ($documents as $document) {
-                if (isset($sequences[$document->getId()])) {
-                    $document['$sequence'] = $sequences[$document->getId()];
-                }
             }
         } catch (PDOException $e) {
             throw $this->processException($e);

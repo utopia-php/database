@@ -46,7 +46,7 @@ abstract class SQL extends Adapter
                 $this->getPDO()->beginTransaction();
 
             } else {
-                $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction); // returns 0
+                $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
             }
         } catch (PDOException $e) {
             throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);

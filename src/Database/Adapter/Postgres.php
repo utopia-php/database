@@ -305,7 +305,7 @@ class Postgres extends SQL
                     }
                 }
                 $indexOrders = $index->getAttribute('orders', []);
-                if (count($indexOrders)) {
+                if ($indexType === Database::INDEX_SPATIAL && count($indexOrders)) {
                     throw new DatabaseException('Adapter does not support orders with Spatial index');
                 }
                 $this->createIndex(

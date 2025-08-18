@@ -127,7 +127,7 @@ class MariaDB extends SQL
                 $indexLength = $index->getAttribute('lengths')[$nested] ?? '';
                 $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
-                if (!$this->getSupportForSpatialIndexOrder() && !empty($indexOrder)) {
+                if ($indexType === Database::INDEX_SPATIAL && !$this->getSupportForSpatialIndexOrder() && !empty($indexOrder)) {
                     throw new DatabaseException('Adapter does not support orders with Spatial index');
                 }
                 $indexAttribute = $this->getInternalKeyForAttribute($attribute);

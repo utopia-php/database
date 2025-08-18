@@ -4,12 +4,84 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 
 trait SpatialTests
 {
+    public function testSpatialCollection():void{
+        /** @var Database $database */
+        $database = static::getDatabase();
+        $collectionName = "test_spatial_Col";
+
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('attribute1'),
+                'type' => Database::VAR_STRING,
+                'size' => 256,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('attribute2'),
+                'type' => Database::VAR_POINT,
+                'size' => 0,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ])
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('index1'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['attribute1'],
+                'lengths' => [256],
+                'orders' => ['ASC'],
+            ]),
+            new Document([
+                '$id' => ID::custom('index2'),
+                'type' => Database::INDEX_SPATIAL,
+                'attributes' => ['attribute2'],
+                'lengths' => [],
+                'orders' => ['DESC'],
+            ]),
+        ];
+
+        $col =  $database->createCollection($collectionName,$attributes,$indexes);
+
+        $this->assertIsArray($col->getAttribute('attributes'));
+        $this->assertCount(2, $col->getAttribute('attributes'));
+
+        $this->assertIsArray($col->getAttribute('indexes'));
+        $this->assertCount(2, $col->getAttribute('indexes'));
+
+        $col = $database->getCollection($collectionName);
+        $this->assertIsArray($col->getAttribute('attributes'));
+        $this->assertCount(2, $col->getAttribute('attributes'));
+
+        $this->assertIsArray($col->getAttribute('indexes'));
+        $this->assertCount(2, $col->getAttribute('indexes'));
+
+        $database->createAttribute($collectionName, 'attribute3', Database::VAR_POINT, 0, true);
+        $database->createIndex($collectionName,ID::custom("index3"),Database::INDEX_SPATIAL,['attribute3']);
+
+        $col = $database->getCollection($collectionName);
+        $this->assertIsArray($col->getAttribute('attributes'));
+        $this->assertCount(3, $col->getAttribute('attributes'));
+
+        $this->assertIsArray($col->getAttribute('indexes'));
+        $this->assertCount(3, $col->getAttribute('indexes'));
+        
+        $database->deleteCollection($collectionName);
+    }
+
     public function testSpatialTypeDocuments(): void
     {
         /** @var Database $database */

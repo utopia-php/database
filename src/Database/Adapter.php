@@ -380,9 +380,14 @@ abstract class Adapter
             } catch (\Throwable $action) {
                 try {
                     $this->rollbackTransaction();
+
+                    if($action->getMessage()==='Failed to start transaction'){
+                        var_dump($action);
+                    }
+                    // $this->inTransaction = 0; Should we set if rollback is success?
                 } catch (\Throwable $rollback) {
                     if ($attempts < 2) {
-                        \usleep(5000); // 5ms
+                        \usleep(5000 * ($attempts + 1));
                         continue;
                     }
 
@@ -391,7 +396,7 @@ abstract class Adapter
                 }
 
                 if ($attempts < 2) {
-                    \usleep(5000); // 5ms
+                    \usleep(5000 * ($attempts + 1));
                     continue;
                 }
 

@@ -1872,13 +1872,15 @@ class Postgres extends SQL
                 return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
 
                 // Spatial query methods
+                // using st_cover instead of contains to match the boundary matching behaviour of the mariadb st_contains
+                // postgis st_contains excludes matching the boundary
             case Query::TYPE_SPATIAL_CONTAINS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
-                return "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_SPATIAL_NOT_CONTAINS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
-                return "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "NOT ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_CROSSES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
@@ -2001,8 +2003,6 @@ class Postgres extends SQL
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
 
-            case Database::VAR_GEOMETRY:
-                return 'GEOMETRY';
 
             case Database::VAR_POINT:
                 return 'GEOMETRY(POINT)';
@@ -2014,7 +2014,7 @@ class Postgres extends SQL
                 return 'GEOMETRY(POLYGON)';
 
             default:
-                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_GEOMETRY . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
+                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 
@@ -2258,9 +2258,7 @@ class Postgres extends SQL
                     }
                     return 'POLYGON(' . implode(', ', $rings) . ')';
 
-                case Database::VAR_GEOMETRY:
                 default:
-                    // Fall through to auto-detection for generic GEOMETRY
                     break;
             }
         }

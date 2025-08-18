@@ -39,8 +39,6 @@ class Spatial extends Validator
             case Database::VAR_POLYGON:
                 return self::validatePolygon($value);
 
-            case Database::VAR_GEOMETRY:
-                return self::validateGeometry($value);
 
             default:
                 throw new Exception('Unknown spatial type: ' . $type);

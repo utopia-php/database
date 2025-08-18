@@ -1178,15 +1178,11 @@ abstract class SQL extends Adapter
                     $total += 7;
                     break;
 
-                case Database::VAR_GEOMETRY:
                 case Database::VAR_POINT:
+                    $total += 25;
+                    break;
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:
-                    /**
-                     * Spatial types in MySQL/MariaDB and PostgreSQL
-                     * Store as binary data, size varies greatly
-                     * Estimate 50 bytes on average for simple geometries
-                     */
                     $total += 50;
                     break;
 

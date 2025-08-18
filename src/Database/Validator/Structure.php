@@ -350,7 +350,6 @@ class Structure extends Validator
                     );
                     break;
 
-                case Database::VAR_GEOMETRY:
                 case Database::VAR_POINT:
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:

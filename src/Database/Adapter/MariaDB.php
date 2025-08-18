@@ -1935,8 +1935,6 @@ class MariaDB extends SQL
             case Database::VAR_DATETIME:
                 return 'DATETIME(3)';
 
-            case Database::VAR_GEOMETRY:
-                return 'GEOMETRY' . ($required && !$this->getSupportForSpatialIndexNull() ? ' NOT NULL' : '');
 
             case Database::VAR_POINT:
                 return 'POINT' . ($required && !$this->getSupportForSpatialIndexNull() ? ' NOT NULL' : '');
@@ -1948,7 +1946,7 @@ class MariaDB extends SQL
                 return 'POLYGON' . ($required && !$this->getSupportForSpatialIndexNull() ? ' NOT NULL' : '');
 
             default:
-                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_GEOMETRY . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
+                throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 
@@ -2194,9 +2192,7 @@ class MariaDB extends SQL
                     }
                     return 'POLYGON(' . implode(', ', $rings) . ')';
 
-                case Database::VAR_GEOMETRY:
                 default:
-                    // Fall through to auto-detection for generic GEOMETRY
                     break;
             }
         }

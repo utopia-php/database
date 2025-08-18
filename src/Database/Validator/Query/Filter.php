@@ -105,7 +105,6 @@ class Filter extends Base
 
         // If the query method is spatial-only, the attribute must be a spatial type
         if (Query::isSpatialQuery($method) && !in_array($attributeType, [
-            Database::VAR_GEOMETRY,
             Database::VAR_POINT,
             Database::VAR_LINESTRING,
             Database::VAR_POLYGON,
@@ -149,7 +148,6 @@ class Filter extends Base
                     $validator = new Text(255, 0); // The query is always on uid
                     break;
 
-                case Database::VAR_GEOMETRY:
                 case Database::VAR_POINT:
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:
@@ -208,7 +206,6 @@ class Filter extends Base
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
             $attributeSchema['type'] !== Database::VAR_STRING &&
             !in_array($attributeSchema['type'], [
-                Database::VAR_GEOMETRY,
                 Database::VAR_POINT,
                 Database::VAR_LINESTRING,
                 Database::VAR_POLYGON

@@ -6897,7 +6897,6 @@ class Database
             // Convert standard queries to spatial queries when used on spatial attributes
             $attributeType = $attribute->getAttribute('type');
             if (in_array($attributeType, [
-                Database::VAR_GEOMETRY,
                 Database::VAR_POINT,
                 Database::VAR_LINESTRING,
                 Database::VAR_POLYGON
@@ -6961,7 +6960,6 @@ class Database
         }
 
         if ($attributeSchema && in_array($attributeSchema->getAttribute('type'), [
-            Database::VAR_GEOMETRY,
             Database::VAR_POINT,
             Database::VAR_LINESTRING,
             Database::VAR_POLYGON

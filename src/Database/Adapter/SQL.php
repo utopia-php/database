@@ -710,49 +710,64 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Get internal IDs for the given documents
+     * Assign internal IDs for the given documents
      *
      * @param string $collection
-     * @param array<string> $documentIds
-     * @param array<?int> $documentTenants
-     * @return array<string>
+     * @param array<Document> $documents
+     * @return array<Document>
      * @throws DatabaseException
      */
-    protected function getSequences(string $collection, array $documentIds, array $documentTenants = []): array
+    public function getSequences(string $collection, array $documents): array
     {
-        $sequences = [];
+        $documentIds = [];
+        $keys = [];
+        $binds = [];
 
-        /**
-         * UID, _tenant bottleneck is ~ 5000 rows since we use _uid IN query
-         */
-        foreach (\array_chunk($documentIds, 1000) as $documentIdsChunk) {
-            $sql = "
-                SELECT _uid, _id
-                FROM {$this->getSQLTable($collection)}
-                WHERE {$this->quote('_uid')} IN (" . implode(',', array_map(fn ($index) => ":_key_{$index}", array_keys($documentIdsChunk))) . ")
-                {$this->getTenantQuery($collection, tenantCount: \count($documentIdsChunk))}
-            ";
+        foreach ($documents as $i => $document) {
+            if (empty($document->getSequence())) {
+                $documentIds[] = $document->getId();
 
-            $stmt = $this->getPDO()->prepare($sql);
+                $key = ":uid_{$i}";
 
-            foreach ($documentIdsChunk as $index => $id) {
-                $stmt->bindValue(":_key_{$index}", $id);
-            }
+                $binds[$key] = $document->getId();
+                $keys[] = $key;
 
-            if ($this->sharedTables) {
-                foreach ($documentIdsChunk as $index => $id) {
-                    $stmt->bindValue(":_tenant_{$index}", \array_shift($documentTenants));
+                if ($this->sharedTables) {
+                    $binds[':_tenant_'.$i] = $document->getTenant();
                 }
             }
-
-            $stmt->execute();
-            $results = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
-            $stmt->closeCursor();
-
-            $sequences = [...$sequences, ...$results];
         }
 
-        return $sequences;
+        if (empty($documentIds)) {
+            return $documents;
+        }
+
+        $placeholders = implode(',', array_values($keys));
+
+        $sql = "
+            SELECT _uid, _id
+            FROM {$this->getSQLTable($collection)}
+            WHERE {$this->quote('_uid')} IN ({$placeholders})
+            {$this->getTenantQuery($collection, tenantCount: \count($documentIds))}
+            ";
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+
+        $stmt->execute();
+        $sequences = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
+        $stmt->closeCursor();
+
+        foreach ($documents as $document) {
+            if (isset($sequences[$document->getId()])) {
+                $document['$sequence'] = $sequences[$document->getId()];
+            }
+        }
+
+        return $documents;
     }
 
     /**
@@ -1808,8 +1823,6 @@ abstract class SQL extends Adapter
             $batchKeys = [];
             $bindValues = [];
             $permissions = [];
-            $documentIds = [];
-            $documentTenants = [];
 
             foreach ($documents as $index => $document) {
                 $attributes = $document->getAttributes();
@@ -1820,13 +1833,10 @@ abstract class SQL extends Adapter
 
                 if (!empty($document->getSequence())) {
                     $attributes['_id'] = $document->getSequence();
-                } else {
-                    $documentIds[] = $document->getId();
                 }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();
-                    $documentTenants[] = $document->getTenant();
                 }
 
                 $bindKeys = [];
@@ -1887,18 +1897,6 @@ abstract class SQL extends Adapter
                 }
 
                 $this->execute($stmtPermissions);
-            }
-
-            $sequences = $this->getSequences(
-                $collection,
-                $documentIds,
-                $documentTenants
-            );
-
-            foreach ($documents as $document) {
-                if (isset($sequences[$document->getId()])) {
-                    $document['$sequence'] = $sequences[$document->getId()];
-                }
             }
         } catch (PDOException $e) {
             throw $this->processException($e);

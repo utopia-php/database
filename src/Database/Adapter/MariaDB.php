@@ -1794,6 +1794,9 @@ class MariaDB extends SQL
 
                 // Spatial query methods
             case Query::TYPE_SPATIAL_CONTAINS:
+                if (!$this->getSupportForBoundaryInclusiveContains()) {
+                    throw new DatabaseException('Adapter does not support boundary inclusive contains');
+                }
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
                 return "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
@@ -2235,5 +2238,14 @@ class MariaDB extends SQL
         }
 
         throw new DatabaseException('Unrecognized geometry array format');
+    }
+    /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+     */
+    public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return true;
     }
 }

@@ -1045,6 +1045,13 @@ abstract class Adapter
     abstract public function getSupportForSpatialIndexNull(): bool;
 
     /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForBoundaryInclusiveContains(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

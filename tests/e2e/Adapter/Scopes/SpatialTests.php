@@ -4,7 +4,6 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -72,9 +71,8 @@ trait SpatialTests
 
             // LineString attribute tests - use operations valid for linestrings
             $lineQueries = [
-                // TODO: for MARIADB and POSTGRES it is changing
-                // 'contains' => Query::contains('lineAttr', [[1.0, 2.0]]), // Point on the line (endpoint)
-                // 'notContains' => Query::notContains('lineAttr', [[5.0, 6.0]]), // Point not on the line
+                'contains' => Query::contains('lineAttr', [[1.0, 2.0]]), // Point on the line (endpoint)
+                'notContains' => Query::notContains('lineAttr', [[5.0, 6.0]]), // Point not on the line
                 'equals' => Query::equals('lineAttr', [[[1.0, 2.0], [3.0, 4.0]]]), // Exact same linestring
                 'notEquals' => Query::notEquals('lineAttr', [[[5.0, 6.0], [7.0, 8.0]]]), // Different linestring
                 'intersects' => Query::intersects('lineAttr', [[1.0, 2.0]]), // Point on the line should intersect
@@ -82,16 +80,18 @@ trait SpatialTests
             ];
 
             foreach ($lineQueries as $queryType => $query) {
+                if (!$database->getAdapter()->getSupportForBoundaryInclusiveContains() && in_array($queryType, ['contains','notContains'])) {
+                    continue;
+                }
                 $result = $database->find($collectionName, [$query], Database::PERMISSION_READ);
-                $this->assertNotEmpty($result, sprintf('Failed spatial query: %s on lineAttr', $queryType));
-                $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on lineAttr', $queryType));
+                $this->assertNotEmpty($result, sprintf('Failed spatial query: %s on polyAttr', $queryType));
+                $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on polyAttr', $queryType));
             }
 
             // Polygon attribute tests - use operations valid for polygons
             $polyQueries = [
-                // TODO: for MARIADB and POSTGRES it is changing
-                // 'contains' => Query::contains('polyAttr', [[5.0, 5.0]]), // Point inside polygon
-                // 'notContains' => Query::notContains('polyAttr', [[15.0, 15.0]]), // Point outside polygon
+                'contains' => Query::contains('polyAttr', [[5.0, 5.0]]), // Point inside polygon
+                'notContains' => Query::notContains('polyAttr', [[15.0, 15.0]]), // Point outside polygon
                 'intersects' => Query::intersects('polyAttr', [[5.0, 5.0]]), // Point inside polygon should intersect
                 'notIntersects' => Query::notIntersects('polyAttr', [[15.0, 15.0]]), // Point outside polygon should not intersect
                 'equals' => Query::equals('polyAttr', [[[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]]]), // Exact same polygon
@@ -101,6 +101,9 @@ trait SpatialTests
             ];
 
             foreach ($polyQueries as $queryType => $query) {
+                if (!$database->getAdapter()->getSupportForBoundaryInclusiveContains() && in_array($queryType, ['contains','notContains'])) {
+                    continue;
+                }
                 $result = $database->find($collectionName, [$query], Database::PERMISSION_READ);
                 $this->assertNotEmpty($result, sprintf('Failed spatial query: %s on polyAttr', $queryType));
                 $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on polyAttr', $queryType));

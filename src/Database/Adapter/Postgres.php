@@ -2318,4 +2318,14 @@ class Postgres extends SQL
     {
         return true;
     }
+
+    /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+     */
+    public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return true;
+    }
 }

@@ -3782,6 +3782,8 @@ class Database
                 return $this->adapter->createDocuments($collection->getId(), $chunk);
             });
 
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
+
             foreach ($batch as $document) {
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
@@ -5096,6 +5098,8 @@ class Database
                 $attribute,
                 $chunk
             )));
+
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {

@@ -734,6 +734,13 @@ abstract class Adapter
     ): array;
 
     /**
+     * @param string $collection
+     * @param array<Document> $documents
+     * @return array<Document>
+     */
+    abstract public function getSequences(string $collection, array $documents): array;
+
+    /**
      * Delete Document
      *
      * @param string $collection

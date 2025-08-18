@@ -52,7 +52,6 @@ class Database
     public const VAR_RELATIONSHIP = 'relationship';
 
     // Spatial Types
-    public const VAR_GEOMETRY = 'geometry';
     public const VAR_POINT = 'point';
     public const VAR_LINESTRING = 'linestring';
     public const VAR_POLYGON = 'polygon';
@@ -1840,7 +1839,6 @@ class Database
             case self::VAR_DATETIME:
             case self::VAR_RELATIONSHIP:
                 break;
-            case self::VAR_GEOMETRY:
             case self::VAR_POINT:
             case self::VAR_LINESTRING:
             case self::VAR_POLYGON:
@@ -1850,7 +1848,7 @@ class Database
                 }
                 break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_GEOMETRY . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
 
         // Only execute when $default is given
@@ -1919,7 +1917,6 @@ class Database
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
-            case self::VAR_GEOMETRY:
             case self::VAR_POINT:
             case self::VAR_LINESTRING:
             case self::VAR_POLYGON:
@@ -1929,7 +1926,7 @@ class Database
                 }
                 // no break
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_GEOMETRY . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
     }
 
@@ -3112,6 +3109,9 @@ class Database
                 if (!$this->adapter->getSupportForSpatialAttributes()) {
                     throw new DatabaseException('Spatial index is not supported');
                 }
+                if (!empty($orders) && !$this->adapter->getSupportForSpatialIndexOrder()) {
+                    throw new DatabaseException('Adapter does not support orders with Spatial index');
+                }
                 break;
 
             default:
@@ -3157,8 +3157,8 @@ class Database
                 }
 
                 $attributeType = $indexAttributesWithTypes[$attr];
-                if (!in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    throw new DatabaseException('Spatial index can only be created on spatial attributes (geometry, point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                if (!in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                    throw new DatabaseException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
                 }
             }
 
@@ -3346,7 +3346,7 @@ class Database
         foreach ($attributes as $attribute) {
             if ($attribute instanceof Document) {
                 $attributeType = $attribute->getAttribute('type');
-                if (in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                if (in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
                     $spatialAttributes[] = $attribute->getId();
                 }
             }
@@ -3735,7 +3735,7 @@ class Database
             foreach ($attributes as $attribute) {
                 $key = $attribute['$id'] ?? '';
                 $type = $attribute['type'] ?? '';
-                if (in_array($type, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                if (in_array($type, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
                     $value = $document->getAttribute($key);
                 }
             }
@@ -6239,7 +6239,7 @@ class Database
         foreach ($attributes as $attribute) {
             if ($attribute instanceof Document) {
                 $attributeType = $attribute->getAttribute('type');
-                if (in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                if (in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
                     $spatialAttributes[] = $attribute->getId();
                 }
             }
@@ -6525,7 +6525,7 @@ class Database
                 if ($node !== null) {
                     // Handle spatial data encoding
                     $attributeType = $attribute['type'] ?? '';
-                    if (in_array($attributeType, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                    if (in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
                         if (is_array($node)) {
                             $node = $this->encodeSpatialData($node, $attributeType);
                         }
@@ -6610,7 +6610,7 @@ class Database
 
             foreach ($value as $index => $node) {
                 // Auto-decode spatial data from WKT to arrays
-                if (is_string($node) && in_array($type, [self::VAR_GEOMETRY, self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                if (is_string($node) && in_array($type, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
                     $node = $this->decodeSpatialData($node);
                 }
 
@@ -7191,10 +7191,6 @@ class Database
                     $rings[] = '(' . implode(', ', $points) . ')';
                 }
                 return 'POLYGON(' . implode(', ', $rings) . ')';
-
-            case self::VAR_GEOMETRY:
-                // If it's an array, convert it to GEOMETRY WKT format
-                return "POINT({$value[0]} {$value[1]})";
 
             default:
                 throw new DatabaseException('Unknown spatial type: ' . $type);

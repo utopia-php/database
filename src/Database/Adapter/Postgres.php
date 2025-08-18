@@ -305,6 +305,9 @@ class Postgres extends SQL
                     }
                 }
                 $indexOrders = $index->getAttribute('orders', []);
+                if (count($indexOrders)) {
+                    throw new DatabaseException('Adapter does not support orders with Spatial index');
+                }
                 $this->createIndex(
                     $id,
                     $indexId,
@@ -2299,33 +2302,23 @@ class Postgres extends SQL
         }
     }
 
-    /**
-     * Get Support for Spatial Attributes
-     *
-     * @return bool
-     */
     public function getSupportForSpatialAttributes(): bool
     {
         return true;
     }
 
-    /**
-     * Get Support for Null Values in Spatial Indexes
-     *
-     * @return bool
-     */
     public function getSupportForSpatialIndexNull(): bool
     {
         return true;
     }
 
-    /**
-     * Does the adapter includes boundary during spatial contains?
-     *
-     * @return bool
-     */
     public function getSupportForBoundaryInclusiveContains(): bool
     {
         return true;
+    }
+
+    public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
     }
 }

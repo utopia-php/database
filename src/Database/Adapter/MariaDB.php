@@ -127,6 +127,9 @@ class MariaDB extends SQL
                 $indexLength = $index->getAttribute('lengths')[$nested] ?? '';
                 $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
+                if (!$this->getSupportForSpatialIndexOrder() && !empty($indexOrder)) {
+                    throw new DatabaseException('Adapter does not support orders with Spatial index');
+                }
                 $indexAttribute = $this->getInternalKeyForAttribute($attribute);
                 $indexAttribute = $this->filter($indexAttribute);
 
@@ -143,7 +146,7 @@ class MariaDB extends SQL
 
             $indexAttributes = \implode(", ", $indexAttributes);
 
-            if ($this->sharedTables && $indexType !== Database::INDEX_FULLTEXT) {
+            if ($this->sharedTables && $indexType !== Database::INDEX_FULLTEXT && $indexType !== Database::INDEX_SPATIAL) {
                 // Add tenant as first index column for best performance
                 $indexAttributes = "_tenant, {$indexAttributes}";
             }
@@ -2239,12 +2242,12 @@ class MariaDB extends SQL
 
         throw new DatabaseException('Unrecognized geometry array format');
     }
-    /**
-     * Does the adapter includes boundary during spatial contains?
-     *
-     * @return bool
-     */
     public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForSpatialIndexOrder(): bool
     {
         return true;
     }

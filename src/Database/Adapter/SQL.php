@@ -1540,17 +1540,17 @@ abstract class SQL extends Adapter
 
     public function getSupportForSpatialAttributes(): bool
     {
-        return false; // Default to false, subclasses override as needed
+        return false;
     }
 
-    /**
-     * Does the adapter support null values in spatial indexes?
-     *
-     * @return bool
-     */
     public function getSupportForSpatialIndexNull(): bool
     {
-        return false; // Default to false, subclasses override as needed
+        return false;
+    }
+
+    public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
     }
 
     /**

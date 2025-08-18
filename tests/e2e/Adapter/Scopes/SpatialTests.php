@@ -11,11 +11,14 @@ use Utopia\Database\Query;
 
 trait SpatialTests
 {
-    public function testSpatialCollection():void{
+    public function testSpatialCollection(): void
+    {
         /** @var Database $database */
         $database = static::getDatabase();
         $collectionName = "test_spatial_Col";
-
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        };
         $attributes = [
             new Document([
                 '$id' => ID::custom('attribute1'),
@@ -43,18 +46,18 @@ trait SpatialTests
                 'type' => Database::INDEX_KEY,
                 'attributes' => ['attribute1'],
                 'lengths' => [256],
-                'orders' => ['ASC'],
+                'orders' => [],
             ]),
             new Document([
                 '$id' => ID::custom('index2'),
                 'type' => Database::INDEX_SPATIAL,
                 'attributes' => ['attribute2'],
                 'lengths' => [],
-                'orders' => ['DESC'],
+                'orders' => [],
             ]),
         ];
 
-        $col =  $database->createCollection($collectionName,$attributes,$indexes);
+        $col =  $database->createCollection($collectionName, $attributes, $indexes);
 
         $this->assertIsArray($col->getAttribute('attributes'));
         $this->assertCount(2, $col->getAttribute('attributes'));
@@ -70,7 +73,7 @@ trait SpatialTests
         $this->assertCount(2, $col->getAttribute('indexes'));
 
         $database->createAttribute($collectionName, 'attribute3', Database::VAR_POINT, 0, true);
-        $database->createIndex($collectionName,ID::custom("index3"),Database::INDEX_SPATIAL,['attribute3']);
+        $database->createIndex($collectionName, ID::custom("index3"), Database::INDEX_SPATIAL, ['attribute3']);
 
         $col = $database->getCollection($collectionName);
         $this->assertIsArray($col->getAttribute('attributes'));
@@ -78,7 +81,7 @@ trait SpatialTests
 
         $this->assertIsArray($col->getAttribute('indexes'));
         $this->assertCount(3, $col->getAttribute('indexes'));
-        
+
         $database->deleteCollection($collectionName);
     }
 
@@ -90,7 +93,7 @@ trait SpatialTests
             $this->markTestSkipped('Adapter does not support spatial attributes');
         }
 
-        $collectionName = 'test_spatial_doc_' . uniqid();
+        $collectionName = 'test_spatial_doc_';
         try {
 
             // Create collection first
@@ -288,5 +291,395 @@ trait SpatialTests
         // Clean up
         $database->deleteCollection('location');
         $database->deleteCollection('building');
+    }
+
+    public function testSpatialAttributes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionName = 'spatial_attrs_';
+        try {
+            $database->createCollection($collectionName);
+
+            $required = $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true;
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $required));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $required));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $required));
+
+            // Create spatial indexes
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_point', Database::INDEX_SPATIAL, ['pointAttr']));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_poly', Database::INDEX_SPATIAL, ['polyAttr']));
+
+            $collection = $database->getCollection($collectionName);
+            $this->assertIsArray($collection->getAttribute('attributes'));
+            $this->assertCount(3, $collection->getAttribute('attributes'));
+            $this->assertIsArray($collection->getAttribute('indexes'));
+            $this->assertCount(3, $collection->getAttribute('indexes'));
+
+            // Create a simple document to ensure structure is valid
+            $doc = $database->createDocument($collectionName, new Document([
+                '$id' => ID::custom('sdoc'),
+                'pointAttr' => [1.0, 1.0],
+                'lineAttr' => [[0.0, 0.0], [1.0, 1.0]],
+                'polyAttr' => [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]],
+                '$permissions' => [Permission::read(Role::any())]
+            ]));
+            $this->assertInstanceOf(Document::class, $doc);
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
+    public function testSpatialOneToMany(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $parent = 'regions_';
+        $child = 'places_';
+        try {
+            $database->createCollection($parent);
+            $database->createCollection($child);
+
+            $database->createAttribute($parent, 'name', Database::VAR_STRING, 255, true);
+            $database->createAttribute($child, 'name', Database::VAR_STRING, 255, true);
+            $database->createAttribute($child, 'coord', Database::VAR_POINT, 0, true);
+            $database->createIndex($child, 'coord_spatial', Database::INDEX_SPATIAL, ['coord']);
+
+            $database->createRelationship(
+                collection: $parent,
+                relatedCollection: $child,
+                type: Database::RELATION_ONE_TO_MANY,
+                twoWay: true,
+                id: 'places',
+                twoWayKey: 'region'
+            );
+
+            $r1 = $database->createDocument($parent, new Document([
+                '$id' => 'r1',
+                'name' => 'Region 1',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+            $this->assertInstanceOf(Document::class, $r1);
+
+            $p1 = $database->createDocument($child, new Document([
+                '$id' => 'p1',
+                'name' => 'Place 1',
+                'coord' => [10.0, 10.0],
+                'region' => 'r1',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+            $p2 = $database->createDocument($child, new Document([
+                '$id' => 'p2',
+                'name' => 'Place 2',
+                'coord' => [10.1, 10.1],
+                'region' => 'r1',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+            $this->assertInstanceOf(Document::class, $p1);
+            $this->assertInstanceOf(Document::class, $p2);
+
+            // Spatial query on child collection
+            $near = $database->find($child, [
+                Query::distance('coord', [[[10.0, 10.0], 1.0]])
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($near);
+
+            $region = $database->getDocument($parent, 'r1');
+            $this->assertArrayHasKey('places', $region);
+            $this->assertEquals(2, \count($region['places']));
+        } finally {
+            $database->deleteCollection($child);
+            $database->deleteCollection($parent);
+        }
+    }
+
+    public function testSpatialManyToOne(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $parent = 'cities_';
+        $child = 'stops_';
+        try {
+            $database->createCollection($parent);
+            $database->createCollection($child);
+
+            $database->createAttribute($parent, 'name', Database::VAR_STRING, 255, true);
+            $database->createAttribute($child, 'name', Database::VAR_STRING, 255, true);
+            $database->createAttribute($child, 'coord', Database::VAR_POINT, 0, true);
+            $database->createIndex($child, 'coord_spatial', Database::INDEX_SPATIAL, ['coord']);
+
+            $database->createRelationship(
+                collection: $child,
+                relatedCollection: $parent,
+                type: Database::RELATION_MANY_TO_ONE,
+                twoWay: true,
+                id: 'city',
+                twoWayKey: 'stops'
+            );
+
+            $c1 = $database->createDocument($parent, new Document([
+                '$id' => 'c1',
+                'name' => 'City 1',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+
+            $s1 = $database->createDocument($child, new Document([
+                '$id' => 's1',
+                'name' => 'Stop 1',
+                'coord' => [20.0, 20.0],
+                'city' => 'c1',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+            $s2 = $database->createDocument($child, new Document([
+                '$id' => 's2',
+                'name' => 'Stop 2',
+                'coord' => [20.2, 20.2],
+                'city' => 'c1',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+            $this->assertInstanceOf(Document::class, $c1);
+            $this->assertInstanceOf(Document::class, $s1);
+            $this->assertInstanceOf(Document::class, $s2);
+
+            $near = $database->find($child, [
+                Query::distance('coord', [[[20.0, 20.0], 1.0]])
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($near);
+
+            $city = $database->getDocument($parent, 'c1');
+            $this->assertArrayHasKey('stops', $city);
+            $this->assertEquals(2, \count($city['stops']));
+        } finally {
+            $database->deleteCollection($child);
+            $database->deleteCollection($parent);
+        }
+    }
+
+    public function testSpatialManyToMany(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $a = 'drivers_';
+        $b = 'routes_';
+        try {
+            $database->createCollection($a);
+            $database->createCollection($b);
+
+            $database->createAttribute($a, 'name', Database::VAR_STRING, 255, true);
+            $database->createAttribute($a, 'home', Database::VAR_POINT, 0, true);
+            $database->createIndex($a, 'home_spatial', Database::INDEX_SPATIAL, ['home']);
+            $database->createAttribute($b, 'title', Database::VAR_STRING, 255, true);
+            $database->createAttribute($b, 'area', Database::VAR_POLYGON, 0, true);
+            $database->createIndex($b, 'area_spatial', Database::INDEX_SPATIAL, ['area']);
+
+            $database->createRelationship(
+                collection: $a,
+                relatedCollection: $b,
+                type: Database::RELATION_MANY_TO_MANY,
+                twoWay: true,
+                id: 'routes',
+                twoWayKey: 'drivers'
+            );
+
+            $d1 = $database->createDocument($a, new Document([
+                '$id' => 'd1',
+                'name' => 'Driver 1',
+                'home' => [30.0, 30.0],
+                'routes' => [
+                    [
+                        '$id' => 'rte1',
+                        'title' => 'Route 1',
+                        'area' => [[[29.5,29.5],[29.5,30.5],[30.5,30.5],[29.5,29.5]]]
+                    ]
+                ],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+            $this->assertInstanceOf(Document::class, $d1);
+
+            // Spatial query on "drivers" using point distance
+            $near = $database->find($a, [
+                Query::distance('home', [[[30.0, 30.0], 0.5]])
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($near);
+
+            // Ensure relationship present
+            $d1 = $database->getDocument($a, 'd1');
+            $this->assertArrayHasKey('routes', $d1);
+            $this->assertEquals(1, \count($d1['routes']));
+        } finally {
+            $database->deleteCollection($b);
+            $database->deleteCollection($a);
+        }
+    }
+
+    public function testSpatialIndex(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Basic spatial index create/delete
+        $collectionName = 'spatial_index_';
+        try {
+            $database->createCollection($collectionName);
+            $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true);
+            $this->assertEquals(true, $database->createIndex($collectionName, 'loc_spatial', Database::INDEX_SPATIAL, ['loc']));
+
+            $collection = $database->getCollection($collectionName);
+            $this->assertIsArray($collection->getAttribute('indexes'));
+            $this->assertCount(1, $collection->getAttribute('indexes'));
+            $this->assertEquals('loc_spatial', $collection->getAttribute('indexes')[0]['$id']);
+            $this->assertEquals(Database::INDEX_SPATIAL, $collection->getAttribute('indexes')[0]['type']);
+
+            $this->assertEquals(true, $database->deleteIndex($collectionName, 'loc_spatial'));
+            $collection = $database->getCollection($collectionName);
+            $this->assertCount(0, $collection->getAttribute('indexes'));
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+
+        // Edge cases: Spatial Index Order support (createCollection and createIndex)
+        $orderSupported = $database->getAdapter()->getSupportForSpatialIndexOrder();
+
+        // createCollection with orders
+        $collOrderCreate = 'spatial_idx_order_create';
+        try {
+            $attributes = [new Document([
+                '$id' => ID::custom('loc'),
+                'type' => Database::VAR_POINT,
+                'size' => 0,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ])];
+            $indexes = [new Document([
+                '$id' => ID::custom('idx_loc'),
+                'type' => Database::INDEX_SPATIAL,
+                'attributes' => ['loc'],
+                'lengths' => [],
+                'orders' => $orderSupported ? [Database::ORDER_ASC] : ['ASC'],
+            ])];
+
+            if ($orderSupported) {
+                $database->createCollection($collOrderCreate, $attributes, $indexes);
+                $meta = $database->getCollection($collOrderCreate);
+                $this->assertEquals('idx_loc', $meta->getAttribute('indexes')[0]['$id']);
+            } else {
+                try {
+                    $database->createCollection($collOrderCreate, $attributes, $indexes);
+                    $this->fail('Expected exception when orders are provided for spatial index on unsupported adapter');
+                } catch (\Throwable $e) {
+                    $this->assertStringContainsString('Spatial index', $e->getMessage());
+                }
+            }
+        } finally {
+            if ($orderSupported) {
+                $database->deleteCollection($collOrderCreate);
+            }
+        }
+
+        // createIndex with orders
+        $collOrderIndex = 'spatial_idx_order_index_' . uniqid();
+        try {
+            $database->createCollection($collOrderIndex);
+            $database->createAttribute($collOrderIndex, 'loc', Database::VAR_POINT, 0, true);
+            if ($orderSupported) {
+                $this->assertTrue($database->createIndex($collOrderIndex, 'idx_loc', Database::INDEX_SPATIAL, ['loc'], [], [Database::ORDER_DESC]));
+            } else {
+                try {
+                    $database->createIndex($collOrderIndex, 'idx_loc', Database::INDEX_SPATIAL, ['loc'], [], ['DESC']);
+                    $this->fail('Expected exception when orders are provided for spatial index on unsupported adapter');
+                } catch (\Throwable $e) {
+                    $this->assertStringContainsString('Spatial index', $e->getMessage());
+                }
+            }
+        } finally {
+            $database->deleteCollection($collOrderIndex);
+        }
+
+        // Edge cases: Spatial Index Nullability (createCollection and createIndex)
+        $nullSupported = $database->getAdapter()->getSupportForSpatialIndexNull();
+
+        // createCollection with required=false
+        $collNullCreate = 'spatial_idx_null_create_' . uniqid();
+        try {
+            $attributes = [new Document([
+                '$id' => ID::custom('loc'),
+                'type' => Database::VAR_POINT,
+                'size' => 0,
+                'required' => false, // edge case
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ])];
+            $indexes = [new Document([
+                '$id' => ID::custom('idx_loc'),
+                'type' => Database::INDEX_SPATIAL,
+                'attributes' => ['loc'],
+                'lengths' => [],
+                'orders' => [],
+            ])];
+
+            if ($nullSupported) {
+                $database->createCollection($collNullCreate, $attributes, $indexes);
+                $meta = $database->getCollection($collNullCreate);
+                $this->assertEquals('idx_loc', $meta->getAttribute('indexes')[0]['$id']);
+            } else {
+                try {
+                    $database->createCollection($collNullCreate, $attributes, $indexes);
+                    $this->fail('Expected exception when spatial index is created on NULL-able geometry attribute');
+                } catch (\Throwable $e) {
+                    $this->assertTrue(true); // exception expected; exact message is adapter-specific
+                }
+            }
+        } finally {
+            if ($nullSupported) {
+                $database->deleteCollection($collNullCreate);
+            }
+        }
+
+        // createIndex with required=false
+        $collNullIndex = 'spatial_idx_null_index_' . uniqid();
+        try {
+            $database->createCollection($collNullIndex);
+            $database->createAttribute($collNullIndex, 'loc', Database::VAR_POINT, 0, false);
+            if ($nullSupported) {
+                $this->assertTrue($database->createIndex($collNullIndex, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            } else {
+                try {
+                    $database->createIndex($collNullIndex, 'idx_loc', Database::INDEX_SPATIAL, ['loc']);
+                    $this->fail('Expected exception when spatial index is created on NULL-able geometry attribute');
+                } catch (\Throwable $e) {
+                    $this->assertTrue(true); // exception expected; exact message is adapter-specific
+                }
+            }
+        } finally {
+            $database->deleteCollection($collNullIndex);
+        }
     }
 }

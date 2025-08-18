@@ -1045,6 +1045,13 @@ abstract class Adapter
     abstract public function getSupportForSpatialIndexNull(): bool;
 
     /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialIndexOrder(): bool;
+
+    /**
      * Does the adapter includes boundary during spatial contains?
      *
      * @return bool

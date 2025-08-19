@@ -4,7 +4,12 @@ namespace Utopia\Database;
 
 use Exception;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 
@@ -371,7 +376,10 @@ abstract class Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        for ($attempts = 0; $attempts < 3; $attempts++) {
+        $sleep = 100_000; // 100 milliseconds
+        $retries = 2;
+
+        for ($attempts = 0; $attempts <= $retries; $attempts++) {
             try {
                 $this->startTransaction();
                 $result = $callback();
@@ -380,9 +388,22 @@ abstract class Adapter
             } catch (\Throwable $action) {
                 try {
                     $this->rollbackTransaction();
+
+                    if (
+                        $action instanceof DuplicateException ||
+                        $action instanceof RestrictedException ||
+                        $action instanceof AuthorizationException ||
+                        $action instanceof RelationshipException ||
+                        $action instanceof ConflictException ||
+                        $action instanceof LimitException
+                    ) {
+                        $this->inTransaction = 0;
+                        throw $action;
+                    }
+
                 } catch (\Throwable $rollback) {
-                    if ($attempts < 2) {
-                        \usleep(5000); // 5ms
+                    if ($attempts < $retries) {
+                        \usleep($sleep * ($attempts + 1));
                         continue;
                     }
 
@@ -390,8 +411,8 @@ abstract class Adapter
                     throw $rollback;
                 }
 
-                if ($attempts < 2) {
-                    \usleep(5000); // 5ms
+                if ($attempts < $retries) {
+                    \usleep($sleep * ($attempts + 1));
                     continue;
                 }
 

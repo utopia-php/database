@@ -1440,7 +1440,7 @@ class Postgres extends SQL
     /**
      * Find Documents
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
@@ -1449,14 +1449,15 @@ class Postgres extends SQL
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
-     * @param array<string,mixed> $spatialAttributes
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $spatialAttributes = []): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
+        $attributes = $collection->getAttributes();
+        $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
@@ -1558,6 +1559,19 @@ class Postgres extends SQL
         }
 
         $selections = $this->getAttributeSelections($queries);
+
+        /**
+         * @var array<string,mixed> $spatialAttributes
+         */
+        $spatialAttributes = [];
+        foreach ($attributes as $attribute) {
+            if ($attribute instanceof Document) {
+                $attributeType = $attribute->getAttribute('type');
+                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                    $spatialAttributes[] = $attribute->getId();
+                }
+            }
+        }
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}

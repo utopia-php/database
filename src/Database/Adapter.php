@@ -768,7 +768,7 @@ abstract class Adapter
      *
      * Find data sets using chosen queries
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
@@ -777,10 +777,9 @@ abstract class Adapter
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
-     * @param array<string,mixed> $spatialAttributes
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $spatialAttributes = []): array;
+    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
 
     /**
      * Sum an attribute

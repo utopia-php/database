@@ -56,6 +56,8 @@ class Database
     public const VAR_LINESTRING = 'linestring';
     public const VAR_POLYGON = 'polygon';
 
+    public const SPATIAL_TYPES = [self::VAR_POINT,self::VAR_LINESTRING, self::VAR_POLYGON];
+
     // Index Types
     public const INDEX_KEY = 'key';
     public const INDEX_FULLTEXT = 'fulltext';
@@ -6232,21 +6234,8 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
-        /**
-         * @var array<string,mixed> $spatialAttributes
-         */
-        $spatialAttributes = [];
-        foreach ($attributes as $attribute) {
-            if ($attribute instanceof Document) {
-                $attributeType = $attribute->getAttribute('type');
-                if (in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    $spatialAttributes[] = $attribute->getId();
-                }
-            }
-        }
-
         $getResults = fn () => $this->adapter->find(
-            $collection->getId(),
+            $collection,
             $queries,
             $limit ?? 25,
             $offset ?? 0,
@@ -6254,8 +6243,7 @@ class Database
             $orderTypes,
             $cursor,
             $cursorDirection,
-            $forPermission,
-            $spatialAttributes
+            $forPermission
         );
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();

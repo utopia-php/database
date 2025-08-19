@@ -3861,7 +3861,7 @@ class Database
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             $batch = $this->withTransaction(function () use ($collection, $chunk) {
-                return $this->adapter->createDocuments($collection->getId(), $chunk);
+                return $this->adapter->createDocuments($collection, $chunk);
             });
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);

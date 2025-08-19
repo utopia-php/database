@@ -1976,7 +1976,7 @@ abstract class SQL extends Adapter
     /**
      * Create Documents in batches
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Document> $documents
      *
      * @return array<Document>
@@ -1984,12 +1984,26 @@ abstract class SQL extends Adapter
      * @throws DuplicateException
      * @throws \Throwable
      */
-    public function createDocuments(string $collection, array $documents): array
+    public function createDocuments(Document $collection, array $documents): array
     {
         if (empty($documents)) {
             return $documents;
         }
 
+        $collectionAttributes = $collection->getAttributes();
+        $collection = $collection->getId();
+        /**
+         * @var array<string,mixed> $spatialAttributes
+        */
+        $spatialAttributes = [];
+        foreach ($collectionAttributes as $attribute) {
+            if ($attribute instanceof Document) {
+                $attributeType = $attribute->getAttribute('type');
+                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                    $spatialAttributes[] = $attribute->getId();
+                }
+            }
+        }
         try {
             $name = $this->filter($collection);
 
@@ -2051,9 +2065,7 @@ abstract class SQL extends Adapter
                     if (\is_array($value)) {
                         $value = \json_encode($value);
                     }
-
-                    // Check if this is a WKT string that should be wrapped with ST_GeomFromText
-                    if (is_string($value) && Spatial::isWKTString($value)) {
+                    if (isset($spatialAttributes[$key])) {
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
                     } else {

@@ -683,14 +683,14 @@ abstract class Adapter
     /**
      * Create Documents in batches
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Document> $documents
      *
      * @return array<Document>
      *
      * @throws DatabaseException
      */
-    abstract public function createDocuments(string $collection, array $documents): array;
+    abstract public function createDocuments(Document $collection, array $documents): array;
 
     /**
      * Update Document

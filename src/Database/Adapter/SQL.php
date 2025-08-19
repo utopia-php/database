@@ -334,20 +334,9 @@ abstract class SQL extends Adapter
      */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        $collectionAttributes = $collection->getAttributes();
+        $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
         $collection = $collection->getId();
-        /**
-         * @var array<string,mixed> $spatialAttributes
-        */
-        $spatialAttributes = [];
-        foreach ($collectionAttributes as $attribute) {
-            if ($attribute instanceof Document) {
-                $attributeType = $attribute->getAttribute('type');
-                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                    $spatialAttributes[] = $attribute->getId();
-                }
-            }
-        }
+
         $name = $this->filter($collection);
         $selections = $this->getAttributeSelections($queries);
 
@@ -501,20 +490,8 @@ abstract class SQL extends Adapter
         if (empty($documents)) {
             return 0;
         }
-        $collectionAttributes = $collection->getAttributes();
+        $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
         $collection = $collection->getId();
-        /**
-         * @var array<string,mixed> $spatialAttributes
-        */
-        $spatialAttributes = [];
-        foreach ($collectionAttributes as $attribute) {
-            if ($attribute instanceof Document) {
-                $attributeType = $attribute->getAttribute('type');
-                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                    $spatialAttributes[] = $attribute->getId();
-                }
-            }
-        }
 
         $attributes = $updates->getAttributes();
 
@@ -539,7 +516,7 @@ abstract class SQL extends Adapter
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
 
-            if (isset($spatialAttributes[$attribute])) {
+            if (in_array($attribute, $spatialAttributes)) {
                 $columns .= "{$this->quote($column)} = ST_GeomFromText(:key_{$bindIndex})";
             } else {
                 $columns .= "{$this->quote($column)} = :key_{$bindIndex}";
@@ -1879,15 +1856,12 @@ abstract class SQL extends Adapter
     protected function getAttributeProjection(array $selections, string $prefix, array $spatialAttributes = []): mixed
     {
         if (empty($selections) || \in_array('*', $selections)) {
-            // When selecting all columns, handle spatial attributes with ST_AsText()
             if (empty($spatialAttributes)) {
                 return "{$this->quote($prefix)}.*";
             }
 
-            // Build complete projection: regular columns + ST_AsText() for spatial columns
             $projections = [];
 
-            // Add internal/system columns
             $internalColumns = ['_id', '_uid', '_createdAt', '_updatedAt', '_permissions'];
             if ($this->sharedTables) {
                 $internalColumns[] = '_tenant';
@@ -1896,7 +1870,6 @@ abstract class SQL extends Adapter
                 $projections[] = "{$this->quote($prefix)}.{$this->quote($col)}";
             }
 
-            // Add spatial columns with ST_AsText conversion
             foreach ($spatialAttributes as $spatialAttr) {
                 $filteredAttr = $this->filter($spatialAttr);
                 $quotedAttr = $this->quote($filteredAttr);
@@ -1927,7 +1900,6 @@ abstract class SQL extends Adapter
             $filteredSelection = $this->filter($selection);
             $quotedSelection = $this->quote($filteredSelection);
 
-            // Check if this selection is a spatial attribute
             if (in_array($selection, $spatialAttributes)) {
                 $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedSelection}) AS {$quotedSelection}";
             } else {
@@ -1993,21 +1965,8 @@ abstract class SQL extends Adapter
         if (empty($documents)) {
             return $documents;
         }
-
-        $collectionAttributes = $collection->getAttribute('attributes', []);
+        $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
         $collection = $collection->getId();
-        /**
-         * @var array<string,mixed> $spatialAttributes
-        */
-        $spatialAttributes = [];
-        foreach ($collectionAttributes as $attribute) {
-            if ($attribute instanceof Document) {
-                $attributeType = $attribute->getAttribute('type');
-                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                    $spatialAttributes[] = $attribute->getId();
-                }
-            }
-        }
         try {
             $name = $this->filter($collection);
 
@@ -2069,7 +2028,7 @@ abstract class SQL extends Adapter
                     if (\is_array($value)) {
                         $value = \json_encode($value);
                     }
-                    if (isset($spatialAttributes[$key])) {
+                    if (in_array($key, $spatialAttributes)) {
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
                     } else {
@@ -2150,20 +2109,8 @@ abstract class SQL extends Adapter
             return $changes;
         }
         try {
-            $collectionAttributes = $collection->getAttributes();
+            $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
             $collection = $collection->getId();
-            /**
-             * @var array<string,mixed> $spatialAttributes
-            */
-            $spatialAttributes = [];
-            foreach ($collectionAttributes as $attr) {
-                if ($attr instanceof Document) {
-                    $attributeType = $attr->getAttribute('type');
-                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                        $spatialAttributes[] = $attr->getId();
-                    }
-                }
-            }
             $name = $this->filter($collection);
             $attribute = $this->filter($attribute);
 
@@ -2206,7 +2153,7 @@ abstract class SQL extends Adapter
                         $attrValue = \json_encode($attrValue);
                     }
 
-                    if (isset($spatialAttributes[$attributeKey])) {
+                    if (in_array($attributeKey, $spatialAttributes)) {
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
                     } else {

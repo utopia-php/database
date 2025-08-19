@@ -1460,7 +1460,7 @@ class Postgres extends SQL
      */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-        $attributes = $collection->getAttributes();
+        $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1563,19 +1563,6 @@ class Postgres extends SQL
         }
 
         $selections = $this->getAttributeSelections($queries);
-
-        /**
-         * @var array<string,mixed> $spatialAttributes
-         */
-        $spatialAttributes = [];
-        foreach ($attributes as $attribute) {
-            if ($attribute instanceof Document) {
-                $attributeType = $attribute->getAttribute('type');
-                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                    $spatialAttributes[] = $attribute->getId();
-                }
-            }
-        }
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}

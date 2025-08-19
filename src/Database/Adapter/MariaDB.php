@@ -823,7 +823,7 @@ class MariaDB extends SQL
     public function createDocument(Document $collection, Document $document): Document
     {
         try {
-            $collectionAttributes = $collection->getAttribute('attributes', []);
+            $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
@@ -837,16 +837,6 @@ class MariaDB extends SQL
             $name = $this->filter($collection);
             $columns = '';
             $columnNames = '';
-
-            $spatialAttributes = [];
-            foreach ($collectionAttributes as $attr) {
-                if ($attr instanceof Document) {
-                    $attributeType = $attr->getAttribute('type');
-                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                        $spatialAttributes[] = $attr->getId();
-                    }
-                }
-            }
 
             /**
              * Insert Attributes
@@ -1382,7 +1372,8 @@ class MariaDB extends SQL
      */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-        $attributes = $collection->getAttributes();
+        $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1485,19 +1476,6 @@ class MariaDB extends SQL
         }
 
         $selections = $this->getAttributeSelections($queries);
-
-        /**
-         * @var array<string,mixed> $spatialAttributes
-         */
-        $spatialAttributes = [];
-        foreach ($attributes as $attribute) {
-            if ($attribute instanceof Document) {
-                $attributeType = $attribute->getAttribute('type');
-                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                    $spatialAttributes[] = $attribute->getId();
-                }
-            }
-        }
 
 
         $sql = "

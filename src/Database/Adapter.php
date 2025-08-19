@@ -378,7 +378,6 @@ abstract class Adapter
     {
         $sleep = 100_000; // 100 milliseconds
         $retries = 2;
-        $retries = 0;
 
         for ($attempts = 0; $attempts <= $retries; $attempts++) {
             try {

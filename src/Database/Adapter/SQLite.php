@@ -1253,4 +1253,13 @@ class SQLite extends MariaDB
 
         return $e;
     }
+
+    public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
+    }
+    public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return false;
+    }
 }

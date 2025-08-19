@@ -709,7 +709,7 @@ abstract class Adapter
      *
      * Updates all documents which match the given query.
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $updates
      * @param array<Document> $documents
      *
@@ -717,7 +717,7 @@ abstract class Adapter
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, Document $updates, array $documents): int;
+    abstract public function updateDocuments(Document $collection, Document $updates, array $documents): int;
 
     /**
      * Create documents if they do not exist, otherwise update them.

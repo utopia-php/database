@@ -4597,7 +4597,7 @@ class Database
                 }
 
                 $this->adapter->updateDocuments(
-                    $collection->getId(),
+                    $collection,
                     $updates,
                     $batch
                 );

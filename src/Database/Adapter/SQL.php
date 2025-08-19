@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Spatial;
 
 abstract class SQL extends Adapter
 {
@@ -479,23 +480,11 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Check if a string is a WKT (Well-Known Text) format
-     *
-     * @param string $value
-     * @return bool
-     */
-    protected function isWKTString(string $value): bool
-    {
-        $value = trim($value);
-        return (bool) preg_match('/^(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION|GEOMETRY)\s*\(/i', $value);
-    }
-
-    /**
      * Update documents
      *
      * Updates all documents which match the given query.
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $updates
      * @param array<Document> $documents
      *
@@ -503,10 +492,24 @@ abstract class SQL extends Adapter
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
         if (empty($documents)) {
             return 0;
+        }
+        $collectionAttributes = $collection->getAttributes();
+        $collection = $collection->getId();
+        /**
+         * @var array<string,mixed> $spatialAttributes
+        */
+        $spatialAttributes = [];
+        foreach ($collectionAttributes as $attribute) {
+            if ($attribute instanceof Document) {
+                $attributeType = $attribute->getAttribute('type');
+                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                    $spatialAttributes[] = $attribute->getId();
+                }
+            }
         }
 
         $attributes = $updates->getAttributes();
@@ -532,9 +535,7 @@ abstract class SQL extends Adapter
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
 
-            // Check if this is spatial data (WKT string)
-            $isSpatialData = is_string($value) && $this->isWKTString($value);
-            if ($isSpatialData) {
+            if (isset($spatialAttributes[$attribute])) {
                 $columns .= "{$this->quote($column)} = ST_GeomFromText(:key_{$bindIndex})";
             } else {
                 $columns .= "{$this->quote($column)} = :key_{$bindIndex}";
@@ -570,10 +571,7 @@ abstract class SQL extends Adapter
 
         $attributeIndex = 0;
         foreach ($attributes as $attributeName => $value) {
-            // Check if this is spatial data (WKT string)
-            $isSpatialData = is_string($value) && $this->isWKTString($value);
-
-            if (!$isSpatialData && is_array($value)) {
+            if (!isset($spatialAttributes[$attributeName]) && is_array($value)) {
                 $value = json_encode($value);
             }
 
@@ -2055,7 +2053,7 @@ abstract class SQL extends Adapter
                     }
 
                     // Check if this is a WKT string that should be wrapped with ST_GeomFromText
-                    if (is_string($value) && $this->isWKTString($value)) {
+                    if (is_string($value) && Spatial::isWKTString($value)) {
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
                     } else {
@@ -2180,7 +2178,7 @@ abstract class SQL extends Adapter
                     }
 
                     // Check if this is a WKT string that should be wrapped with ST_GeomFromText
-                    if (is_string($attrValue) && $this->isWKTString($attrValue)) {
+                    if (is_string($attrValue) && Spatial::isWKTString($attrValue)) {
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
                     } else {

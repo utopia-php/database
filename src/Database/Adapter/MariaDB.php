@@ -812,7 +812,7 @@ class MariaDB extends SQL
     /**
      * Create Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $document
      * @return Document
      * @throws Exception
@@ -820,9 +820,11 @@ class MariaDB extends SQL
      * @throws DuplicateException
      * @throws \Throwable
      */
-    public function createDocument(string $collection, Document $document): Document
+    public function createDocument(Document $collection, Document $document): Document
     {
         try {
+            $collectionAttributes = $collection->getAttribute('attributes', []);
+            $collection = $collection->getId();
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
@@ -836,6 +838,16 @@ class MariaDB extends SQL
             $columns = '';
             $columnNames = '';
 
+            $spatialAttributes = [];
+            foreach ($collectionAttributes as $attr) {
+                if ($attr instanceof Document) {
+                    $attributeType = $attr->getAttribute('type');
+                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                        $spatialAttributes[] = $attr->getId();
+                    }
+                }
+            }
+
             /**
              * Insert Attributes
              */
@@ -844,16 +856,7 @@ class MariaDB extends SQL
                 $column = $this->filter($attribute);
                 $bindKey = 'key_' . $bindIndex;
                 $columns .= "`{$column}`, ";
-
-                // Check if this is spatial data (WKT string)
-                $isSpatialData = is_string($value) && (
-                    strpos($value, 'POINT(') === 0 ||
-                    strpos($value, 'LINESTRING(') === 0 ||
-                    strpos($value, 'POLYGON(') === 0 ||
-                    strpos($value, 'GEOMETRY(') === 0
-                );
-
-                if ($isSpatialData) {
+                if (in_array($attribute, $spatialAttributes)) {
                     $columnNames .= 'ST_GeomFromText(:' . $bindKey . '), ';
                 } else {
                     $columnNames .= ':' . $bindKey . ', ';

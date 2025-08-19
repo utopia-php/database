@@ -411,41 +411,11 @@ abstract class SQL extends Adapter
 
         foreach ($spatialAttributes as $spatialAttr) {
             if (array_key_exists($spatialAttr, $document) && !is_null($document[$spatialAttr])) {
-                $document[$spatialAttr] = $this->processSpatialValue($document[$spatialAttr]);
+                $document[$spatialAttr] = $this->convertWKTToArray($document[$spatialAttr]);
             }
         }
 
         return new Document($document);
-    }
-
-    /**
-     * Process spatial value - convert from database format to array
-     * This method should be overridden by adapters that support spatial data
-     *
-     * @param mixed $value
-     * @return mixed
-     */
-    protected function processSpatialValue(mixed $value): mixed
-    {
-        if (is_null($value)) {
-            return null;
-        }
-
-        // Check if it's already a WKT string (from ST_AsText), convert to array
-        if (is_string($value)) {
-            if (strpos($value, 'POINT(') === 0 ||
-                strpos($value, 'LINESTRING(') === 0 ||
-                strpos($value, 'POLYGON(') === 0 ||
-                strpos($value, 'GEOMETRY(') === 0) {
-                try {
-                    return $this->convertWKTToArray($value);
-                } catch (Exception $e) {
-                    return $value;
-                }
-            }
-        }
-
-        return $value;
     }
 
     /**

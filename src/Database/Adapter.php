@@ -672,12 +672,12 @@ abstract class Adapter
     /**
      * Create Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $document
      *
      * @return Document
      */
-    abstract public function createDocument(string $collection, Document $document): Document;
+    abstract public function createDocument(Document $collection, Document $document): Document;
 
     /**
      * Create Documents in batches

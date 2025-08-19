@@ -3343,17 +3343,6 @@ class Database
             return $document;
         }
 
-        // Extract spatial attributes for the adapter
-        $spatialAttributes = [];
-        foreach ($attributes as $attribute) {
-            if ($attribute instanceof Document) {
-                $attributeType = $attribute->getAttribute('type');
-                if (in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    $spatialAttributes[] = $attribute->getId();
-                }
-            }
-        }
-
         $document = $this->adapter->getDocument(
             $collection,
             $id,
@@ -3730,18 +3719,6 @@ class Database
 
         $document = $this->encode($collection, $document);
 
-        // Debug: Check if spatial data is properly encoded
-        if ($this->adapter->getSupportForSpatialAttributes()) {
-            $attributes = $collection->getAttribute('attributes', []);
-            foreach ($attributes as $attribute) {
-                $key = $attribute['$id'] ?? '';
-                $type = $attribute['type'] ?? '';
-                if (in_array($type, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    $value = $document->getAttribute($key);
-                }
-            }
-        }
-
         if ($this->validate) {
             $validator = new Permissions();
             if (!$validator->isValid($document->getPermissions())) {
@@ -3763,7 +3740,7 @@ class Database
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
-            return $this->adapter->createDocument($collection->getId(), $document);
+            return $this->adapter->createDocument($collection, $document);
         });
 
         if ($this->resolveRelationships) {

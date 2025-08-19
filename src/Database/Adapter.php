@@ -661,14 +661,13 @@ abstract class Adapter
     /**
      * Get Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param array<Query> $queries
      * @param bool $forUpdate
-     * @param array<string> $spatialAttributes
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false, array $spatialAttributes = []): Document;
+    abstract public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
 
     /**
      * Create Document

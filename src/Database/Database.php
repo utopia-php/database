@@ -3355,11 +3355,10 @@ class Database
         }
 
         $document = $this->adapter->getDocument(
-            $collection->getId(),
+            $collection,
             $id,
             $queries,
-            $forUpdate,
-            $spatialAttributes
+            $forUpdate
         );
 
         if ($document->isEmpty()) {

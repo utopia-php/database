@@ -220,7 +220,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false, array $spatialAttributes = []): Document
+    public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

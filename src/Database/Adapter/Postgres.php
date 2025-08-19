@@ -709,8 +709,9 @@ class Postgres extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $collection = $this->getDocument(Database::METADATA, $collection);
-                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
                 $junction = $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
 
@@ -793,8 +794,9 @@ class Postgres extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $collection = $this->getDocument(Database::METADATA, $collection);
-                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
                 $junction = $side === Database::RELATION_SIDE_PARENT
                     ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence())

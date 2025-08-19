@@ -325,16 +325,29 @@ abstract class SQL extends Adapter
     /**
      * Get Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param Query[] $queries
      * @param bool $forUpdate
-     * @param array<string> $spatialAttributes
      * @return Document
      * @throws DatabaseException
      */
-    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false, array $spatialAttributes = []): Document
+    public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
+        $collectionAttributes = $collection->getAttributes();
+        $collection = $collection->getId();
+        /**
+         * @var array<string,mixed> $spatialAttributes
+        */
+        $spatialAttributes = [];
+        foreach ($collectionAttributes as $attribute) {
+            if ($attribute instanceof Document) {
+                $attributeType = $attribute->getAttribute('type');
+                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                    $spatialAttributes[] = $attribute->getId();
+                }
+            }
+        }
         $name = $this->filter($collection);
         $selections = $this->getAttributeSelections($queries);
 

@@ -354,8 +354,8 @@ class SQLite extends MariaDB
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-
-        $collection = $this->getDocument(Database::METADATA, $name);
+        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $collection = $this->getDocument($metadataCollection, $name);
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
@@ -402,7 +402,8 @@ class SQLite extends MariaDB
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        $collection = $this->getDocument(Database::METADATA, $collection);
+        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $collection = $this->getDocument($metadataCollection, $collection);
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');

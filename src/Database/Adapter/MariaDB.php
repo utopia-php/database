@@ -563,8 +563,9 @@ class MariaDB extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $collection = $this->getDocument(Database::METADATA, $collection);
-                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
                 $junction = $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
 
@@ -646,8 +647,9 @@ class MariaDB extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $collection = $this->getDocument(Database::METADATA, $collection);
-                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
                 $junction = $side === Database::RELATION_SIDE_PARENT
                     ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence())
@@ -713,7 +715,8 @@ class MariaDB extends SQL
      */
     public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = []): bool
     {
-        $collection = $this->getDocument(Database::METADATA, $collection);
+        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $collection = $this->getDocument($metadataCollection, $collection);
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');

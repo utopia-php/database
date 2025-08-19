@@ -724,13 +724,13 @@ abstract class Adapter
      *
      * If attribute is not empty, only the specified attribute will be increased, by the new value in each document.
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $attribute
      * @param array<Change> $changes
      * @return array<Document>
      */
     abstract public function createOrUpdateDocuments(
-        string $collection,
+        Document $collection,
         string $attribute,
         array $changes
     ): array;

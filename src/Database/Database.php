@@ -5231,7 +5231,7 @@ class Database
              * @var array<Change> $chunk
              */
             $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
-                $collection->getId(),
+                $collection,
                 $attribute,
                 $chunk
             )));

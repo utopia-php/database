@@ -2131,22 +2131,35 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * @param string $collection
+     * @param Document $collection
      * @param string $attribute
      * @param array<Change> $changes
      * @return array<Document>
      * @throws DatabaseException
      */
     public function createOrUpdateDocuments(
-        string $collection,
+        Document $collection,
         string $attribute,
         array $changes
     ): array {
         if (empty($changes)) {
             return $changes;
         }
-
         try {
+            $collectionAttributes = $collection->getAttributes();
+            $collection = $collection->getId();
+            /**
+             * @var array<string,mixed> $spatialAttributes
+            */
+            $spatialAttributes = [];
+            foreach ($collectionAttributes as $attr) {
+                if ($attr instanceof Document) {
+                    $attributeType = $attr->getAttribute('type');
+                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                        $spatialAttributes[] = $attr->getId();
+                    }
+                }
+            }
             $name = $this->filter($collection);
             $attribute = $this->filter($attribute);
 
@@ -2184,13 +2197,12 @@ abstract class SQL extends Adapter
 
                 $bindKeys = [];
 
-                foreach ($attributes as $attrValue) {
+                foreach ($attributes as $attributeKey => $attrValue) {
                     if (\is_array($attrValue)) {
                         $attrValue = \json_encode($attrValue);
                     }
 
-                    // Check if this is a WKT string that should be wrapped with ST_GeomFromText
-                    if (is_string($attrValue) && Spatial::isWKTString($attrValue)) {
+                    if (isset($spatialAttributes[$attributeKey])) {
                         $bindKey = 'key_' . $bindIndex;
                         $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
                     } else {

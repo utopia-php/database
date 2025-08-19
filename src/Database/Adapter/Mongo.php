@@ -1168,7 +1168,7 @@ class Mongo extends Adapter
                 $attributes['_permissions'] = $document->getPermissions();
 
                 if (!empty($document->getSequence())) {
-                    $attributes['_id'] = new ObjectId($document->getSequence());
+                    $attributes['_id'] = $document->getSequence();
                 }
 
                 if ($this->sharedTables) {
@@ -1204,6 +1204,13 @@ class Mongo extends Adapter
                     $update = [
                         '$set' => $record
                     ];
+
+                    // Add UUID7 _id for new documents in upsert operations
+                    if (empty($document->getSequence())) {
+                        $update['$setOnInsert'] = [
+                            '_id' => $this->client->createUuid()
+                        ];
+                    }
                 }
 
                 $operations[] = [
@@ -1358,7 +1365,7 @@ class Mongo extends Adapter
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         foreach ($sequences as $index => $sequence) {
-            $sequences[$index] = new ObjectId($sequence);
+            $sequences[$index] = $sequence;
         }
 
         $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_id', $sequences)]);
@@ -1512,7 +1519,7 @@ class Mongo extends Adapter
 
                     $tmp = $cursor[$originalPrev];
                     if ($originalPrev === '$sequence') {
-                        $tmp = new ObjectId($tmp);
+                        $tmp = $tmp;
                     }
 
                     $andConditions[] = [
@@ -1523,8 +1530,6 @@ class Mongo extends Adapter
                 $tmp = $cursor[$originalAttribute];
 
                 if ($originalAttribute === '$sequence') {
-                    $tmp = new ObjectId($tmp);
-
                     /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
                     if (count($orderAttributes) === 1) {
                         $filters[$attribute] = [
@@ -1594,7 +1599,7 @@ class Mongo extends Adapter
             Database::VAR_BOOLEAN => 'bool',
             Database::VAR_DATETIME => 'date',
             Database::VAR_ID => 'string',
-            Database::VAR_OBJECT_ID => 'objectId',
+            Database::VAR_UUID7 => 'string',
             default => 'string'
         };
     }
@@ -1792,7 +1797,7 @@ class Mongo extends Adapter
                 unset($result['$id']);
             }
             if (array_key_exists('$sequence', $array)) {
-                $result['_id'] = new ObjectId($array['$sequence']);
+                $result['_id'] = $array['$sequence'];
                 unset($result['$sequence']);
             }
             if (array_key_exists('$tenant', $array)) {
@@ -1842,7 +1847,7 @@ class Mongo extends Adapter
             $query->setAttribute('_id');
             $values = $query->getValues();
             foreach ($values as $k => $v) {
-                $values[$k] = new ObjectId($v);
+                $values[$k] = $v;
             }
             $query->setValues($values);
         } elseif ($query->getAttribute() === '$createdAt') {
@@ -2400,7 +2405,7 @@ class Mongo extends Adapter
      */
     public function getIdAttributeType(): string
     {
-        return Database::VAR_OBJECT_ID;
+        return Database::VAR_UUID7;
     }
 
     /**

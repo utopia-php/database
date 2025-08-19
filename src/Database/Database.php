@@ -42,7 +42,7 @@ class Database
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
     public const VAR_ID = 'id';
-    public const VAR_OBJECT_ID = 'objectId';
+    public const VAR_UUID7 = 'uuid7';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;

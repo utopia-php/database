@@ -74,7 +74,7 @@ class Spatial extends Validator
      */
     protected static function validateLineString(array $value): bool
     {
-        if (empty($value)) {
+        if (count($value) < 2) {
             throw new Exception('LineString must contain at least one point');
         }
 
@@ -156,7 +156,7 @@ class Spatial extends Validator
     public static function isWKTString(string $value): bool
     {
         $value = trim($value);
-        return (bool) preg_match('/^(POINT|LINESTRING|POLYGON|GEOMETRY)\s*\(/i', $value);
+        return (bool) preg_match('/^(POINT|LINESTRING|POLYGON)\s*\(/i', $value);
     }
 
     /**

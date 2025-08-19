@@ -27,10 +27,6 @@ class Query
     public const TYPE_ENDS_WITH = 'endsWith';
     public const TYPE_NOT_ENDS_WITH = 'notEndsWith';
 
-    // Spatial contains methods (for explicit spatial operations)
-    public const TYPE_SPATIAL_CONTAINS = 'spatialContains';
-    public const TYPE_SPATIAL_NOT_CONTAINS = 'spatialNotContains';
-
     // General spatial method constants (for spatial-only operations)
     public const TYPE_CROSSES = 'crosses';
     public const TYPE_NOT_CROSSES = 'notCrosses';
@@ -82,8 +78,6 @@ class Query
         self::TYPE_NOT_STARTS_WITH,
         self::TYPE_ENDS_WITH,
         self::TYPE_NOT_ENDS_WITH,
-        self::TYPE_SPATIAL_CONTAINS,
-        self::TYPE_SPATIAL_NOT_CONTAINS,
         self::TYPE_CROSSES,
         self::TYPE_NOT_CROSSES,
         self::TYPE_DISTANCE,
@@ -293,8 +287,6 @@ class Query
     public static function isSpatialQuery(string $value): bool
     {
         return match ($value) {
-            self::TYPE_SPATIAL_CONTAINS,
-            self::TYPE_SPATIAL_NOT_CONTAINS,
             self::TYPE_CROSSES,
             self::TYPE_NOT_CROSSES,
             self::TYPE_DISTANCE,

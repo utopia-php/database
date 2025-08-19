@@ -151,14 +151,11 @@ class Filter extends Base
                 case Database::VAR_POINT:
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:
-                    // Spatial queries accept flexible geometry data (arrays)
-                    // Basic validation: ensure it's an array since spatial data is passed as arrays
                     if (!is_array($value)) {
                         $this->message = 'Spatial data must be an array';
                         return false;
                     }
-                    // Skip further validation for spatial data as it will be handled by the database
-                    continue 2; // Continue to next value in the foreach loop
+                    continue 2;
 
                 default:
                     $this->message = 'Unknown Data type';
@@ -262,15 +259,6 @@ class Filter extends Base
             case Query::TYPE_EQUAL:
             case Query::TYPE_CONTAINS:
             case Query::TYPE_NOT_CONTAINS:
-                if ($this->isEmpty($value->getValues())) {
-                    $this->message = \ucfirst($method) . ' queries require at least one value.';
-                    return false;
-                }
-
-                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
-
-            case Query::TYPE_SPATIAL_CONTAINS:
-            case Query::TYPE_SPATIAL_NOT_CONTAINS:
                 if ($this->isEmpty($value->getValues())) {
                     $this->message = \ucfirst($method) . ' queries require at least one value.';
                     return false;

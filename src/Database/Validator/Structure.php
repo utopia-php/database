@@ -353,7 +353,7 @@ class Structure extends Validator
                 case Database::VAR_POINT:
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:
-                    $validators[] = new \Utopia\Database\Validator\Spatial($type);
+                    $validators[] = new Spatial($type);
                     break;
 
                 default:

@@ -1461,6 +1461,7 @@ class Postgres extends SQL
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+        $attributes = $collection->getAttribute('attributes', []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -1534,7 +1535,7 @@ class Postgres extends SQL
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -1837,7 +1838,15 @@ class Postgres extends SQL
 
             case Query::TYPE_CONTAINS:
             case Query::TYPE_NOT_CONTAINS:
-                if ($query->onArray()) {
+                // using st_cover instead of contains to match the boundary matching behaviour of the mariadb st_contains
+                // postgis st_contains excludes matching the boundary
+                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                    $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
+                    $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                    return $isNot
+                        ? "NOT ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))"
+                        : "ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                } elseif ($query->onArray()) {
                     $operator = '@>';
                 } else {
                     $operator = null;
@@ -1859,8 +1868,8 @@ class Postgres extends SQL
                         Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_CONTAINS => ($query->onArray() || in_array($attributeType, Database::SPATIAL_TYPES)) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_NOT_CONTAINS => ($query->onArray() || in_array($attributeType, Database::SPATIAL_TYPES)) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
 
@@ -1879,67 +1888,56 @@ class Postgres extends SQL
                 $separator = $isNotQuery ? ' AND ' : ' OR ';
                 return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
 
-                // Spatial query methods
-                // using st_cover instead of contains to match the boundary matching behaviour of the mariadb st_contains
-                // postgis st_contains excludes matching the boundary
-            case Query::TYPE_SPATIAL_CONTAINS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
-                return "ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
-            case Query::TYPE_SPATIAL_NOT_CONTAINS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
-                return "NOT ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
             case Query::TYPE_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_DISTANCE:
                 $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0]);
                 $binds[":{$placeholder}_1"] = $distanceParams[1];
                 return "ST_DWithin({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), :{$placeholder}_1)";
 
             case Query::TYPE_NOT_DISTANCE:
                 $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0]);
                 $binds[":{$placeholder}_1"] = $distanceParams[1];
                 return "NOT ST_DWithin({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), :{$placeholder}_1)";
 
             case Query::TYPE_EQUALS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_EQUALS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0], $attributeType);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
         }
     }
@@ -2198,114 +2196,6 @@ class Postgres extends SQL
         return "\"{$string}\"";
     }
 
-    /**
-     * Helper method to get attribute type from attributes array
-     *
-     * @param string $attributeName
-     * @param array<mixed> $attributes
-     * @return string|null
-     */
-    protected function getAttributeType(string $attributeName, array $attributes): ?string
-    {
-        foreach ($attributes as $attribute) {
-            if (isset($attribute['$id']) && $attribute['$id'] === $attributeName) {
-                return $attribute['type'] ?? null;
-            }
-            if (isset($attribute['key']) && $attribute['key'] === $attributeName) {
-                return $attribute['type'] ?? null;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Convert array to Well-Known Text (WKT)
-     *
-     * @param array<mixed> $geometry
-     * @param string|null $type
-     * @return string
-     */
-    protected function convertArrayToWTK(array $geometry, ?string $type = null): string
-    {
-        if (empty($geometry)) {
-            throw new DatabaseException('Empty geometry array provided');
-        }
-
-        if ($type) {
-            switch ($type) {
-                case Database::VAR_POINT:
-                    if (count($geometry) !== 2 || !is_numeric($geometry[0]) || !is_numeric($geometry[1])) {
-                        throw new DatabaseException('Invalid POINT format: expected [x, y]');
-                    }
-                    return "POINT({$geometry[0]} {$geometry[1]})";
-
-                case Database::VAR_LINESTRING:
-                    $points = [];
-                    foreach ($geometry as $point) {
-                        if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
-                            throw new DatabaseException('Invalid LINESTRING format: expected [[x1, y1], [x2, y2], ...]');
-                        }
-                        $points[] = "{$point[0]} {$point[1]}";
-                    }
-                    return 'LINESTRING(' . implode(', ', $points) . ')';
-
-                case Database::VAR_POLYGON:
-                    $rings = [];
-                    foreach ($geometry as $ring) {
-                        if (!is_array($ring)) {
-                            throw new DatabaseException('Invalid POLYGON format: expected [[[x1, y1], [x2, y2], ...], ...]');
-                        }
-                        $points = [];
-                        foreach ($ring as $point) {
-                            if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
-                                throw new DatabaseException('Invalid POLYGON point format');
-                            }
-                            $points[] = "{$point[0]} {$point[1]}";
-                        }
-                        $rings[] = '(' . implode(', ', $points) . ')';
-                    }
-                    return 'POLYGON(' . implode(', ', $rings) . ')';
-
-                default:
-                    break;
-            }
-        }
-
-        if (isset($geometry[0]) && is_array($geometry[0])) {
-            // Multi-point geometry (polygon, linestring)
-            if (isset($geometry[0][0]) && is_array($geometry[0][0])) {
-                // Polygon
-                $rings = [];
-                foreach ($geometry as $ring) {
-                    $points = [];
-                    foreach ($ring as $point) {
-                        if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
-                            throw new DatabaseException('Invalid point format in polygon ring');
-                        }
-                        $points[] = $point[0] . ' ' . $point[1];
-                    }
-                    $rings[] = '(' . implode(', ', $points) . ')';
-                }
-                return 'POLYGON(' . implode(', ', $rings) . ')';
-            } else {
-                // LineString
-                $points = [];
-                foreach ($geometry as $point) {
-                    if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
-                        throw new DatabaseException('Invalid point format in geometry array');
-                    }
-                    $points[] = $point[0] . ' ' . $point[1];
-                }
-                return 'LINESTRING(' . implode(', ', $points) . ')';
-            }
-        } else {
-            // Point
-            if (count($geometry) !== 2 || !is_numeric($geometry[0]) || !is_numeric($geometry[1])) {
-                throw new DatabaseException('Invalid POINT format: expected [x, y]');
-            }
-            return 'POINT(' . $geometry[0] . ' ' . $geometry[1] . ')';
-        }
-    }
 
     public function getSupportForSpatialAttributes(): bool
     {

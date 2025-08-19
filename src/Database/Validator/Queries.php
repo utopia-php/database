@@ -104,8 +104,6 @@ class Queries extends Validator
                 Query::TYPE_NOT_ENDS_WITH,
                 Query::TYPE_CONTAINS,
                 Query::TYPE_NOT_CONTAINS,
-                Query::TYPE_SPATIAL_CONTAINS,
-                Query::TYPE_SPATIAL_NOT_CONTAINS,
                 Query::TYPE_AND,
                 Query::TYPE_OR,
                 Query::TYPE_CROSSES,

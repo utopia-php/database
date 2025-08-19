@@ -2258,4 +2258,72 @@ abstract class SQL extends Adapter
 
         return \array_map(fn ($change) => $change->getNew(), $changes);
     }
+
+    /**
+     * Build geometry WKT string from array input for spatial queries
+     *
+     * @param array<mixed> $geometry
+     * @return string
+     * @throws DatabaseException
+     */
+    protected function convertArrayToWTK(array $geometry): string
+    {
+        // point [x, y]
+        if (count($geometry) === 2 && is_numeric($geometry[0]) && is_numeric($geometry[1])) {
+            return "POINT({$geometry[0]} {$geometry[1]})";
+        }
+
+        // linestring [[x1, y1], [x2, y2], ...]
+        if (is_array($geometry[0]) && count($geometry[0]) === 2 && is_numeric($geometry[0][0])) {
+            $points = [];
+            foreach ($geometry as $point) {
+                if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
+                    throw new DatabaseException('Invalid point format in geometry array');
+                }
+                $points[] = "{$point[0]} {$point[1]}";
+            }
+            return 'LINESTRING(' . implode(', ', $points) . ')';
+        }
+
+        // polygon [[[x1, y1], [x2, y2], ...], ...]
+        if (is_array($geometry[0]) && is_array($geometry[0][0]) && count($geometry[0][0]) === 2) {
+            $rings = [];
+            foreach ($geometry as $ring) {
+                if (!is_array($ring)) {
+                    throw new DatabaseException('Invalid ring format in polygon geometry');
+                }
+                $points = [];
+                foreach ($ring as $point) {
+                    if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
+                        throw new DatabaseException('Invalid point format in polygon ring');
+                    }
+                    $points[] = "{$point[0]} {$point[1]}";
+                }
+                $rings[] = '(' . implode(', ', $points) . ')';
+            }
+            return 'POLYGON(' . implode(', ', $rings) . ')';
+        }
+
+        throw new DatabaseException('Unrecognized geometry array format');
+    }
+
+    /**
+     * Helper method to get attribute type from attributes array
+     *
+     * @param string $attributeName
+     * @param array<mixed> $attributes
+     * @return string|null
+     */
+    protected function getAttributeType(string $attributeName, array $attributes): ?string
+    {
+        foreach ($attributes as $attribute) {
+            if (isset($attribute['$id']) && $attribute['$id'] === $attributeName) {
+                return $attribute['type'] ?? null;
+            }
+            if (isset($attribute['key']) && $attribute['key'] === $attributeName) {
+                return $attribute['type'] ?? null;
+            }
+        }
+        return null;
+    }
 }

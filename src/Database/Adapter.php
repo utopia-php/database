@@ -371,6 +371,8 @@ abstract class Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
+        $sleep = 100_000; // 100 milliseconds
+
         for ($attempts = 0; $attempts < 3; $attempts++) {
             try {
                 $this->startTransaction();
@@ -379,14 +381,10 @@ abstract class Adapter
                 return $result;
             } catch (\Throwable $action) {
                 try {
-                    var_dump($action->getMessage());
-
                     $this->rollbackTransaction();
-
-                    //$this->inTransaction = 0;// Should we set if rollback is success?
                 } catch (\Throwable $rollback) {
                     if ($attempts < 2) {
-                        \usleep(5000 * ($attempts + 1));
+                        \usleep($sleep * ($attempts + 1));
                         continue;
                     }
 
@@ -395,7 +393,7 @@ abstract class Adapter
                 }
 
                 if ($attempts < 2) {
-                    \usleep(5000 * ($attempts + 1));
+                    \usleep($sleep * ($attempts + 1));
                     continue;
                 }
 

@@ -652,7 +652,6 @@ class Mongo extends Adapter
 
         $indexes = [];
         $options = [];
-
         $indexes['name'] = $id;
 
         // If sharedTables, always add _tenant as the first key
@@ -661,15 +660,15 @@ class Mongo extends Adapter
         }
 
         foreach ($attributes as $i => $attribute) {
-            $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
+            $attributes[$i]  = $this->filter($this->getInternalKeyForAttribute($attribute));
             $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
-            $indexes['key'][$attribute] = $orderType;
+            $indexes['key'][$attributes[$i] ] = $orderType;
 
             switch ($type) {
                 case Database::INDEX_KEY:
                     break;
                 case Database::INDEX_FULLTEXT:
-                    $indexes['key'][$attribute] = 'text';
+                    $indexes['key'][$attributes[$i]] = 'text';
                     break;
                 case Database::INDEX_UNIQUE:
                     $indexes['unique'] = true;

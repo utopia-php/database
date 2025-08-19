@@ -463,6 +463,27 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Helper method to extract spatial type attributes from collection attributes
+     *
+     * @param Document $collection
+     * @return array<int,string>
+     */
+    protected function getSpatialAttributesFromCollection(Document $collection): array
+    {
+        $collectionAttributes = $collection->getAttribute('attributes', []);
+        $spatialAttributes = [];
+        foreach ($collectionAttributes as $attr) {
+            if ($attr instanceof Document) {
+                $attributeType = $attr->getAttribute('type');
+                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                    $spatialAttributes[] = $attr->getId();
+                }
+            }
+        }
+        return $spatialAttributes;
+    }
+
+    /**
      * Update documents
      *
      * Updates all documents which match the given query.
@@ -1973,7 +1994,7 @@ abstract class SQL extends Adapter
             return $documents;
         }
 
-        $collectionAttributes = $collection->getAttributes();
+        $collectionAttributes = $collection->getAttribute('attributes', []);
         $collection = $collection->getId();
         /**
          * @var array<string,mixed> $spatialAttributes

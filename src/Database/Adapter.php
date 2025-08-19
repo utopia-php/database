@@ -694,14 +694,14 @@ abstract class Adapter
     /**
      * Update Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param Document $document
      * @param bool $skipPermissions
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document;
+    abstract public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document;
 
     /**
      * Update documents

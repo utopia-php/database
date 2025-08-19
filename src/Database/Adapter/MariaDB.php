@@ -945,7 +945,7 @@ class MariaDB extends SQL
     /**
      * Update Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param Document $document
      * @param bool $skipPermissions
@@ -955,9 +955,11 @@ class MariaDB extends SQL
      * @throws DuplicateException
      * @throws \Throwable
      */
-    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         try {
+            $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+            $collection = $collection->getId();
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
@@ -1123,15 +1125,7 @@ class MariaDB extends SQL
                 $column = $this->filter($attribute);
                 $bindKey = 'key_' . $bindIndex;
 
-                // Check if this is spatial data (WKT string)
-                $isSpatialData = is_string($value) && (
-                    strpos($value, 'POINT(') === 0 ||
-                    strpos($value, 'LINESTRING(') === 0 ||
-                    strpos($value, 'POLYGON(') === 0 ||
-                    strpos($value, 'GEOMETRY(') === 0
-                );
-
-                if ($isSpatialData) {
+                if (in_array($attribute, $spatialAttributes)) {
                     $columns .= "`{$column}`" . '=ST_GeomFromText(:' . $bindKey . '),';
                 } else {
                     $columns .= "`{$column}`" . '=:' . $bindKey . ',';

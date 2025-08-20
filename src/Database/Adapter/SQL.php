@@ -398,57 +398,7 @@ abstract class SQL extends Adapter
             unset($document['_permissions']);
         }
 
-        foreach ($spatialAttributes as $spatialAttr) {
-            if (array_key_exists($spatialAttr, $document) && !is_null($document[$spatialAttr])) {
-                $document[$spatialAttr] = $this->convertWKTToArray($document[$spatialAttr]);
-            }
-        }
-
         return new Document($document);
-    }
-
-    /**
-     * Convert WKT string to array format
-     *
-     * @param string $wkt
-     * @return array<mixed>
-     */
-    protected function convertWKTToArray(string $wkt): array
-    {
-        // Simple WKT to array conversion for basic shapes
-        if (preg_match('/^POINT\(([^)]+)\)$/i', $wkt, $matches)) {
-            $coords = explode(' ', trim($matches[1]));
-            return [(float)$coords[0], (float)$coords[1]];
-        }
-
-        if (preg_match('/^LINESTRING\(([^)]+)\)$/i', $wkt, $matches)) {
-            $coordsString = trim($matches[1]);
-            $points = explode(',', $coordsString);
-            $result = [];
-            foreach ($points as $point) {
-                $coords = explode(' ', trim($point));
-                $result[] = [(float)$coords[0], (float)$coords[1]];
-            }
-            return $result;
-        }
-
-        if (preg_match('/^POLYGON\(\(([^)]+)\)\)$/i', $wkt, $matches)) {
-            $pointsString = trim($matches[1]);
-            $points = explode(',', $pointsString);
-            $result = [];
-            foreach ($points as $point) {
-                $coords = explode(' ', trim($point));
-                if (count($coords) !== 2) {
-                    throw new DatabaseException('Invalid POLYGON WKT format');
-                }
-                $result[] = [(float)$coords[0], (float)$coords[1]];
-            }
-            // Return as array of rings (single ring for simple polygons)
-            return [$result];
-        }
-
-        // If we can't parse it, return the original WKT as a single-element array
-        return [$wkt];
     }
 
     /**
@@ -2266,7 +2216,7 @@ abstract class SQL extends Adapter
      * @return string
      * @throws DatabaseException
      */
-    protected function convertArrayToWTK(array $geometry): string
+    protected function convertArrayToWKT(array $geometry): string
     {
         // point [x, y]
         if (count($geometry) === 2 && is_numeric($geometry[0]) && is_numeric($geometry[1])) {

@@ -1797,55 +1797,55 @@ class Postgres extends SQL
     {
         switch ($query->getMethod()) {
             case Query::TYPE_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_DISTANCE:
                 $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
                 $binds[":{$placeholder}_1"] = $distanceParams[1];
                 return "ST_DWithin({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), :{$placeholder}_1)";
 
             case Query::TYPE_NOT_DISTANCE:
                 $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
                 $binds[":{$placeholder}_1"] = $distanceParams[1];
                 return "NOT ST_DWithin({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), :{$placeholder}_1)";
 
             case Query::TYPE_EQUAL:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_EQUAL:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_CONTAINS:
@@ -1853,7 +1853,7 @@ class Postgres extends SQL
                 // using st_cover instead of contains to match the boundary matching behaviour of the mariadb st_contains
                 // postgis st_contains excludes matching the boundary
                 $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return $isNot
                     ? "NOT ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))"
                     : "ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";

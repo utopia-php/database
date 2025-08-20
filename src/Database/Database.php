@@ -6573,8 +6573,7 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
-                // Auto-decode spatial data from WKT to arrays
-                if (is_string($node) && in_array($type, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                if (is_string($node) && in_array($type, Database::SPATIAL_TYPES)) {
                     $node = $this->decodeSpatialData($node);
                 }
 
@@ -7085,21 +7084,23 @@ class Database
     {
         $wkt = trim($wkt);
 
-        if (preg_match('/^POINT\(([^)]+)\)$/i', $wkt, $matches)) {
-            $coords = explode(' ', trim($matches[1]));
-            if (count($coords) !== 2) {
+        // POINT(x y)
+        if (preg_match('/^POINT\s*\(([^)]+)\)$/i', $wkt, $m)) {
+            $coords = preg_split('/\s+/', trim($m[1]));
+            if ($coords === false || count($coords) !== 2) {
                 throw new DatabaseException('Invalid POINT WKT format');
             }
             return [(float)$coords[0], (float)$coords[1]];
         }
 
-        if (preg_match('/^LINESTRING\(([^)]+)\)$/i', $wkt, $matches)) {
-            $coordsString = trim($matches[1]);
-            $points = explode(',', $coordsString);
+        // LINESTRING(x1 y1, x2 y2, ...)
+        if (preg_match('/^LINESTRING\s*\(([^)]+)\)$/i', $wkt, $m)) {
+            $coordsString = trim($m[1]);
+            $points = array_map('trim', explode(',', $coordsString));
             $result = [];
             foreach ($points as $point) {
-                $coords = explode(' ', trim($point));
-                if (count($coords) !== 2) {
+                $coords = preg_split('/\s+/', $point);
+                if ($coords === false || count($coords) !== 2) {
                     throw new DatabaseException('Invalid LINESTRING WKT format');
                 }
                 $result[] = [(float)$coords[0], (float)$coords[1]];
@@ -7107,31 +7108,35 @@ class Database
             return $result;
         }
 
-        if (preg_match('/^POLYGON\(\(([^)]+)\)\)$/i', $wkt, $matches)) {
-            $content = substr($wkt, 8, -1); // Remove POLYGON(( and ))
-            $rings = explode('),(', $content);
+        // POLYGON multiple rings (outer + holes) => (x1 y1, x2 y2,...), (h1x h1y, h2x h2y,...)
+        if (preg_match('/^POLYGON\s*\(\((.+)\)\)$/i', $wkt, $m)) {
+            $content = $m[1];
+            $rings = preg_split('/\)\s*,\s*\(/', $content);
+            if ($rings === false) {
+                throw new DatabaseException('Invalid POLYGON WKT format');
+            }
+
             $result = [];
-
             foreach ($rings as $ring) {
-                $ring = trim($ring, '()');
-                $points = explode(',', $ring);
+                $ring = trim($ring, '() ');
+                if ($ring === '') {
+                    $result[] = [];
+                    continue;
+                }
 
+                $points = array_map('trim', explode(',', $ring));
                 $ringPoints = [];
-
                 foreach ($points as $point) {
-                    $coords = preg_split('/\s+/', trim($point));
+                    $coords = preg_split('/\s+/', $point);
                     if ($coords === false || count($coords) !== 2) {
                         throw new DatabaseException('Invalid POLYGON WKT format');
                     }
                     $ringPoints[] = [(float)$coords[0], (float)$coords[1]];
                 }
-
                 $result[] = $ringPoints;
             }
-
             return $result;
         }
-
         return [$wkt];
     }
 }

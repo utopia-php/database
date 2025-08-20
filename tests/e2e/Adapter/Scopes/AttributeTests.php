@@ -1680,17 +1680,15 @@ trait AttributeTests
 
 
             /**
-             * Test on nested queries
+             * Test convertQueries for nested queries
              */
-            $database->find('datetime', [
+            $docs = $database->find('datetime', [
                 Query::or([
                     Query::equal('$createdAt', [$date]),
-                    Query::equal('$updatedAt', [$date])
+                    Query::equal('date', [$date])
                 ]),
             ]);
-
-            $this->assertEquals(999, 111);
-
+            $this->assertCount(0, $docs);
         }
     }
 

@@ -682,4 +682,362 @@ trait SpatialTests
             $database->deleteCollection($collNullIndex);
         }
     }
+
+    public function testComplexGeometricShapes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'complex_shapes_';
+        try {
+            $database->createCollection($collectionName);
+
+            // Create spatial attributes for different geometric shapes
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'rectangle', Database::VAR_POLYGON, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'square', Database::VAR_POLYGON, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'triangle', Database::VAR_POLYGON, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'circle_center', Database::VAR_POINT, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'complex_polygon', Database::VAR_POLYGON, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'multi_linestring', Database::VAR_LINESTRING, 0, true));
+
+            // Create spatial indexes
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_rectangle', Database::INDEX_SPATIAL, ['rectangle']));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_square', Database::INDEX_SPATIAL, ['square']));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_triangle', Database::INDEX_SPATIAL, ['triangle']));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_circle_center', Database::INDEX_SPATIAL, ['circle_center']));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_complex_polygon', Database::INDEX_SPATIAL, ['complex_polygon']));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_multi_linestring', Database::INDEX_SPATIAL, ['multi_linestring']));
+
+            // Create documents with different geometric shapes
+            $doc1 = new Document([
+                '$id' => 'rect1',
+                'rectangle' => [[[0, 0], [0, 10], [20, 10], [20, 0], [0, 0]]], // 20x10 rectangle
+                'square' => [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]], // 10x10 square
+                'triangle' => [[[25, 0], [35, 20], [15, 20], [25, 0]]], // triangle
+                'circle_center' => [10, 5], // center of rectangle
+                'complex_polygon' => [[[0, 0], [0, 20], [20, 20], [20, 15], [15, 15], [15, 5], [20, 5], [20, 0], [0, 0]]], // L-shaped polygon
+                'multi_linestring' => [[[0, 0], [10, 10], [20, 0], [0, 20], [20, 20]], // single linestring with multiple points
+                    '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+                ]]);
+
+            $doc2 = new Document([
+                '$id' => 'rect2',
+                'rectangle' => [[[30, 0], [30, 8], [50, 8], [50, 0], [30, 0]]], // 20x8 rectangle
+                'square' => [[[35, 10], [35, 20], [45, 20], [45, 10], [35, 10]]], // 10x10 square
+                'triangle' => [[[55, 0], [65, 15], [45, 15], [55, 0]]], // triangle
+                'circle_center' => [40, 4], // center of second rectangle
+                'complex_polygon' => [[[30, 0], [30, 20], [50, 20], [50, 10], [40, 10], [40, 0], [30, 0]]], // T-shaped polygon
+                'multi_linestring' => [[[30, 0], [40, 10], [50, 0], [30, 20], [50, 20]], // single linestring with multiple points
+                    '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+                ]]);
+
+            $createdDoc1 = $database->createDocument($collectionName, $doc1);
+            $createdDoc2 = $database->createDocument($collectionName, $doc2);
+
+            $this->assertInstanceOf(Document::class, $createdDoc1);
+            $this->assertInstanceOf(Document::class, $createdDoc2);
+
+            // Test rectangle-specific queries
+            $this->testRectangleQueries($database, $collectionName);
+
+            // Test square-specific queries
+            $this->testSquareQueries($database, $collectionName);
+
+            // Test triangle-specific queries
+            $this->testTriangleQueries($database, $collectionName);
+
+            // Test complex polygon queries
+            $this->testComplexPolygonQueries($database, $collectionName);
+
+            // Test multi-linestring queries
+            $this->testMultiLinestringQueries($database, $collectionName);
+
+            // Test spatial relationship queries between shapes
+            $this->testSpatialRelationshipQueries($database, $collectionName);
+
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
+    private function testRectangleQueries(Database $database, string $collectionName): void
+    {
+        // Test rectangle contains point
+        $insideRect1 = $database->find($collectionName, [
+            Query::contains('rectangle', [[5, 5]]) // Point inside first rectangle
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($insideRect1);
+        $this->assertEquals('rect1', $insideRect1[0]->getId());
+
+        // Test rectangle doesn't contain point outside
+        $outsideRect1 = $database->find($collectionName, [
+            Query::notContains('rectangle', [[25, 25]]) // Point outside first rectangle
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($outsideRect1);
+
+        // Test rectangle intersects with another rectangle
+        $overlappingRect = $database->find($collectionName, [
+            Query::overlaps('rectangle', [[[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]]) // Overlapping rectangle
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($overlappingRect);
+
+        // Test rectangle doesn't overlap with distant rectangle
+        $nonOverlappingRect = $database->find($collectionName, [
+            Query::notOverlaps('rectangle', [[[100, 100], [100, 110], [110, 110], [110, 100], [100, 100]]]) // Distant rectangle
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($nonOverlappingRect);
+    }
+
+    private function testSquareQueries(Database $database, string $collectionName): void
+    {
+        // Test square contains point
+        $insideSquare1 = $database->find($collectionName, [
+            Query::contains('square', [[10, 10]]) // Point inside first square
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($insideSquare1);
+        $this->assertEquals('rect1', $insideSquare1[0]->getId());
+
+        // Test square doesn't contain point outside
+        $outsideSquare1 = $database->find($collectionName, [
+            Query::notContains('square', [[20, 20]]) // Point outside first square
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($outsideSquare1);
+
+        // Test square equals exact same square
+        $exactSquare = $database->find($collectionName, [
+            Query::equals('square', [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]]) // Exact same square
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($exactSquare);
+        $this->assertEquals('rect1', $exactSquare[0]->getId());
+
+        // Test square doesn't equal different square
+        $differentSquare = $database->find($collectionName, [
+            Query::notEquals('square', [[[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]]]) // Different square
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($differentSquare);
+    }
+
+    private function testTriangleQueries(Database $database, string $collectionName): void
+    {
+        // Test triangle contains point
+        $insideTriangle1 = $database->find($collectionName, [
+            Query::contains('triangle', [[25, 10]]) // Point inside first triangle
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($insideTriangle1);
+        $this->assertEquals('rect1', $insideTriangle1[0]->getId());
+
+        // Test triangle doesn't contain point outside
+        $outsideTriangle1 = $database->find($collectionName, [
+            Query::notContains('triangle', [[25, 25]]) // Point outside first triangle
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($outsideTriangle1);
+
+        // Test triangle intersects with point
+        $intersectingTriangle = $database->find($collectionName, [
+            Query::intersects('triangle', [[25, 10]]) // Point inside triangle should intersect
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($intersectingTriangle);
+
+        // Test triangle doesn't intersect with distant point
+        $nonIntersectingTriangle = $database->find($collectionName, [
+            Query::notIntersects('triangle', [[100, 100]]) // Distant point should not intersect
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($nonIntersectingTriangle);
+    }
+
+    private function testComplexPolygonQueries(Database $database, string $collectionName): void
+    {
+        // Test L-shaped polygon contains point
+        $insideLShape = $database->find($collectionName, [
+            Query::contains('complex_polygon', [[10, 10]]) // Point inside L-shape
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($insideLShape);
+        $this->assertEquals('rect1', $insideLShape[0]->getId());
+
+        // Test L-shaped polygon doesn't contain point in "hole"
+        $inHole = $database->find($collectionName, [
+            Query::notContains('complex_polygon', [[17, 10]]) // Point in the "hole" of L-shape
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($inHole);
+
+        // Test T-shaped polygon contains point
+        $insideTShape = $database->find($collectionName, [
+            Query::contains('complex_polygon', [[40, 5]]) // Point inside T-shape
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($insideTShape);
+        $this->assertEquals('rect2', $insideTShape[0]->getId());
+
+        // Test complex polygon intersects with line
+        $intersectingLine = $database->find($collectionName, [
+            Query::intersects('complex_polygon', [[[0, 10], [20, 10]]]) // Horizontal line through L-shape
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($intersectingLine);
+    }
+
+    private function testMultiLinestringQueries(Database $database, string $collectionName): void
+    {
+        // Test linestring contains point
+        $onLine1 = $database->find($collectionName, [
+            Query::contains('multi_linestring', [[5, 5]]) // Point on first line segment
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($onLine1);
+
+        // Test linestring doesn't contain point off line
+        $offLine1 = $database->find($collectionName, [
+            Query::notContains('multi_linestring', [[5, 15]]) // Point not on any line
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($offLine1);
+
+        // Test linestring intersects with point
+        $intersectingPoint = $database->find($collectionName, [
+            Query::intersects('multi_linestring', [[10, 10]]) // Point on diagonal line
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($intersectingPoint);
+
+        // Test linestring touches another line
+        $touchingLine = $database->find($collectionName, [
+            Query::touches('multi_linestring', [[[0, 20], [20, 20]]]) // Horizontal line touching vertical line
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($touchingLine);
+    }
+
+    private function testSpatialRelationshipQueries(Database $database, string $collectionName): void
+    {
+        // Test distance queries between shapes
+        $nearCenter = $database->find($collectionName, [
+            Query::distance('circle_center', [[[10, 5], 5.0]]) // Points within 5 units of first center
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($nearCenter);
+        $this->assertEquals('rect1', $nearCenter[0]->getId());
+
+        // Test distance queries to find nearby shapes
+        $nearbyShapes = $database->find($collectionName, [
+            Query::distance('circle_center', [[[40, 4], 15.0]]) // Points within 15 units of second center
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($nearbyShapes);
+        $this->assertEquals('rect2', $nearbyShapes[0]->getId());
+
+        // Test overlapping shapes
+        $overlappingShapes = $database->find($collectionName, [
+            Query::overlaps('rectangle', [[[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]]) // Overlapping rectangle
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($overlappingShapes);
+
+        // Test non-overlapping shapes
+        $nonOverlappingShapes = $database->find($collectionName, [
+            Query::notOverlaps('rectangle', [[[100, 100], [100, 110], [110, 110], [110, 100], [100, 100]]]) // Distant rectangle
+        ], Database::PERMISSION_READ);
+        $this->assertNotEmpty($nonOverlappingShapes);
+    }
+
+    public function testSpatialQueryCombinations(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'spatial_combinations_';
+        try {
+            $database->createCollection($collectionName);
+
+            // Create spatial attributes
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'location', Database::VAR_POINT, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'route', Database::VAR_LINESTRING, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 255, true));
+
+            // Create spatial indexes
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_location', Database::INDEX_SPATIAL, ['location']));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_area', Database::INDEX_SPATIAL, ['area']));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_route', Database::INDEX_SPATIAL, ['route']));
+
+            // Create test documents
+            $doc1 = new Document([
+                '$id' => 'park1',
+                'name' => 'Central Park',
+                'location' => [40.7829, -73.9654],
+                'area' => [[[40.7649, -73.9814], [40.7649, -73.9494], [40.8009, -73.9494], [40.8009, -73.9814], [40.7649, -73.9814]]],
+                'route' => [[40.7649, -73.9814], [40.8009, -73.9494]],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]);
+
+            $doc2 = new Document([
+                '$id' => 'park2',
+                'name' => 'Prospect Park',
+                'location' => [40.6602, -73.9690],
+                'area' => [[[40.6502, -73.9790], [40.6502, -73.9590], [40.6702, -73.9590], [40.6702, -73.9790], [40.6502, -73.9790]]],
+                'route' => [[40.6502, -73.9790], [40.6702, -73.9590]],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]);
+
+            $doc3 = new Document([
+                '$id' => 'park3',
+                'name' => 'Battery Park',
+                'location' => [40.6033, -74.0170],
+                'area' => [[[40.5933, -74.0270], [40.5933, -74.0070], [40.6133, -74.0070], [40.6133, -74.0270], [40.5933, -74.0270]]],
+                'route' => [[40.5933, -74.0270], [40.6133, -74.0070]],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]);
+
+            $database->createDocument($collectionName, $doc1);
+            $database->createDocument($collectionName, $doc2);
+            $database->createDocument($collectionName, $doc3);
+
+            // Test complex spatial queries with logical combinations
+            // Test AND combination: parks within area AND near specific location
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $nearbyAndInArea = $database->find($collectionName, [
+                    Query::and([
+                        Query::distance('location', [[[40.7829, -73.9654], 0.01]]), // Near Central Park
+                        Query::contains('area', [[40.7829, -73.9654]]) // Location is within area
+                    ])
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($nearbyAndInArea);
+                $this->assertEquals('park1', $nearbyAndInArea[0]->getId());
+            }
+
+            // Test OR combination: parks near either location
+            $nearEitherLocation = $database->find($collectionName, [
+                Query::or([
+                    Query::distance('location', [[[40.7829, -73.9654], 0.01]]), // Near Central Park
+                    Query::distance('location', [[[40.6602, -73.9690], 0.01]]) // Near Prospect Park
+                ])
+            ], Database::PERMISSION_READ);
+            $this->assertCount(2, $nearEitherLocation);
+
+            // Test NOT combination: parks NOT near specific location
+            $notNearCentral = $database->find($collectionName, [
+                Query::notDistance('location', [[[40.7829, -73.9654], 0.01]]) // NOT near Central Park
+            ], Database::PERMISSION_READ);
+            $this->assertCount(2, $notNearCentral);
+            $this->assertNotContains('park1', array_map(fn ($doc) => $doc->getId(), $notNearCentral));
+
+            // Test ordering by distance from a specific point
+            $orderedByDistance = $database->find($collectionName, [
+                Query::distance('location', [[[40.7829, -73.9654], 0.01]]), // Within ~1km
+                Query::orderAsc('location'),
+                Query::limit(10)
+            ], Database::PERMISSION_READ);
+
+            $this->assertNotEmpty($orderedByDistance);
+            // First result should be closest to the reference point
+            $this->assertEquals('park1', $orderedByDistance[0]->getId());
+
+            // Test spatial queries with limits
+            $limitedResults = $database->find($collectionName, [
+                Query::distance('location', [[[40.7829, -73.9654], 1.0]]), // Within 1 degree
+                Query::limit(2)
+            ], Database::PERMISSION_READ);
+
+            $this->assertCount(2, $limitedResults);
+
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
 }

@@ -148,6 +148,9 @@ class Postgres extends SQL
             ->prepare($sql)
             ->execute();
 
+        // extension for supporting spatial types
+        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis;')->execute();
+
         $collation = "
             CREATE COLLATION IF NOT EXISTS utf8_ci (
             provider = icu,

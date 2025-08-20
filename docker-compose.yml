@@ -30,7 +30,11 @@ services:
       - database
 
   postgres:
-    image: postgis/postgis:16-3.4
+    build:
+      context: .
+      dockerfile: postgres.dockerfile
+      args:
+        POSTGRES_VERSION: 16
     container_name: utopia-postgres
     networks:
       - database
@@ -40,11 +44,13 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
       POSTGRES_DB: root
-    volumes:
-      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
 
   postgres-mirror:
-    image: postgis/postgis:16-3.4
+    build:
+      context: .
+      dockerfile: postgres.dockerfile
+      args:
+        POSTGRES_VERSION: 16
     container_name: utopia-postgres-mirror
     networks:
       - database
@@ -54,8 +60,6 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
       POSTGRES_DB: root
-    volumes:
-      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
 
   mariadb:
     image: mariadb:10.11

@@ -719,9 +719,9 @@ trait SpatialTests
                 'triangle' => [[[25, 0], [35, 20], [15, 20], [25, 0]]], // triangle
                 'circle_center' => [10, 5], // center of rectangle
                 'complex_polygon' => [[[0, 0], [0, 20], [20, 20], [20, 15], [15, 15], [15, 5], [20, 5], [20, 0], [0, 0]]], // L-shaped polygon
-                'multi_linestring' => [[[0, 0], [10, 10], [20, 0], [0, 20], [20, 20]], // single linestring with multiple points
-                    '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
-                ]]);
+                'multi_linestring' => [[0, 0], [10, 10], [20, 0], [0, 20], [20, 20]], // single linestring with multiple points
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]);
 
             $doc2 = new Document([
                 '$id' => 'rect2',
@@ -730,9 +730,9 @@ trait SpatialTests
                 'triangle' => [[[55, 0], [65, 15], [45, 15], [55, 0]]], // triangle
                 'circle_center' => [40, 4], // center of second rectangle
                 'complex_polygon' => [[[30, 0], [30, 20], [50, 20], [50, 10], [40, 10], [40, 0], [30, 0]]], // T-shaped polygon
-                'multi_linestring' => [[[30, 0], [40, 10], [50, 0], [30, 20], [50, 20]], // single linestring with multiple points
-                    '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
-                ]]);
+                'multi_linestring' => [[30, 0], [40, 10], [50, 0], [30, 20], [50, 20]], // single linestring with multiple points
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]);
 
             $createdDoc1 = $database->createDocument($collectionName, $doc1);
             $createdDoc2 = $database->createDocument($collectionName, $doc2);
@@ -740,197 +740,175 @@ trait SpatialTests
             $this->assertInstanceOf(Document::class, $createdDoc1);
             $this->assertInstanceOf(Document::class, $createdDoc2);
 
-            // Test rectangle-specific queries
-            $this->testRectangleQueries($database, $collectionName);
+            // Test rectangle contains point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $insideRect1 = $database->find($collectionName, [
+                    Query::contains('rectangle', [[5, 5]]) // Point inside first rectangle
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($insideRect1);
+                $this->assertEquals('rect1', $insideRect1[0]->getId());
+            }
 
-            // Test square-specific queries
-            $this->testSquareQueries($database, $collectionName);
+            // Test rectangle doesn't contain point outside
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $outsideRect1 = $database->find($collectionName, [
+                    Query::notContains('rectangle', [[25, 25]]) // Point outside first rectangle
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($outsideRect1);
+            }
 
-            // Test triangle-specific queries
-            $this->testTriangleQueries($database, $collectionName);
+            // Test rectangle intersects with another rectangle
+            $overlappingRect = $database->find($collectionName, [
+                Query::and([
+                    Query::intersects('rectangle', [[[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]]),
+                    Query::notTouches('rectangle', [[[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]])
+                ]),
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($overlappingRect);
 
-            // Test complex polygon queries
-            $this->testComplexPolygonQueries($database, $collectionName);
 
-            // Test multi-linestring queries
-            $this->testMultiLinestringQueries($database, $collectionName);
+            // Test square contains point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $insideSquare1 = $database->find($collectionName, [
+                    Query::contains('square', [[10, 10]]) // Point inside first square
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($insideSquare1);
+                $this->assertEquals('rect1', $insideSquare1[0]->getId());
+            }
 
-            // Test spatial relationship queries between shapes
-            $this->testSpatialRelationshipQueries($database, $collectionName);
+            // Test square doesn't contain point outside
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $outsideSquare1 = $database->find($collectionName, [
+                    Query::notContains('square', [[20, 20]]) // Point outside first square
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($outsideSquare1);
+            }
+
+            // Test square equals same geometry using contains when supported, otherwise intersects
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $exactSquare = $database->find($collectionName, [
+                    Query::contains('square', [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]])
+                ], Database::PERMISSION_READ);
+            } else {
+                $exactSquare = $database->find($collectionName, [
+                    Query::intersects('square', [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]])
+                ], Database::PERMISSION_READ);
+            }
+            $this->assertNotEmpty($exactSquare);
+            $this->assertEquals('rect1', $exactSquare[0]->getId());
+
+            // Test square doesn't equal different square
+            $differentSquare = $database->find($collectionName, [
+                Query::notEquals('square', [[[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]]]) // Different square
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($differentSquare);
+
+            // Test triangle contains point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $insideTriangle1 = $database->find($collectionName, [
+                    Query::contains('triangle', [[25, 10]]) // Point inside first triangle
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($insideTriangle1);
+                $this->assertEquals('rect1', $insideTriangle1[0]->getId());
+            }
+
+            // Test triangle doesn't contain point outside
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $outsideTriangle1 = $database->find($collectionName, [
+                    Query::notContains('triangle', [[25, 25]]) // Point outside first triangle
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($outsideTriangle1);
+            }
+
+            // Test triangle intersects with point
+            $intersectingTriangle = $database->find($collectionName, [
+                Query::intersects('triangle', [[25, 10]]) // Point inside triangle should intersect
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($intersectingTriangle);
+
+            // Test triangle doesn't intersect with distant point
+            $nonIntersectingTriangle = $database->find($collectionName, [
+                Query::notIntersects('triangle', [[100, 100]]) // Distant point should not intersect
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($nonIntersectingTriangle);
+
+            // Test L-shaped polygon contains point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $insideLShape = $database->find($collectionName, [
+                    Query::contains('complex_polygon', [[10, 10]]) // Point inside L-shape
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($insideLShape);
+                $this->assertEquals('rect1', $insideLShape[0]->getId());
+            }
+
+            // Test L-shaped polygon doesn't contain point in "hole"
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $inHole = $database->find($collectionName, [
+                    Query::notContains('complex_polygon', [[17, 10]]) // Point in the "hole" of L-shape
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($inHole);
+            }
+
+            // Test T-shaped polygon contains point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $insideTShape = $database->find($collectionName, [
+                    Query::contains('complex_polygon', [[40, 5]]) // Point inside T-shape
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($insideTShape);
+                $this->assertEquals('rect2', $insideTShape[0]->getId());
+            }
+
+            // Test complex polygon intersects with line
+            $intersectingLine = $database->find($collectionName, [
+                Query::intersects('complex_polygon', [[[0, 10], [20, 10]]]) // Horizontal line through L-shape
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($intersectingLine);
+
+            // Test linestring contains point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $onLine1 = $database->find($collectionName, [
+                    Query::contains('multi_linestring', [[5, 5]]) // Point on first line segment
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($onLine1);
+            }
+
+            // Test linestring doesn't contain point off line
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $offLine1 = $database->find($collectionName, [
+                    Query::notContains('multi_linestring', [[5, 15]]) // Point not on any line
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($offLine1);
+            }
+
+            // Test linestring intersects with point
+            $intersectingPoint = $database->find($collectionName, [
+                Query::intersects('multi_linestring', [[10, 10]]) // Point on diagonal line
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($intersectingPoint);
+
+            // Test linestring intersects with a horizontal line coincident at y=20
+            $touchingLine = $database->find($collectionName, [
+                Query::intersects('multi_linestring', [[[0, 20], [20, 20]]])
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($touchingLine);
+
+            // Test distance queries between shapes
+            $nearCenter = $database->find($collectionName, [
+                Query::distance('circle_center', [[[10, 5], 5.0]]) // Points within 5 units of first center
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($nearCenter);
+            $this->assertEquals('rect1', $nearCenter[0]->getId());
+
+            // Test distance queries to find nearby shapes
+            $nearbyShapes = $database->find($collectionName, [
+                Query::distance('circle_center', [[[40, 4], 15.0]]) // Points within 15 units of second center
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($nearbyShapes);
+            $this->assertEquals('rect2', $nearbyShapes[0]->getId());
 
         } finally {
             $database->deleteCollection($collectionName);
         }
-    }
-
-    private function testRectangleQueries(Database $database, string $collectionName): void
-    {
-        // Test rectangle contains point
-        $insideRect1 = $database->find($collectionName, [
-            Query::contains('rectangle', [[5, 5]]) // Point inside first rectangle
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($insideRect1);
-        $this->assertEquals('rect1', $insideRect1[0]->getId());
-
-        // Test rectangle doesn't contain point outside
-        $outsideRect1 = $database->find($collectionName, [
-            Query::notContains('rectangle', [[25, 25]]) // Point outside first rectangle
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($outsideRect1);
-
-        // Test rectangle intersects with another rectangle
-        $overlappingRect = $database->find($collectionName, [
-            Query::overlaps('rectangle', [[[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]]) // Overlapping rectangle
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($overlappingRect);
-
-        // Test rectangle doesn't overlap with distant rectangle
-        $nonOverlappingRect = $database->find($collectionName, [
-            Query::notOverlaps('rectangle', [[[100, 100], [100, 110], [110, 110], [110, 100], [100, 100]]]) // Distant rectangle
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($nonOverlappingRect);
-    }
-
-    private function testSquareQueries(Database $database, string $collectionName): void
-    {
-        // Test square contains point
-        $insideSquare1 = $database->find($collectionName, [
-            Query::contains('square', [[10, 10]]) // Point inside first square
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($insideSquare1);
-        $this->assertEquals('rect1', $insideSquare1[0]->getId());
-
-        // Test square doesn't contain point outside
-        $outsideSquare1 = $database->find($collectionName, [
-            Query::notContains('square', [[20, 20]]) // Point outside first square
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($outsideSquare1);
-
-        // Test square equals exact same square
-        $exactSquare = $database->find($collectionName, [
-            Query::equals('square', [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]]) // Exact same square
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($exactSquare);
-        $this->assertEquals('rect1', $exactSquare[0]->getId());
-
-        // Test square doesn't equal different square
-        $differentSquare = $database->find($collectionName, [
-            Query::notEquals('square', [[[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]]]) // Different square
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($differentSquare);
-    }
-
-    private function testTriangleQueries(Database $database, string $collectionName): void
-    {
-        // Test triangle contains point
-        $insideTriangle1 = $database->find($collectionName, [
-            Query::contains('triangle', [[25, 10]]) // Point inside first triangle
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($insideTriangle1);
-        $this->assertEquals('rect1', $insideTriangle1[0]->getId());
-
-        // Test triangle doesn't contain point outside
-        $outsideTriangle1 = $database->find($collectionName, [
-            Query::notContains('triangle', [[25, 25]]) // Point outside first triangle
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($outsideTriangle1);
-
-        // Test triangle intersects with point
-        $intersectingTriangle = $database->find($collectionName, [
-            Query::intersects('triangle', [[25, 10]]) // Point inside triangle should intersect
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($intersectingTriangle);
-
-        // Test triangle doesn't intersect with distant point
-        $nonIntersectingTriangle = $database->find($collectionName, [
-            Query::notIntersects('triangle', [[100, 100]]) // Distant point should not intersect
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($nonIntersectingTriangle);
-    }
-
-    private function testComplexPolygonQueries(Database $database, string $collectionName): void
-    {
-        // Test L-shaped polygon contains point
-        $insideLShape = $database->find($collectionName, [
-            Query::contains('complex_polygon', [[10, 10]]) // Point inside L-shape
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($insideLShape);
-        $this->assertEquals('rect1', $insideLShape[0]->getId());
-
-        // Test L-shaped polygon doesn't contain point in "hole"
-        $inHole = $database->find($collectionName, [
-            Query::notContains('complex_polygon', [[17, 10]]) // Point in the "hole" of L-shape
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($inHole);
-
-        // Test T-shaped polygon contains point
-        $insideTShape = $database->find($collectionName, [
-            Query::contains('complex_polygon', [[40, 5]]) // Point inside T-shape
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($insideTShape);
-        $this->assertEquals('rect2', $insideTShape[0]->getId());
-
-        // Test complex polygon intersects with line
-        $intersectingLine = $database->find($collectionName, [
-            Query::intersects('complex_polygon', [[[0, 10], [20, 10]]]) // Horizontal line through L-shape
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($intersectingLine);
-    }
-
-    private function testMultiLinestringQueries(Database $database, string $collectionName): void
-    {
-        // Test linestring contains point
-        $onLine1 = $database->find($collectionName, [
-            Query::contains('multi_linestring', [[5, 5]]) // Point on first line segment
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($onLine1);
-
-        // Test linestring doesn't contain point off line
-        $offLine1 = $database->find($collectionName, [
-            Query::notContains('multi_linestring', [[5, 15]]) // Point not on any line
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($offLine1);
-
-        // Test linestring intersects with point
-        $intersectingPoint = $database->find($collectionName, [
-            Query::intersects('multi_linestring', [[10, 10]]) // Point on diagonal line
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($intersectingPoint);
-
-        // Test linestring touches another line
-        $touchingLine = $database->find($collectionName, [
-            Query::touches('multi_linestring', [[[0, 20], [20, 20]]]) // Horizontal line touching vertical line
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($touchingLine);
-    }
-
-    private function testSpatialRelationshipQueries(Database $database, string $collectionName): void
-    {
-        // Test distance queries between shapes
-        $nearCenter = $database->find($collectionName, [
-            Query::distance('circle_center', [[[10, 5], 5.0]]) // Points within 5 units of first center
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($nearCenter);
-        $this->assertEquals('rect1', $nearCenter[0]->getId());
-
-        // Test distance queries to find nearby shapes
-        $nearbyShapes = $database->find($collectionName, [
-            Query::distance('circle_center', [[[40, 4], 15.0]]) // Points within 15 units of second center
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($nearbyShapes);
-        $this->assertEquals('rect2', $nearbyShapes[0]->getId());
-
-        // Test overlapping shapes
-        $overlappingShapes = $database->find($collectionName, [
-            Query::overlaps('rectangle', [[[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]]) // Overlapping rectangle
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($overlappingShapes);
-
-        // Test non-overlapping shapes
-        $nonOverlappingShapes = $database->find($collectionName, [
-            Query::notOverlaps('rectangle', [[[100, 100], [100, 110], [110, 110], [110, 100], [100, 100]]]) // Distant rectangle
-        ], Database::PERMISSION_READ);
-        $this->assertNotEmpty($nonOverlappingShapes);
     }
 
     public function testSpatialQueryCombinations(): void

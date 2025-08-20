@@ -6754,42 +6754,67 @@ class Database
      * @param array<Query> $queries
      * @return array<Query>
      * @throws QueryException
-     * @throws Exception
+     * @throws \Utopia\Database\Exception
      */
-    public function convertQueries(Document $collection, array $queries): array
+    public static function convertQueries(Document $collection, array $queries): array
     {
+        foreach ($queries as $index => $query) {
+            if ($query->isNested()) {
+                $values = self::convertQueries($collection, $query->getValues());
+                $query->setValues($values);
+            }
+
+            $query = self::convertQuery($collection, $query);
+
+            $queries[$index] = $query;
+        }
+
+        return $queries;
+    }
+
+    /**
+     * @param Document $collection
+     * @param Query $query
+     * @return Query
+     * @throws QueryException
+     * @throws \Utopia\Database\Exception
+     */
+    public static function convertQuery(Document $collection, Query $query): Query
+    {
+        /**
+         * @var array<Document> $attributes
+         */
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
             $attributes[] = new Document($attribute);
         }
 
-        foreach ($attributes as $attribute) {
-            foreach ($queries as $query) {
-                if ($query->getAttribute() === $attribute->getId()) {
-                    $query->setOnArray($attribute->getAttribute('array', false));
-                }
-            }
+        $attribute = new Document();
 
-            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
-                foreach ($queries as $index => $query) {
-                    if ($query->getAttribute() === $attribute->getId()) {
-                        $values = $query->getValues();
-                        foreach ($values as $valueIndex => $value) {
-                            try {
-                                $values[$valueIndex] = DateTime::setTimezone($value);
-                            } catch (\Throwable $e) {
-                                throw new QueryException($e->getMessage(), $e->getCode(), $e);
-                            }
-                        }
-                        $query->setValues($values);
-                        $queries[$index] = $query;
-                    }
-                }
+        foreach ($attributes as $attr) {
+            if ($attr->getId() === $query->getAttribute()) {
+                $attribute = $attr;
             }
         }
 
-        return $queries;
+        if (! $attribute->isEmpty()) {
+            $query->setOnArray($attribute->getAttribute('array', false));
+
+            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
+                $values = $query->getValues();
+                foreach ($values as $valueIndex => $value) {
+                    try {
+                        $values[$valueIndex] = DateTime::setTimezone($value);
+                    } catch (\Throwable $e) {
+                        throw new QueryException($e->getMessage(), $e->getCode(), $e);
+                    }
+                }
+                $query->setValues($values);
+            }
+        }
+
+        return $query;
     }
 
     /**

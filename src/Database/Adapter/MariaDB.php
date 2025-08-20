@@ -1686,6 +1686,90 @@ class MariaDB extends SQL
     }
 
     /**
+     * Handle spatial queries
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $attribute
+     * @param string $alias
+     * @param string $placeholder
+     * @return string
+     */
+    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    {
+        switch ($query->getMethod()) {
+            case Query::TYPE_CROSSES:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_CROSSES:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_DISTANCE:
+                $distanceParams = $query->getValues()[0];
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0]);
+                $binds[":{$placeholder}_1"] = $distanceParams[1];
+                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) <= :{$placeholder}_1";
+
+            case Query::TYPE_NOT_DISTANCE:
+                $distanceParams = $query->getValues()[0];
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0]);
+                $binds[":{$placeholder}_1"] = $distanceParams[1];
+                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
+
+            case Query::TYPE_INTERSECTS:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_INTERSECTS:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_OVERLAPS:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_OVERLAPS:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_TOUCHES:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_TOUCHES:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_EQUAL:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_EQUAL:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_CONTAINS:
+                if (!$this->getSupportForBoundaryInclusiveContains()) {
+                    throw new DatabaseException('Adapter does not support boundary inclusive contains');
+                }
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_CONTAINS:
+                if (!$this->getSupportForBoundaryInclusiveContains()) {
+                    throw new DatabaseException('Adapter does not support boundary inclusive contains');
+                }
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                return "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            default:
+                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
+        }
+    }
+
+    /**
      * Get SQL Condition
      *
      * @param Query $query
@@ -1704,8 +1788,11 @@ class MariaDB extends SQL
         $alias = $this->quote(Query::DEFAULT_ALIAS);
         $placeholder = ID::unique();
 
-        // Get attribute type for spatial queries
         $attributeType = $this->getAttributeType($query->getAttribute(), $attributes);
+
+        if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+            return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
+        }
 
         switch ($query->getMethod()) {
             case Query::TYPE_OR:
@@ -1746,82 +1833,16 @@ class MariaDB extends SQL
             case Query::TYPE_IS_NOT_NULL:
 
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
-
-            case Query::TYPE_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
-            case Query::TYPE_NOT_CROSSES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
-            case Query::TYPE_DISTANCE:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) <= :{$placeholder}_1";
-
-            case Query::TYPE_NOT_DISTANCE:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
-
-
-            case Query::TYPE_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
-            case Query::TYPE_NOT_INTERSECTS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
-            case Query::TYPE_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
-            case Query::TYPE_NOT_OVERLAPS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
-            case Query::TYPE_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
-            case Query::TYPE_NOT_TOUCHES:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
-            case Query::TYPE_EQUAL:
-                if(in_array($attributeType,Database::SPATIAL_TYPES)){
-                    $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                    return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-                }
-            
-            case Query::TYPE_NOT_EQUAL:
-                if(in_array($attributeType,Database::SPATIAL_TYPES)){
-                    $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                    return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-                }
-            
             case Query::TYPE_CONTAINS:
             case Query::TYPE_NOT_CONTAINS:
+                if ($this->getSupportForJSONOverlaps() && $query->onArray()) {
+                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
                     $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
-                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                        if (!$this->getSupportForBoundaryInclusiveContains()) {
-                            throw new DatabaseException('Adapter does not support boundary inclusive contains');
-                        }
-                        $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                        return $isNot
-                            ? "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))"
-                            : "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-                    } elseif ($this->getSupportForJSONOverlaps() && $query->onArray()) {
-                        $binds[":{$placeholder}_0"] = json_encode($query->getValues());
-                        return $isNot
-                            ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
-                            : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
-                    }
-
+                    return $isNot
+                        ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
+                        : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
+                }
+                // no break
             default:
                 $conditions = [];
                 $isNotQuery = in_array($query->getMethod(), [
@@ -1836,8 +1857,8 @@ class MariaDB extends SQL
                         Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS => ($query->onArray() || in_array($attributeType, Database::SPATIAL_TYPES)) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_CONTAINS => ($query->onArray() || in_array($attributeType, Database::SPATIAL_TYPES)) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
 

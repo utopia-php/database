@@ -32,8 +32,6 @@ class Query
     public const TYPE_NOT_CROSSES = 'notCrosses';
     public const TYPE_DISTANCE = 'distance';
     public const TYPE_NOT_DISTANCE = 'notDistance';
-    public const TYPE_EQUALS = 'equals';
-    public const TYPE_NOT_EQUALS = 'notEquals';
     public const TYPE_INTERSECTS = 'intersects';
     public const TYPE_NOT_INTERSECTS = 'notIntersects';
     public const TYPE_OVERLAPS = 'overlaps';
@@ -82,8 +80,6 @@ class Query
         self::TYPE_NOT_CROSSES,
         self::TYPE_DISTANCE,
         self::TYPE_NOT_DISTANCE,
-        self::TYPE_EQUALS,
-        self::TYPE_NOT_EQUALS,
         self::TYPE_INTERSECTS,
         self::TYPE_NOT_INTERSECTS,
         self::TYPE_OVERLAPS,
@@ -263,8 +259,6 @@ class Query
             self::TYPE_NOT_CROSSES,
             self::TYPE_DISTANCE,
             self::TYPE_NOT_DISTANCE,
-            self::TYPE_EQUALS,
-            self::TYPE_NOT_EQUALS,
             self::TYPE_INTERSECTS,
             self::TYPE_NOT_INTERSECTS,
             self::TYPE_OVERLAPS,
@@ -291,8 +285,6 @@ class Query
             self::TYPE_NOT_CROSSES,
             self::TYPE_DISTANCE,
             self::TYPE_NOT_DISTANCE,
-            self::TYPE_EQUALS,
-            self::TYPE_NOT_EQUALS,
             self::TYPE_INTERSECTS,
             self::TYPE_NOT_INTERSECTS,
             self::TYPE_OVERLAPS,
@@ -427,7 +419,7 @@ class Query
      * Helper method to create Query with equal method
      *
      * @param string $attribute
-     * @param array<string|int|float|bool> $values
+     * @param array<string|int|float|bool|array<mixed,mixed>> $values
      * @return Query
      */
     public static function equal(string $attribute, array $values): self
@@ -439,12 +431,12 @@ class Query
      * Helper method to create Query with notEqual method
      *
      * @param string $attribute
-     * @param string|int|float|bool|array $value
+     * @param string|int|float|bool|array<mixed,mixed> $value
      * @return Query
      */
     public static function notEqual(string $attribute, string|int|float|bool|array $value): self
     {
-        return new self(self::TYPE_NOT_EQUAL, $attribute, is_array($value)?$value:[$value]);
+        return new self(self::TYPE_NOT_EQUAL, $attribute, is_array($value) ? $value : [$value]);
     }
 
     /**
@@ -921,30 +913,6 @@ class Query
     public static function notDistance(string $attribute, array $values): self
     {
         return new self(self::TYPE_NOT_DISTANCE, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with equals method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function equals(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_EQUALS, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with notEquals method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function notEquals(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_NOT_EQUALS, $attribute, $values);
     }
 
     /**

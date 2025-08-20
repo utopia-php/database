@@ -1747,56 +1747,6 @@ class MariaDB extends SQL
 
                 return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
 
-            case Query::TYPE_CONTAINS:
-            case Query::TYPE_NOT_CONTAINS:
-                $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
-                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                    if (!$this->getSupportForBoundaryInclusiveContains()) {
-                        throw new DatabaseException('Adapter does not support boundary inclusive contains');
-                    }
-                    $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                    return $isNot
-                        ? "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))"
-                        : "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-                } elseif ($this->getSupportForJSONOverlaps() && $query->onArray()) {
-                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
-                    return $isNot
-                        ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
-                        : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
-                }
-
-                // no break! continue to default case
-            default:
-                $conditions = [];
-                $isNotQuery = in_array($query->getMethod(), [
-                    Query::TYPE_NOT_STARTS_WITH,
-                    Query::TYPE_NOT_ENDS_WITH,
-                    Query::TYPE_NOT_CONTAINS
-                ]);
-
-                foreach ($query->getValues() as $key => $value) {
-                    $value = match ($query->getMethod()) {
-                        Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
-                        Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS => ($query->onArray() || in_array($attributeType, Database::SPATIAL_TYPES)) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_CONTAINS => ($query->onArray() || in_array($attributeType, Database::SPATIAL_TYPES)) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                        default => $value
-                    };
-
-                    $binds[":{$placeholder}_{$key}"] = $value;
-
-                    if ($isNotQuery) {
-                        $conditions[] = "{$alias}.{$attribute} NOT {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
-                    } else {
-                        $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
-                    }
-                }
-
-                $separator = $isNotQuery ? ' AND ' : ' OR ';
-                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
-
             case Query::TYPE_CROSSES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
@@ -1817,13 +1767,6 @@ class MariaDB extends SQL
                 $binds[":{$placeholder}_1"] = $distanceParams[1];
                 return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
 
-            case Query::TYPE_EQUALS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
-
-            case Query::TYPE_NOT_EQUALS:
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
-                return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
@@ -1848,6 +1791,66 @@ class MariaDB extends SQL
             case Query::TYPE_NOT_TOUCHES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
                 return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_EQUAL:
+                if(in_array($attributeType,Database::SPATIAL_TYPES)){
+                    $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                    return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                }
+            
+            case Query::TYPE_NOT_EQUAL:
+                if(in_array($attributeType,Database::SPATIAL_TYPES)){
+                    $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                    return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                }
+            
+            case Query::TYPE_CONTAINS:
+            case Query::TYPE_NOT_CONTAINS:
+                    $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
+                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                        if (!$this->getSupportForBoundaryInclusiveContains()) {
+                            throw new DatabaseException('Adapter does not support boundary inclusive contains');
+                        }
+                        $binds[":{$placeholder}_0"] = $this->convertArrayToWTK($query->getValues()[0]);
+                        return $isNot
+                            ? "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))"
+                            : "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                    } elseif ($this->getSupportForJSONOverlaps() && $query->onArray()) {
+                        $binds[":{$placeholder}_0"] = json_encode($query->getValues());
+                        return $isNot
+                            ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
+                            : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
+                    }
+
+            default:
+                $conditions = [];
+                $isNotQuery = in_array($query->getMethod(), [
+                    Query::TYPE_NOT_STARTS_WITH,
+                    Query::TYPE_NOT_ENDS_WITH,
+                    Query::TYPE_NOT_CONTAINS
+                ]);
+
+                foreach ($query->getValues() as $key => $value) {
+                    $value = match ($query->getMethod()) {
+                        Query::TYPE_STARTS_WITH => $this->escapeWildcards($value) . '%',
+                        Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
+                        Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                        Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
+                        Query::TYPE_CONTAINS => ($query->onArray() || in_array($attributeType, Database::SPATIAL_TYPES)) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_NOT_CONTAINS => ($query->onArray() || in_array($attributeType, Database::SPATIAL_TYPES)) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        default => $value
+                    };
+
+                    $binds[":{$placeholder}_{$key}"] = $value;
+                    if ($isNotQuery) {
+                        $conditions[] = "{$alias}.{$attribute} NOT {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    } else {
+                        $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
+                    }
+                }
+
+                $separator = $isNotQuery ? ' AND ' : ' OR ';
+                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
         }
     }
 

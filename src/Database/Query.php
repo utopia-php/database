@@ -439,12 +439,12 @@ class Query
      * Helper method to create Query with notEqual method
      *
      * @param string $attribute
-     * @param string|int|float|bool $value
+     * @param string|int|float|bool|array $value
      * @return Query
      */
-    public static function notEqual(string $attribute, string|int|float|bool $value): self
+    public static function notEqual(string $attribute, string|int|float|bool|array $value): self
     {
-        return new self(self::TYPE_NOT_EQUAL, $attribute, [$value]);
+        return new self(self::TYPE_NOT_EQUAL, $attribute, is_array($value)?$value:[$value]);
     }
 
     /**

@@ -130,8 +130,8 @@ trait SpatialTests
 
             // Point attribute tests - use operations valid for points
             $pointQueries = [
-                'equals' => Query::equals('pointAttr', [[6.0, 6.0]]),
-                'notEquals' => Query::notEquals('pointAttr', [[1.0, 1.0]]),
+                'equals' => query::equal('pointAttr', [[6.0, 6.0]]),
+                'notEquals' => query::notEqual('pointAttr', [[1.0, 1.0]]),
                 'distance' => Query::distance('pointAttr', [[[6.0, 6.0], 0.1]]),
                 'notDistance' => Query::notDistance('pointAttr', [[[1.0, 1.0], 0.1]]),
                 'intersects' => Query::intersects('pointAttr', [[6.0, 6.0]]),
@@ -148,8 +148,8 @@ trait SpatialTests
             $lineQueries = [
                 'contains' => Query::contains('lineAttr', [[1.0, 2.0]]), // Point on the line (endpoint)
                 'notContains' => Query::notContains('lineAttr', [[5.0, 6.0]]), // Point not on the line
-                'equals' => Query::equals('lineAttr', [[[1.0, 2.0], [3.0, 4.0]]]), // Exact same linestring
-                'notEquals' => Query::notEquals('lineAttr', [[[5.0, 6.0], [7.0, 8.0]]]), // Different linestring
+                'equals' => query::equal('lineAttr', [[[1.0, 2.0], [3.0, 4.0]]]), // Exact same linestring
+                'notEquals' => query::notEqual('lineAttr', [[[5.0, 6.0], [7.0, 8.0]]]), // Different linestring
                 'intersects' => Query::intersects('lineAttr', [[1.0, 2.0]]), // Point on the line should intersect
                 'notIntersects' => Query::notIntersects('lineAttr', [[5.0, 6.0]]) // Point not on the line should not intersect
             ];
@@ -169,8 +169,8 @@ trait SpatialTests
                 'notContains' => Query::notContains('polyAttr', [[15.0, 15.0]]), // Point outside polygon
                 'intersects' => Query::intersects('polyAttr', [[5.0, 5.0]]), // Point inside polygon should intersect
                 'notIntersects' => Query::notIntersects('polyAttr', [[15.0, 15.0]]), // Point outside polygon should not intersect
-                'equals' => Query::equals('polyAttr', [[[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]]]), // Exact same polygon
-                'notEquals' => Query::notEquals('polyAttr', [[[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [20.0, 20.0]]]]), // Different polygon
+                'equals' => query::equal('polyAttr', [[[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]]]), // Exact same polygon
+                'notEquals' => query::notEqual('polyAttr', [[[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [20.0, 20.0]]]]), // Different polygon
                 'overlaps' => Query::overlaps('polyAttr', [[[[5.0, 5.0], [5.0, 15.0], [15.0, 15.0], [15.0, 5.0], [5.0, 5.0]]]]), // Overlapping polygon
                 'notOverlaps' => Query::notOverlaps('polyAttr', [[[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [30.0, 20.0], [20.0, 20.0]]]]) // Non-overlapping polygon
             ];
@@ -799,7 +799,7 @@ trait SpatialTests
 
             // Test square doesn't equal different square
             $differentSquare = $database->find($collectionName, [
-                Query::notEquals('square', [[[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]]]) // Different square
+                query::notEqual('square', [[[0, 0], [0, 10], [10, 10], [10, 0], [0, 0]]]) // Different square
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($differentSquare);
 

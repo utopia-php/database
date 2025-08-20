@@ -6750,9 +6750,11 @@ class Database
     }
 
     /**
-     * @param array<Query> $queries
-     * @return array<Query>
-     * @throws Exception
+     * @param Document $collection
+     * @param array $queries
+     * @return array
+     * @throws QueryException
+     * @throws \Utopia\Database\Exception
      */
     public static function convertQueries(Document $collection, array $queries): array
     {
@@ -6771,7 +6773,11 @@ class Database
     }
 
     /**
-     * @throws Exception
+     * @param Document $collection
+     * @param Query $query
+     * @return Query
+     * @throws QueryException
+     * @throws \Utopia\Database\Exception
      */
     public static function convertQuery(Document $collection, Query $query): Query
     {

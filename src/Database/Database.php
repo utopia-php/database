@@ -6752,7 +6752,7 @@ class Database
     /**
      * @param Document $collection
      * @param array<Query> $queries
-     * @return array
+     * @return array<Query>
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */

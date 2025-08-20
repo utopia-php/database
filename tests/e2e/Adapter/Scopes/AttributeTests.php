@@ -1678,9 +1678,8 @@ trait AttributeTests
             ]);
             $this->assertCount(0, $docs);
 
-
             /**
-             * Test convertQueries for nested queries
+             * Test convertQueries on nested queries
              */
             $docs = $database->find('datetime', [
                 Query::or([

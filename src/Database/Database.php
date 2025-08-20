@@ -31,6 +31,7 @@ use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
+use Utopia\Database\Validator\Spatial;
 use Utopia\Database\Validator\Structure;
 
 class Database
@@ -7034,8 +7035,7 @@ class Database
      */
     protected function encodeSpatialData(mixed $value, string $type): string
     {
-        // Validate first using the dedicated Spatial validator
-        \Utopia\Database\Validator\Spatial::validate($value, $type);
+        Spatial::validate($value, $type);
 
         switch ($type) {
             case self::VAR_POINT:

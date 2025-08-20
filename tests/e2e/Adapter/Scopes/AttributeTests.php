@@ -1689,7 +1689,7 @@ trait AttributeTests
                 ]),
             ]);
 
-            $this->assertEquals(999,111);
+            $this->assertEquals(999, 111);
 
         }
     }

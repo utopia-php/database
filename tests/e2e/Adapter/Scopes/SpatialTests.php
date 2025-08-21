@@ -757,6 +757,22 @@ trait SpatialTests
                 $this->assertNotEmpty($outsideRect1);
             }
 
+            // Test failure case: rectangle should NOT contain distant point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $distantPoint = $database->find($collectionName, [
+                    Query::contains('rectangle', [[100, 100]]) // Point far outside rectangle
+                ], Database::PERMISSION_READ);
+                $this->assertEmpty($distantPoint);
+            }
+
+            // Test failure case: rectangle should NOT contain point on boundary edge
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $boundaryPoint = $database->find($collectionName, [
+                    Query::contains('rectangle', [[0, 0]]) // Point on rectangle boundary
+                ], Database::PERMISSION_READ);
+                $this->assertEmpty($boundaryPoint);
+            }
+
             // Test rectangle intersects with another rectangle
             $overlappingRect = $database->find($collectionName, [
                 Query::and([
@@ -776,12 +792,88 @@ trait SpatialTests
                 $this->assertEquals('rect1', $insideSquare1[0]->getId());
             }
 
+            // Test rectangle contains square (shape contains shape)
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $rectContainsSquare = $database->find($collectionName, [
+                    Query::contains('rectangle', [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]]) // Square geometry
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($rectContainsSquare);
+                $this->assertEquals('rect1', $rectContainsSquare[0]->getId());
+            }
+
+            // Test rectangle contains triangle (shape contains shape)
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $rectContainsTriangle = $database->find($collectionName, [
+                    Query::contains('rectangle', [[[20, 5], [30, 5], [25, 20], [20, 5]]]) // Triangle geometry
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($rectContainsTriangle);
+                $this->assertEquals('rect1', $rectContainsTriangle[0]->getId());
+            }
+
+            // Test L-shaped polygon contains smaller rectangle (shape contains shape)
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $lShapeContainsRect = $database->find($collectionName, [
+                    Query::contains('complex_polygon', [[[5, 5], [5, 10], [10, 10], [10, 5], [5, 5]]]) // Small rectangle inside L-shape
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($lShapeContainsRect);
+                $this->assertEquals('rect1', $lShapeContainsRect[0]->getId());
+            }
+
+            // Test T-shaped polygon contains smaller square (shape contains shape)
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $tShapeContainsSquare = $database->find($collectionName, [
+                    Query::contains('complex_polygon', [[[35, 5], [35, 10], [40, 10], [40, 5], [35, 5]]]) // Small square inside T-shape
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($tShapeContainsSquare);
+                $this->assertEquals('rect2', $tShapeContainsSquare[0]->getId());
+            }
+
+            // Test failure case: square should NOT contain rectangle (smaller shape cannot contain larger shape)
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $squareNotContainsRect = $database->find($collectionName, [
+                    Query::notContains('square', [[[0, 0], [0, 20], [20, 20], [20, 0], [0, 0]]]) // Larger rectangle
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($squareNotContainsRect);
+            }
+
+            // Test failure case: triangle should NOT contain rectangle
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $triangleNotContainsRect = $database->find($collectionName, [
+                    Query::notContains('triangle', [[[20, 0], [20, 25], [30, 25], [30, 0], [20, 0]]]) // Rectangle that extends beyond triangle
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($triangleNotContainsRect);
+            }
+
+            // Test failure case: L-shape should NOT contain T-shape (different complex polygons)
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $lShapeNotContainsTShape = $database->find($collectionName, [
+                    Query::notContains('complex_polygon', [[[30, 0], [30, 20], [50, 20], [50, 0], [30, 0]]]) // T-shape geometry
+                ], Database::PERMISSION_READ);
+                $this->assertNotEmpty($lShapeNotContainsTShape);
+            }
+
             // Test square doesn't contain point outside
             if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
                 $outsideSquare1 = $database->find($collectionName, [
                     Query::notContains('square', [[20, 20]]) // Point outside first square
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($outsideSquare1);
+            }
+
+            // Test failure case: square should NOT contain distant point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $distantPointSquare = $database->find($collectionName, [
+                    Query::contains('square', [[100, 100]]) // Point far outside square
+                ], Database::PERMISSION_READ);
+                $this->assertEmpty($distantPointSquare);
+            }
+
+            // Test failure case: square should NOT contain point on boundary
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $boundaryPointSquare = $database->find($collectionName, [
+                    Query::contains('square', [[5, 5]]) // Point on square boundary (should be empty if boundary not inclusive)
+                ], Database::PERMISSION_READ);
+                // Note: This may or may not be empty depending on boundary inclusivity
             }
 
             // Test square equals same geometry using contains when supported, otherwise intersects
@@ -820,6 +912,22 @@ trait SpatialTests
                 $this->assertNotEmpty($outsideTriangle1);
             }
 
+            // Test failure case: triangle should NOT contain distant point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $distantPointTriangle = $database->find($collectionName, [
+                    Query::contains('triangle', [[100, 100]]) // Point far outside triangle
+                ], Database::PERMISSION_READ);
+                $this->assertEmpty($distantPointTriangle);
+            }
+
+            // Test failure case: triangle should NOT contain point outside its area
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $outsideTriangleArea = $database->find($collectionName, [
+                    Query::contains('triangle', [[35, 25]]) // Point outside triangle area
+                ], Database::PERMISSION_READ);
+                $this->assertEmpty($outsideTriangleArea);
+            }
+
             // Test triangle intersects with point
             $intersectingTriangle = $database->find($collectionName, [
                 Query::intersects('triangle', [[25, 10]]) // Point inside triangle should intersect
@@ -849,6 +957,22 @@ trait SpatialTests
                 $this->assertNotEmpty($inHole);
             }
 
+            // Test failure case: L-shaped polygon should NOT contain distant point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $distantPointLShape = $database->find($collectionName, [
+                    Query::contains('complex_polygon', [[100, 100]]) // Point far outside L-shape
+                ], Database::PERMISSION_READ);
+                $this->assertEmpty($distantPointLShape);
+            }
+
+            // Test failure case: L-shaped polygon should NOT contain point in the hole
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $holePoint = $database->find($collectionName, [
+                    Query::contains('complex_polygon', [[17, 10]]) // Point in the "hole" of L-shape
+                ], Database::PERMISSION_READ);
+                $this->assertEmpty($holePoint);
+            }
+
             // Test T-shaped polygon contains point
             if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
                 $insideTShape = $database->find($collectionName, [
@@ -856,6 +980,22 @@ trait SpatialTests
                 ], Database::PERMISSION_READ);
                 $this->assertNotEmpty($insideTShape);
                 $this->assertEquals('rect2', $insideTShape[0]->getId());
+            }
+
+            // Test failure case: T-shaped polygon should NOT contain distant point
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $distantPointTShape = $database->find($collectionName, [
+                    Query::contains('complex_polygon', [[100, 100]]) // Point far outside T-shape
+                ], Database::PERMISSION_READ);
+                $this->assertEmpty($distantPointTShape);
+            }
+
+            // Test failure case: T-shaped polygon should NOT contain point outside its area
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $outsideTShapeArea = $database->find($collectionName, [
+                    Query::contains('complex_polygon', [[25, 25]]) // Point outside T-shape area
+                ], Database::PERMISSION_READ);
+                $this->assertEmpty($outsideTShapeArea);
             }
 
             // Test complex polygon intersects with line

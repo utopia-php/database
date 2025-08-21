@@ -1342,11 +1342,17 @@ class Database
             return new Document(self::COLLECTION);
         }
 
-        $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
-
-        $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
-
-        return $createdCollection;
+        $createdCollection = null;
+        try {
+            $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+            $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
+            return $createdCollection;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            if ($createdCollection !== null) {
+                $this->purgeCachedCollection($id);
+            }
+        }
     }
 
     /**
@@ -1538,19 +1544,24 @@ class Database
             }
         }
 
-        if ($id === self::METADATA) {
-            $deleted = true;
-        } else {
-            $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
+        $deleted = false;
+        try {
+            if ($id === self::METADATA) {
+                $deleted = true;
+            } else {
+                $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $id));
+            }
+
+            if ($deleted) {
+                $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+            }
+
+            return $deleted;
+        } finally {
+            // Ensure cache is cleared even if trigger fails
+            // Since adapter.deleteCollection() was called, cache should be cleared regardless
+            $this->purgeCachedCollection($id);
         }
-
-        if ($deleted) {
-            $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
-        }
-
-        $this->purgeCachedCollection($id);
-
-        return $deleted;
     }
 
     /**
@@ -1605,29 +1616,43 @@ class Database
             Document::SET_TYPE_APPEND
         );
 
+        $created = false;
+        $metadataModified = false;
         try {
             $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create attribute');
             }
+
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+
+            return true;
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
+
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+
+            return true;
+        } finally {
+            // Ensure collection cache is cleared if either adapter succeeded OR metadata was modified
+            if ($created || $metadataModified) {
+                $this->purgeCachedCollection($collection->getId());
+            }
         }
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
-
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
-
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
-
-        return true;
     }
 
     /**
@@ -1712,30 +1737,44 @@ class Database
             $attributeDocuments[] = $attributeDocument;
         }
 
+        $created = false;
+        $metadataModified = false;
         try {
             $created = $this->adapter->createAttributes($collection->getId(), $attributes);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create attributes');
             }
+            
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+
+            return true;
         } catch (DuplicateException $e) {
             // No attributes were in a metadata, but at least one of them was present on the table
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
+            
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+
+            return true;
+        } finally {
+            // Ensure cache is cleared if either adapter succeeded OR metadata was modified
+            if ($created || $metadataModified) {
+                $this->purgeCachedCollection($collection->getId());
+            }
         }
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
-
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
-
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
-
-        return true;
     }
 
     /**
@@ -2242,11 +2281,7 @@ class Database
                 if (!$updated) {
                     throw new DatabaseException('Failed to update attribute');
                 }
-
-                $this->purgeCachedCollection($collection);
             }
-
-            $this->purgeCachedDocument(self::METADATA, $collection);
         });
     }
 
@@ -2341,27 +2376,32 @@ class Database
             }
         }
 
+        $deleted = false;
         try {
-            if (!$this->adapter->deleteAttribute($collection->getId(), $id)) {
+            $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
+            if (!$deleted) {
                 throw new DatabaseException('Failed to delete attribute');
             }
+
+            $collection->setAttribute('attributes', \array_values($attributes));
+            $collection->setAttribute('indexes', \array_values($indexes));
+
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
+
+            return true;
         } catch (NotFoundException) {
-            // Ignore
+            // Ignore - attribute doesn't exist
+            return true;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            if ($deleted) {
+                $this->purgeCachedCollection($collection->getId());
+            }
         }
-
-        $collection->setAttribute('attributes', \array_values($attributes));
-        $collection->setAttribute('indexes', \array_values($indexes));
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
-
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
-
-        $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
-
-        return true;
     }
 
     /**
@@ -2429,18 +2469,23 @@ class Database
             $index->setAttribute('attributes', $indexAttributes);
         }
 
-        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+        try {
+            $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
 
-        $collection->setAttribute('attributes', $attributes);
-        $collection->setAttribute('indexes', $indexes);
+            $collection->setAttribute('attributes', $attributes);
+            $collection->setAttribute('indexes', $indexes);
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
+
+            return $renamed;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            $this->purgeCachedCollection($collection->getId());
         }
-
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
-
-        return $renamed;
     }
 
     /**
@@ -2693,20 +2738,98 @@ class Database
         $relatedCollectionId = $attribute['options']['relatedCollection'];
         $relatedCollection = $this->getCollection($relatedCollectionId);
 
-        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete, $type, $side) {
-            $altering = (!\is_null($newKey) && $newKey !== $id)
-                || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
+        try {
+            $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete, $type, $side) {
+                $altering = (!\is_null($newKey) && $newKey !== $id)
+                    || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
 
-            $relatedCollectionId = $attribute['options']['relatedCollection'];
-            $relatedCollection = $this->getCollection($relatedCollectionId);
-            $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
+                $relatedCollectionId = $attribute['options']['relatedCollection'];
+                $relatedCollection = $this->getCollection($relatedCollectionId);
+                $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
 
-            if (
-                !\is_null($newTwoWayKey)
-                && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedAttributes))
-            ) {
-                throw new DuplicateException('Related attribute already exists');
-            }
+                if (
+                    !\is_null($newTwoWayKey)
+                    && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedAttributes))
+                ) {
+                    throw new DuplicateException('Related attribute already exists');
+                }
+
+                $newKey ??= $attribute['key'];
+                $twoWayKey = $attribute['options']['twoWayKey'];
+                $newTwoWayKey ??= $attribute['options']['twoWayKey'];
+                $twoWay ??= $attribute['options']['twoWay'];
+                $onDelete ??= $attribute['options']['onDelete'];
+
+                $attribute->setAttribute('$id', $newKey);
+                $attribute->setAttribute('key', $newKey);
+                $attribute->setAttribute('options', [
+                    'relatedCollection' => $relatedCollection->getId(),
+                    'relationType' => $type,
+                    'twoWay' => $twoWay,
+                    'twoWayKey' => $newTwoWayKey,
+                    'onDelete' => $onDelete,
+                    'side' => $side,
+                ]);
+
+
+                $this->updateAttributeMeta($relatedCollection->getId(), $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $twoWay, $onDelete) {
+                    $options = $twoWayAttribute->getAttribute('options', []);
+                    $options['twoWayKey'] = $newKey;
+                    $options['twoWay'] = $twoWay;
+                    $options['onDelete'] = $onDelete;
+
+                    $twoWayAttribute->setAttribute('$id', $newTwoWayKey);
+                    $twoWayAttribute->setAttribute('key', $newTwoWayKey);
+                    $twoWayAttribute->setAttribute('options', $options);
+                });
+
+                if ($type === self::RELATION_MANY_TO_MANY) {
+                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+
+                    $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($newKey) {
+                        $junctionAttribute->setAttribute('$id', $newKey);
+                        $junctionAttribute->setAttribute('key', $newKey);
+                    });
+                    $this->updateAttributeMeta($junction, $twoWayKey, function ($junctionAttribute) use ($newTwoWayKey) {
+                        $junctionAttribute->setAttribute('$id', $newTwoWayKey);
+                        $junctionAttribute->setAttribute('key', $newTwoWayKey);
+                    });
+
+                    // Cache clearing is handled by the finally block
+                }
+
+                if ($altering) {
+                    $updated = $this->adapter->updateRelationship(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $type,
+                        $twoWay,
+                        $id,
+                        $twoWayKey,
+                        $side,
+                        $newKey,
+                        $newTwoWayKey
+                    );
+
+                    if (!$updated) {
+                        throw new DatabaseException('Failed to update relationship');
+                    }
+                }
+            });
+
+            // Update Indexes
+            $renameIndex = function (string $collection, string $key, string $newKey) {
+                $this->updateIndexMeta(
+                    $collection,
+                    '_index_' . $key,
+                    function ($index) use ($newKey) {
+                        $index->setAttribute('attributes', [$newKey]);
+                    }
+                );
+                $this->silent(
+                    fn () => $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
+                );
+            };
 
             $newKey ??= $attribute['key'];
             $twoWayKey = $attribute['options']['twoWayKey'];
@@ -2714,132 +2837,60 @@ class Database
             $twoWay ??= $attribute['options']['twoWay'];
             $onDelete ??= $attribute['options']['onDelete'];
 
-            $attribute->setAttribute('$id', $newKey);
-            $attribute->setAttribute('key', $newKey);
-            $attribute->setAttribute('options', [
-                'relatedCollection' => $relatedCollection->getId(),
-                'relationType' => $type,
-                'twoWay' => $twoWay,
-                'twoWayKey' => $newTwoWayKey,
-                'onDelete' => $onDelete,
-                'side' => $side,
-            ]);
-
-
-            $this->updateAttributeMeta($relatedCollection->getId(), $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $twoWay, $onDelete) {
-                $options = $twoWayAttribute->getAttribute('options', []);
-                $options['twoWayKey'] = $newKey;
-                $options['twoWay'] = $twoWay;
-                $options['onDelete'] = $onDelete;
-
-                $twoWayAttribute->setAttribute('$id', $newTwoWayKey);
-                $twoWayAttribute->setAttribute('key', $newTwoWayKey);
-                $twoWayAttribute->setAttribute('options', $options);
-            });
-
-            if ($type === self::RELATION_MANY_TO_MANY) {
-                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
-
-                $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($newKey) {
-                    $junctionAttribute->setAttribute('$id', $newKey);
-                    $junctionAttribute->setAttribute('key', $newKey);
-                });
-                $this->updateAttributeMeta($junction, $twoWayKey, function ($junctionAttribute) use ($newTwoWayKey) {
-                    $junctionAttribute->setAttribute('$id', $newTwoWayKey);
-                    $junctionAttribute->setAttribute('key', $newTwoWayKey);
-                });
-
-                $this->purgeCachedCollection($junction);
-            }
-
-            if ($altering) {
-                $updated = $this->adapter->updateRelationship(
-                    $collection->getId(),
-                    $relatedCollection->getId(),
-                    $type,
-                    $twoWay,
-                    $id,
-                    $twoWayKey,
-                    $side,
-                    $newKey,
-                    $newTwoWayKey
-                );
-
-                if (!$updated) {
-                    throw new DatabaseException('Failed to update relationship');
-                }
-            }
-        });
-
-        // Update Indexes
-        $renameIndex = function (string $collection, string $key, string $newKey) {
-            $this->updateIndexMeta(
-                $collection,
-                '_index_' . $key,
-                function ($index) use ($newKey) {
-                    $index->setAttribute('attributes', [$newKey]);
-                }
-            );
-            $this->silent(
-                fn () => $this->renameIndex($collection, '_index_' . $key, '_index_' . $newKey)
-            );
-        };
-
-        $newKey ??= $attribute['key'];
-        $twoWayKey = $attribute['options']['twoWayKey'];
-        $newTwoWayKey ??= $attribute['options']['twoWayKey'];
-        $twoWay ??= $attribute['options']['twoWay'];
-        $onDelete ??= $attribute['options']['onDelete'];
-
-        switch ($type) {
-            case self::RELATION_ONE_TO_ONE:
-                if ($id !== $newKey) {
-                    $renameIndex($collection->getId(), $id, $newKey);
-                }
-                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
-                    $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                }
-                break;
-            case self::RELATION_ONE_TO_MANY:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
-                    }
-                } else {
+            switch ($type) {
+                case self::RELATION_ONE_TO_ONE:
                     if ($id !== $newKey) {
                         $renameIndex($collection->getId(), $id, $newKey);
                     }
-                }
-                break;
-            case self::RELATION_MANY_TO_ONE:
-                if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($id !== $newKey) {
-                        $renameIndex($collection->getId(), $id, $newKey);
-                    }
-                } else {
-                    if ($twoWayKey !== $newTwoWayKey) {
+                    if ($twoWay && $twoWayKey !== $newTwoWayKey) {
                         $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
                     }
-                }
-                break;
-            case self::RELATION_MANY_TO_MANY:
-                $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+                    break;
+                case self::RELATION_ONE_TO_MANY:
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        if ($twoWayKey !== $newTwoWayKey) {
+                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                        }
+                    } else {
+                        if ($id !== $newKey) {
+                            $renameIndex($collection->getId(), $id, $newKey);
+                        }
+                    }
+                    break;
+                case self::RELATION_MANY_TO_ONE:
+                    if ($side === Database::RELATION_SIDE_PARENT) {
+                        if ($id !== $newKey) {
+                            $renameIndex($collection->getId(), $id, $newKey);
+                        }
+                    } else {
+                        if ($twoWayKey !== $newTwoWayKey) {
+                            $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                        }
+                    }
+                    break;
+                case self::RELATION_MANY_TO_MANY:
+                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                if ($id !== $newKey) {
-                    $renameIndex($junction, $id, $newKey);
-                }
-                if ($twoWayKey !== $newTwoWayKey) {
-                    $renameIndex($junction, $twoWayKey, $newTwoWayKey);
-                }
-                break;
-            default:
-                throw new RelationshipException('Invalid relationship type.');
+                    if ($id !== $newKey) {
+                        $renameIndex($junction, $id, $newKey);
+                    }
+                    if ($twoWayKey !== $newTwoWayKey) {
+                        $renameIndex($junction, $twoWayKey, $newTwoWayKey);
+                    }
+                    break;
+                default:
+                    throw new RelationshipException('Invalid relationship type.');
+            }
+
+            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
+
+            return true;
+        } finally {
+            // Ensure both collection caches are cleared even if trigger fails
+            // This is required because the relationship spans both collections
+            $this->purgeCachedCollection($collection->getId());
+            $this->purgeCachedCollection($relatedCollection->getId());
         }
-
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedCollection($relatedCollection->getId());
-
-        return true;
     }
 
     /**
@@ -2892,82 +2943,92 @@ class Database
 
         $relatedCollection->setAttribute('attributes', \array_values($relatedAttributes));
 
-        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
-            try {
-                $this->withTransaction(function () use ($collection, $relatedCollection) {
-                    $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-                    $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
-                });
-            } catch (\Throwable $e) {
-                throw new DatabaseException('Failed to delete relationship: ' . $e->getMessage());
-            }
+        $relationshipDeleted = false;
+        try {
+            $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $side) {
+                try {
+                    $this->withTransaction(function () use ($collection, $relatedCollection) {
+                        $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                        $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                    });
+                } catch (\Throwable $e) {
+                    throw new DatabaseException('Failed to delete relationship: ' . $e->getMessage());
+                }
 
-            $indexKey = '_index_' . $id;
-            $twoWayIndexKey = '_index_' . $twoWayKey;
+                $indexKey = '_index_' . $id;
+                $twoWayIndexKey = '_index_' . $twoWayKey;
 
-            switch ($type) {
-                case self::RELATION_ONE_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        $this->deleteIndex($collection->getId(), $indexKey);
-                        if ($twoWay) {
-                            $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                switch ($type) {
+                    case self::RELATION_ONE_TO_ONE:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            $this->deleteIndex($collection->getId(), $indexKey);
+                            if ($twoWay) {
+                                $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                            }
                         }
-                    }
-                    if ($side === Database::RELATION_SIDE_CHILD) {
-                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                        if ($twoWay) {
+                        if ($side === Database::RELATION_SIDE_CHILD) {
+                            $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                            if ($twoWay) {
+                                $this->deleteIndex($collection->getId(), $indexKey);
+                            }
+                        }
+                        break;
+                    case self::RELATION_ONE_TO_MANY:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                        } else {
                             $this->deleteIndex($collection->getId(), $indexKey);
                         }
-                    }
-                    break;
-                case self::RELATION_ONE_TO_MANY:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                    } else {
-                        $this->deleteIndex($collection->getId(), $indexKey);
-                    }
-                    break;
-                case self::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        $this->deleteIndex($collection->getId(), $indexKey);
-                    } else {
-                        $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
-                    }
-                    break;
-                case self::RELATION_MANY_TO_MANY:
-                    $junction = $this->getJunctionCollection(
-                        $collection,
-                        $relatedCollection,
-                        $side
-                    );
+                        break;
+                    case self::RELATION_MANY_TO_ONE:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            $this->deleteIndex($collection->getId(), $indexKey);
+                        } else {
+                            $this->deleteIndex($relatedCollection->getId(), $twoWayIndexKey);
+                        }
+                        break;
+                    case self::RELATION_MANY_TO_MANY:
+                        $junction = $this->getJunctionCollection(
+                            $collection,
+                            $relatedCollection,
+                            $side
+                        );
 
-                    $this->deleteDocument(self::METADATA, $junction);
-                    break;
-                default:
-                    throw new RelationshipException('Invalid relationship type.');
+                        $this->deleteCollection($junction);
+                        break;
+                    default:
+                        throw new RelationshipException('Invalid relationship type.');
+                }
+            });
+
+            $deleted = $this->adapter->deleteRelationship(
+                $collection->getId(),
+                $relatedCollection->getId(),
+                $type,
+                $twoWay,
+                $id,
+                $twoWayKey,
+                $side
+            );
+
+            if (!$deleted) {
+                throw new DatabaseException('Failed to delete relationship');
             }
-        });
 
-        $deleted = $this->adapter->deleteRelationship(
-            $collection->getId(),
-            $relatedCollection->getId(),
-            $type,
-            $twoWay,
-            $id,
-            $twoWayKey,
-            $side
-        );
+            $relationshipDeleted = true;
 
-        if (!$deleted) {
-            throw new DatabaseException('Failed to delete relationship');
+            $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
+
+            return true;
+        } finally {
+            // Ensure both collection caches are cleared even if operation fails partway through
+            // Individual deleteIndex calls clear their respective caches, but we need to ensure
+            // both collections are cleared for consistency
+            if ($relationshipDeleted) {
+                $this->purgeCachedCollection($collection->getId());
+                $this->purgeCachedCollection($relatedCollection->getId());
+            }
         }
-
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedCollection($relatedCollection->getId());
-
-        $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $relationship);
-
-        return true;
     }
 
     /**
@@ -3013,15 +3074,20 @@ class Database
 
         $collection->setAttribute('indexes', $indexes);
 
-        $this->adapter->renameIndex($collection->getId(), $old, $new);
+        try {
+            $this->adapter->renameIndex($collection->getId(), $old, $new);
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
+
+            return true;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            $this->purgeCachedCollection($collection->getId());
         }
-
-        $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
-
-        return true;
     }
 
     /**
@@ -3140,27 +3206,43 @@ class Database
             }
         }
 
+        $created = false;
+        $metadataModified = false;
         try {
             $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create index');
             }
+
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
+            }
+
+            $this->trigger(self::EVENT_INDEX_CREATE, $index);
+
+            return true;
         } catch (DuplicateException $e) {
             // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-
             if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
                 throw $e;
             }
+
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+                $metadataModified = true;
+            }
+
+            $this->trigger(self::EVENT_INDEX_CREATE, $index);
+
+            return true;
+        } finally {
+            // Ensure collection cache is cleared if either adapter succeeded OR metadata was modified
+            if ($created || $metadataModified) {
+                $this->purgeCachedCollection($collection->getId());
+            }
         }
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
-
-        $this->trigger(self::EVENT_INDEX_CREATE, $index);
-
-        return true;
     }
 
     /**
@@ -3189,17 +3271,25 @@ class Database
             }
         }
 
-        $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+        $deleted = false;
+        try {
+            $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
 
-        $collection->setAttribute('indexes', \array_values($indexes));
+            $collection->setAttribute('indexes', \array_values($indexes));
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
+
+            return $deleted;
+        } finally {
+            // Ensure collection cache is cleared even if trigger fails after adapter changes
+            if ($deleted) {
+                $this->purgeCachedCollection($collection->getId());
+            }
         }
-
-        $this->trigger(self::EVENT_INDEX_DELETE, $indexDeleted);
-
-        return $deleted;
     }
 
     /**
@@ -6045,11 +6135,6 @@ class Database
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
-
-        $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
-            '$id' => $id,
-            '$collection' => $collectionId
-        ]));
 
         return true;
     }

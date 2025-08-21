@@ -1136,21 +1136,20 @@ trait SpatialTests
         }
 
         $results = $database->find($collectionName, [Query::select(["name"])]);
-        foreach ($results as $doc) {
+        foreach ($results as $document) {
             $this->assertNotEmpty($document->getAttribute('name'));
         }
 
         $results = $database->find($collectionName, [Query::select(["location"])]);
-        foreach ($results as $doc) {
+        foreach ($results as $document) {
             $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
         }
 
         $results = $database->find($collectionName, [Query::select(["area","location"])]);
-        foreach ($results as $doc) {
+        foreach ($results as $document) {
             $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
             $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
         }
-
 
         // Test 2: updateDocuments with spatial data
         $updateResults = [];

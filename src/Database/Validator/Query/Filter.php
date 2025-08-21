@@ -101,8 +101,14 @@ class Filter extends Base
             return false;
         }
 
-        // Extract the type of desired attribute from collection $schema
         $attributeType = $attributeSchema['type'];
+
+        // If the query method is spatial-only, the attribute must be a spatial type
+        $query = new Query($method);
+        if ($query->isSpatialQuery() && !in_array($attributeType, Database::SPATIAL_TYPES, true)) {
+            $this->message = 'Spatial query "' . $method . '" cannot be applied on non-spatial attribute: ' . $attribute;
+            return false;
+        }
 
         foreach ($values as $value) {
             $validator = null;
@@ -138,6 +144,16 @@ class Filter extends Base
                 case Database::VAR_RELATIONSHIP:
                     $validator = new Text(255, 0); // The query is always on uid
                     break;
+
+                case Database::VAR_POINT:
+                case Database::VAR_LINESTRING:
+                case Database::VAR_POLYGON:
+                    if (!is_array($value)) {
+                        $this->message = 'Spatial data must be an array';
+                        return false;
+                    }
+                    continue 2;
+
                 default:
                     $this->message = 'Unknown Data type';
                     return false;
@@ -182,7 +198,8 @@ class Filter extends Base
         if (
             !$array &&
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
-            $attributeSchema['type'] !==  Database::VAR_STRING
+            $attributeSchema['type'] !== Database::VAR_STRING &&
+            !in_array($attributeSchema['type'], Database::SPATIAL_TYPES)
         ) {
             $queryType = $method === Query::TYPE_NOT_CONTAINS ? 'notContains' : 'contains';
             $this->message = 'Cannot query ' . $queryType . ' on attribute "' . $attribute . '" because it is not an array or string.';
@@ -242,6 +259,16 @@ class Filter extends Base
 
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
+            case Query::TYPE_DISTANCE:
+            case Query::TYPE_NOT_DISTANCE:
+            case Query::TYPE_DISTANCE_GREATER_THAN:
+            case Query::TYPE_DISTANCE_LESS_THAN:
+                if (count($value->getValues()) !== 1 || !is_array($value->getValues()[0]) || count($value->getValues()[0]) !== 2) {
+                    $this->message = 'Distance query requires [[geometry, distance]] parameters';
+                    return false;
+                }
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+
             case Query::TYPE_NOT_EQUAL:
             case Query::TYPE_LESSER:
             case Query::TYPE_LESSER_EQUAL:
@@ -290,6 +317,15 @@ class Filter extends Base
                 return true;
 
             default:
+                // Handle spatial query types and any other query types
+                if ($value->isSpatialQuery()) {
+                    if ($this->isEmpty($value->getValues())) {
+                        $this->message = \ucfirst($method) . ' queries require at least one value.';
+                        return false;
+                    }
+                    return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+                }
+
                 return false;
         }
     }

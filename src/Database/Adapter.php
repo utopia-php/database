@@ -534,7 +534,7 @@ abstract class Adapter
      * @throws TimeoutException
      * @throws DuplicateException
      */
-    abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool;
+    abstract public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool;
 
     /**
      * Create Attributes
@@ -661,54 +661,54 @@ abstract class Adapter
     /**
      * Get Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param array<Query> $queries
      * @param bool $forUpdate
      * @return Document
      */
-    abstract public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
+    abstract public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document;
 
     /**
      * Create Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $document
      *
      * @return Document
      */
-    abstract public function createDocument(string $collection, Document $document): Document;
+    abstract public function createDocument(Document $collection, Document $document): Document;
 
     /**
      * Create Documents in batches
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Document> $documents
      *
      * @return array<Document>
      *
      * @throws DatabaseException
      */
-    abstract public function createDocuments(string $collection, array $documents): array;
+    abstract public function createDocuments(Document $collection, array $documents): array;
 
     /**
      * Update Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param Document $document
      * @param bool $skipPermissions
      *
      * @return Document
      */
-    abstract public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document;
+    abstract public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document;
 
     /**
      * Update documents
      *
      * Updates all documents which match the given query.
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $updates
      * @param array<Document> $documents
      *
@@ -716,20 +716,20 @@ abstract class Adapter
      *
      * @throws DatabaseException
      */
-    abstract public function updateDocuments(string $collection, Document $updates, array $documents): int;
+    abstract public function updateDocuments(Document $collection, Document $updates, array $documents): int;
 
     /**
      * Create documents if they do not exist, otherwise update them.
      *
      * If attribute is not empty, only the specified attribute will be increased, by the new value in each document.
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $attribute
      * @param array<Change> $changes
      * @return array<Document>
      */
     abstract public function createOrUpdateDocuments(
-        string $collection,
+        Document $collection,
         string $attribute,
         array $changes
     ): array;
@@ -767,7 +767,7 @@ abstract class Adapter
      *
      * Find data sets using chosen queries
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
@@ -776,10 +776,9 @@ abstract class Adapter
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
-     *
      * @return array<Document>
      */
-    abstract public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
+    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
 
     /**
      * Sum an attribute
@@ -1028,6 +1027,34 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForBatchCreateAttributes(): bool;
+
+    /**
+     * Is spatial attributes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialAttributes(): bool;
+
+    /**
+     * Does the adapter support null values in spatial indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialIndexNull(): bool;
+
+    /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialIndexOrder(): bool;
+
+    /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForBoundaryInclusiveContains(): bool;
 
     /**
      * Get current attribute count from collection document

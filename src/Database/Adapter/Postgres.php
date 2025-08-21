@@ -148,6 +148,9 @@ class Postgres extends SQL
             ->prepare($sql)
             ->execute();
 
+        // extension for supporting spatial types
+        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis;')->execute();
+
         $collation = "
             CREATE COLLATION IF NOT EXISTS utf8_ci (
             provider = icu,
@@ -203,7 +206,8 @@ class Postgres extends SQL
                 $attribute->getAttribute('type'),
                 $attribute->getAttribute('size', 0),
                 $attribute->getAttribute('signed', true),
-                $attribute->getAttribute('array', false)
+                $attribute->getAttribute('array', false),
+                $attribute->getAttribute('required', false)
             );
 
             // Ignore relationships with virtual attributes
@@ -304,6 +308,9 @@ class Postgres extends SQL
                     }
                 }
                 $indexOrders = $index->getAttribute('orders', []);
+                if ($indexType === Database::INDEX_SPATIAL && count($indexOrders)) {
+                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
+                }
                 $this->createIndex(
                     $id,
                     $indexId,
@@ -437,11 +444,11 @@ class Postgres extends SQL
      * @return bool
      * @throws DatabaseException
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $type = $this->getSQLType($type, $size, $signed, $array);
+        $type = $this->getSQLType($type, $size, $signed, $array, $required);
 
         $sql = "
 			ALTER TABLE {$this->getSQLTable($name)}
@@ -538,7 +545,7 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $type = $this->getSQLType($type, $size, $signed, $array);
+        $type = $this->getSQLType($type, $size, $signed, $array, false);
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
@@ -605,7 +612,7 @@ class Postgres extends SQL
         $relatedTable = $this->getSQLTable($relatedName);
         $id = $this->filter($id);
         $twoWayKey = $this->filter($twoWayKey);
-        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false);
+        $sqlType = $this->getSQLType(Database::VAR_RELATIONSHIP, 0, false, false, false);
 
         switch ($type) {
             case Database::RELATION_ONE_TO_ONE:
@@ -705,8 +712,9 @@ class Postgres extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $collection = $this->getDocument(Database::METADATA, $collection);
-                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
                 $junction = $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
 
@@ -789,8 +797,9 @@ class Postgres extends SQL
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $collection = $this->getDocument(Database::METADATA, $collection);
-                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
                 $junction = $side === Database::RELATION_SIDE_PARENT
                     ? $this->getSQLTable('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence())
@@ -860,18 +869,27 @@ class Postgres extends SQL
             Database::INDEX_KEY,
             Database::INDEX_FULLTEXT => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT),
+            Database::INDEX_SPATIAL => 'INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL),
         };
 
         $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
         $attributes = \implode(', ', $attributes);
 
-        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT) {
+        // Spatial indexes can't include _tenant because GIST indexes require all columns to have compatible operator classes
+        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT && $type !== Database::INDEX_SPATIAL) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }
 
-        $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)} ({$attributes});";
+        $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)}";
+
+        // Add USING GIST for spatial indexes
+        if ($type === Database::INDEX_SPATIAL) {
+            $sql .= " USING GIST";
+        }
+
+        $sql .= " ({$attributes});";
 
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
@@ -934,13 +952,14 @@ class Postgres extends SQL
     /**
      * Create Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $document
      *
      * @return Document
      */
-    public function createDocument(string $collection, Document $document): Document
+    public function createDocument(Document $collection, Document $document): Document
     {
+        $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
@@ -1044,7 +1063,7 @@ class Postgres extends SQL
      * Update Document
      *
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param Document $document
      * @param bool $skipPermissions
@@ -1052,8 +1071,9 @@ class Postgres extends SQL
      * @throws DatabaseException
      * @throws DuplicateException
      */
-    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
+        $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
@@ -1427,7 +1447,7 @@ class Postgres extends SQL
     /**
      * Find Documents
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
@@ -1441,8 +1461,11 @@ class Postgres extends SQL
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
+        $spatialAttributes = $this->getSpatialAttributes($collection);
+        $attributes = $collection->getAttribute('attributes', []);
+        $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
@@ -1515,7 +1538,7 @@ class Postgres extends SQL
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -1546,7 +1569,7 @@ class Postgres extends SQL
         $selections = $this->getAttributeSelections($queries);
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias)}
+            SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlWhere}
             {$sqlOrder}
@@ -1557,10 +1580,14 @@ class Postgres extends SQL
 
         try {
             $stmt = $this->getPDO()->prepare($sql);
-            foreach ($binds as $key => $value) {
-                $stmt->bindValue($key, $value, $this->getPDOType($value));
-            }
 
+            foreach ($binds as $key => $value) {
+                if (gettype($value) === 'double') {
+                    $stmt->bindValue($key, $this->getFloatPrecision($value), PDO::PARAM_STR);
+                } else {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+            }
             $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -1761,14 +1788,107 @@ class Postgres extends SQL
     }
 
     /**
+     * Handle spatial queries
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $attribute
+     * @param string $alias
+     * @param string $placeholder
+     * @return string
+     */
+    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    {
+        switch ($query->getMethod()) {
+            case Query::TYPE_CROSSES:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_CROSSES:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_DISTANCE:
+                $distanceParams = $query->getValues()[0];
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+                $binds[":{$placeholder}_1"] = $distanceParams[1];
+                return "ST_DWithin({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), :{$placeholder}_1)";
+
+            case Query::TYPE_NOT_DISTANCE:
+                $distanceParams = $query->getValues()[0];
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+                $binds[":{$placeholder}_1"] = $distanceParams[1];
+                return "NOT ST_DWithin({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), :{$placeholder}_1)";
+
+            case Query::TYPE_DISTANCE_GREATER_THAN:
+                $distanceParams = $query->getValues()[0];
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+                $binds[":{$placeholder}_1"] = $distanceParams[1];
+                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
+
+            case Query::TYPE_DISTANCE_LESS_THAN:
+                $distanceParams = $query->getValues()[0];
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+                $binds[":{$placeholder}_1"] = $distanceParams[1];
+                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) < :{$placeholder}_1";
+
+            case Query::TYPE_EQUAL:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_EQUAL:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_INTERSECTS:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_INTERSECTS:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_OVERLAPS:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_OVERLAPS:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_TOUCHES:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_NOT_TOUCHES:
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            case Query::TYPE_CONTAINS:
+            case Query::TYPE_NOT_CONTAINS:
+                // using st_cover instead of contains to match the boundary matching behaviour of the mariadb st_contains
+                // postgis st_contains excludes matching the boundary
+                $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
+                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
+                return $isNot
+                    ? "NOT ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))"
+                    : "ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+
+            default:
+                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
+        }
+    }
+
+    /**
      * Get SQL Condition
      *
      * @param Query $query
      * @param array<string, mixed> $binds
+     * @param array<mixed> $attributes
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query, array &$binds): string
+    protected function getSQLCondition(Query $query, array &$binds, array $attributes = []): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
 
@@ -1776,7 +1896,13 @@ class Postgres extends SQL
         $attribute = $this->quote($attribute);
         $alias = $this->quote(Query::DEFAULT_ALIAS);
         $placeholder = ID::unique();
+
+        $attributeType = $this->getAttributeType($query->getAttribute(), $attributes);
         $operator = null;
+
+        if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+            return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
+        }
 
         switch ($query->getMethod()) {
             case Query::TYPE_OR:
@@ -1784,7 +1910,7 @@ class Postgres extends SQL
                 $conditions = [];
                 /* @var $q Query */
                 foreach ($query->getValue() as $q) {
-                    $conditions[] = $this->getSQLCondition($q, $binds);
+                    $conditions[] = $this->getSQLCondition($q, $binds, $attributes);
                 }
 
                 $method = strtoupper($query->getMethod());
@@ -1836,8 +1962,8 @@ class Postgres extends SQL
                         Query::TYPE_NOT_STARTS_WITH => $this->escapeWildcards($value) . '%',
                         Query::TYPE_ENDS_WITH => '%' . $this->escapeWildcards($value),
                         Query::TYPE_NOT_ENDS_WITH => '%' . $this->escapeWildcards($value),
-                        Query::TYPE_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
-                        Query::TYPE_NOT_CONTAINS => $query->onArray() ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
+                        Query::TYPE_NOT_CONTAINS => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($value) . '%',
                         default => $value
                     };
 
@@ -1883,10 +2009,11 @@ class Postgres extends SQL
      * @param int $size in chars
      * @param bool $signed
      * @param bool $array
+     * @param bool $required
      * @return string
      * @throws DatabaseException
      */
-    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false): string
+    protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if ($array === true) {
             return 'JSONB';
@@ -1924,8 +2051,18 @@ class Postgres extends SQL
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
 
+
+            case Database::VAR_POINT:
+                return 'GEOMETRY(POINT)';
+
+            case Database::VAR_LINESTRING:
+                return 'GEOMETRY(LINESTRING)';
+
+            case Database::VAR_POLYGON:
+                return 'GEOMETRY(POLYGON)';
+
             default:
-                throw new DatabaseException('Unknown Type: ' . $type);
+                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 
@@ -1961,6 +2098,18 @@ class Postgres extends SQL
             default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
     }
+
+    /**
+     * Size of POINT spatial type
+     *
+     * @return int
+    */
+    protected function getMaxPointSize(): int
+    {
+        // https://stackoverflow.com/questions/30455025/size-of-data-type-geographypoint-4326-in-postgis
+        return 32;
+    }
+
 
     /**
      * Encode array
@@ -2099,5 +2248,45 @@ class Postgres extends SQL
     protected function quote(string $string): string
     {
         return "\"{$string}\"";
+    }
+
+    /**
+     * Is spatial attributes supported?
+     *
+     * @return bool
+    */
+    public function getSupportForSpatialAttributes(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Does the adapter support null values in spatial indexes?
+     *
+     * @return bool
+    */
+    public function getSupportForSpatialIndexNull(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+    */
+    public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+    */
+    public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
     }
 }

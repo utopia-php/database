@@ -2091,7 +2091,7 @@ class Postgres extends SQL
     protected function getPDOType(mixed $value): int
     {
         return match (\gettype($value)) {
-            'string' => PDO::PARAM_STR,
+            'string', 'double' => PDO::PARAM_STR,
             'boolean' => PDO::PARAM_BOOL,
             'integer' => PDO::PARAM_INT,
             'NULL' => PDO::PARAM_NULL,

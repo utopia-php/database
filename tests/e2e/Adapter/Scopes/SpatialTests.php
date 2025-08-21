@@ -127,13 +127,12 @@ trait SpatialTests
             $this->assertEquals([6.0, 6.0], $updatedDoc->getAttribute('pointAttr'));
 
             // Test spatial queries with appropriate operations for each geometry type
-
             // Point attribute tests - use operations valid for points
             $pointQueries = [
                 'equals' => Query::equal('pointAttr', [[6.0, 6.0]]),
                 'notEquals' => Query::notEqual('pointAttr', [[1.0, 1.0]]),
-                'distance' => Query::distanceLessThan('pointAttr', [[[6.0, 6.0], 0.1]]),
-                'notDistance' => Query::notDistanceLessThan('pointAttr', [[[1.0, 1.0], 0.1]]),
+                'distance' => Query::distance('pointAttr', [[[5.0, 5.0], 1.4142135623730951]]),
+                'notDistance' => Query::notDistance('pointAttr', [[[1.0, 1.0], 0.0]]),
                 'intersects' => Query::intersects('pointAttr', [[6.0, 6.0]]),
                 'notIntersects' => Query::notIntersects('pointAttr', [[1.0, 1.0]])
             ];
@@ -184,7 +183,7 @@ trait SpatialTests
                 $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document returned for %s on polyAttr', $queryType));
             }
         } finally {
-            $database->deleteCollection($collectionName);
+            // $database->deleteCollection($collectionName);
         }
     }
 
@@ -426,33 +425,6 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertEmpty($extremelyFar);
 
-            // Test NOT distance queries
-            // Test notDistanceLessThan: places NOT close to center (should find p2)
-            $notClose = $database->find($child, [
-                Query::notDistanceLessThan('coord', [[[10.0, 10.0], 0.05]])
-            ], Database::PERMISSION_READ);
-            $this->assertNotEmpty($notClose);
-            $this->assertEquals('p2', $notClose[0]->getId());
-
-            // Test notDistanceGreaterThan: places NOT far from center (should find p1)
-            $notFar = $database->find($child, [
-                Query::notDistanceGreaterThan('coord', [[[10.0, 10.0], 0.05]])
-            ], Database::PERMISSION_READ);
-            $this->assertNotEmpty($notFar);
-            $this->assertEquals('p1', $notFar[0]->getId());
-
-            // Test notDistanceLessThan with larger threshold (should find none since both places are within threshold)
-            $notCloseLarge = $database->find($child, [
-                Query::notDistanceLessThan('coord', [[[10.0, 10.0], 0.2]])
-            ], Database::PERMISSION_READ);
-            $this->assertEmpty($notCloseLarge);
-
-            // Test notDistanceGreaterThan with small threshold (should find both since neither is beyond threshold)
-            $notFarSmall = $database->find($child, [
-                Query::notDistanceGreaterThan('coord', [[[10.0, 10.0], 0.2]])
-            ], Database::PERMISSION_READ);
-            $this->assertCount(2, $notFarSmall);
-
             // Equal-distance semantics: distance (<=) and notDistance (>), threshold exactly at 0
             $equalZero = $database->find($child, [
                 Query::distance('coord', [[[10.0, 10.0], 0.0]])
@@ -558,33 +530,6 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertEmpty($veryFar);
 
-            // Test NOT distance queries
-            // Test notDistanceLessThan: stops NOT close to center (should find s2)
-            $notClose = $database->find($child, [
-                Query::notDistanceLessThan('coord', [[[20.0, 20.0], 0.1]])
-            ], Database::PERMISSION_READ);
-            $this->assertNotEmpty($notClose);
-            $this->assertEquals('s2', $notClose[0]->getId());
-
-            // Test notDistanceGreaterThan: stops NOT far from center (should find s1)
-            $notFar = $database->find($child, [
-                Query::notDistanceGreaterThan('coord', [[[20.0, 20.0], 0.1]])
-            ], Database::PERMISSION_READ);
-            $this->assertNotEmpty($notFar);
-            $this->assertEquals('s1', $notFar[0]->getId());
-
-            // Test notDistanceLessThan with larger threshold (should find none since both stops are within threshold)
-            $notCloseLarge = $database->find($child, [
-                Query::notDistanceLessThan('coord', [[[20.0, 20.0], 0.5]])
-            ], Database::PERMISSION_READ);
-            $this->assertEmpty($notCloseLarge);
-
-            // Test notDistanceGreaterThan with small threshold (should find both since neither is beyond threshold)
-            $notFarSmall = $database->find($child, [
-                Query::notDistanceGreaterThan('coord', [[[20.0, 20.0], 0.5]])
-            ], Database::PERMISSION_READ);
-            $this->assertCount(2, $notFarSmall);
-
             // Equal-distance semantics: distance (<=) and notDistance (>), threshold exactly at 0
             $equalZero = $database->find($child, [
                 Query::distance('coord', [[[20.0, 20.0], 0.0]])
@@ -689,33 +634,6 @@ trait SpatialTests
                 Query::distanceGreaterThan('home', [[[30.0, 30.0], 0.5]])
             ], Database::PERMISSION_READ);
             $this->assertEmpty($moderatelyFar);
-
-            // Test NOT distance queries
-            // Test notDistanceLessThan: drivers NOT close to center (should find none since d1 is exactly at center)
-            $notClose = $database->find($a, [
-                Query::notDistanceLessThan('home', [[[30.0, 30.0], 0.05]])
-            ], Database::PERMISSION_READ);
-            $this->assertEmpty($notClose);
-
-            // Test notDistanceGreaterThan: drivers NOT far from center (should find d1)
-            $notFar = $database->find($a, [
-                Query::notDistanceGreaterThan('home', [[[30.0, 30.0], 0.05]])
-            ], Database::PERMISSION_READ);
-            $this->assertNotEmpty($notFar);
-            $this->assertEquals('d1', $notFar[0]->getId());
-
-            // Test notDistanceLessThan with larger threshold (should find none since d1 is within threshold)
-            $notCloseLarge = $database->find($a, [
-                Query::notDistanceLessThan('home', [[[30.0, 30.0], 0.5]])
-            ], Database::PERMISSION_READ);
-            $this->assertEmpty($notCloseLarge);
-
-            // Test notDistanceGreaterThan with small threshold (should find d1 since it's not beyond threshold)
-            $notFarSmall = $database->find($a, [
-                Query::notDistanceGreaterThan('home', [[[30.0, 30.0], 0.5]])
-            ], Database::PERMISSION_READ);
-            $this->assertNotEmpty($notFarSmall);
-            $this->assertEquals('d1', $notFarSmall[0]->getId());
 
             // Equal-distance semantics: distance (<=) and notDistance (>), threshold exactly at 0
             $equalZero = $database->find($a, [
@@ -1287,48 +1205,6 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertCount(1, $farFromOrigin);
 
-            // Test NOT distance queries
-            // Test notDistanceLessThan: shapes NOT close to first center (should find rect2)
-            $notCloseToFirstCenter = $database->find($collectionName, [
-                Query::notDistanceLessThan('circle_center', [[[10, 5], 5.0]])
-            ], Database::PERMISSION_READ);
-            $this->assertNotEmpty($notCloseToFirstCenter);
-            $this->assertEquals('rect2', $notCloseToFirstCenter[0]->getId());
-
-            // Test notDistanceGreaterThan: shapes NOT far from first center (should find rect1)
-            $notFarFromFirstCenter = $database->find($collectionName, [
-                Query::notDistanceGreaterThan('circle_center', [[[10, 5], 5.0]])
-            ], Database::PERMISSION_READ);
-            $this->assertNotEmpty($notFarFromFirstCenter);
-            $this->assertEquals('rect1', $notFarFromFirstCenter[0]->getId());
-
-            // Test notDistanceLessThan: shapes NOT close to second center (should find rect1)
-            $notCloseToSecondCenter = $database->find($collectionName, [
-                Query::notDistanceLessThan('circle_center', [[[40, 4], 5.0]])
-            ], Database::PERMISSION_READ);
-            $this->assertNotEmpty($notCloseToSecondCenter);
-            $this->assertEquals('rect1', $notCloseToSecondCenter[0]->getId());
-
-            // Test notDistanceGreaterThan: shapes NOT far from second center (should find rect2)
-            $notFarFromSecondCenter = $database->find($collectionName, [
-                Query::notDistanceGreaterThan('circle_center', [[[40, 4], 5.0]])
-            ], Database::PERMISSION_READ);
-            $this->assertNotEmpty($notFarFromSecondCenter);
-            $this->assertEquals('rect2', $notFarFromSecondCenter[0]->getId());
-
-            // Test edge cases with very small thresholds
-            // Test notDistanceLessThan with tiny threshold (should find only rect2; rect1 is exactly at the center)
-            $notCloseTiny = $database->find($collectionName, [
-                Query::notDistanceLessThan('circle_center', [[[10, 5], 0.001]])
-            ], Database::PERMISSION_READ);
-            $this->assertCount(1, $notCloseTiny);
-
-            // Test notDistanceGreaterThan with huge threshold (should find both since neither is beyond huge threshold)
-            $notFarHuge = $database->find($collectionName, [
-                Query::notDistanceGreaterThan('circle_center', [[[10, 5], 100.0]])
-            ], Database::PERMISSION_READ);
-            $this->assertCount(2, $notFarHuge);
-
             // Equal-distance semantics for circle_center
             // rect1 is exactly at [10,5], so distance 0
             $equalZero = $database->find($collectionName, [
@@ -1456,13 +1332,6 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertCount(0, $farFromTimesSquare);
 
-            // Test NOT combination: parks NOT near specific location
-            $notNearCentral = $database->find($collectionName, [
-                Query::notDistanceLessThan('location', [[[40.7829, -73.9654], 0.01]]) // NOT near Central Park
-            ], Database::PERMISSION_READ);
-            $this->assertCount(2, $notNearCentral);
-            $this->assertNotContains('park1', array_map(fn ($doc) => $doc->getId(), $notNearCentral));
-
             // Test ordering by distance from a specific point
             $orderedByDistance = $database->find($collectionName, [
                 Query::distanceLessThan('location', [[[40.7829, -73.9654], 0.01]]), // Within ~1km
@@ -1480,20 +1349,6 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
 
             $this->assertCount(2, $limitedResults);
-
-            // Test notDistanceGreaterThan: parks NOT far from Central Park (should find those within the threshold)
-            $notFarFromCentral = $database->find($collectionName, [
-                Query::notDistanceGreaterThan('location', [[[40.7829, -73.9654], 0.2]]) // NOT more than 0.2 degrees
-            ], Database::PERMISSION_READ);
-            $this->assertCount(3, $notFarFromCentral); // All parks should be within 0.2 degrees
-
-            // Test notDistanceLessThan: parks NOT close to Central Park (should find those beyond the threshold)
-            $notCloseToCentral = $database->find($collectionName, [
-                Query::notDistanceLessThan('location', [[[40.7829, -73.9654], 0.001]]) // NOT less than 0.001 degrees
-            ], Database::PERMISSION_READ);
-            $this->assertCount(2, $notCloseToCentral); // Should find park2 and park3
-            $this->assertNotContains('park1', array_map(fn ($doc) => $doc->getId(), $notCloseToCentral));
-
         } finally {
             $database->deleteCollection($collectionName);
         }

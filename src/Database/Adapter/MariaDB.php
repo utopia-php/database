@@ -1494,7 +1494,11 @@ class MariaDB extends SQL
             $stmt = $this->getPDO()->prepare($sql);
 
             foreach ($binds as $key => $value) {
-                $stmt->bindValue($key, $value, $this->getPDOType($value));
+                if (gettype($value) === 'double') {
+                    $stmt->bindValue($key, $this->getFloatPrecision($value), PDO::PARAM_STR);
+                } else {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
             }
 
             $stmt->execute();
@@ -1711,13 +1715,13 @@ class MariaDB extends SQL
                 $distanceParams = $query->getValues()[0];
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
                 $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) <= :{$placeholder}_1";
+                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) = :{$placeholder}_1";
 
             case Query::TYPE_NOT_DISTANCE:
                 $distanceParams = $query->getValues()[0];
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
                 $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
+                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) != :{$placeholder}_1";
 
             case Query::TYPE_DISTANCE_GREATER_THAN:
                 $distanceParams = $query->getValues()[0];
@@ -1730,18 +1734,6 @@ class MariaDB extends SQL
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
                 $binds[":{$placeholder}_1"] = $distanceParams[1];
                 return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) < :{$placeholder}_1";
-
-            case Query::TYPE_NOT_DISTANCE_GREATER_THAN:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "NOT (ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1)";
-
-            case Query::TYPE_NOT_DISTANCE_LESS_THAN:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "NOT (ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) < :{$placeholder}_1)";
 
             case Query::TYPE_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
@@ -1978,11 +1970,22 @@ class MariaDB extends SQL
     protected function getPDOType(mixed $value): int
     {
         return match (gettype($value)) {
-            'double', 'string' => PDO::PARAM_STR,
+            'string' => PDO::PARAM_STR,
             'integer', 'boolean' => PDO::PARAM_INT,
             'NULL' => PDO::PARAM_NULL,
             default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
+    }
+
+    /**
+     * Size of POINT spatial type
+     *
+     * @return int
+    */
+    protected function getMaxPointSize(): int
+    {
+        // https://dev.mysql.com/doc/refman/8.4/en/gis-data-formats.html#gis-internal-format
+        return 25;
     }
 
     public function getMinDateTime(): \DateTime

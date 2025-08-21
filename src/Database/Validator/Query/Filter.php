@@ -263,8 +263,6 @@ class Filter extends Base
             case Query::TYPE_NOT_DISTANCE:
             case Query::TYPE_DISTANCE_GREATER_THAN:
             case Query::TYPE_DISTANCE_LESS_THAN:
-            case Query::TYPE_NOT_DISTANCE_GREATER_THAN:
-            case Query::TYPE_NOT_DISTANCE_LESS_THAN:
                 if (count($value->getValues()) !== 1 || !is_array($value->getValues()[0]) || count($value->getValues()[0]) !== 2) {
                     $this->message = 'Distance query requires [[geometry, distance]] parameters';
                     return false;
@@ -320,8 +318,7 @@ class Filter extends Base
 
             default:
                 // Handle spatial query types and any other query types
-                $query = new Query($method);
-                if ($query->isSpatialQuery()) {
+                if ($value->isSpatialQuery()) {
                     if ($this->isEmpty($value->getValues())) {
                         $this->message = \ucfirst($method) . ' queries require at least one value.';
                         return false;

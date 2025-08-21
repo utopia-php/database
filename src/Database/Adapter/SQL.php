@@ -20,6 +20,27 @@ abstract class SQL extends Adapter
     protected mixed $pdo;
 
     /**
+     * Controls how many fractional digits are used when binding float parameters.
+     */
+    protected int $floatPrecision = 17;
+
+    /**
+     * Configure float precision for parameter binding/logging.
+     */
+    public function setFloatPrecision(int $precision): void
+    {
+        $this->floatPrecision = $precision;
+    }
+
+    /**
+     * Helper to format a float value according to configured precision for binding/logging.
+     */
+    protected function getFloatPrecision(float $value): string
+    {
+        return sprintf('%.'. $this->floatPrecision . 'F', $value);
+    }
+
+    /**
      * Constructor.
      *
      * Set connection and settings
@@ -58,7 +79,7 @@ abstract class SQL extends Adapter
         }
 
         $this->inTransaction++;
-        return $result;
+        return true;
     }
 
     /**
@@ -1108,11 +1129,11 @@ abstract class SQL extends Adapter
                     break;
 
                 case Database::VAR_POINT:
-                    $total += 25;
+                    $total += $this->getMaxPointSize();
                     break;
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:
-                    $total += 50;
+                    $total += 20;
                     break;
 
                 default:
@@ -1702,6 +1723,12 @@ abstract class SQL extends Adapter
         return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
     }
 
+    /**
+     * Size of POINT spatial type
+     *
+     * @return int
+    */
+    abstract protected function getMaxPointSize(): int;
     /**
      * @return string
      */

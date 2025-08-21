@@ -34,8 +34,6 @@ class Query
     public const TYPE_NOT_DISTANCE = 'notDistance';
     public const TYPE_DISTANCE_GREATER_THAN = 'distanceGreaterThan';
     public const TYPE_DISTANCE_LESS_THAN = 'distanceLessThan';
-    public const TYPE_NOT_DISTANCE_GREATER_THAN = 'notDistanceGreaterThan';
-    public const TYPE_NOT_DISTANCE_LESS_THAN = 'notDistanceLessThan';
     public const TYPE_INTERSECTS = 'intersects';
     public const TYPE_NOT_INTERSECTS = 'notIntersects';
     public const TYPE_OVERLAPS = 'overlaps';
@@ -86,8 +84,6 @@ class Query
         self::TYPE_NOT_DISTANCE,
         self::TYPE_DISTANCE_GREATER_THAN,
         self::TYPE_DISTANCE_LESS_THAN,
-        self::TYPE_NOT_DISTANCE_GREATER_THAN,
-        self::TYPE_NOT_DISTANCE_LESS_THAN,
         self::TYPE_INTERSECTS,
         self::TYPE_NOT_INTERSECTS,
         self::TYPE_OVERLAPS,
@@ -293,8 +289,6 @@ class Query
             self::TYPE_NOT_DISTANCE,
             self::TYPE_DISTANCE_GREATER_THAN,
             self::TYPE_DISTANCE_LESS_THAN,
-            self::TYPE_NOT_DISTANCE_GREATER_THAN,
-            self::TYPE_NOT_DISTANCE_LESS_THAN,
             self::TYPE_INTERSECTS,
             self::TYPE_NOT_INTERSECTS,
             self::TYPE_OVERLAPS,
@@ -947,30 +941,6 @@ class Query
     public static function distanceLessThan(string $attribute, array $values): self
     {
         return new self(self::TYPE_DISTANCE_LESS_THAN, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with notDistanceGreaterThan method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function notDistanceGreaterThan(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_NOT_DISTANCE_GREATER_THAN, $attribute, $values);
-    }
-
-    /**
-     * Helper method to create Query with notDistanceLessThan method
-     *
-     * @param string $attribute
-     * @param array<mixed> $values
-     * @return Query
-     */
-    public static function notDistanceLessThan(string $attribute, array $values): self
-    {
-        return new self(self::TYPE_NOT_DISTANCE_LESS_THAN, $attribute, $values);
     }
 
     /**

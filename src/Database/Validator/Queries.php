@@ -112,8 +112,6 @@ class Queries extends Validator
                 Query::TYPE_NOT_DISTANCE,
                 Query::TYPE_DISTANCE_GREATER_THAN,
                 Query::TYPE_DISTANCE_LESS_THAN,
-                Query::TYPE_NOT_DISTANCE_GREATER_THAN,
-                Query::TYPE_NOT_DISTANCE_LESS_THAN,
                 Query::TYPE_INTERSECTS,
                 Query::TYPE_NOT_INTERSECTS,
                 Query::TYPE_OVERLAPS,

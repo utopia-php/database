@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Database;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\PDO;
 
 class MariaDBTest extends Base
@@ -69,5 +70,17 @@ class MariaDBTest extends Base
         self::$pdo->exec($sql);
 
         return true;
+    }
+
+    public function testVectorAttributesNotSupported(): void
+    {
+        $database = static::getDatabase();
+
+        $this->assertEquals(true, $database->createCollection('vectorNotSupported'));
+
+        // Test that vector attributes are rejected on MariaDB
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Vector type is only supported in PostgreSQL adapter');
+        $database->createAttribute('vectorNotSupported', 'embedding', Database::VAR_VECTOR, 3, true);
     }
 }

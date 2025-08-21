@@ -1811,6 +1811,7 @@ abstract class SQL extends Adapter
             }
 
             $projections = [];
+            $projections[] = "{$this->quote($prefix)}.*";
 
             $internalColumns = ['_id', '_uid', '_createdAt', '_updatedAt', '_permissions'];
             if ($this->sharedTables) {

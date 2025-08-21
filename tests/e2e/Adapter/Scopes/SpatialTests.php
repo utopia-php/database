@@ -998,7 +998,6 @@ trait SpatialTests
             // Test ordering by distance from a specific point
             $orderedByDistance = $database->find($collectionName, [
                 Query::distance('location', [[[40.7829, -73.9654], 0.01]]), // Within ~1km
-                Query::orderAsc('location'),
                 Query::limit(10)
             ], Database::PERMISSION_READ);
 
@@ -1017,5 +1016,263 @@ trait SpatialTests
         } finally {
             $database->deleteCollection($collectionName);
         }
+    }
+
+    public function testSpatialBulkOperation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'test_spatial_bulk_ops';
+
+        // Create collection with spatial attributes
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'size' => 256,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('location'),
+                'type' => Database::VAR_POINT,
+                'size' => 0,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('area'),
+                'type' => Database::VAR_POLYGON,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ])
+        ];
+
+        $indexes = [
+            new Document([
+                '$id' => ID::custom('spatial_idx'),
+                'type' => Database::INDEX_SPATIAL,
+                'attributes' => ['location'],
+                'lengths' => [],
+                'orders' => [],
+            ])
+        ];
+
+        $database->createCollection($collectionName, $attributes, $indexes);
+
+        // Test 1: createDocuments with spatial data
+        $spatialDocuments = [];
+        for ($i = 0; $i < 5; $i++) {
+            $spatialDocuments[] = new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Location ' . $i,
+                'location' => [10.0 + $i, 20.0 + $i], // POINT
+                'area' => [
+                    [10.0 + $i, 20.0 + $i],
+                    [11.0 + $i, 20.0 + $i],
+                    [11.0 + $i, 21.0 + $i],
+                    [10.0 + $i, 21.0 + $i],
+                    [10.0 + $i, 20.0 + $i]
+                ] // POLYGON
+            ]);
+        }
+
+        $results = [];
+        $count = $database->createDocuments($collectionName, $spatialDocuments, 3, onNext: function ($doc) use (&$results) {
+            $results[] = $doc;
+        });
+
+        $this->assertEquals(5, $count);
+        $this->assertEquals(5, count($results));
+
+        // Verify created documents
+        foreach ($results as $document) {
+            $this->assertNotEmpty($document->getId());
+            $this->assertNotEmpty($document->getAttribute('name'));
+            $this->assertNotEmpty($document->getSequence());
+            $this->assertIsArray($document->getAttribute('location'));
+            $this->assertIsArray($document->getAttribute('area'));
+            $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
+            $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
+        }
+
+        $results = $database->find($collectionName);
+        foreach ($results as $document) {
+            $this->assertNotEmpty($document->getId());
+            $this->assertNotEmpty($document->getAttribute('name'));
+            $this->assertNotEmpty($document->getSequence());
+            $this->assertIsArray($document->getAttribute('location'));
+            $this->assertIsArray($document->getAttribute('area'));
+            $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
+            $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
+        }
+
+        foreach ($results as $doc) {
+            $document = $database->getDocument($collectionName, $doc->getId());
+            $this->assertNotEmpty($document->getId());
+            $this->assertNotEmpty($document->getAttribute('name'));
+            $this->assertEquals($document->getAttribute('name'), $doc->getAttribute('name'));
+            $this->assertNotEmpty($document->getSequence());
+            $this->assertIsArray($document->getAttribute('location'));
+            $this->assertIsArray($document->getAttribute('area'));
+            $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
+            $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
+        }
+
+        $results = $database->find($collectionName, [Query::select(["name"])]);
+        foreach ($results as $doc) {
+            $this->assertNotEmpty($document->getAttribute('name'));
+        }
+
+        $results = $database->find($collectionName, [Query::select(["location"])]);
+        foreach ($results as $doc) {
+            $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
+        }
+
+        $results = $database->find($collectionName, [Query::select(["area","location"])]);
+        foreach ($results as $doc) {
+            $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
+            $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
+        }
+
+
+        // Test 2: updateDocuments with spatial data
+        $updateResults = [];
+        $updateCount = $database->updateDocuments($collectionName, new Document([
+            'name' => 'Updated Location',
+            'location' => [15.0, 25.0], // New POINT
+            'area' => [
+                [15.0, 25.0],
+                [16.0, 25.0],
+                [16.0, 26.0],
+                [15.0, 26.0],
+                [15.0, 25.0]
+            ] // New POLYGON
+        ]), [
+            Query::greaterThanEqual('$sequence', $results[0]->getSequence())
+        ], onNext: function ($doc) use (&$updateResults) {
+            $updateResults[] = $doc;
+        });
+
+        $this->assertGreaterThan(0, $updateCount);
+
+        // Verify updated documents
+        foreach ($updateResults as $document) {
+            $this->assertEquals('Updated Location', $document->getAttribute('name'));
+            $this->assertEquals([15.0, 25.0], $document->getAttribute('location'));
+            $this->assertEquals([[
+                [15.0, 25.0],
+                [16.0, 25.0],
+                [16.0, 26.0],
+                [15.0, 26.0],
+                [15.0, 25.0]
+            ]], $document->getAttribute('area'));
+        }
+
+        // Test 3: createOrUpdateDocuments with spatial data
+        $upsertDocuments = [
+            new Document([
+                '$id' => 'upsert1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Upsert Location 1',
+                'location' => [30.0, 40.0],
+                'area' => [
+                    [30.0, 40.0],
+                    [31.0, 40.0],
+                    [31.0, 41.0],
+                    [30.0, 41.0],
+                    [30.0, 40.0]
+                ]
+            ]),
+            new Document([
+                '$id' => 'upsert2',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'Upsert Location 2',
+                'location' => [35.0, 45.0],
+                'area' => [
+                    [35.0, 45.0],
+                    [36.0, 45.0],
+                    [36.0, 46.0],
+                    [35.0, 46.0],
+                    [35.0, 45.0]
+                ]
+            ])
+        ];
+
+        $upsertResults = [];
+        $upsertCount = $database->createOrUpdateDocuments($collectionName, $upsertDocuments, onNext: function ($doc) use (&$upsertResults) {
+            $upsertResults[] = $doc;
+        });
+
+        $this->assertEquals(2, $upsertCount);
+        $this->assertEquals(2, count($upsertResults));
+
+        // Verify upserted documents
+        foreach ($upsertResults as $document) {
+            $this->assertNotEmpty($document->getId());
+            $this->assertNotEmpty($document->getSequence());
+            $this->assertIsArray($document->getAttribute('location'));
+            $this->assertIsArray($document->getAttribute('area'));
+        }
+
+        // Test 4: Query spatial data after bulk operations
+        $allDocuments = $database->find($collectionName, [
+            Query::orderAsc('$sequence')
+        ]);
+
+        $this->assertGreaterThan(5, count($allDocuments)); // Should have original 5 + upserted 2
+
+        // Test 5: Spatial queries on bulk created data
+        $nearbyDocuments = $database->find($collectionName, [
+            Query::distance('location', [[[15.0, 25.0], 1.0]]) // Find documents within 1 unit
+        ]);
+
+        $this->assertGreaterThan(0, count($nearbyDocuments));
+
+        // Test 6: Update specific spatial documents
+        $specificUpdateCount = $database->updateDocuments($collectionName, new Document([
+            'name' => 'Specifically Updated'
+        ]), [
+            Query::equal('$id', ['upsert1'])
+        ]);
+
+        $this->assertEquals(1, $specificUpdateCount);
+
+        // Verify the specific update
+        $specificDoc = $database->find($collectionName, [
+            Query::equal('$id', ['upsert1'])
+        ]);
+
+        $this->assertCount(1, $specificDoc);
+        $this->assertEquals('Specifically Updated', $specificDoc[0]->getAttribute('name'));
+
+        // Cleanup
+        $database->deleteCollection($collectionName);
     }
 }

@@ -1588,7 +1588,7 @@ class Postgres extends SQL
                     $stmt->bindValue($key, $value, $this->getPDOType($value));
                 }
             }
-            $stmt->execute();
+            $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }

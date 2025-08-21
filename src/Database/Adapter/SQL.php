@@ -394,6 +394,12 @@ abstract class SQL extends Adapter
             unset($document['_permissions']);
         }
 
+        $document['main::$permissions'] = json_decode($document['main::$permissions'], true);
+
+        if ($this->sharedTables) {
+            $document['main::$tenant'] = $document['main::$tenant'] === null ? null : (int)$document['main::$tenant'];
+        }
+
         return new Document($document);
     }
 
@@ -1738,6 +1744,32 @@ abstract class SQL extends Adapter
     /**
      * Get the SQL projection given the selected attributes
      *
+     * @param array<string> $selects
+     * @return string
+     * @throws Exception
+     */
+    protected function addHiddenAttribute(array $selects): string
+    {
+        $alias = Query::DEFAULT_ALIAS;
+
+        $strings = [];
+
+        $strings[] = $alias.'._uid as '.$this->quote($alias.'::$id');
+        $strings[] = $alias.'._id as '.$this->quote($alias.'::$sequence');
+        $strings[] = $alias.'._permissions as '.$this->quote($alias.'::$permissions');
+        $strings[] = $alias.'._createdAt as '.$this->quote($alias.'::$createdAt');
+        $strings[] = $alias.'._updatedAt as '.$this->quote($alias.'::$updatedAt');
+
+        if ($this->sharedTables) {
+            $strings[] = $alias.'._tenant as '.$this->quote($alias.'::$tenant');
+        }
+
+        return ', '.implode(', ', $strings);
+    }
+
+    /**
+     * Get the SQL projection given the selected attributes
+     *
      * @param array<string> $selections
      * @param string $prefix
      * @return mixed
@@ -1746,28 +1778,17 @@ abstract class SQL extends Adapter
     protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         if (empty($selections) || \in_array('*', $selections)) {
-            return "{$this->quote($prefix)}.*";
+            return "{$this->quote($prefix)}.* {$this->addHiddenAttribute($selections)}";
         }
 
-        $internalKeys = [
-            '$id',
-            '$sequence',
-            '$permissions',
-            '$createdAt',
-            '$updatedAt',
-        ];
-
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
-
-        foreach ($internalKeys as $internalKey) {
-            $selections[] = $this->getInternalKeyForAttribute($internalKey);
-        }
+        $selections = array_diff($selections, ['$collection']);
 
         foreach ($selections as &$selection) {
+            $selection = $this->getInternalKeyForAttribute($selection);
             $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
         }
 
-        return \implode(',', $selections);
+        return \implode(',', $selections).$this->addHiddenAttribute($selections);
     }
 
     protected function getInternalKeyForAttribute(string $attribute): string

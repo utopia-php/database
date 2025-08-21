@@ -537,6 +537,25 @@ class Database
     }
 
     /**
+     * Check if attribute is internal
+     *
+     * @param string $attribute
+     * @return bool
+     */
+    public static function isInternalAttribute(string $attribute): bool
+    {
+        if (str_contains($attribute, '$')) {
+            foreach (Database::INTERNAL_ATTRIBUTES as $attr) {
+                if (str_contains($attribute, $attr['$id'])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Get getConnection Id
      *
      * @return string
@@ -3275,7 +3294,7 @@ class Database
             if ($collection->getId() !== self::METADATA) {
                 if (!$validator->isValid([
                     ...$collection->getRead(),
-                    ...($documentSecurity ? $document->getRead() : [])
+                    ...($documentSecurity ? $document->getRead('main::$permissions') : [])
                 ])) {
                     return new Document();
                 }
@@ -3292,17 +3311,17 @@ class Database
             $queries,
             $forUpdate
         );
-
         if ($document->isEmpty()) {
             return $document;
         }
 
         $document->setAttribute('$collection', $collection->getId());
+        $document->setAttribute('main::$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
                 ...$collection->getRead(),
-                ...($documentSecurity ? $document->getRead() : [])
+                ...($documentSecurity ? $document->getRead('main::$permissions') : [])
             ])) {
                 return new Document();
             }
@@ -3332,6 +3351,9 @@ class Database
         }
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
+
+        $document->setAttribute('main::$createdAt', DateTime::formatTz($document->getAttribute('main::$createdAt')));
+        $document->setAttribute('main::$updatedAt', DateTime::formatTz($document->getAttribute('main::$updatedAt')));
 
         return $document;
     }
@@ -3696,6 +3718,16 @@ class Database
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
 
+        $document->setAttribute('main::$id', $document->getId());
+        $document->setAttribute('main::$sequence', $document->getSequence());
+        $document->setAttribute('main::$permissions', $document->getPermissions());
+        $document->setAttribute('main::$createdAt', $document->getCreatedAt());
+        $document->setAttribute('main::$updatedAt', $document->getUpdatedAt());
+        $document->setAttribute('main::$collection', $document->getCollection());
+        if ($this->adapter->getSharedTables()) {
+            $document->setAttribute('main::$tenant', $document->getTenant());
+        }
+
         return $document;
     }
 
@@ -4026,7 +4058,7 @@ class Database
 
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it, inheriting permissions if none are set
-            if (!isset($relation['$permissions'])) {
+            if (!isset($relation['$permissions'])) { // todo: Should this be main::$permissions
                 $relation->setAttribute('$permissions', $document->getPermissions());
             }
 
@@ -4192,8 +4224,14 @@ class Database
                     $relationships[$relationship->getAttribute('key')] = $relationship;
                 }
 
+                $alias = Query::DEFAULT_ALIAS;
+
                 // Compare if the document has any changes
                 foreach ($document as $key => $value) {
+                    if (str_starts_with($key, $alias.'::') && Database::isInternalAttribute($key)){
+                        continue;
+                    }
+
                     // Skip the nested documents as they will be checked later in recursions.
                     if (\array_key_exists($key, $relationships)) {
                         // No need to compare nested documents more than max depth.
@@ -4336,6 +4374,16 @@ class Database
         $document = $this->decode($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
+
+        $document->setAttribute('main::$id', $document->getId());
+        $document->setAttribute('main::$sequence', $document->getSequence());
+        $document->setAttribute('main::$permissions', $document->getPermissions());
+        $document->setAttribute('main::$createdAt', $document->getCreatedAt());
+        $document->setAttribute('main::$updatedAt', $document->getUpdatedAt());
+        $document->setAttribute('main::$collection', $document->getCollection());
+        if ($this->adapter->getSharedTables()) {
+            $document->setAttribute('main::$tenant', $document->getTenant());
+        }
 
         return $document;
     }
@@ -4669,6 +4717,7 @@ class Database
                                     $related->getId(),
                                     $related->setAttribute($twoWayKey, $document->getId())
                                 ));
+
                                 break;
                             case 'object':
                                 if ($value instanceof Document) {
@@ -4687,7 +4736,7 @@ class Database
 
                                     $this->relationshipWriteStack[] = $relatedCollection->getId();
                                     if ($related->isEmpty()) {
-                                        if (!isset($value['$permissions'])) {
+                                        if (!isset($value['$permissions'])) {// todo check if should be main::$permissions
                                             $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                         }
                                         $related = $this->createDocument(
@@ -4776,7 +4825,7 @@ class Database
                                     );
 
                                     if ($related->isEmpty()) {
-                                        if (!isset($relation['$permissions'])) {
+                                        if (!isset($relation['$permissions'])) { // todo check if should be main::$permissions
                                             $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                         }
                                         $this->createDocument(
@@ -4816,7 +4865,7 @@ class Database
                             );
 
                             if ($related->isEmpty()) {
-                                if (!isset($value['$permissions'])) {
+                                if (!isset($value['$permissions'])) { // todo check if should be main::$permissions
                                     $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                 }
                                 $this->createDocument(
@@ -4889,7 +4938,7 @@ class Database
                                 $related = $this->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select(['$id'])]);
 
                                 if ($related->isEmpty()) {
-                                    if (!isset($value['$permissions'])) {
+                                    if (!isset($value['$permissions'])) {// todo check if should be main::$permissions
                                         $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
                                     }
                                     $related = $this->createDocument(
@@ -6178,6 +6227,9 @@ class Database
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
+                $node->setAttribute('main::$collection', $collection->getId());
+                $node->setAttribute('main::$createdAt', DateTime::formatTz($node->getAttribute('main::$createdAt')));
+                $node->setAttribute('main::$updatedAt', DateTime::formatTz($node->getAttribute('main::$updatedAt')));
             }
 
             $results[$index] = $node;
@@ -6393,6 +6445,21 @@ class Database
      */
     public function encode(Document $collection, Document $document): Document
     {
+        /**
+         * When iterating over an ArrayObject, foreach uses an internal iterator (like Iterator), and modifying the object during iteration doesn’t affect the iterator immediately.
+         */
+        $keysToRemove = [];
+
+        foreach ($document as $key => $value) {
+            if (strpos($key, '::$') !== false) {
+                $keysToRemove[] = $key;
+            }
+        }
+
+        foreach ($keysToRemove as $key) {
+            unset($document[$key]);
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
         $internalDateAttributes = ['$createdAt','$updatedAt'];
         foreach ($this->getInternalAttributes() as $attribute) {
@@ -6714,12 +6781,12 @@ class Database
 
         $selections = \array_merge($selections, $relationshipSelections);
 
-        $selections[] = '$id';
-        $selections[] = '$sequence';
-        $selections[] = '$collection';
-        $selections[] = '$createdAt';
-        $selections[] = '$updatedAt';
-        $selections[] = '$permissions';
+//        $selections[] = '$id';
+//        $selections[] = '$sequence';
+//        $selections[] = '$collection';
+//        $selections[] = '$createdAt';
+//        $selections[] = '$updatedAt';
+//        $selections[] = '$permissions';
 
         return \array_values(\array_unique($selections));
     }

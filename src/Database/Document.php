@@ -90,17 +90,17 @@ class Document extends ArrayObject
     /**
      * @return array<string>
      */
-    public function getPermissions(): array
+    public function getPermissions(string $attribute = '$permissions'): array
     {
-        return \array_values(\array_unique($this->getAttribute('$permissions', [])));
+        return \array_values(\array_unique($this->getAttribute($attribute, [])));
     }
 
     /**
      * @return array<string>
      */
-    public function getRead(): array
+    public function getRead(string $attribute = '$permissions'): array
     {
-        return $this->getPermissionsByType(Database::PERMISSION_READ);
+        return $this->getPermissionsByType(Database::PERMISSION_READ, $attribute);
     }
 
     /**
@@ -142,11 +142,11 @@ class Document extends ArrayObject
     /**
      * @return array<string>
      */
-    public function getPermissionsByType(string $type): array
+    public function getPermissionsByType(string $type, string $attribute = '$permissions'): array
     {
         $typePermissions = [];
 
-        foreach ($this->getPermissions() as $permission) {
+        foreach ($this->getPermissions($attribute) as $permission) {
             if (!\str_starts_with($permission, $type)) {
                 continue;
             }
@@ -195,13 +195,8 @@ class Document extends ArrayObject
     {
         $attributes = [];
 
-        $internalKeys = \array_map(
-            fn ($attr) => $attr['$id'],
-            Database::INTERNAL_ATTRIBUTES
-        );
-
         foreach ($this as $attribute => $value) {
-            if (\in_array($attribute, $internalKeys)) {
+            if (Database::isInternalAttribute($attribute)){
                 continue;
             }
 

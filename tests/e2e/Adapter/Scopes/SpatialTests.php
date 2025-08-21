@@ -1487,7 +1487,7 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertCount(3, $notFarFromCentral); // All parks should be within 0.2 degrees
 
-            // Test notDistanceLessThan: parks NOT close to Central Park (should find those beyond the threshold) 
+            // Test notDistanceLessThan: parks NOT close to Central Park (should find those beyond the threshold)
             $notCloseToCentral = $database->find($collectionName, [
                 Query::notDistanceLessThan('location', [[[40.7829, -73.9654], 0.001]]) // NOT less than 0.001 degrees
             ], Database::PERMISSION_READ);

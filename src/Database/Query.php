@@ -274,13 +274,11 @@ class Query
 
     /**
      * Check if method is a spatial-only query method
-     *
-     * @param string $value
      * @return bool
      */
-    public static function isSpatialQuery(string $value): bool
+    public function isSpatialQuery(): bool
     {
-        return match ($value) {
+        return match ($this->method) {
             self::TYPE_CROSSES,
             self::TYPE_NOT_CROSSES,
             self::TYPE_DISTANCE,
@@ -939,8 +937,6 @@ class Query
         return new self(self::TYPE_NOT_INTERSECTS, $attribute, $values);
     }
 
-
-
     /**
      * Helper method to create Query with crosses method
      *
@@ -1012,6 +1008,4 @@ class Query
     {
         return new self(self::TYPE_NOT_TOUCHES, $attribute, $values);
     }
-
-
 }

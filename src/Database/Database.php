@@ -1847,7 +1847,7 @@ class Database
             case self::VAR_POLYGON:
                 // Check if adapter supports spatial attributes
                 if (!$this->adapter->getSupportForSpatialAttributes()) {
-                    throw new DatabaseException('Spatial attributes are not supported by this adapter');
+                    throw new DatabaseException('Spatial attributes are not supported');
                 }
                 break;
             default:
@@ -3110,10 +3110,10 @@ class Database
 
             case self::INDEX_SPATIAL:
                 if (!$this->adapter->getSupportForSpatialAttributes()) {
-                    throw new DatabaseException('Spatial index is not supported');
+                    throw new DatabaseException('Spatial indexes are not supported');
                 }
                 if (!empty($orders) && !$this->adapter->getSupportForSpatialIndexOrder()) {
-                    throw new DatabaseException('Adapter does not support orders with Spatial index');
+                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
                 }
                 break;
 
@@ -6490,7 +6490,7 @@ class Database
                 if ($node !== null) {
                     // Handle spatial data encoding
                     $attributeType = $attribute['type'] ?? '';
-                    if (in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
                         if (is_array($node)) {
                             $node = $this->encodeSpatialData($node, $attributeType);
                         }
@@ -7035,7 +7035,8 @@ class Database
      */
     protected function encodeSpatialData(mixed $value, string $type): string
     {
-        Spatial::validate($value, $type);
+        $validator = new Spatial($type);
+        $validator->isValid($value);
 
         switch ($type) {
             case self::VAR_POINT:
@@ -7080,63 +7081,49 @@ class Database
      * @return array<mixed>
      * @throws DatabaseException
      */
-    protected function decodeSpatialData(string $wkt): array
+    public function decodeSpatialData(string $wkt): array
     {
-        $wkt = trim($wkt);
+        $upper = strtoupper($wkt);
 
         // POINT(x y)
-        if (preg_match('/^POINT\s*\(([^)]+)\)$/i', $wkt, $m)) {
-            $coords = preg_split('/\s+/', trim($m[1]));
-            if ($coords === false || count($coords) !== 2) {
-                throw new DatabaseException('Invalid POINT WKT format');
-            }
+        if (str_starts_with($upper, 'POINT(')) {
+            $start = strpos($wkt, '(') + 1;
+            $end   = strrpos($wkt, ')');
+            $inside = substr($wkt, $start, $end - $start);
+
+            $coords = explode(' ', trim($inside));
             return [(float)$coords[0], (float)$coords[1]];
         }
 
         // LINESTRING(x1 y1, x2 y2, ...)
-        if (preg_match('/^LINESTRING\s*\(([^)]+)\)$/i', $wkt, $m)) {
-            $coordsString = trim($m[1]);
-            $points = array_map('trim', explode(',', $coordsString));
-            $result = [];
-            foreach ($points as $point) {
-                $coords = preg_split('/\s+/', $point);
-                if ($coords === false || count($coords) !== 2) {
-                    throw new DatabaseException('Invalid LINESTRING WKT format');
-                }
-                $result[] = [(float)$coords[0], (float)$coords[1]];
-            }
-            return $result;
+        if (str_starts_with($upper, 'LINESTRING(')) {
+            $start = strpos($wkt, '(') + 1;
+            $end   = strrpos($wkt, ')');
+            $inside = substr($wkt, $start, $end - $start);
+
+            $points = explode(',', $inside);
+            return array_map(function ($point) {
+                $coords = explode(' ', trim($point));
+                return [(float)$coords[0], (float)$coords[1]];
+            }, $points);
         }
 
-        // POLYGON multiple rings (outer + holes) => (x1 y1, x2 y2,...), (h1x h1y, h2x h2y,...)
-        if (preg_match('/^POLYGON\s*\(\((.+)\)\)$/i', $wkt, $m)) {
-            $content = $m[1];
-            $rings = preg_split('/\)\s*,\s*\(/', $content);
-            if ($rings === false) {
-                throw new DatabaseException('Invalid POLYGON WKT format');
-            }
+        // POLYGON((x1,y1),(x2,y2))
+        if (str_starts_with($upper, 'POLYGON((')) {
+            $start = strpos($wkt, '((') + 2;
+            $end   = strrpos($wkt, '))');
+            $inside = substr($wkt, $start, $end - $start);
 
-            $result = [];
-            foreach ($rings as $ring) {
-                $ring = trim($ring, '() ');
-                if ($ring === '') {
-                    $result[] = [];
-                    continue;
-                }
-
-                $points = array_map('trim', explode(',', $ring));
-                $ringPoints = [];
-                foreach ($points as $point) {
-                    $coords = preg_split('/\s+/', $point);
-                    if ($coords === false || count($coords) !== 2) {
-                        throw new DatabaseException('Invalid POLYGON WKT format');
-                    }
-                    $ringPoints[] = [(float)$coords[0], (float)$coords[1]];
-                }
-                $result[] = $ringPoints;
-            }
-            return $result;
+            $rings = explode('),(', $inside);
+            return array_map(function ($ring) {
+                $points = explode(',', $ring);
+                return array_map(function ($point) {
+                    $coords = explode(' ', trim($point));
+                    return [(float)$coords[0], (float)$coords[1]];
+                }, $points);
+            }, $rings);
         }
+
         return [$wkt];
     }
 }

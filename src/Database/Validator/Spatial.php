@@ -39,7 +39,6 @@ class Spatial extends Validator
             case Database::VAR_POLYGON:
                 return self::validatePolygon($value);
 
-
             default:
                 throw new Exception('Unknown spatial type: ' . $type);
         }
@@ -128,23 +127,6 @@ class Spatial extends Validator
         }
 
         return true;
-    }
-
-    /**
-     * Validate GEOMETRY data
-     *
-     * @param array<mixed,mixed> $value
-     * @return bool
-     * @throws Exception
-     */
-    protected static function validateGeometry(array $value): bool
-    {
-        // For geometry, we accept simple point arrays
-        if (count($value) === 2 && is_numeric($value[0]) && is_numeric($value[1])) {
-            return true;
-        }
-
-        throw new Exception('Geometry type requires array of two numeric values [x, y]');
     }
 
     /**

@@ -309,7 +309,7 @@ class Postgres extends SQL
                 }
                 $indexOrders = $index->getAttribute('orders', []);
                 if ($indexType === Database::INDEX_SPATIAL && count($indexOrders)) {
-                    throw new DatabaseException('Adapter does not support orders with Spatial index');
+                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
                 }
                 $this->createIndex(
                     $id,
@@ -1463,7 +1463,7 @@ class Postgres extends SQL
      */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-        $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+        $spatialAttributes = $this->getSpatialAttributes($collection);
         $attributes = $collection->getAttribute('attributes', []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
@@ -2222,22 +2222,41 @@ class Postgres extends SQL
         return "\"{$string}\"";
     }
 
-
+    /**
+     * Is spatial attributes supported?
+     *
+     * @return bool
+    */
     public function getSupportForSpatialAttributes(): bool
     {
         return true;
     }
 
+    /**
+     * Does the adapter support null values in spatial indexes?
+     *
+     * @return bool
+    */
     public function getSupportForSpatialIndexNull(): bool
     {
         return true;
     }
 
+    /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+    */
     public function getSupportForBoundaryInclusiveContains(): bool
     {
         return true;
     }
 
+    /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+    */
     public function getSupportForSpatialIndexOrder(): bool
     {
         return false;

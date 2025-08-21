@@ -104,11 +104,8 @@ class Filter extends Base
         $attributeType = $attributeSchema['type'];
 
         // If the query method is spatial-only, the attribute must be a spatial type
-        if (Query::isSpatialQuery($method) && !in_array($attributeType, [
-            Database::VAR_POINT,
-            Database::VAR_LINESTRING,
-            Database::VAR_POLYGON,
-        ], true)) {
+        $query = new Query($method);
+        if ($query->isSpatialQuery() && !in_array($attributeType, Database::SPATIAL_TYPES, true)) {
             $this->message = 'Spatial query "' . $method . '" cannot be applied on non-spatial attribute: ' . $attribute;
             return false;
         }
@@ -202,11 +199,7 @@ class Filter extends Base
             !$array &&
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
             $attributeSchema['type'] !== Database::VAR_STRING &&
-            !in_array($attributeSchema['type'], [
-                Database::VAR_POINT,
-                Database::VAR_LINESTRING,
-                Database::VAR_POLYGON
-            ])
+            !in_array($attributeSchema['type'], Database::SPATIAL_TYPES)
         ) {
             $queryType = $method === Query::TYPE_NOT_CONTAINS ? 'notContains' : 'contains';
             $this->message = 'Cannot query ' . $queryType . ' on attribute "' . $attribute . '" because it is not an array or string.';
@@ -323,7 +316,8 @@ class Filter extends Base
 
             default:
                 // Handle spatial query types and any other query types
-                if (Query::isSpatialQuery($method)) {
+                $query = new Query($method);
+                if ($query->isSpatialQuery()) {
                     if ($this->isEmpty($value->getValues())) {
                         $this->message = \ucfirst($method) . ' queries require at least one value.';
                         return false;

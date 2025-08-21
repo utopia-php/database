@@ -128,7 +128,7 @@ class MariaDB extends SQL
                 $indexLength = (empty($indexLength)) ? '' : '(' . (int)$indexLength . ')';
                 $indexOrder = $index->getAttribute('orders')[$nested] ?? '';
                 if ($indexType === Database::INDEX_SPATIAL && !$this->getSupportForSpatialIndexOrder() && !empty($indexOrder)) {
-                    throw new DatabaseException('Adapter does not support orders with Spatial index');
+                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
                 }
                 $indexAttribute = $this->getInternalKeyForAttribute($attribute);
                 $indexAttribute = $this->filter($indexAttribute);
@@ -823,7 +823,7 @@ class MariaDB extends SQL
     public function createDocument(Document $collection, Document $document): Document
     {
         try {
-            $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+            $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
@@ -877,12 +877,13 @@ class MariaDB extends SQL
             }
 
             $attributeIndex = 0;
-            foreach ($attributes as $attributeName => $value) {
+            foreach ($attributes as $value) {
                 if (\is_array($value)) {
                     $value = \json_encode($value);
                 }
 
                 $bindKey = 'key_' . $attributeIndex;
+                $attribute = $this->filter($attribute);
                 $value = (\is_bool($value)) ? (int)$value : $value;
                 $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
                 $attributeIndex++;
@@ -948,7 +949,7 @@ class MariaDB extends SQL
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         try {
-            $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+            $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1372,7 +1373,7 @@ class MariaDB extends SQL
      */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-        $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+        $spatialAttributes = $this->getSpatialAttributes($collection);
         $attributes = $collection->getAttribute('attributes', []);
 
         $collection = $collection->getId();
@@ -1751,16 +1752,10 @@ class MariaDB extends SQL
                 return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_CONTAINS:
-                if (!$this->getSupportForBoundaryInclusiveContains()) {
-                    throw new DatabaseException('Adapter does not support boundary inclusive contains');
-                }
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_NOT_CONTAINS:
-                if (!$this->getSupportForBoundaryInclusiveContains()) {
-                    throw new DatabaseException('Adapter does not support boundary inclusive contains');
-                }
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
@@ -2142,12 +2137,21 @@ class MariaDB extends SQL
     {
         return false;
     }
+    /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+     */
 
     public function getSupportForBoundaryInclusiveContains(): bool
     {
         return true;
     }
-
+    /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+     */
     public function getSupportForSpatialIndexOrder(): bool
     {
         return true;

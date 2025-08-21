@@ -130,8 +130,8 @@ trait SpatialTests
 
             // Point attribute tests - use operations valid for points
             $pointQueries = [
-                'equals' => query::equal('pointAttr', [[6.0, 6.0]]),
-                'notEquals' => query::notEqual('pointAttr', [[1.0, 1.0]]),
+                'equals' => Query::equal('pointAttr', [[6.0, 6.0]]),
+                'notEquals' => Query::notEqual('pointAttr', [[1.0, 1.0]]),
                 'distance' => Query::distance('pointAttr', [[[6.0, 6.0], 0.1]]),
                 'notDistance' => Query::notDistance('pointAttr', [[[1.0, 1.0], 0.1]]),
                 'intersects' => Query::intersects('pointAttr', [[6.0, 6.0]]),

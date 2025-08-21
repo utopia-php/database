@@ -334,7 +334,7 @@ abstract class SQL extends Adapter
      */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+        $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
 
         $name = $this->filter($collection);
@@ -407,7 +407,7 @@ abstract class SQL extends Adapter
      * @param Document $collection
      * @return array<int,string>
      */
-    protected function getSpatialAttributesFromCollection(Document $collection): array
+    protected function getSpatialAttributes(Document $collection): array
     {
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $spatialAttributes = [];
@@ -440,7 +440,7 @@ abstract class SQL extends Adapter
         if (empty($documents)) {
             return 0;
         }
-        $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+        $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
 
         $attributes = $updates->getAttributes();
@@ -1467,16 +1467,31 @@ abstract class SQL extends Adapter
         return true;
     }
 
+    /**
+     * Is spatial attributes supported?
+     *
+     * @return bool
+    */
     public function getSupportForSpatialAttributes(): bool
     {
         return false;
     }
 
+    /**
+     * Does the adapter support null values in spatial indexes?
+     *
+     * @return bool
+     */
     public function getSupportForSpatialIndexNull(): bool
     {
         return false;
     }
 
+    /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+    */
     public function getSupportForSpatialIndexOrder(): bool
     {
         return false;
@@ -1916,7 +1931,7 @@ abstract class SQL extends Adapter
         if (empty($documents)) {
             return $documents;
         }
-        $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+        $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         try {
             $name = $this->filter($collection);
@@ -2060,7 +2075,7 @@ abstract class SQL extends Adapter
             return $changes;
         }
         try {
-            $spatialAttributes = $this->getSpatialAttributesFromCollection($collection);
+            $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $name = $this->filter($collection);
             $attribute = $this->filter($attribute);

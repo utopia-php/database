@@ -263,6 +263,8 @@ class Query
             self::TYPE_NOT_CROSSES,
             self::TYPE_DISTANCE_EQUAL,
             self::TYPE_DISTANCE_NOT_EQUAL,
+            self::TYPE_DISTANCE_GREATER_THAN,
+            self::TYPE_DISTANCE_LESS_THAN,
             self::TYPE_INTERSECTS,
             self::TYPE_NOT_INTERSECTS,
             self::TYPE_OVERLAPS,
@@ -900,11 +902,12 @@ class Query
      *
      * @param string $attribute
      * @param array<mixed> $values
+     * @param int|float $distance
      * @return Query
      */
-    public static function distanceEqual(string $attribute, array $values): self
+    public static function distanceEqual(string $attribute, array $values, int|float $distance): self
     {
-        return new self(self::TYPE_DISTANCE_EQUAL, $attribute, $values);
+        return new self(self::TYPE_DISTANCE_EQUAL, $attribute, [[$values,$distance]]);
     }
 
     /**
@@ -912,11 +915,12 @@ class Query
      *
      * @param string $attribute
      * @param array<mixed> $values
+     * @param int|float $distance
      * @return Query
      */
-    public static function distanceNotEqual(string $attribute, array $values): self
+    public static function distanceNotEqual(string $attribute, array $values, int|float $distance): self
     {
-        return new self(self::TYPE_DISTANCE_NOT_EQUAL, $attribute, $values);
+        return new self(self::TYPE_DISTANCE_NOT_EQUAL, $attribute, [[$values,$distance]]);
     }
 
     /**
@@ -924,11 +928,12 @@ class Query
      *
      * @param string $attribute
      * @param array<mixed> $values
+     * @param int|float $distance
      * @return Query
      */
-    public static function distanceGreaterThan(string $attribute, array $values): self
+    public static function distanceGreaterThan(string $attribute, array $values, int|float $distance): self
     {
-        return new self(self::TYPE_DISTANCE_GREATER_THAN, $attribute, $values);
+        return new self(self::TYPE_DISTANCE_GREATER_THAN, $attribute, [[$values,$distance]]);
     }
 
     /**
@@ -936,11 +941,11 @@ class Query
      *
      * @param string $attribute
      * @param array<mixed> $values
-     * @return Query
+     * @param int|float $distance
      */
-    public static function distanceLessThan(string $attribute, array $values): self
+    public static function distanceLessThan(string $attribute, array $values, int|float $distance): self
     {
-        return new self(self::TYPE_DISTANCE_LESS_THAN, $attribute, $values);
+        return new self(self::TYPE_DISTANCE_LESS_THAN, $attribute, [[$values,$distance]]);
     }
 
     /**

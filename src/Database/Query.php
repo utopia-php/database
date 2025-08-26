@@ -942,6 +942,7 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      * @param int|float $distance
+     * @return Query
      */
     public static function distanceLessThan(string $attribute, array $values, int|float $distance): self
     {

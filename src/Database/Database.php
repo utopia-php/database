@@ -6370,7 +6370,7 @@ class Database
         $queries = Query::groupByType($queries)['filters'];
         $queries = $this->convertQueries($collection, $queries);
 
-        $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
+        $getCount = fn () => $this->adapter->count($collection, $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
@@ -6415,7 +6415,7 @@ class Database
 
         $queries = $this->convertQueries($collection, $queries);
 
-        $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
+        $sum = $this->adapter->sum($collection, $attribute, $queries, $max);
 
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);
 

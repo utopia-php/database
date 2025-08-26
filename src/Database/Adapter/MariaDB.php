@@ -1548,15 +1548,17 @@ class MariaDB extends SQL
     /**
      * Count Documents
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $max
      * @return int
      * @throws Exception
      * @throws PDOException
      */
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
+        $attributes = $collection->getAttribute("attributes", []);
+        $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $binds = [];
@@ -1571,7 +1573,7 @@ class MariaDB extends SQL
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -1620,7 +1622,7 @@ class MariaDB extends SQL
     /**
      * Sum an Attribute
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $attribute
      * @param array<Query> $queries
      * @param int|null $max
@@ -1628,8 +1630,10 @@ class MariaDB extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): int|float
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
+        $collectionAttributes = $collection->getAttribute("attributes", []);
+        $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
         $where = [];
@@ -1644,7 +1648,7 @@ class MariaDB extends SQL
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $conditions = $this->getSQLConditions($queries, $binds, attributes:$collectionAttributes);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }

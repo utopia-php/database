@@ -265,12 +265,12 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

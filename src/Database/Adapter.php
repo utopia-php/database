@@ -783,25 +783,25 @@ abstract class Adapter
     /**
      * Sum an attribute
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $attribute
      * @param array<Query> $queries
      * @param int|null $max
      *
      * @return int|float
      */
-    abstract public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
+    abstract public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
 
     /**
      * Count Documents
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $max
      *
      * @return int
      */
-    abstract public function count(string $collection, array $queries = [], ?int $max = null): int;
+    abstract public function count(Document $collection, array $queries = [], ?int $max = null): int;
 
     /**
      * Get Collection Size of the raw data

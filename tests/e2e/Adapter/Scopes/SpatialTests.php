@@ -1645,4 +1645,91 @@ trait SpatialTests
         // Cleanup
         $database->deleteCollection($collectionName);
     }
+
+    public function testSptialAggregation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+        $collectionName = 'spatial_agg_';
+        try {
+            // Create collection with spatial and numeric attributes
+            $database->createCollection($collectionName);
+            $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 255, true);
+            $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, true);
+            $database->createAttribute($collectionName, 'score', Database::VAR_INTEGER, 0, true);
+
+            // Spatial indexes
+            $database->createIndex($collectionName, 'idx_loc', Database::INDEX_SPATIAL, ['loc']);
+            $database->createIndex($collectionName, 'idx_area', Database::INDEX_SPATIAL, ['area']);
+
+            // Seed documents
+            $a = $database->createDocument($collectionName, new Document([
+                '$id' => 'a',
+                'name' => 'A',
+                'loc' => [10.0, 10.0],
+                'area' => [[[9.0, 9.0], [9.0, 11.0], [11.0, 11.0], [11.0, 9.0], [9.0, 9.0]]],
+                'score' => 10,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+            $b = $database->createDocument($collectionName, new Document([
+                '$id' => 'b',
+                'name' => 'B',
+                'loc' => [10.05, 10.05],
+                'area' => [[[9.5, 9.5], [9.5, 10.6], [10.6, 10.6], [10.6, 9.5], [9.5, 9.5]]],
+                'score' => 20,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+            $c = $database->createDocument($collectionName, new Document([
+                '$id' => 'c',
+                'name' => 'C',
+                'loc' => [50.0, 50.0],
+                'area' => [[[49.0, 49.0], [49.0, 51.0], [51.0, 51.0], [51.0, 49.0], [49.0, 49.0]]],
+                'score' => 30,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+
+            $this->assertInstanceOf(Document::class, $a);
+            $this->assertInstanceOf(Document::class, $b);
+            $this->assertInstanceOf(Document::class, $c);
+
+            // COUNT with spatial distance filter
+            $queries = [
+                Query::distanceLessThan('loc', [[[10.0, 10.0], 0.1]])
+            ];
+            $this->assertEquals(2, $database->count($collectionName, $queries));
+            $this->assertCount(2, $database->find($collectionName, $queries));
+
+            // SUM with spatial distance filter
+            $sumNear = $database->sum($collectionName, 'score', $queries);
+            $this->assertEquals(10 + 20, $sumNear);
+
+            // COUNT and SUM with distanceGreaterThan (should only include far point "c")
+            $queriesFar = [
+                Query::distanceGreaterThan('loc', [[[10.0, 10.0], 10.0]])
+            ];
+            $this->assertEquals(1, $database->count($collectionName, $queriesFar));
+            $this->assertEquals(30, $database->sum($collectionName, 'score', $queriesFar));
+
+            // COUNT and SUM with polygon contains filter (adapter-dependent boundary inclusivity)
+            if ($database->getAdapter()->getSupportForBoundaryInclusiveContains()) {
+                $queriesContain = [
+                    Query::contains('area', [[10.0, 10.0]])
+                ];
+                $this->assertEquals(2, $database->count($collectionName, $queriesContain));
+                $this->assertEquals(30, $database->sum($collectionName, 'score', $queriesContain));
+
+                $queriesNotContain = [
+                    Query::notContains('area', [[10.0, 10.0]])
+                ];
+                $this->assertEquals(1, $database->count($collectionName, $queriesNotContain));
+                $this->assertEquals(30, $database->sum($collectionName, 'score', $queriesNotContain));
+            }
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
 }

@@ -30,8 +30,8 @@ class Query
     // General spatial method constants (for spatial-only operations)
     public const TYPE_CROSSES = 'crosses';
     public const TYPE_NOT_CROSSES = 'notCrosses';
-    public const TYPE_DISTANCE = 'distance';
-    public const TYPE_NOT_DISTANCE = 'notDistance';
+    public const TYPE_DISTANCE_EQUAL = 'distanceEqual';
+    public const TYPE_DISTANCE_NOT_EQUAL = 'distanceNotEqual';
     public const TYPE_DISTANCE_GREATER_THAN = 'distanceGreaterThan';
     public const TYPE_DISTANCE_LESS_THAN = 'distanceLessThan';
     public const TYPE_INTERSECTS = 'intersects';
@@ -80,8 +80,8 @@ class Query
         self::TYPE_NOT_ENDS_WITH,
         self::TYPE_CROSSES,
         self::TYPE_NOT_CROSSES,
-        self::TYPE_DISTANCE,
-        self::TYPE_NOT_DISTANCE,
+        self::TYPE_DISTANCE_EQUAL,
+        self::TYPE_DISTANCE_NOT_EQUAL,
         self::TYPE_DISTANCE_GREATER_THAN,
         self::TYPE_DISTANCE_LESS_THAN,
         self::TYPE_INTERSECTS,
@@ -261,8 +261,8 @@ class Query
             self::TYPE_NOT_ENDS_WITH,
             self::TYPE_CROSSES,
             self::TYPE_NOT_CROSSES,
-            self::TYPE_DISTANCE,
-            self::TYPE_NOT_DISTANCE,
+            self::TYPE_DISTANCE_EQUAL,
+            self::TYPE_DISTANCE_NOT_EQUAL,
             self::TYPE_INTERSECTS,
             self::TYPE_NOT_INTERSECTS,
             self::TYPE_OVERLAPS,
@@ -285,8 +285,8 @@ class Query
         return match ($this->method) {
             self::TYPE_CROSSES,
             self::TYPE_NOT_CROSSES,
-            self::TYPE_DISTANCE,
-            self::TYPE_NOT_DISTANCE,
+            self::TYPE_DISTANCE_EQUAL,
+            self::TYPE_DISTANCE_NOT_EQUAL,
             self::TYPE_DISTANCE_GREATER_THAN,
             self::TYPE_DISTANCE_LESS_THAN,
             self::TYPE_INTERSECTS,
@@ -896,27 +896,27 @@ class Query
     // Spatial query methods
 
     /**
-     * Helper method to create Query with distance method
+     * Helper method to create Query with distanceEqual method
      *
      * @param string $attribute
      * @param array<mixed> $values
      * @return Query
      */
-    public static function distance(string $attribute, array $values): self
+    public static function distanceEqual(string $attribute, array $values): self
     {
-        return new self(self::TYPE_DISTANCE, $attribute, $values);
+        return new self(self::TYPE_DISTANCE_EQUAL, $attribute, $values);
     }
 
     /**
-     * Helper method to create Query with notDistance method
+     * Helper method to create Query with distanceNotEqual method
      *
      * @param string $attribute
      * @param array<mixed> $values
      * @return Query
      */
-    public static function notDistance(string $attribute, array $values): self
+    public static function distanceNotEqual(string $attribute, array $values): self
     {
-        return new self(self::TYPE_NOT_DISTANCE, $attribute, $values);
+        return new self(self::TYPE_DISTANCE_NOT_EQUAL, $attribute, $values);
     }
 
     /**

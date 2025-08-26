@@ -1715,13 +1715,13 @@ class MariaDB extends SQL
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
-            case Query::TYPE_DISTANCE:
+            case Query::TYPE_DISTANCE_EQUAL:
                 $distanceParams = $query->getValues()[0];
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
                 $binds[":{$placeholder}_1"] = $distanceParams[1];
                 return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) = :{$placeholder}_1";
 
-            case Query::TYPE_NOT_DISTANCE:
+            case Query::TYPE_DISTANCE_NOT_EQUAL:
                 $distanceParams = $query->getValues()[0];
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
                 $binds[":{$placeholder}_1"] = $distanceParams[1];

@@ -43,8 +43,8 @@ trait DocumentTests
         $this->assertEquals(true, $database->createAttribute('documents', 'id', Database::VAR_ID, 0, false, null));
 
         $sequence = '1000000';
-        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
-            $sequence = '6890c1e3c00288c2470de7a0' ;
+       if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc' ;
         }
 
         $document = $database->createDocument('documents', new Document([
@@ -102,8 +102,8 @@ trait DocumentTests
 
 
         $sequence = '56000';
-        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
-            $sequence = '6890c1e3c00288c2470de7b3' ;
+       if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+            $sequence = '01890dd5-7331-7f3a-9c1b-123456789def' ;
         }
 
         // Test create document with manual internal id
@@ -279,8 +279,8 @@ trait DocumentTests
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $sequence = '0';
-        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
-            $sequence = '6890c1e3c00288c0000de7b3';
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
         }
 
         /**
@@ -402,8 +402,10 @@ trait DocumentTests
         $offset = 1000000;
         for ($i = $offset; $i <= ($offset + 10); $i++) {
             $sequence = (string)$i;
-            if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
-                $sequence = '689000288c0000de7'.$i;
+            if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+                // Replace last 6 digits with $i to make it unique
+                $suffix = str_pad(substr((string)$i, -6), 6, '0', STR_PAD_LEFT);
+                $sequence = '01890dd5-7331-7f3a-9c1b-123456' . $suffix;
             }
 
             $hash[$i] = $sequence;
@@ -4712,8 +4714,8 @@ trait DocumentTests
         $database = static::getDatabase();
 
         $sequence = '200';
-        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_OBJECT_ID) {
-            $sequence = '6890c1e3c00288c2470de7a0' ;
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc' ;
         }
 
         $document->setAttribute('$id', 'caseSensitive');

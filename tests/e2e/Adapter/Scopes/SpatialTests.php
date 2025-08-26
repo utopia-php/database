@@ -131,8 +131,8 @@ trait SpatialTests
             $pointQueries = [
                 'equals' => Query::equal('pointAttr', [[6.0, 6.0]]),
                 'notEquals' => Query::notEqual('pointAttr', [[1.0, 1.0]]),
-                'distance' => Query::distance('pointAttr', [[[5.0, 5.0], 1.4142135623730951]]),
-                'notDistance' => Query::notDistance('pointAttr', [[[1.0, 1.0], 0.0]]),
+                'distanceEqual' => Query::distanceEqual('pointAttr', [[[5.0, 5.0], 1.4142135623730951]]),
+                'distanceNotEqual' => Query::distanceNotEqual('pointAttr', [[[1.0, 1.0], 0.0]]),
                 'intersects' => Query::intersects('pointAttr', [[6.0, 6.0]]),
                 'notIntersects' => Query::notIntersects('pointAttr', [[1.0, 1.0]])
             ];
@@ -425,15 +425,15 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertEmpty($extremelyFar);
 
-            // Equal-distance semantics: distance (<=) and notDistance (>), threshold exactly at 0
+            // Equal-distanceEqual semantics: distanceEqual (<=) and distanceNotEqual (>), threshold exactly at 0
             $equalZero = $database->find($child, [
-                Query::distance('coord', [[[10.0, 10.0], 0.0]])
+                Query::distanceEqual('coord', [[[10.0, 10.0], 0.0]])
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($equalZero);
             $this->assertEquals('p1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($child, [
-                Query::notDistance('coord', [[[10.0, 10.0], 0.0]])
+                Query::distanceNotEqual('coord', [[[10.0, 10.0], 0.0]])
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($notEqualZero);
             $this->assertEquals('p2', $notEqualZero[0]->getId());
@@ -530,15 +530,15 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertEmpty($veryFar);
 
-            // Equal-distance semantics: distance (<=) and notDistance (>), threshold exactly at 0
+            // Equal-distanceEqual semantics: distanceEqual (<=) and distanceNotEqual (>), threshold exactly at 0
             $equalZero = $database->find($child, [
-                Query::distance('coord', [[[20.0, 20.0], 0.0]])
+                Query::distanceEqual('coord', [[[20.0, 20.0], 0.0]])
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($equalZero);
             $this->assertEquals('s1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($child, [
-                Query::notDistance('coord', [[[20.0, 20.0], 0.0]])
+                Query::distanceNotEqual('coord', [[[20.0, 20.0], 0.0]])
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($notEqualZero);
             $this->assertEquals('s2', $notEqualZero[0]->getId());
@@ -598,7 +598,7 @@ trait SpatialTests
             ]));
             $this->assertInstanceOf(Document::class, $d1);
 
-            // Spatial query on "drivers" using point distance
+            // Spatial query on "drivers" using point distanceEqual
             $near = $database->find($a, [
                 Query::distanceLessThan('home', [[[30.0, 30.0], 0.5]])
             ], Database::PERMISSION_READ);
@@ -635,15 +635,15 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertEmpty($moderatelyFar);
 
-            // Equal-distance semantics: distance (<=) and notDistance (>), threshold exactly at 0
+            // Equal-distanceEqual semantics: distanceEqual (<=) and distanceNotEqual (>), threshold exactly at 0
             $equalZero = $database->find($a, [
-                Query::distance('home', [[[30.0, 30.0], 0.0]])
+                Query::distanceEqual('home', [[[30.0, 30.0], 0.0]])
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($equalZero);
             $this->assertEquals('d1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($a, [
-                Query::notDistance('home', [[[30.0, 30.0], 0.0]])
+                Query::distanceNotEqual('home', [[[30.0, 30.0], 0.0]])
             ], Database::PERMISSION_READ);
             $this->assertEmpty($notEqualZero);
 
@@ -1156,14 +1156,14 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($touchingLine);
 
-            // Test distance queries between shapes
+            // Test distanceEqual queries between shapes
             $nearCenter = $database->find($collectionName, [
                 Query::distanceLessThan('circle_center', [[[10, 5], 5.0]]) // Points within 5 units of first center
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($nearCenter);
             $this->assertEquals('rect1', $nearCenter[0]->getId());
 
-            // Test distance queries to find nearby shapes
+            // Test distanceEqual queries to find nearby shapes
             $nearbyShapes = $database->find($collectionName, [
                 Query::distanceLessThan('circle_center', [[[40, 4], 15.0]]) // Points within 15 units of second center
             ], Database::PERMISSION_READ);
@@ -1205,16 +1205,16 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertCount(1, $farFromOrigin);
 
-            // Equal-distance semantics for circle_center
-            // rect1 is exactly at [10,5], so distance 0
+            // Equal-distanceEqual semantics for circle_center
+            // rect1 is exactly at [10,5], so distanceEqual 0
             $equalZero = $database->find($collectionName, [
-                Query::distance('circle_center', [[[10, 5], 0.0]])
+                Query::distanceEqual('circle_center', [[[10, 5], 0.0]])
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($equalZero);
             $this->assertEquals('rect1', $equalZero[0]->getId());
 
             $notEqualZero = $database->find($collectionName, [
-                Query::notDistance('circle_center', [[[10, 5], 0.0]])
+                Query::distanceNotEqual('circle_center', [[[10, 5], 0.0]])
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($notEqualZero);
             $this->assertEquals('rect2', $notEqualZero[0]->getId());
@@ -1332,7 +1332,7 @@ trait SpatialTests
             ], Database::PERMISSION_READ);
             $this->assertCount(0, $farFromTimesSquare);
 
-            // Test ordering by distance from a specific point
+            // Test ordering by distanceEqual from a specific point
             $orderedByDistance = $database->find($collectionName, [
                 Query::distanceLessThan('location', [[[40.7829, -73.9654], 0.01]]), // Within ~1km
                 Query::limit(10)
@@ -1696,14 +1696,14 @@ trait SpatialTests
             $this->assertInstanceOf(Document::class, $b);
             $this->assertInstanceOf(Document::class, $c);
 
-            // COUNT with spatial distance filter
+            // COUNT with spatial distanceEqual filter
             $queries = [
                 Query::distanceLessThan('loc', [[[10.0, 10.0], 0.1]])
             ];
             $this->assertEquals(2, $database->count($collectionName, $queries));
             $this->assertCount(2, $database->find($collectionName, $queries));
 
-            // SUM with spatial distance filter
+            // SUM with spatial distanceEqual filter
             $sumNear = $database->sum($collectionName, 'score', $queries);
             $this->assertEquals(10 + 20, $sumNear);
 

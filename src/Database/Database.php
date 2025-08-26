@@ -1306,7 +1306,10 @@ class Database
                 $attributes,
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
-                $this->adapter->getSupportForIndexArray()
+                $this->adapter->getSupportForIndexArray(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForSpatialIndexNull(),
+                $this->adapter->getSupportForSpatialIndexOrder(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2251,7 +2254,10 @@ class Database
                         $attributes,
                         $this->adapter->getMaxIndexLength(),
                         $this->adapter->getInternalIndexesKeys(),
-                        $this->adapter->getSupportForIndexArray()
+                        $this->adapter->getSupportForIndexArray(),
+                        $this->adapter->getSupportForSpatialAttributes(),
+                        $this->adapter->getSupportForSpatialIndexNull(),
+                        $this->adapter->getSupportForSpatialIndexOrder(),
                     );
 
                     foreach ($indexes as $index) {
@@ -3191,7 +3197,10 @@ class Database
                 $collection->getAttribute('attributes', []),
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
-                $this->adapter->getSupportForIndexArray()
+                $this->adapter->getSupportForIndexArray(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForSpatialIndexNull(),
+                $this->adapter->getSupportForSpatialIndexOrder(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

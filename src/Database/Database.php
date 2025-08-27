@@ -31,6 +31,7 @@ use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
+use Utopia\Database\Validator\Spatial;
 use Utopia\Database\Validator\Structure;
 
 class Database
@@ -50,6 +51,13 @@ class Database
 
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
+
+    // Spatial Types
+    public const VAR_POINT = 'point';
+    public const VAR_LINESTRING = 'linestring';
+    public const VAR_POLYGON = 'polygon';
+
+    public const SPATIAL_TYPES = [self::VAR_POINT,self::VAR_LINESTRING, self::VAR_POLYGON];
 
     // Index Types
     public const INDEX_KEY = 'key';
@@ -347,6 +355,11 @@ class Database
     protected int $relationshipFetchDepth = 1;
 
     protected bool $filter = true;
+
+    /**
+     * @var array<string, bool>|null
+     */
+    protected ?array $disabledFilters = [];
 
     protected bool $validate = true;
 
@@ -813,17 +826,35 @@ class Database
      *
      * @template T
      * @param callable(): T $callback
+     * @param array<string>|null $filters
      * @return T
      */
-    public function skipFilters(callable $callback): mixed
+    public function skipFilters(callable $callback, ?array $filters = null): mixed
     {
-        $initial = $this->filter;
-        $this->disableFilters();
+        if (empty($filters)) {
+            $initial = $this->filter;
+            $this->disableFilters();
+
+            try {
+                return $callback();
+            } finally {
+                $this->filter = $initial;
+            }
+        }
+
+        $previous = $this->filter;
+        $previousDisabled = $this->disabledFilters;
+        $disabled = [];
+        foreach ($filters as $name) {
+            $disabled[$name] = true;
+        }
+        $this->disabledFilters = $disabled;
 
         try {
             return $callback();
         } finally {
-            $this->filter = $initial;
+            $this->filter = $previous;
+            $this->disabledFilters = $previousDisabled;
         }
     }
 
@@ -1275,7 +1306,10 @@ class Database
                 $attributes,
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
-                $this->adapter->getSupportForIndexArray()
+                $this->adapter->getSupportForIndexArray(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForSpatialIndexNull(),
+                $this->adapter->getSupportForSpatialIndexOrder(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -1583,7 +1617,7 @@ class Database
         );
 
         try {
-            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array, $required);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create attribute');
@@ -1811,8 +1845,16 @@ class Database
             case self::VAR_DATETIME:
             case self::VAR_RELATIONSHIP:
                 break;
+            case self::VAR_POINT:
+            case self::VAR_LINESTRING:
+            case self::VAR_POLYGON:
+                // Check if adapter supports spatial attributes
+                if (!$this->adapter->getSupportForSpatialAttributes()) {
+                    throw new DatabaseException('Spatial attributes are not supported');
+                }
+                break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
 
         // Only execute when $default is given
@@ -1881,8 +1923,16 @@ class Database
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
+            case self::VAR_POINT:
+            case self::VAR_LINESTRING:
+            case self::VAR_POLYGON:
+                // Spatial types expect arrays as default values
+                if ($defaultType !== 'array') {
+                    throw new DatabaseException('Default value for spatial type ' . $type . ' must be an array');
+                }
+                // no break
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
     }
 
@@ -2204,7 +2254,10 @@ class Database
                         $attributes,
                         $this->adapter->getMaxIndexLength(),
                         $this->adapter->getInternalIndexesKeys(),
-                        $this->adapter->getSupportForIndexArray()
+                        $this->adapter->getSupportForIndexArray(),
+                        $this->adapter->getSupportForSpatialAttributes(),
+                        $this->adapter->getSupportForSpatialIndexNull(),
+                        $this->adapter->getSupportForSpatialIndexOrder(),
                     );
 
                     foreach ($indexes as $index) {
@@ -3061,17 +3114,28 @@ class Database
                 }
                 break;
 
+            case self::INDEX_SPATIAL:
+                if (!$this->adapter->getSupportForSpatialAttributes()) {
+                    throw new DatabaseException('Spatial indexes are not supported');
+                }
+                if (!empty($orders) && !$this->adapter->getSupportForSpatialIndexOrder()) {
+                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
+                }
+                break;
+
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL);
         }
 
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];
+        $indexAttributesRequired = [];
         foreach ($attributes as $i => $attr) {
             foreach ($collectionAttributes as $collectionAttribute) {
                 if ($collectionAttribute->getAttribute('key') === $attr) {
                     $indexAttributesWithTypes[$attr] = $collectionAttribute->getAttribute('type');
+                    $indexAttributesRequired[$attr] = $collectionAttribute->getAttribute('required', false);
 
                     /**
                      * mysql does not save length in collection when length = attributes size
@@ -3094,6 +3158,29 @@ class Database
             }
         }
 
+        // Validate spatial index constraints
+        if ($type === self::INDEX_SPATIAL) {
+            foreach ($attributes as $attr) {
+                if (!isset($indexAttributesWithTypes[$attr])) {
+                    throw new DatabaseException('Attribute "' . $attr . '" not found in collection');
+                }
+
+                $attributeType = $indexAttributesWithTypes[$attr];
+                if (!in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                    throw new DatabaseException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                }
+            }
+
+            // Check spatial index null constraints for adapters that don't support null values
+            if (!$this->adapter->getSupportForSpatialIndexNull()) {
+                foreach ($attributes as $attr) {
+                    if (!$indexAttributesRequired[$attr]) {
+                        throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attr . '" as required or create the index on a column with no null values.');
+                    }
+                }
+            }
+        }
+
         $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -3110,7 +3197,10 @@ class Database
                 $collection->getAttribute('attributes', []),
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
-                $this->adapter->getSupportForIndexArray()
+                $this->adapter->getSupportForIndexArray(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForSpatialIndexNull(),
+                $this->adapter->getSupportForSpatialIndexOrder(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -3264,7 +3354,7 @@ class Database
         }
 
         $document = $this->adapter->getDocument(
-            $collection->getId(),
+            $collection,
             $id,
             $queries,
             $forUpdate
@@ -3273,7 +3363,6 @@ class Database
         if ($document->isEmpty()) {
             return $document;
         }
-
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
@@ -3325,9 +3414,15 @@ class Database
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = \array_filter($attributes, function ($attribute) {
-            return $attribute['type'] === Database::VAR_RELATIONSHIP;
-        });
+        $relationships = [];
+
+        foreach ($attributes as $attribute) {
+            if ($attribute['type'] === Database::VAR_RELATIONSHIP) {
+                if (empty($selects) || array_key_exists($attribute['key'], $selects)) {
+                    $relationships[] = $attribute;
+                }
+            }
+        }
 
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
@@ -4213,7 +4308,7 @@ class Database
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
-            return $this->adapter->createDocument($collection->getId(), $document);
+            return $this->adapter->createDocument($collection, $document);
         });
 
         if ($this->resolveRelationships) {
@@ -4311,7 +4406,7 @@ class Database
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             $batch = $this->withTransaction(function () use ($collection, $chunk) {
-                return $this->adapter->createDocuments($collection->getId(), $chunk);
+                return $this->adapter->createDocuments($collection, $chunk);
             });
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
@@ -4854,7 +4949,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $id, $document, $skipPermissionsUpdate);
+            $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
             $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
@@ -5049,7 +5144,7 @@ class Database
                 }
 
                 $this->adapter->updateDocuments(
-                    $collection->getId(),
+                    $collection,
                     $updates,
                     $batch
                 );
@@ -5683,7 +5778,7 @@ class Database
              * @var array<Change> $chunk
              */
             $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
-                $collection->getId(),
+                $collection,
                 $attribute,
                 $chunk
             )));
@@ -5751,7 +5846,7 @@ class Database
         int|float|null $max = null
     ): Document {
         if ($value <= 0) { // Can be a float
-            throw new DatabaseException('Value must be numeric and greater than 0');
+            throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -5848,7 +5943,7 @@ class Database
         int|float|null $min = null
     ): Document {
         if ($value <= 0) { // Can be a float
-            throw new DatabaseException('Value must be numeric and greater than 0');
+            throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -6688,7 +6783,7 @@ class Database
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         $getResults = fn () => $this->adapter->find(
-            $collection->getId(),
+            $collection,
             $queries,
             $limit ?? 25,
             $offset ?? 0,
@@ -6850,7 +6945,7 @@ class Database
         $queries = Query::groupByType($queries)['filters'];
         $queries = $this->convertQueries($collection, $queries);
 
-        $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
+        $getCount = fn () => $this->adapter->count($collection, $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
@@ -6895,7 +6990,7 @@ class Database
 
         $queries = $this->convertQueries($collection, $queries);
 
-        $sum = $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
+        $sum = $this->adapter->sum($collection, $attribute, $queries, $max);
 
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);
 
@@ -6968,6 +7063,14 @@ class Database
 
             foreach ($value as $index => $node) {
                 if ($node !== null) {
+                    // Handle spatial data encoding
+                    $attributeType = $attribute['type'] ?? '';
+                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                        if (is_array($node)) {
+                            $node = $this->encodeSpatialData($node, $attributeType);
+                        }
+                    }
+
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
@@ -7025,6 +7128,7 @@ class Database
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
+            $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
@@ -7045,6 +7149,10 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
+                if (is_string($node) && in_array($type, Database::SPATIAL_TYPES)) {
+                    $node = $this->decodeSpatialData($node);
+                }
+
                 foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
@@ -7185,6 +7293,10 @@ class Database
             return $value;
         }
 
+        if (!\is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
+            return $value;
+        }
+
         if (!array_key_exists($filter, self::$filters) && !array_key_exists($filter, $this->instanceFilters)) {
             throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
         }
@@ -7287,42 +7399,67 @@ class Database
      * @param array<Query> $queries
      * @return array<Query>
      * @throws QueryException
-     * @throws Exception
+     * @throws \Utopia\Database\Exception
      */
-    public function convertQueries(Document $collection, array $queries): array
+    public static function convertQueries(Document $collection, array $queries): array
     {
+        foreach ($queries as $index => $query) {
+            if ($query->isNested()) {
+                $values = self::convertQueries($collection, $query->getValues());
+                $query->setValues($values);
+            }
+
+            $query = self::convertQuery($collection, $query);
+
+            $queries[$index] = $query;
+        }
+
+        return $queries;
+    }
+
+    /**
+     * @param Document $collection
+     * @param Query $query
+     * @return Query
+     * @throws QueryException
+     * @throws \Utopia\Database\Exception
+     */
+    public static function convertQuery(Document $collection, Query $query): Query
+    {
+        /**
+         * @var array<Document> $attributes
+         */
         $attributes = $collection->getAttribute('attributes', []);
 
         foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
             $attributes[] = new Document($attribute);
         }
 
-        foreach ($attributes as $attribute) {
-            foreach ($queries as $query) {
-                if ($query->getAttribute() === $attribute->getId()) {
-                    $query->setOnArray($attribute->getAttribute('array', false));
-                }
-            }
+        $attribute = new Document();
 
-            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
-                foreach ($queries as $index => $query) {
-                    if ($query->getAttribute() === $attribute->getId()) {
-                        $values = $query->getValues();
-                        foreach ($values as $valueIndex => $value) {
-                            try {
-                                $values[$valueIndex] = DateTime::setTimezone($value);
-                            } catch (\Throwable $e) {
-                                throw new QueryException($e->getMessage(), $e->getCode(), $e);
-                            }
-                        }
-                        $query->setValues($values);
-                        $queries[$index] = $query;
-                    }
-                }
+        foreach ($attributes as $attr) {
+            if ($attr->getId() === $query->getAttribute()) {
+                $attribute = $attr;
             }
         }
 
-        return $queries;
+        if (! $attribute->isEmpty()) {
+            $query->setOnArray($attribute->getAttribute('array', false));
+
+            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
+                $values = $query->getValues();
+                foreach ($values as $valueIndex => $value) {
+                    try {
+                        $values[$valueIndex] = DateTime::setTimezone($value);
+                    } catch (\Throwable $e) {
+                        throw new QueryException($e->getMessage(), $e->getCode(), $e);
+                    }
+                }
+                $query->setValues($values);
+            }
+        }
+
+        return $query;
     }
 
     /**
@@ -7495,5 +7632,107 @@ class Database
         }, $nestedSelections)));
 
         return $nestedSelections;
+    }
+
+    /**
+     * Encode spatial data from array format to WKT (Well-Known Text) format
+     *
+     * @param mixed $value
+     * @param string $type
+     * @return string
+     * @throws DatabaseException
+     */
+    protected function encodeSpatialData(mixed $value, string $type): string
+    {
+        $validator = new Spatial($type);
+        $validator->isValid($value);
+
+        switch ($type) {
+            case self::VAR_POINT:
+                return "POINT({$value[0]} {$value[1]})";
+
+            case self::VAR_LINESTRING:
+                $points = [];
+                foreach ($value as $point) {
+                    $points[] = "{$point[0]} {$point[1]}";
+                }
+                return 'LINESTRING(' . implode(', ', $points) . ')';
+
+            case self::VAR_POLYGON:
+                // Check if this is a single ring (flat array of points) or multiple rings
+                $isSingleRing = count($value) > 0 && is_array($value[0]) &&
+                              count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
+
+                if ($isSingleRing) {
+                    // Convert single ring format [[x1,y1], [x2,y2], ...] to multi-ring format
+                    $value = [$value];
+                }
+
+                $rings = [];
+                foreach ($value as $ring) {
+                    $points = [];
+                    foreach ($ring as $point) {
+                        $points[] = "{$point[0]} {$point[1]}";
+                    }
+                    $rings[] = '(' . implode(', ', $points) . ')';
+                }
+                return 'POLYGON(' . implode(', ', $rings) . ')';
+
+            default:
+                throw new DatabaseException('Unknown spatial type: ' . $type);
+        }
+    }
+
+    /**
+     * Decode spatial data from WKT (Well-Known Text) format to array format
+     *
+     * @param string $wkt
+     * @return array<mixed>
+     * @throws DatabaseException
+     */
+    public function decodeSpatialData(string $wkt): array
+    {
+        $upper = strtoupper($wkt);
+
+        // POINT(x y)
+        if (str_starts_with($upper, 'POINT(')) {
+            $start = strpos($wkt, '(') + 1;
+            $end   = strrpos($wkt, ')');
+            $inside = substr($wkt, $start, $end - $start);
+
+            $coords = explode(' ', trim($inside));
+            return [(float)$coords[0], (float)$coords[1]];
+        }
+
+        // LINESTRING(x1 y1, x2 y2, ...)
+        if (str_starts_with($upper, 'LINESTRING(')) {
+            $start = strpos($wkt, '(') + 1;
+            $end   = strrpos($wkt, ')');
+            $inside = substr($wkt, $start, $end - $start);
+
+            $points = explode(',', $inside);
+            return array_map(function ($point) {
+                $coords = explode(' ', trim($point));
+                return [(float)$coords[0], (float)$coords[1]];
+            }, $points);
+        }
+
+        // POLYGON((x1,y1),(x2,y2))
+        if (str_starts_with($upper, 'POLYGON((')) {
+            $start = strpos($wkt, '((') + 2;
+            $end   = strrpos($wkt, '))');
+            $inside = substr($wkt, $start, $end - $start);
+
+            $rings = explode('),(', $inside);
+            return array_map(function ($ring) {
+                $points = explode(',', $ring);
+                return array_map(function ($point) {
+                    $coords = explode(' ', trim($point));
+                    return [(float)$coords[0], (float)$coords[1]];
+                }, $points);
+            }, $rings);
+        }
+
+        return [$wkt];
     }
 }

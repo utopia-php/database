@@ -66,11 +66,17 @@ class Document extends ArrayObject
     }
 
     /**
-     * @return string
+     * @return string|null
      */
-    public function getSequence(): string
+    public function getSequence(): ?string
     {
-        return $this->getAttribute('$sequence', '');
+        $sequence = $this->getAttribute('$sequence');
+
+        if ($sequence === null) {
+            return null;
+        }
+
+        return $sequence;
     }
 
     /**
@@ -172,10 +178,12 @@ class Document extends ArrayObject
     public function getTenant(): ?int
     {
         $tenant = $this->getAttribute('$tenant');
-        if ($tenant !== null) {
-            return (int)$tenant;
+
+        if ($tenant === null) {
+            return null;
         }
-        return null;
+
+        return (int) $tenant;
     }
 
     /**

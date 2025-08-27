@@ -2190,10 +2190,10 @@ class Database
                         throw new DatabaseException('Spatial attributes are not supported');
                     }
                     if (!empty($size)) {
-                        throw new DatabaseException('Size must be empty');
+                        throw new DatabaseException('Size must be empty for spatial attributes');
                     }
                     if (!empty($array)) {
-                        throw new DatabaseException('Array must be empty');
+                        throw new DatabaseException('Spatial attributes cannot be arrays');
                     }
                     break;
                 default:

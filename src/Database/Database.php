@@ -2244,19 +2244,29 @@ class Database
                 throw new LimitException('Row width limit reached. Cannot update attribute.');
             }
 
-            // checking required of attributes in case of spatial types
-            if (in_array($type, Database::SPATIAL_TYPES) && !$this->adapter->getSupportForSpatialIndexNull()) {
+            if (in_array($type, self::SPATIAL_TYPES, true) && !$this->adapter->getSupportForSpatialIndexNull()) {
                 $attributeMap = [];
-                foreach ($attributes as $attribute) {
-                    $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
-                    $attributeMap[$key] = $attribute;
+                foreach ($attributes as $attrDoc) {
+                    $key = \strtolower($attrDoc->getAttribute('key', $attrDoc->getAttribute('$id')));
+                    $attributeMap[$key] = $attrDoc;
                 }
+
                 $indexes = $collectionDoc->getAttribute('indexes', []);
                 foreach ($indexes as $index) {
-                    $attributes = $index->getAttribute('attributes', []);
-                    foreach ($attributes as $attributeName) {
-                        $attribute  = $attributeMap[\strtolower($attributeName)];
-                        if (!$required) {
+                    if ($index->getAttribute('type') !== self::INDEX_SPATIAL) {
+                        continue;
+                    }
+                    $indexAttributes = $index->getAttribute('attributes', []);
+                    foreach ($indexAttributes as $attributeName) {
+                        $lookup = \strtolower($attributeName);
+                        if (!isset($attributeMap[$lookup])) {
+                            continue;
+                        }
+                        $attrDoc = $attributeMap[$lookup];
+                        $attrType = $attrDoc->getAttribute('type');
+                        $attrRequired = (bool)$attrDoc->getAttribute('required', false);
+
+                        if (in_array($attrType, self::SPATIAL_TYPES, true) && !$attrRequired) {
                             throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.');
                         }
                     }

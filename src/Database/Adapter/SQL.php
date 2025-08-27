@@ -1518,6 +1518,36 @@ abstract class SQL extends Adapter
         return false;
     }
 
+/**
+     * Is internal casting supported?
+     *
+     * @return bool
+     */
+    public function getSupportForInternalCasting(): bool
+    {
+        return false;
+    }
+
+    public function isMongo(): bool
+    {
+        return false;
+    }
+
+    public function setUTCDatetime(string $value): mixed
+    {
+        return $value;
+    }
+
+    public function castingBefore(Document $collection, Document $document): Document
+    {
+        return $document;
+    }
+
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        return $document;
+    }       
+
     /**
      * @param string $tableName
      * @param string $columns

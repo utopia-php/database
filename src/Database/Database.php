@@ -1909,8 +1909,11 @@ class Database
         }
 
         if ($defaultType === 'array') {
-            foreach ($default as $value) {
-                $this->validateDefaultTypes($type, $value);
+            // spatial types require the array itself
+            if (!in_array($type, Database::SPATIAL_TYPES)) {
+                foreach ($default as $value) {
+                    $this->validateDefaultTypes($type, $value);
+                }
             }
             return;
         }

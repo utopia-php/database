@@ -1865,4 +1865,108 @@ trait SpatialTests
             $database->deleteCollection($collectionName);
         }
     }
+
+    public function testSpatialAttributeDefaults(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'spatial_defaults_';
+        try {
+            $database->createCollection($collectionName);
+
+            // Create spatial attributes with defaults and no indexes to avoid nullability/index constraints
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'pt', Database::VAR_POINT, 0, false, [1.0, 2.0]));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'ln', Database::VAR_LINESTRING, 0, false, [[0.0, 0.0], [1.0, 1.0]]));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'pg', Database::VAR_POLYGON, 0, false, [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]]));
+
+            // Create non-spatial attributes (mix of defaults and no defaults)
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'title', Database::VAR_STRING, 255, false, 'Untitled'));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'count', Database::VAR_INTEGER, 0, false, 0));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'rating', Database::VAR_FLOAT, 0, false)); // no default
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'active', Database::VAR_BOOLEAN, 0, false, true));
+
+            // Create document without providing spatial values, expect defaults applied
+            $doc = $database->createDocument($collectionName, new Document([
+                '$id' => ID::custom('d1'),
+                '$permissions' => [Permission::read(Role::any())]
+            ]));
+            $this->assertInstanceOf(Document::class, $doc);
+            $this->assertEquals([1.0, 2.0], $doc->getAttribute('pt'));
+            $this->assertEquals([[0.0, 0.0], [1.0, 1.0]], $doc->getAttribute('ln'));
+            $this->assertEquals([[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]], $doc->getAttribute('pg'));
+            // Non-spatial defaults
+            $this->assertEquals('Untitled', $doc->getAttribute('title'));
+            $this->assertEquals(0, $doc->getAttribute('count'));
+            $this->assertNull($doc->getAttribute('rating'));
+            $this->assertTrue($doc->getAttribute('active'));
+
+            // Create document overriding defaults
+            $doc2 = $database->createDocument($collectionName, new Document([
+                '$id' => ID::custom('d2'),
+                '$permissions' => [Permission::read(Role::any())],
+                'pt' => [9.0, 9.0],
+                'ln' => [[2.0, 2.0], [3.0, 3.0]],
+                'pg' => [[[1.0, 1.0], [1.0, 3.0], [3.0, 3.0], [1.0, 1.0]]],
+                'title' => 'Custom',
+                'count' => 5,
+                'rating' => 4.5,
+                'active' => false
+            ]));
+            $this->assertInstanceOf(Document::class, $doc2);
+            $this->assertEquals([9.0, 9.0], $doc2->getAttribute('pt'));
+            $this->assertEquals([[2.0, 2.0], [3.0, 3.0]], $doc2->getAttribute('ln'));
+            $this->assertEquals([[[1.0, 1.0], [1.0, 3.0], [3.0, 3.0], [1.0, 1.0]]], $doc2->getAttribute('pg'));
+            $this->assertEquals('Custom', $doc2->getAttribute('title'));
+            $this->assertEquals(5, $doc2->getAttribute('count'));
+            $this->assertEquals(4.5, $doc2->getAttribute('rating'));
+            $this->assertFalse($doc2->getAttribute('active'));
+
+            // Update defaults and ensure they are applied for new documents
+            $database->updateAttributeDefault($collectionName, 'pt', [5.0, 6.0]);
+            $database->updateAttributeDefault($collectionName, 'ln', [[10.0, 10.0], [20.0, 20.0]]);
+            $database->updateAttributeDefault($collectionName, 'pg', [[[5.0, 5.0], [5.0, 7.0], [7.0, 7.0], [5.0, 5.0]]]);
+            $database->updateAttributeDefault($collectionName, 'title', 'Updated');
+            $database->updateAttributeDefault($collectionName, 'count', 10);
+            $database->updateAttributeDefault($collectionName, 'active', false);
+
+            $doc3 = $database->createDocument($collectionName, new Document([
+                '$id' => ID::custom('d3'),
+                '$permissions' => [Permission::read(Role::any())]
+            ]));
+            $this->assertInstanceOf(Document::class, $doc3);
+            $this->assertEquals([5.0, 6.0], $doc3->getAttribute('pt'));
+            $this->assertEquals([[10.0, 10.0], [20.0, 20.0]], $doc3->getAttribute('ln'));
+            $this->assertEquals([[[5.0, 5.0], [5.0, 7.0], [7.0, 7.0], [5.0, 5.0]]], $doc3->getAttribute('pg'));
+            $this->assertEquals('Updated', $doc3->getAttribute('title'));
+            $this->assertEquals(10, $doc3->getAttribute('count'));
+            $this->assertNull($doc3->getAttribute('rating'));
+            $this->assertFalse($doc3->getAttribute('active'));
+
+            // Invalid defaults should raise errors
+            try {
+                $database->updateAttributeDefault($collectionName, 'pt', [[1.0, 2.0]]); // wrong dimensionality
+                $this->fail('Expected exception for invalid point default shape');
+            } catch (\Throwable $e) {
+                $this->assertTrue(true);
+            }
+            try {
+                $database->updateAttributeDefault($collectionName, 'ln', [1.0, 2.0]); // wrong dimensionality
+                $this->fail('Expected exception for invalid linestring default shape');
+            } catch (\Throwable $e) {
+                $this->assertTrue(true);
+            }
+            try {
+                $database->updateAttributeDefault($collectionName, 'pg', [[1.0, 2.0]]); // wrong dimensionality
+                $this->fail('Expected exception for invalid polygon default shape');
+            } catch (\Throwable $e) {
+                $this->assertTrue(true);
+            }
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
 }

@@ -1852,6 +1852,12 @@ class Database
                 if (!$this->adapter->getSupportForSpatialAttributes()) {
                     throw new DatabaseException('Spatial attributes are not supported');
                 }
+                if (!empty($size)) {
+                    throw new DatabaseException('Size must be empty for spatial attributes');
+                }
+                if (!empty($array)) {
+                    throw new DatabaseException('Spatial attributes cannot be arrays');
+                }
                 break;
             default:
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
@@ -1903,8 +1909,11 @@ class Database
         }
 
         if ($defaultType === 'array') {
-            foreach ($default as $value) {
-                $this->validateDefaultTypes($type, $value);
+            // spatial types require the array itself
+            if (!in_array($type, Database::SPATIAL_TYPES)) {
+                foreach ($default as $value) {
+                    $this->validateDefaultTypes($type, $value);
+                }
             }
             return;
         }
@@ -2173,6 +2182,20 @@ class Database
                         throw new DatabaseException('Size must be empty');
                     }
                     break;
+
+                case self::VAR_POINT:
+                case self::VAR_LINESTRING:
+                case self::VAR_POLYGON:
+                    if (!$this->adapter->getSupportForSpatialAttributes()) {
+                        throw new DatabaseException('Spatial attributes are not supported');
+                    }
+                    if (!empty($size)) {
+                        throw new DatabaseException('Size must be empty for spatial attributes');
+                    }
+                    if (!empty($array)) {
+                        throw new DatabaseException('Spatial attributes cannot be arrays');
+                    }
+                    break;
                 default:
                     throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
             }
@@ -2219,6 +2242,35 @@ class Database
                 $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
             ) {
                 throw new LimitException('Row width limit reached. Cannot update attribute.');
+            }
+
+            if (in_array($type, self::SPATIAL_TYPES, true) && !$this->adapter->getSupportForSpatialIndexNull()) {
+                $attributeMap = [];
+                foreach ($attributes as $attrDoc) {
+                    $key = \strtolower($attrDoc->getAttribute('key', $attrDoc->getAttribute('$id')));
+                    $attributeMap[$key] = $attrDoc;
+                }
+
+                $indexes = $collectionDoc->getAttribute('indexes', []);
+                foreach ($indexes as $index) {
+                    if ($index->getAttribute('type') !== self::INDEX_SPATIAL) {
+                        continue;
+                    }
+                    $indexAttributes = $index->getAttribute('attributes', []);
+                    foreach ($indexAttributes as $attributeName) {
+                        $lookup = \strtolower($attributeName);
+                        if (!isset($attributeMap[$lookup])) {
+                            continue;
+                        }
+                        $attrDoc = $attributeMap[$lookup];
+                        $attrType = $attrDoc->getAttribute('type');
+                        $attrRequired = (bool)$attrDoc->getAttribute('required', false);
+
+                        if (in_array($attrType, self::SPATIAL_TYPES, true) && !$attrRequired) {
+                            throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.');
+                        }
+                    }
+                }
             }
 
             if ($altering) {

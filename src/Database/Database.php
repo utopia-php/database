@@ -6860,15 +6860,15 @@ class Database
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
-    public static function convertQueries(Document $collection, array $queries): array
+    public function convertQueries(Document $collection, array $queries): array
     {
         foreach ($queries as $index => $query) {
             if ($query->isNested()) {
-                $values = self::convertQueries($collection, $query->getValues());
+                $values = $this->convertQueries($collection, $query->getValues());
                 $query->setValues($values);
             }
 
-            $query = self::convertQuery($collection, $query);
+            $query = $this->convertQuery($collection, $query);
 
             $queries[$index] = $query;
         }
@@ -6883,7 +6883,7 @@ class Database
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
-    public static function convertQuery(Document $collection, Query $query): Query
+    public function convertQuery(Document $collection, Query $query): Query
     {
         /**
          * @var array<Document> $attributes

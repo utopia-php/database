@@ -1852,6 +1852,12 @@ class Database
                 if (!$this->adapter->getSupportForSpatialAttributes()) {
                     throw new DatabaseException('Spatial attributes are not supported');
                 }
+                if (!empty($size)) {
+                    throw new DatabaseException('Size must be empty');
+                }
+                if (!empty($array)) {
+                    throw new DatabaseException('Array must be empty');
+                }
                 break;
             default:
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
@@ -2173,6 +2179,20 @@ class Database
                         throw new DatabaseException('Size must be empty');
                     }
                     break;
+
+                case self::VAR_POINT:
+                case self::VAR_LINESTRING:
+                case self::VAR_POLYGON:
+                    if (!$this->adapter->getSupportForSpatialAttributes()) {
+                        throw new DatabaseException('Spatial attributes are not supported');
+                    }
+                    if (!empty($size)) {
+                        throw new DatabaseException('Size must be empty');
+                    }
+                    if (!empty($array)) {
+                        throw new DatabaseException('Array must be empty');
+                    }
+                    break;
                 default:
                     throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
             }
@@ -2219,6 +2239,25 @@ class Database
                 $this->adapter->getAttributeWidth($collectionDoc) >= $this->adapter->getDocumentSizeLimit()
             ) {
                 throw new LimitException('Row width limit reached. Cannot update attribute.');
+            }
+
+            // checking required of attributes in case of spatial types
+            if (in_array($type, Database::SPATIAL_TYPES) && !$this->adapter->getSupportForSpatialIndexNull()) {
+                $attributeMap = [];
+                foreach ($attributes as $attribute) {
+                    $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
+                    $attributeMap[$key] = $attribute;
+                }
+                $indexes = $collectionDoc->getAttribute('indexes', []);
+                foreach ($indexes as $index) {
+                    $attributes = $index->getAttribute('attributes', []);
+                    foreach ($attributes as $attributeName) {
+                        $attribute  = $attributeMap[\strtolower($attributeName)];
+                        if (!$required) {
+                            throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.');
+                        }
+                    }
+                }
             }
 
             if ($altering) {

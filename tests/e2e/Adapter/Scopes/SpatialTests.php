@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -340,7 +341,12 @@ trait SpatialTests
 
             // Create spatial indexes
             $this->assertEquals(true, $database->createIndex($collectionName, 'idx_point', Database::INDEX_SPATIAL, ['pointAttr']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
+            if ($database->getAdapter()->getSupportForSpatialIndexNull()) {
+                $this->assertEquals(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
+            } else {
+                // Attribute was created as required above; directly create index once
+                $this->assertEquals(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
+            }
             $this->assertEquals(true, $database->createIndex($collectionName, 'idx_poly', Database::INDEX_SPATIAL, ['polyAttr']));
 
             $collection = $database->getCollection($collectionName);
@@ -1768,6 +1774,92 @@ trait SpatialTests
                 ];
                 $this->assertEquals(1, $database->count($collectionName, $queriesNotContain));
                 $this->assertEquals(30, $database->sum($collectionName, 'score', $queriesNotContain));
+            }
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
+    public function testUpdateSpatialAttributes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'spatial_update_attrs_';
+        try {
+            $database->createCollection($collectionName);
+
+            // 0) Disallow creation of spatial attributes with size or array
+            try {
+                $database->createAttribute($collectionName, 'geom_bad_size', Database::VAR_POINT, 10, true);
+                $this->fail('Expected DatabaseException when creating spatial attribute with non-zero size');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+            }
+
+            try {
+                $database->createAttribute($collectionName, 'geom_bad_array', Database::VAR_POINT, 0, true, array: true);
+                $this->fail('Expected DatabaseException when creating spatial attribute with array=true');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+            }
+
+            // Create a single spatial attribute (required=true)
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'geom', Database::VAR_POINT, 0, true));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_geom', Database::INDEX_SPATIAL, ['geom']));
+
+            // 1) Disallow size and array updates on spatial attributes: expect DatabaseException
+            try {
+                $database->updateAttribute($collectionName, 'geom', size: 10);
+                $this->fail('Expected DatabaseException when updating size on spatial attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+            }
+
+            try {
+                $database->updateAttribute($collectionName, 'geom', array: true);
+                $this->fail('Expected DatabaseException when updating array on spatial attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+            }
+
+            // 2) required=true -> create index -> update required=false
+            $nullSupported = $database->getAdapter()->getSupportForSpatialIndexNull();
+            if ($nullSupported) {
+                // Should succeed on adapters that allow nullable spatial indexes
+                $database->updateAttribute($collectionName, 'geom', required: false);
+                $meta = $database->getCollection($collectionName);
+                $this->assertEquals(false, $meta->getAttribute('attributes')[0]['required']);
+            } else {
+                // Should error (index constraint) when making required=false while spatial index exists
+                $threw = false;
+                try {
+                    $database->updateAttribute($collectionName, 'geom', required: false);
+                } catch (\Throwable $e) {
+                    $threw = true;
+                }
+                $this->assertTrue($threw, 'Expected error when setting required=false with existing spatial index and adapter not supporting nullable indexes');
+                // Ensure attribute remains required
+                $meta = $database->getCollection($collectionName);
+                $this->assertEquals(true, $meta->getAttribute('attributes')[0]['required']);
+            }
+
+            // 3) Spatial index order support: providing orders should fail if not supported
+            $orderSupported = $database->getAdapter()->getSupportForSpatialIndexOrder();
+            if ($orderSupported) {
+                $this->assertTrue($database->createIndex($collectionName, 'idx_geom_desc', Database::INDEX_SPATIAL, ['geom'], [], [Database::ORDER_DESC]));
+                // cleanup
+                $this->assertTrue($database->deleteIndex($collectionName, 'idx_geom_desc'));
+            } else {
+                try {
+                    $database->createIndex($collectionName, 'idx_geom_desc', Database::INDEX_SPATIAL, ['geom'], [], ['DESC']);
+                    $this->fail('Expected error when providing orders for spatial index on adapter without order support');
+                } catch (\Throwable $e) {
+                    $this->assertTrue(true);
+                }
             }
         } finally {
             $database->deleteCollection($collectionName);

@@ -7024,7 +7024,12 @@ class Database
                 // 'foo.bar.baz' becomes 'bar.baz'
 
                 $nestingPath = \implode('.', $nesting);
-                $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
+                // If nestingPath is empty, it means we want all fields (*) for this relationship
+                if (empty($nestingPath)) {
+                    $nestedSelections[$selectedKey][] = Query::select(['*']);
+                } else {
+                    $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
+                }
 
                 $type = $relationship->getAttribute('options')['relationType'];
                 $side = $relationship->getAttribute('options')['side'];
@@ -7053,7 +7058,13 @@ class Database
                 }
             }
 
-            $query->setValues(\array_values($values));
+            $finalValues = \array_values($values);
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                if (empty($finalValues)) {
+                    $finalValues = ['*'];
+                }
+            }
+            $query->setValues($finalValues);
         }
 
         return $nestedSelections;
@@ -7086,7 +7097,7 @@ class Database
             case self::VAR_POLYGON:
                 // Check if this is a single ring (flat array of points) or multiple rings
                 $isSingleRing = count($value) > 0 && is_array($value[0]) &&
-                              count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
+                    count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
 
                 if ($isSingleRing) {
                     // Convert single ring format [[x1,y1], [x2,y2], ...] to multi-ring format

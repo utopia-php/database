@@ -13,7 +13,6 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Spatial;
 
 abstract class SQL extends Adapter
 {

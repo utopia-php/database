@@ -114,4 +114,75 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::equal('integer', $values)));
         $this->assertEquals('Query on attribute has greater than 100 values: integer', $this->validator->getDescription());
     }
+
+    public function testNotContains(): void
+    {
+        // Test valid notContains queries
+        $this->assertTrue($this->validator->isValid(Query::notContains('string', ['unwanted'])));
+        $this->assertTrue($this->validator->isValid(Query::notContains('string_array', ['spam', 'unwanted'])));
+        $this->assertTrue($this->validator->isValid(Query::notContains('integer_array', [100, 200])));
+
+        // Test invalid notContains queries (empty values)
+        $this->assertFalse($this->validator->isValid(Query::notContains('string', [])));
+        $this->assertEquals('NotContains queries require at least one value.', $this->validator->getDescription());
+    }
+
+    public function testNotSearch(): void
+    {
+        // Test valid notSearch queries
+        $this->assertTrue($this->validator->isValid(Query::notSearch('string', 'unwanted')));
+
+        // Test that arrays cannot use notSearch
+        $this->assertFalse($this->validator->isValid(Query::notSearch('string_array', 'unwanted')));
+        $this->assertEquals('Cannot query notSearch on attribute "string_array" because it is an array.', $this->validator->getDescription());
+
+        // Test multiple values not allowed
+        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_SEARCH, 'string', ['word1', 'word2'])));
+        $this->assertEquals('NotSearch queries require exactly one value.', $this->validator->getDescription());
+    }
+
+    public function testNotStartsWith(): void
+    {
+        // Test valid notStartsWith queries
+        $this->assertTrue($this->validator->isValid(Query::notStartsWith('string', 'temp')));
+
+        // Test that arrays cannot use notStartsWith
+        $this->assertFalse($this->validator->isValid(Query::notStartsWith('string_array', 'temp')));
+        $this->assertEquals('Cannot query notStartsWith on attribute "string_array" because it is an array.', $this->validator->getDescription());
+
+        // Test multiple values not allowed
+        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_STARTS_WITH, 'string', ['prefix1', 'prefix2'])));
+        $this->assertEquals('NotStartsWith queries require exactly one value.', $this->validator->getDescription());
+    }
+
+    public function testNotEndsWith(): void
+    {
+        // Test valid notEndsWith queries
+        $this->assertTrue($this->validator->isValid(Query::notEndsWith('string', '.tmp')));
+
+        // Test that arrays cannot use notEndsWith
+        $this->assertFalse($this->validator->isValid(Query::notEndsWith('string_array', '.tmp')));
+        $this->assertEquals('Cannot query notEndsWith on attribute "string_array" because it is an array.', $this->validator->getDescription());
+
+        // Test multiple values not allowed
+        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_ENDS_WITH, 'string', ['suffix1', 'suffix2'])));
+        $this->assertEquals('NotEndsWith queries require exactly one value.', $this->validator->getDescription());
+    }
+
+    public function testNotBetween(): void
+    {
+        // Test valid notBetween queries
+        $this->assertTrue($this->validator->isValid(Query::notBetween('integer', 0, 50)));
+
+        // Test that arrays cannot use notBetween
+        $this->assertFalse($this->validator->isValid(Query::notBetween('integer_array', 1, 10)));
+        $this->assertEquals('Cannot query notBetween on attribute "integer_array" because it is an array.', $this->validator->getDescription());
+
+        // Test wrong number of values
+        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_BETWEEN, 'integer', [10])));
+        $this->assertEquals('NotBetween queries require exactly two values.', $this->validator->getDescription());
+
+        $this->assertFalse($this->validator->isValid(new Query(Query::TYPE_NOT_BETWEEN, 'integer', [10, 20, 30])));
+        $this->assertEquals('NotBetween queries require exactly two values.', $this->validator->getDescription());
+    }
 }

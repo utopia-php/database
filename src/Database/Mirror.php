@@ -781,6 +781,75 @@ class Mirror extends Database
         return $modified;
     }
 
+    public function createOrUpdateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE, callable|null $onNext = null): int
+    {
+        $modified = 0;
+        $this->source->createOrUpdateDocuments(
+            $collection,
+            $documents,
+            $batchSize,
+            function ($doc) use ($onNext, &$modified) {
+                $onNext && $onNext($doc);
+                $modified++;
+            }
+        );
+
+        if (
+            \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+            || $this->destination === null
+        ) {
+            return $modified;
+        }
+
+        $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
+        if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
+            return $modified;
+        }
+
+        try {
+            $clones = [];
+
+            foreach ($documents as $document) {
+                $clone = clone $document;
+
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->beforeCreateOrUpdateDocument(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+
+                $clones[] = $clone;
+            }
+
+            $modified = $this->destination->withPreserveDates(
+                fn () =>
+                $this->destination->createOrUpdateDocuments(
+                    $collection,
+                    $clones,
+                    $batchSize,
+                    null,
+                )
+            );
+
+            foreach ($clones as $clone) {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterCreateOrUpdateDocument(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+            }
+        } catch (\Throwable $err) {
+            $this->logError('createDocuments', $err);
+        }
+        return $modified;
+    }
+
     public function deleteDocument(string $collection, string $id): bool
     {
         $result = $this->source->deleteDocument($collection, $id);

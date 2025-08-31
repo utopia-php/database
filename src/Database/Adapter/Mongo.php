@@ -1464,170 +1464,170 @@ class Mongo extends Adapter
     * @throws Exception
     * @throws Timeout
     */
-   public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-   {
-       $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
-       $queries = array_map(fn ($query) => clone $query, $queries);
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    {
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $queries = array_map(fn ($query) => clone $query, $queries);
 
-       $filters = $this->buildFilters($queries);
+        $filters = $this->buildFilters($queries);
 
-       if ($this->sharedTables) {
-           $filters['_tenant'] = $this->getTenantFilters($collection->getId());
-       }
+        if ($this->sharedTables) {
+            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
+        }
 
-       // permissions
-       if (Authorization::$status) {
-           $roles = \implode('|', Authorization::getRoles());
-           $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
-       }
+        // permissions
+        if (Authorization::$status) {
+            $roles = \implode('|', Authorization::getRoles());
+            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
+        }
 
-       $options = [];
+        $options = [];
 
-       if (!\is_null($limit)) {
-           $options['limit'] = $limit;
-       }
-       if (!\is_null($offset)) {
-           $options['skip'] = $offset;
-       }
+        if (!\is_null($limit)) {
+            $options['limit'] = $limit;
+        }
+        if (!\is_null($offset)) {
+            $options['skip'] = $offset;
+        }
 
-       if ($this->timeout) {
-           $options['maxTimeMS'] = $this->timeout;
-       }
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
+        }
 
-       $selections = $this->getAttributeSelections($queries);
-       if (!empty($selections) && !\in_array('*', $selections)) {
-           $options['projection'] = $this->getAttributeProjection($selections);
-       }
+        $selections = $this->getAttributeSelections($queries);
+        if (!empty($selections) && !\in_array('*', $selections)) {
+            $options['projection'] = $this->getAttributeProjection($selections);
+        }
 
-       $orFilters = [];
+        $orFilters = [];
 
-       foreach ($orderAttributes as $i => $originalAttribute) {
-           $attribute = $this->getInternalKeyForAttribute($originalAttribute);
-           $attribute = $this->filter($attribute);
+        foreach ($orderAttributes as $i => $originalAttribute) {
+            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
+            $attribute = $this->filter($attribute);
 
-           $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-           $direction = $orderType;
+            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $direction = $orderType;
 
-           /** Get sort direction  ASC || DESC**/
-           if ($cursorDirection === Database::CURSOR_BEFORE) {
-               $direction = ($direction === Database::ORDER_ASC)
-                   ? Database::ORDER_DESC
-                   : Database::ORDER_ASC;
-           }
+            /** Get sort direction  ASC || DESC**/
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $direction = ($direction === Database::ORDER_ASC)
+                    ? Database::ORDER_DESC
+                    : Database::ORDER_ASC;
+            }
 
-           $options['sort'][$attribute] = $this->getOrder($direction);
+            $options['sort'][$attribute] = $this->getOrder($direction);
 
-           /** Get operator sign  '$lt' ? '$gt' **/
-           $operator = $cursorDirection === Database::CURSOR_AFTER
-               ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
-               : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
+            /** Get operator sign  '$lt' ? '$gt' **/
+            $operator = $cursorDirection === Database::CURSOR_AFTER
+                ? ($orderType === Database::ORDER_DESC ? Query::TYPE_LESSER : Query::TYPE_GREATER)
+                : ($orderType === Database::ORDER_DESC ? Query::TYPE_GREATER : Query::TYPE_LESSER);
 
-           $operator = $this->getQueryOperator($operator);
+            $operator = $this->getQueryOperator($operator);
 
-           if (!empty($cursor)) {
+            if (!empty($cursor)) {
 
-               $andConditions = [];
-               for ($j = 0; $j < $i; $j++) {
-                   $originalPrev = $orderAttributes[$j];
-                   $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
+                $andConditions = [];
+                for ($j = 0; $j < $i; $j++) {
+                    $originalPrev = $orderAttributes[$j];
+                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
 
-                   $tmp = $cursor[$originalPrev];
-                   if ($originalPrev === '$sequence') {
-                       $tmp = $tmp;
-                   }
+                    $tmp = $cursor[$originalPrev];
+                    if ($originalPrev === '$sequence') {
+                        $tmp = $tmp;
+                    }
 
-                   $andConditions[] = [
-                       $prevAttr => $tmp
-                   ];
-               }
+                    $andConditions[] = [
+                        $prevAttr => $tmp
+                    ];
+                }
 
-               $tmp = $cursor[$originalAttribute];
+                $tmp = $cursor[$originalAttribute];
 
-               if ($originalAttribute === '$sequence') {
-                   /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
-                   if (count($orderAttributes) === 1) {
-                       $filters[$attribute] = [
-                           $operator => $tmp
-                       ];
-                       break;
-                   }
-               }
+                if ($originalAttribute === '$sequence') {
+                    /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
+                    if (count($orderAttributes) === 1) {
+                        $filters[$attribute] = [
+                            $operator => $tmp
+                        ];
+                        break;
+                    }
+                }
 
-               $andConditions[] = [
-                   $attribute => [
-                       $operator => $tmp
-                   ]
-               ];
+                $andConditions[] = [
+                    $attribute => [
+                        $operator => $tmp
+                    ]
+                ];
 
-               $orFilters[] = [
-                   '$and' => $andConditions
-               ];
-           }
-       }
+                $orFilters[] = [
+                    '$and' => $andConditions
+                ];
+            }
+        }
 
-       if (!empty($orFilters)) {
-           $filters['$or'] = $orFilters;
-       }
+        if (!empty($orFilters)) {
+            $filters['$or'] = $orFilters;
+        }
 
-       // Translate operators and handle time filters
-       $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
+        // Translate operators and handle time filters
+        $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
-       $found = [];
+        $found = [];
 
-       try {
-           // Use proper cursor iteration with reasonable batch size
-           $batchSize = 1000;
-           $options['batchSize'] = $batchSize;
-       
-           $response = $this->client->find($name, $filters, $options);
-           $results = $response->cursor->firstBatch ?? [];
-         
-           // Process first batch
-           foreach ($results as $result) {
-               $record = $this->replaceChars('_', '$', (array)$result);
-               $found[] = new Document($record);
-           }
-           
-           // Get cursor ID for subsequent batches
-           $cursorId = $response->cursor->id ?? null;
-           
-           // Continue fetching with getMore
-           while ($cursorId && $cursorId !== 0) {
-               // Check if limit is reached
-               if (!\is_null($limit) && count($found) >= $limit) {
-                   break;
-               }
-               
-               $moreResponse = $this->client->getMore($cursorId, $name, $batchSize);
-               $moreResults = $moreResponse->cursor->nextBatch ?? [];
-               
-               if (empty($moreResults)) {
-                   break;
-               }
-               
-               foreach ($moreResults as $result) {
-                   $record = $this->replaceChars('_', '$', (array)$result);
-                   $found[] = new Document($record);
-                   
-                   // Check limit again after each document
-                   if (!\is_null($limit) && count($found) >= $limit) {
-                       break 2; // Break both inner and outer loops
-                   }
-               }
-               
-               $cursorId = $moreResponse->cursor->id ?? 0;
-           }
+        try {
+            // Use proper cursor iteration with reasonable batch size
+            $batchSize = 1000;
+            $options['batchSize'] = $batchSize;
 
-       } catch (MongoException $e) {
-           throw $this->processException($e);
-       }
+            $response = $this->client->find($name, $filters, $options);
+            $results = $response->cursor->firstBatch ?? [];
 
-       if ($cursorDirection === Database::CURSOR_BEFORE) {
-           $found = array_reverse($found);
-       }
+            // Process first batch
+            foreach ($results as $result) {
+                $record = $this->replaceChars('_', '$', (array)$result);
+                $found[] = new Document($record);
+            }
 
-       return $found;
-   }
+            // Get cursor ID for subsequent batches
+            $cursorId = $response->cursor->id ?? null;
+
+            // Continue fetching with getMore
+            while ($cursorId && $cursorId !== 0) {
+                // Check if limit is reached
+                if (!\is_null($limit) && count($found) >= $limit) {
+                    break;
+                }
+
+                $moreResponse = $this->client->getMore($cursorId, $name, $batchSize);
+                $moreResults = $moreResponse->cursor->nextBatch ?? [];
+
+                if (empty($moreResults)) {
+                    break;
+                }
+
+                foreach ($moreResults as $result) {
+                    $record = $this->replaceChars('_', '$', (array)$result);
+                    $found[] = new Document($record);
+
+                    // Check limit again after each document
+                    if (!\is_null($limit) && count($found) >= $limit) {
+                        break 2; // Break both inner and outer loops
+                    }
+                }
+
+                $cursorId = $moreResponse->cursor->id ?? 0;
+            }
+
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
+
+        if ($cursorDirection === Database::CURSOR_BEFORE) {
+            $found = array_reverse($found);
+        }
+
+        return $found;
+    }
 
 
     /**
@@ -1690,15 +1690,15 @@ class Mongo extends Adapter
     }
 
 
-/**
-     * Count Documents
-     *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $max
-     * @return int
-     * @throws Exception
-     */
+    /**
+         * Count Documents
+         *
+         * @param Document $collection
+         * @param array<Query> $queries
+         * @param int|null $max
+         * @return int
+         * @throws Exception
+         */
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
@@ -1729,31 +1729,31 @@ class Mongo extends Adapter
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
-        /** 
+        /**
          * Use MongoDB aggregation pipeline for accurate counting
          * Accuracy and Sharded Clusters
-         * "On a sharded cluster, the count command when run without a query predicate can result in an inaccurate 
+         * "On a sharded cluster, the count command when run without a query predicate can result in an inaccurate
          * count if orphaned documents exist or if a chunk migration is in progress.
          * To avoid these situations, on a sharded cluster, use the db.collection.aggregate() method"
          * https://www.mongodb.com/docs/manual/reference/command/count/#response
          **/
-        
+
         // Original count command (commented for reference and fallback)
         // Use this for single-instance MongoDB when performance is critical and accuracy is not a concern
         // return $this->client->count($name, $filters, $options);
-        
+
         $pipeline = [];
-        
+
         // Add match stage if filters are provided
         if (!empty($filters)) {
             $pipeline[] = ['$match' => $this->client->toObject($filters)];
         }
-        
+
         // Add limit stage if specified
         if (!\is_null($max) && $max > 0) {
             $pipeline[] = ['$limit' => $max];
         }
-        
+
         // Use $group and $sum when limit is specified, $count when no limit
         // Note: $count stage doesn't works well with $limit in the same pipeline
         // When limit is specified, we need to use $group + $sum to count the limited documents
@@ -1761,7 +1761,7 @@ class Mongo extends Adapter
             // When limit is specified, use $group and $sum to count limited documents
             $pipeline[] = [
                 '$group' => [
-                    '_id' => null, 
+                    '_id' => null,
                     'total' => ['$sum' => 1]]
             ];
         } else {
@@ -1770,26 +1770,26 @@ class Mongo extends Adapter
                 '$count' => 'total'
             ];
         }
-        
+
         try {
             $result = $this->client->aggregate($name, $pipeline);
-            
+
             // Aggregation returns stdClass with cursor property containing firstBatch
             if (isset($result->cursor) && !empty($result->cursor->firstBatch)) {
                 $firstResult = $result->cursor->firstBatch[0];
-                
+
                 // Handle both $count and $group response formats
                 if (isset($firstResult->total)) {
                     return (int)$firstResult->total;
                 }
             }
-            
+
             return 0;
         } catch (MongoException $e) {
             return 0;
         }
     }
-       
+
 
     /**
      * Sum an attribute

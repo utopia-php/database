@@ -1518,11 +1518,11 @@ abstract class SQL extends Adapter
         return false;
     }
 
-/**
-     * Is internal casting supported?
-     *
-     * @return bool
-     */
+    /**
+         * Is internal casting supported?
+         *
+         * @return bool
+         */
     public function getSupportForInternalCasting(): bool
     {
         return false;
@@ -1546,7 +1546,7 @@ abstract class SQL extends Adapter
     public function castingAfter(Document $collection, Document $document): Document
     {
         return $document;
-    }       
+    }
 
     /**
      * @param string $tableName

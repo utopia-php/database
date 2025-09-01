@@ -13,7 +13,6 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Spatial;
 
 abstract class SQL extends Adapter
 {
@@ -66,19 +65,17 @@ abstract class SQL extends Adapter
                     $this->getPDO()->prepare('ROLLBACK')->execute();
                 }
 
-                $result = $this->getPDO()->beginTransaction();
+                $this->getPDO()->beginTransaction();
+
             } else {
-                $result = $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
+                $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
             }
         } catch (PDOException $e) {
             throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!$result) {
-            throw new TransactionException('Failed to start transaction');
-        }
-
         $this->inTransaction++;
+
         return true;
     }
 
@@ -124,21 +121,17 @@ abstract class SQL extends Adapter
 
         try {
             if ($this->inTransaction > 1) {
-                $result = $this->getPDO()->exec('ROLLBACK TO transaction' . ($this->inTransaction - 1));
+                $this->getPDO()->exec('ROLLBACK TO transaction' . ($this->inTransaction - 1));
                 $this->inTransaction--;
             } else {
-                $result = $this->getPDO()->rollBack();
+                $this->getPDO()->rollBack();
                 $this->inTransaction = 0;
             }
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!$result) {
-            throw new TransactionException('Failed to rollback transaction');
-        }
-
-        return $result;
+        return true;
     }
 
     /**

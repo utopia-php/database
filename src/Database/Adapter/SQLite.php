@@ -168,6 +168,8 @@ class SQLite extends MariaDB
 				{$tenantQuery}
 				`_createdAt` DATETIME(3) DEFAULT NULL,
 				`_updatedAt` DATETIME(3) DEFAULT NULL,
+                `_createdBy` VARCHAR(255) DEFAULT NULL,
+				`_updatedBy` VARCHAR(255) DEFAULT NULL,
 				`_permissions` MEDIUMTEXT DEFAULT NULL".(!empty($attributes) ? ',' : '')."
 				" . \substr(\implode(' ', $attributeStrings), 0, -2) . "
 			)

@@ -1694,7 +1694,9 @@ class Postgres extends SQL
         $alias = $this->quote($alias);
         $placeholder = ID::unique();
         
-        $vector = '[' . implode(',', \array_map(\floatval(...), $query->getValues())) . ']';
+        $values = $query->getValues();
+        $vectorArray = $values[0] ?? [];
+        $vector = '[' . implode(',', \array_map(\floatval(...), $vectorArray)) . ']';
         $binds[":vector_{$placeholder}"] = $vector;
 
         return match ($query->getMethod()) {

@@ -281,7 +281,10 @@ class Query
             self::TYPE_NOT_TOUCHES,
             self::TYPE_OR,
             self::TYPE_AND,
-            self::TYPE_SELECT => true,
+            self::TYPE_SELECT,
+            self::TYPE_VECTOR_DOT,
+            self::TYPE_VECTOR_COSINE,
+            self::TYPE_VECTOR_EUCLIDEAN => true,
             default => false,
         };
     }
@@ -1060,7 +1063,7 @@ class Query
      */
     public static function vectorDot(string $attribute, array $vector): self
     {
-        return new self(self::TYPE_VECTOR_DOT, $attribute, $vector);
+        return new self(self::TYPE_VECTOR_DOT, $attribute, [$vector]);
     }
 
     /**
@@ -1072,7 +1075,7 @@ class Query
      */
     public static function vectorCosine(string $attribute, array $vector): self
     {
-        return new self(self::TYPE_VECTOR_COSINE, $attribute, $vector);
+        return new self(self::TYPE_VECTOR_COSINE, $attribute, [$vector]);
     }
 
     /**
@@ -1084,6 +1087,6 @@ class Query
      */
     public static function vectorEuclidean(string $attribute, array $vector): self
     {
-        return new self(self::TYPE_VECTOR_EUCLIDEAN, $attribute, $vector);
+        return new self(self::TYPE_VECTOR_EUCLIDEAN, $attribute, [$vector]);
     }
 }

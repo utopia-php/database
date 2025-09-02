@@ -172,7 +172,7 @@ class Filter extends Base
                         $this->message = "Vector query value must have {$expectedSize} elements";
                         return false;
                     }
-                    break;
+                    continue 2;
                 default:
                     $this->message = 'Unknown Data type';
                     return false;

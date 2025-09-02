@@ -17,7 +17,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         // Test that vector attributes can only be created on PostgreSQL
@@ -61,7 +61,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorErrorCollection');
@@ -81,7 +81,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorLimitCollection');
@@ -101,7 +101,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorDocuments');
@@ -151,7 +151,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorQueries');
@@ -302,7 +302,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorValidation');
@@ -325,7 +325,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorIndexes');
@@ -380,7 +380,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorDimMismatch');
@@ -407,7 +407,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorInvalidTypes');
@@ -449,7 +449,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorNullEmpty');
@@ -488,7 +488,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         // Test with maximum allowed dimensions (16000 for pgvector)
@@ -529,7 +529,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorUpdates');
@@ -570,7 +570,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('multiVector');
@@ -623,7 +623,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorPagination');
@@ -699,7 +699,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorTextSearch');
@@ -773,7 +773,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorSpecialFloats');
@@ -836,7 +836,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorPerf');
@@ -901,7 +901,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorValidation2');
@@ -946,7 +946,7 @@ trait VectorTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->markTestSkipped('Adapter does not support vector attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('vectorNorm');

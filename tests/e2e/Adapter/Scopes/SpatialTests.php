@@ -18,7 +18,7 @@ trait SpatialTests
         $database = static::getDatabase();
         $collectionName = "test_spatial_Col";
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
         };
         $attributes = [
             new Document([
@@ -91,7 +91,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $collectionName = 'test_spatial_doc_';
@@ -846,7 +846,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $collectionName = 'complex_shapes_';
@@ -1276,7 +1276,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $collectionName = 'spatial_combinations_';
@@ -1406,7 +1406,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $collectionName = 'test_spatial_bulk_ops';
@@ -1698,7 +1698,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
         }
         $collectionName = 'spatial_agg_';
         try {
@@ -1785,7 +1785,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $collectionName = 'spatial_update_attrs_';
@@ -1871,7 +1871,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
         }
 
         $collectionName = 'spatial_defaults_';

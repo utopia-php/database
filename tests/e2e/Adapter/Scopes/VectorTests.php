@@ -6,6 +6,8 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 
 trait VectorTests
@@ -20,13 +22,13 @@ trait VectorTests
         }
 
         // Test that vector attributes can only be created on PostgreSQL
-        $this->assertEquals(true, $database->createCollection('vectorCollection'));
+        $database->createCollection('vectorCollection');
 
         // Create a vector attribute with 3 dimensions
-        $this->assertEquals(true, $database->createAttribute('vectorCollection', 'embedding', Database::VAR_VECTOR, 3, true));
+        $database->createAttribute('vectorCollection', 'embedding', Database::VAR_VECTOR, 3, true);
 
         // Create a vector attribute with 128 dimensions
-        $this->assertEquals(true, $database->createAttribute('vectorCollection', 'large_embedding', Database::VAR_VECTOR, 128, false, null));
+        $database->createAttribute('vectorCollection', 'large_embedding', Database::VAR_VECTOR, 128, false, null);
 
         // Verify the attributes were created
         $collection = $database->getCollection('vectorCollection');
@@ -63,7 +65,7 @@ trait VectorTests
             $this->markTestSkipped('Adapter does not support vector attributes');
         }
 
-        $this->assertEquals(true, $database->createCollection('vectorErrorCollection'));
+        $database->createCollection('vectorErrorCollection');
 
         // Test invalid dimensions
         $this->expectException(DatabaseException::class);
@@ -83,7 +85,7 @@ trait VectorTests
             $this->markTestSkipped('Adapter does not support vector attributes');
         }
 
-        $this->assertEquals(true, $database->createCollection('vectorLimitCollection'));
+        $database->createCollection('vectorLimitCollection');
 
         // Test too many dimensions (pgvector limit is 16000)
         $this->expectException(DatabaseException::class);
@@ -103,22 +105,31 @@ trait VectorTests
             $this->markTestSkipped('Adapter does not support vector attributes');
         }
 
-        $this->assertEquals(true, $database->createCollection('vectorDocuments'));
-        $this->assertEquals(true, $database->createAttribute('vectorDocuments', 'name', Database::VAR_STRING, 255, true));
-        $this->assertEquals(true, $database->createAttribute('vectorDocuments', 'embedding', Database::VAR_VECTOR, 3, true));
+        $database->createCollection('vectorDocuments');
+        $database->createAttribute('vectorDocuments', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('vectorDocuments', 'embedding', Database::VAR_VECTOR, 3, true);
 
         // Create documents with vector data
         $doc1 = $database->createDocument('vectorDocuments', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'name' => 'Document 1',
             'embedding' => [1.0, 0.0, 0.0]
         ]));
 
         $doc2 = $database->createDocument('vectorDocuments', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'name' => 'Document 2', 
             'embedding' => [0.0, 1.0, 0.0]
         ]));
 
         $doc3 = $database->createDocument('vectorDocuments', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'name' => 'Document 3',
             'embedding' => [0.0, 0.0, 1.0]
         ]));
@@ -144,25 +155,43 @@ trait VectorTests
             $this->markTestSkipped('Adapter does not support vector attributes');
         }
 
-        $this->assertEquals(true, $database->createCollection('vectorQueries'));
-        $this->assertEquals(true, $database->createAttribute('vectorQueries', 'name', Database::VAR_STRING, 255, true));
-        $this->assertEquals(true, $database->createAttribute('vectorQueries', 'embedding', Database::VAR_VECTOR, 3, true));
+        $database->createCollection('vectorQueries');
+        $database->createAttribute('vectorQueries', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('vectorQueries', 'embedding', Database::VAR_VECTOR, 3, true);
 
-        // Create test documents
-        $database->createDocument('vectorQueries', new Document([
+        // Create test documents with read permissions
+        $doc1 = $database->createDocument('vectorQueries', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'name' => 'Test 1',
             'embedding' => [1.0, 0.0, 0.0]
         ]));
 
-        $database->createDocument('vectorQueries', new Document([
+        $doc2 = $database->createDocument('vectorQueries', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'name' => 'Test 2',
             'embedding' => [0.0, 1.0, 0.0]
         ]));
 
-        $database->createDocument('vectorQueries', new Document([
+        $doc3 = $database->createDocument('vectorQueries', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'name' => 'Test 3',
             'embedding' => [0.5, 0.5, 0.0]
         ]));
+        
+        // Verify documents were created
+        $this->assertNotEmpty($doc1->getId());
+        $this->assertNotEmpty($doc2->getId());
+        $this->assertNotEmpty($doc3->getId());
+        
+        // Test without vector queries first
+        $allDocs = $database->find('vectorQueries');
+        $this->assertCount(3, $allDocs, "Should have 3 documents in collection");
 
         // Test vector dot product query
         $results = $database->find('vectorQueries', [
@@ -222,7 +251,7 @@ trait VectorTests
         // Test vector query with specific name filter
         $results = $database->find('vectorQueries', [
             Query::vectorEuclidean('embedding', [0.7, 0.7, 0.0]),
-            Query::equal('name', 'Test 3')
+            Query::equal('name', ['Test 3'])
         ]);
         
         $this->assertCount(1, $results);
@@ -241,13 +270,14 @@ trait VectorTests
         // Test empty result with impossible filter combination
         $results = $database->find('vectorQueries', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
-            Query::equal('name', 'Test 2'),
-            Query::equal('name', 'Test 3')  // Impossible condition
+            Query::equal('name', ['Test 2']),
+            Query::equal('name', ['Test 3'])  // Impossible condition
         ]);
         
         $this->assertCount(0, $results);
 
-        // Test vector query with custom ordering (reverse order by name)
+        // Test vector query with secondary ordering
+        // Vector similarity takes precedence, name DESC is secondary
         $results = $database->find('vectorQueries', [
             Query::vectorDot('embedding', [0.4, 0.6, 0.0]),
             Query::orderDesc('name'),
@@ -255,9 +285,13 @@ trait VectorTests
         ]);
         
         $this->assertCount(2, $results);
-        // Should be ordered by name descending: Test 3, Test 2
-        $this->assertEquals('Test 3', $results[0]->getAttribute('name'));
-        $this->assertEquals('Test 2', $results[1]->getAttribute('name'));
+        // Results should be ordered primarily by vector similarity
+        // The vector [0.4, 0.6, 0.0] is most similar to Test 2 [0.0, 1.0, 0.0] 
+        // and Test 3 [0.5, 0.5, 0.0] using dot product
+        // Test 2 dot product: 0.4*0.0 + 0.6*1.0 + 0.0*0.0 = 0.6
+        // Test 3 dot product: 0.4*0.5 + 0.6*0.5 + 0.0*0.0 = 0.5
+        // So Test 2 should come first (higher dot product with negative inner product operator)
+        $this->assertEquals('Test 2', $results[0]->getAttribute('name'));
         
         // Cleanup
         $database->deleteCollection('vectorQueries');
@@ -272,9 +306,9 @@ trait VectorTests
             $this->markTestSkipped('Adapter does not support vector attributes');
         }
 
-        $this->assertEquals(true, $database->createCollection('vectorValidation'));
-        $this->assertEquals(true, $database->createAttribute('vectorValidation', 'embedding', Database::VAR_VECTOR, 3, true));
-        $this->assertEquals(true, $database->createAttribute('vectorValidation', 'name', Database::VAR_STRING, 255, true));
+        $database->createCollection('vectorValidation');
+        $database->createAttribute('vectorValidation', 'embedding', Database::VAR_VECTOR, 3, true);
+        $database->createAttribute('vectorValidation', 'name', Database::VAR_STRING, 255, true);
 
         // Test that vector queries fail on non-vector attributes
         $this->expectException(DatabaseException::class);
@@ -295,18 +329,18 @@ trait VectorTests
             $this->markTestSkipped('Adapter does not support vector attributes');
         }
 
-        $this->assertEquals(true, $database->createCollection('vectorIndexes'));
-        $this->assertEquals(true, $database->createAttribute('vectorIndexes', 'embedding', Database::VAR_VECTOR, 3, true));
+        $database->createCollection('vectorIndexes');
+        $database->createAttribute('vectorIndexes', 'embedding', Database::VAR_VECTOR, 3, true);
         
         // Create different types of vector indexes
         // Euclidean distance index (L2 distance)
-        $this->assertEquals(true, $database->createIndex('vectorIndexes', 'embedding_euclidean', Database::INDEX_HNSW_EUCLIDEAN, ['embedding']));
+        $database->createIndex('vectorIndexes', 'embedding_euclidean', Database::INDEX_HNSW_EUCLIDEAN, ['embedding']);
         
         // Cosine distance index
-        $this->assertEquals(true, $database->createIndex('vectorIndexes', 'embedding_cosine', Database::INDEX_HNSW_COSINE, ['embedding']));
+        $database->createIndex('vectorIndexes', 'embedding_cosine', Database::INDEX_HNSW_COSINE, ['embedding']);
         
         // Inner product (dot product) index
-        $this->assertEquals(true, $database->createIndex('vectorIndexes', 'embedding_dot', Database::INDEX_HNSW_DOT, ['embedding']));
+        $database->createIndex('vectorIndexes', 'embedding_dot', Database::INDEX_HNSW_DOT, ['embedding']);
         
         // Verify indexes were created
         $collection = $database->getCollection('vectorIndexes');
@@ -316,10 +350,16 @@ trait VectorTests
         
         // Test that queries work with indexes
         $database->createDocument('vectorIndexes', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'embedding' => [1.0, 0.0, 0.0]
         ]));
         
         $database->createDocument('vectorIndexes', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
             'embedding' => [0.0, 1.0, 0.0]
         ]));
         

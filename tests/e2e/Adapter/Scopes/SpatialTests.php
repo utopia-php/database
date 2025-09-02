@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1552,6 +1553,19 @@ trait SpatialTests
             $updateResults[] = $doc;
         });
 
+        // should fail due to invalid structure
+        try {
+            $database->updateDocuments($collectionName, new Document([
+                'name' => 'Updated Location',
+                'location' => [15.0, 25.0],
+                'area' => [15.0, 25.0] // invalid polygon
+            ]));
+            $this->fail("fail to throw structure exception for the invalid spatial type");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+
+        }
+
         $this->assertGreaterThan(0, $updateCount);
 
         // Verify updated documents
@@ -1969,4 +1983,89 @@ trait SpatialTests
             $database->deleteCollection($collectionName);
         }
     }
+
+    public function testInvalidSpatialTypes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'test_invalid_spatial_types';
+
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('pointAttr'),
+                'type' => Database::VAR_POINT,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('lineAttr'),
+                'type' => Database::VAR_LINESTRING,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('polyAttr'),
+                'type' => Database::VAR_POLYGON,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ])
+        ];
+
+        $database->createCollection($collectionName, $attributes);
+
+        // ❌ Invalid Point (must be [x, y])
+        try {
+            $database->createDocument($collectionName, new Document([
+                'pointAttr' => [10.0], // only 1 coordinate
+            ]));
+            $this->fail("Expected StructureException for invalid point");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        // ❌ Invalid LineString (must be [[x,y],[x,y],...], at least 2 points)
+        try {
+            $database->createDocument($collectionName, new Document([
+                'lineAttr' => [[10.0, 20.0]], // only one point
+            ]));
+            $this->fail("Expected StructureException for invalid line");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        try {
+            $database->createDocument($collectionName, new Document([
+                'lineAttr' => [10.0, 20.0], // not an array of arrays
+            ]));
+            $this->fail("Expected StructureException for invalid line structure");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        try {
+            $database->createDocument($collectionName, new Document([
+                'polyAttr' => [10.0, 20.0] // not an array of arrays
+            ]));
+            $this->fail("Expected StructureException for invalid polygon structure");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        // Cleanup
+        $database->deleteCollection($collectionName);
+    }
+
 }

@@ -1130,6 +1130,11 @@ abstract class SQL extends Adapter
                 case Database::VAR_POLYGON:
                     $total += 20;
                     break;
+                
+                case Database::VAR_VECTOR:
+                    // Each dimension is typically 4 bytes (float32)
+                    $total += ($attribute['size'] ?? 0) * 4;
+                    break;
 
                 default:
                     throw new DatabaseException('Unknown type: ' . $attribute['type']);
@@ -2486,7 +2491,7 @@ abstract class SQL extends Adapter
             $orders = \array_merge($vectorOrders, $orders);
         }
 
-        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
+        $sqlOrder = !empty($orders) ? 'ORDER BY ' . implode(', ', $orders) : '';
 
         $sqlLimit = '';
         if (! \is_null($limit)) {
@@ -2500,7 +2505,6 @@ abstract class SQL extends Adapter
         }
 
         $selections = $this->getAttributeSelections($queries);
-
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}

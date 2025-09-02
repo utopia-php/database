@@ -2464,7 +2464,7 @@ abstract class SQL extends Adapter
                 }
             }
 
-            $stmt->execute();
+            $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -2571,7 +2571,7 @@ abstract class SQL extends Adapter
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
-        $stmt->execute();
+        $this->execute($stmt);
 
         $result = $stmt->fetchAll();
         $stmt->closeCursor();
@@ -2646,7 +2646,7 @@ abstract class SQL extends Adapter
             $stmt->bindValue($key, $value, $this->getPDOType($value));
         }
 
-        $stmt->execute();
+        $this->execute($stmt);
 
         $result = $stmt->fetchAll();
         $stmt->closeCursor();

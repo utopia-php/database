@@ -1353,6 +1353,47 @@ class MariaDB extends SQL
     }
 
     /**
+     * Handle distance spatial queries
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $attribute
+     * @param string $alias
+     * @param string $placeholder
+     * @return string
+    */
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    {
+        $distanceParams = $query->getValues()[0];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+        $binds[":{$placeholder}_1"] = $distanceParams[1];
+
+        $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
+
+        switch ($query->getMethod()) {
+            case Query::TYPE_DISTANCE_EQUAL:
+                $operator = '=';
+                break;
+            case Query::TYPE_DISTANCE_NOT_EQUAL:
+                $operator = '!=';
+                break;
+            case Query::TYPE_DISTANCE_GREATER_THAN:
+                $operator = '>';
+                break;
+            case Query::TYPE_DISTANCE_LESS_THAN:
+                $operator = '<';
+                break;
+            default:
+                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
+        }
+
+        if ($useMeters) {
+            return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), 6371000) {$operator} :{$placeholder}_1";
+        }
+        return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) {$operator} :{$placeholder}_1";
+    }
+
+    /**
      * Handle spatial queries
      *
      * @param Query $query
@@ -1374,28 +1415,10 @@ class MariaDB extends SQL
                 return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_DISTANCE_EQUAL:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) = :{$placeholder}_1";
-
             case Query::TYPE_DISTANCE_NOT_EQUAL:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) != :{$placeholder}_1";
-
             case Query::TYPE_DISTANCE_GREATER_THAN:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
-
             case Query::TYPE_DISTANCE_LESS_THAN:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) < :{$placeholder}_1";
+                return $this->handleDistanceSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
 
             case Query::TYPE_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);

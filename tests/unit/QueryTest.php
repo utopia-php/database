@@ -55,17 +55,17 @@ class QueryTest extends TestCase
         $query = Query::vectorDot('embedding', $vector);
         $this->assertEquals(Query::TYPE_VECTOR_DOT, $query->getMethod());
         $this->assertEquals('embedding', $query->getAttribute());
-        $this->assertEquals($vector, $query->getValues());
+        $this->assertEquals([$vector], $query->getValues());
 
         $query = Query::vectorCosine('embedding', $vector);
         $this->assertEquals(Query::TYPE_VECTOR_COSINE, $query->getMethod());
         $this->assertEquals('embedding', $query->getAttribute());
-        $this->assertEquals($vector, $query->getValues());
+        $this->assertEquals([$vector], $query->getValues());
 
         $query = Query::vectorEuclidean('embedding', $vector);
         $this->assertEquals(Query::TYPE_VECTOR_EUCLIDEAN, $query->getMethod());
         $this->assertEquals('embedding', $query->getAttribute());
-        $this->assertEquals($vector, $query->getValues());
+        $this->assertEquals([$vector], $query->getValues());
 
         $query = Query::search('search', 'John Doe');
 

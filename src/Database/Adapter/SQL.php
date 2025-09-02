@@ -2598,6 +2598,7 @@ abstract class SQL extends Adapter
         $collectionAttributes = $collection->getAttribute("attributes", []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
+        $attribute = $this->filter($attribute);
         $roles = Authorization::getRoles();
         $where = [];
         $alias = Query::DEFAULT_ALIAS;

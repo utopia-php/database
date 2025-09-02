@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1552,6 +1553,19 @@ trait SpatialTests
             $updateResults[] = $doc;
         });
 
+        // should fail due to invalid structure
+        try {
+            $database->updateDocuments($collectionName, new Document([
+                'name' => 'Updated Location',
+                'location' => [15.0, 25.0],
+                'area' => [15.0, 25.0] // invalid polygon
+            ]));
+            $this->fail("fail to throw structure exception for the invalid spatial type");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+
+        }
+
         $this->assertGreaterThan(0, $updateCount);
 
         // Verify updated documents
@@ -1965,6 +1979,181 @@ trait SpatialTests
             } catch (\Throwable $e) {
                 $this->assertTrue(true);
             }
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
+    public function testInvalidSpatialTypes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'test_invalid_spatial_types';
+
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('pointAttr'),
+                'type' => Database::VAR_POINT,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('lineAttr'),
+                'type' => Database::VAR_LINESTRING,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('polyAttr'),
+                'type' => Database::VAR_POLYGON,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ])
+        ];
+
+        $database->createCollection($collectionName, $attributes);
+
+        // Invalid Point (must be [x, y])
+        try {
+            $database->createDocument($collectionName, new Document([
+                'pointAttr' => [10.0], // only 1 coordinate
+            ]));
+            $this->fail("Expected StructureException for invalid point");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        // Invalid LineString (must be [[x,y],[x,y],...], at least 2 points)
+        try {
+            $database->createDocument($collectionName, new Document([
+                'lineAttr' => [[10.0, 20.0]], // only one point
+            ]));
+            $this->fail("Expected StructureException for invalid line");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        try {
+            $database->createDocument($collectionName, new Document([
+                'lineAttr' => [10.0, 20.0], // not an array of arrays
+            ]));
+            $this->fail("Expected StructureException for invalid line structure");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        try {
+            $database->createDocument($collectionName, new Document([
+                'polyAttr' => [10.0, 20.0] // not an array of arrays
+            ]));
+            $this->fail("Expected StructureException for invalid polygon structure");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        $invalidPolygons = [
+            [[0,0],[1,1],[0,1]],
+            [[0,0],['a',1],[1,1],[0,0]],
+            [[0,0],[1,0],[1,1],[0,1]],
+            [],
+            [[0,0,5],[1,0,5],[1,1,5],[0,0,5]],
+            [
+                [[0,0],[2,0],[2,2],[0,0]], // valid
+                [[0,0,1],[1,0,1],[1,1,1],[0,0,1]] // invalid 3D
+            ]
+        ];
+        foreach ($invalidPolygons as $invalidPolygon) {
+            try {
+                $database->createDocument($collectionName, new Document([
+                    'polyAttr' => $invalidPolygon
+                ]));
+                $this->fail("Expected StructureException for invalid polygon structure");
+            } catch (\Throwable $th) {
+                $this->assertInstanceOf(StructureException::class, $th);
+            }
+        }
+        // Cleanup
+        $database->deleteCollection($collectionName);
+    }
+
+    public function testSpatialDistanceInMeter(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'spatial_distance_meters_';
+        try {
+            $database->createCollection($collectionName);
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+
+            // Two points roughly ~1000 meters apart by latitude delta (~0.009 deg ≈ 1km)
+            $p0 = $database->createDocument($collectionName, new Document([
+                '$id' => 'p0',
+                'loc' => [0.0000, 0.0000],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+            $p1 = $database->createDocument($collectionName, new Document([
+                '$id' => 'p1',
+                'loc' => [0.0090, 0.0000],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+
+            $this->assertInstanceOf(Document::class, $p0);
+            $this->assertInstanceOf(Document::class, $p1);
+
+            // distanceLessThan with meters=true: within 1500m should include both
+            $within1_5km = $database->find($collectionName, [
+                Query::distanceLessThan('loc', [0.0000, 0.0000], 1500, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($within1_5km);
+            $this->assertCount(2, $within1_5km);
+
+            // Within 500m should include only p0 (exact point)
+            $within500m = $database->find($collectionName, [
+                Query::distanceLessThan('loc', [0.0000, 0.0000], 500, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($within500m);
+            $this->assertCount(1, $within500m);
+            $this->assertEquals('p0', $within500m[0]->getId());
+
+            // distanceGreaterThan 500m should include only p1
+            $greater500m = $database->find($collectionName, [
+                Query::distanceGreaterThan('loc', [0.0000, 0.0000], 500, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($greater500m);
+            $this->assertCount(1, $greater500m);
+            $this->assertEquals('p1', $greater500m[0]->getId());
+
+            // distanceEqual with 0m should return exact match p0
+            $equalZero = $database->find($collectionName, [
+                Query::distanceEqual('loc', [0.0000, 0.0000], 0, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($equalZero);
+            $this->assertEquals('p0', $equalZero[0]->getId());
+
+            // distanceNotEqual with 0m should return p1
+            $notEqualZero = $database->find($collectionName, [
+                Query::distanceNotEqual('loc', [0.0000, 0.0000], 0, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($notEqualZero);
+            $this->assertEquals('p1', $notEqualZero[0]->getId());
         } finally {
             $database->deleteCollection($collectionName);
         }

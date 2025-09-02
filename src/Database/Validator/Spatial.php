@@ -3,12 +3,12 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
-use Utopia\Database\Exception;
 use Utopia\Validator;
 
 class Spatial extends Validator
 {
     private string $spatialType;
+    protected string $message = '';
 
     public function __construct(string $spatialType)
     {
@@ -16,49 +16,21 @@ class Spatial extends Validator
     }
 
     /**
-     * Validate spatial data according to its type
-     *
-     * @param mixed $value
-     * @param string $type
-     * @return bool
-     * @throws Exception
-     */
-    public static function validate(mixed $value, string $type): bool
-    {
-        if (!is_array($value)) {
-            throw new Exception('Spatial data must be provided as an array');
-        }
-
-        switch ($type) {
-            case Database::VAR_POINT:
-                return self::validatePoint($value);
-
-            case Database::VAR_LINESTRING:
-                return self::validateLineString($value);
-
-            case Database::VAR_POLYGON:
-                return self::validatePolygon($value);
-
-            default:
-                throw new Exception('Unknown spatial type: ' . $type);
-        }
-    }
-
-    /**
      * Validate POINT data
      *
-     * @param array<mixed,mixed> $value
+     * @param array<mixed> $value
      * @return bool
-     * @throws Exception
      */
-    protected static function validatePoint(array $value): bool
+    protected function validatePoint(array $value): bool
     {
         if (count($value) !== 2) {
-            throw new Exception('Point must be an array of two numeric values [x, y]');
+            $this->message = 'Point must be an array of two numeric values [x, y]';
+            return false;
         }
 
         if (!is_numeric($value[0]) || !is_numeric($value[1])) {
-            throw new Exception('Point coordinates must be numeric values');
+            $this->message = 'Point coordinates must be numeric values';
+            return false;
         }
 
         return true;
@@ -67,23 +39,25 @@ class Spatial extends Validator
     /**
      * Validate LINESTRING data
      *
-     * @param array<mixed,mixed> $value
+     * @param array<mixed> $value
      * @return bool
-     * @throws Exception
      */
-    protected static function validateLineString(array $value): bool
+    protected function validateLineString(array $value): bool
     {
         if (count($value) < 2) {
-            throw new Exception('LineString must contain at least one point');
+            $this->message = 'LineString must contain at least two points';
+            return false;
         }
 
         foreach ($value as $point) {
             if (!is_array($point) || count($point) !== 2) {
-                throw new Exception('Each point in LineString must be an array of two values [x, y]');
+                $this->message = 'Each point in LineString must be an array of two values [x, y]';
+                return false;
             }
 
             if (!is_numeric($point[0]) || !is_numeric($point[1])) {
-                throw new Exception('Each point in LineString must have numeric coordinates');
+                $this->message = 'Each point in LineString must have numeric coordinates';
+                return false;
             }
         }
 
@@ -93,36 +67,53 @@ class Spatial extends Validator
     /**
      * Validate POLYGON data
      *
-     * @param array<mixed,mixed> $value
+     * @param array<mixed> $value
      * @return bool
-     * @throws Exception
      */
-    protected static function validatePolygon(array $value): bool
+    protected function validatePolygon(array $value): bool
     {
         if (empty($value)) {
-            throw new Exception('Polygon must contain at least one ring');
+            $this->message = 'Polygon must contain at least one ring';
+            return false;
         }
 
         // Detect single-ring polygon: [[x, y], [x, y], ...]
         $isSingleRing = isset($value[0]) && is_array($value[0]) &&
-                        count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
+            count($value[0]) === 2 &&
+            is_numeric($value[0][0]) &&
+            is_numeric($value[0][1]);
 
         if ($isSingleRing) {
-            $value = [$value]; // Wrap single ring into multi-ring format
+            $value = [$value]; // wrap single ring
         }
 
-        foreach ($value as $ring) {
+        foreach ($value as $ringIndex => $ring) {
             if (!is_array($ring) || empty($ring)) {
-                throw new Exception('Each ring in Polygon must be an array of points');
+                $this->message = "Ring #{$ringIndex} must be an array of points";
+                return false;
             }
 
-            foreach ($ring as $point) {
+            if (count($ring) < 4) {
+                $this->message = "Ring #{$ringIndex} must contain at least 4 points to form a closed polygon";
+                return false;
+            }
+
+            foreach ($ring as $pointIndex => $point) {
                 if (!is_array($point) || count($point) !== 2) {
-                    throw new Exception('Each point in Polygon ring must be an array of two values [x, y]');
+                    $this->message = "Point #{$pointIndex} in ring #{$ringIndex} must be an array of two values [x, y]";
+                    return false;
                 }
+
                 if (!is_numeric($point[0]) || !is_numeric($point[1])) {
-                    throw new Exception('Each point in Polygon ring must have numeric coordinates');
+                    $this->message = "Coordinates of point #{$pointIndex} in ring #{$ringIndex} must be numeric";
+                    return false;
                 }
+            }
+
+            // Check that the ring is closed (first point == last point)
+            if ($ring[0] !== $ring[count($ring) - 1]) {
+                $this->message = "Ring #{$ringIndex} must be closed (first point must equal last point)";
+                return false;
             }
         }
 
@@ -131,9 +122,6 @@ class Spatial extends Validator
 
     /**
      * Check if a value is valid WKT string
-     *
-     * @param string $value
-     * @return bool
      */
     public static function isWKTString(string $value): bool
     {
@@ -141,41 +129,23 @@ class Spatial extends Validator
         return (bool) preg_match('/^(POINT|LINESTRING|POLYGON)\s*\(/i', $value);
     }
 
-    /**
-     * Get validator description
-     *
-     * @return string
-     */
     public function getDescription(): string
     {
-        return 'Value must be a valid ' . $this->spatialType . ' format (array or WKT string)';
+        return 'Value must be a valid ' . $this->spatialType . ": {$this->message}";
     }
 
-    /**
-     * Is array
-     *
-     * @return bool
-     */
     public function isArray(): bool
     {
         return false;
     }
 
-    /**
-     * Get Type
-     *
-     * @return string
-     */
     public function getType(): string
     {
         return 'spatial';
     }
 
     /**
-     * Is valid
-     *
-     * @param mixed $value
-     * @return bool
+     * Main validation entrypoint
      */
     public function isValid($value): bool
     {
@@ -184,20 +154,27 @@ class Spatial extends Validator
         }
 
         if (is_string($value)) {
-            // Check if it's a valid WKT string
             return self::isWKTString($value);
         }
 
         if (is_array($value)) {
-            // Validate the array format according to the specific spatial type
-            try {
-                self::validate($value, $this->spatialType);
-                return true;
-            } catch (\Exception $e) {
-                return false;
+            switch ($this->spatialType) {
+                case Database::VAR_POINT:
+                    return $this->validatePoint($value);
+
+                case Database::VAR_LINESTRING:
+                    return $this->validateLineString($value);
+
+                case Database::VAR_POLYGON:
+                    return $this->validatePolygon($value);
+
+                default:
+                    $this->message = 'Unknown spatial type: ' . $this->spatialType;
+                    return false;
             }
         }
 
+        $this->message = 'Spatial value must be array or WKT string';
         return false;
     }
 }

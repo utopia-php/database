@@ -3,7 +3,6 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
-use PDO;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -14,7 +13,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 class MariaDB extends SQL
 {
@@ -1634,9 +1632,9 @@ class MariaDB extends SQL
     protected function getPDOType(mixed $value): int
     {
         return match (gettype($value)) {
-            'string','double' => PDO::PARAM_STR,
-            'integer', 'boolean' => PDO::PARAM_INT,
-            'NULL' => PDO::PARAM_NULL,
+            'string','double' => \PDO::PARAM_STR,
+            'integer', 'boolean' => \PDO::PARAM_INT,
+            'NULL' => \PDO::PARAM_NULL,
             default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
     }

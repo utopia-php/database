@@ -2458,7 +2458,7 @@ abstract class SQL extends Adapter
 
             foreach ($binds as $key => $value) {
                 if (gettype($value) === 'double') {
-                    $stmt->bindValue($key, $this->getFloatPrecision($value), PDO::PARAM_STR);
+                    $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
                 } else {
                     $stmt->bindValue($key, $value, $this->getPDOType($value));
                 }

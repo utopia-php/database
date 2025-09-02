@@ -887,29 +887,33 @@ class Postgres extends SQL
 
         $sqlType = match ($type) {
             Database::INDEX_KEY,
-            Database::INDEX_FULLTEXT => 'INDEX',
+            Database::INDEX_FULLTEXT,
+            Database::INDEX_SPATIAL,
+            Database::INDEX_HNSW_EUCLIDEAN,
+            Database::INDEX_HNSW_COSINE,
+            Database::INDEX_HNSW_DOT => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            Database::INDEX_SPATIAL => 'INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL),
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
         };
 
         $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
         $attributes = \implode(', ', $attributes);
 
-        // Spatial indexes can't include _tenant because GIST indexes require all columns to have compatible operator classes
-        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT && $type !== Database::INDEX_SPATIAL) {
+        if ($this->sharedTables && \in_array($type, [Database::INDEX_KEY, Database::INDEX_UNIQUE])) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }
 
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)}";
 
-        // Add USING GIST for spatial indexes
-        if ($type === Database::INDEX_SPATIAL) {
-            $sql .= " USING GIST";
-        }
-
-        $sql .= " ({$attributes});";
+        // Add USING clause for special index types
+        $sql .= match ($type) {
+            Database::INDEX_SPATIAL => " USING GIST ({$attributes})",
+            Database::INDEX_HNSW_EUCLIDEAN => " USING HNSW ({$attributes} vector_l2_ops)",
+            Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
+            Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
+            default => " ({$attributes})",
+        };
 
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
@@ -1586,7 +1590,7 @@ class Postgres extends SQL
         $attributeType = $this->getAttributeType($query->getAttribute(), $attributes);
         $operator = null;
 
-        if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+        if (\in_array($attributeType, Database::SPATIAL_TYPES)) {
             return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
         }
 

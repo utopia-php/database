@@ -66,6 +66,9 @@ class Database
     public const INDEX_FULLTEXT = 'fulltext';
     public const INDEX_UNIQUE = 'unique';
     public const INDEX_SPATIAL = 'spatial';
+    public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
+    public const INDEX_HNSW_COSINE = 'hnsw_cosine';
+    public const INDEX_HNSW_DOT = 'hnsw_dot';
     public const ARRAY_INDEX_LENGTH = 255;
 
     // Relation Types

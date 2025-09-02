@@ -193,8 +193,18 @@ class Postgres extends SQL
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
 
-        /** @var array<string> $attributeStrings */
-        $attributeStrings = [];
+        // Check if any attributes are vector type and ensure extension is installed
+        $hasVectorAttributes = false;
+        foreach ($attributes as $attribute) {
+            if ($attribute->getAttribute('type') === Database::VAR_VECTOR) {
+                $hasVectorAttributes = true;
+                break;
+            }
+        }
+        
+        if ($hasVectorAttributes) {
+            $this->ensurePgVectorExtension();
+        }
 
         /** @var array<string> $attributeStrings */
         $attributeStrings = [];

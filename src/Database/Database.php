@@ -6725,11 +6725,18 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
-                if (is_string($node) && in_array($type, Database::SPATIAL_TYPES)) {
+                if (\is_string($node) && \in_array($type, Database::SPATIAL_TYPES)) {
                     $node = $this->decodeSpatialData($node);
                 }
 
-                foreach (array_reverse($filters) as $filter) {
+                if (\is_string($node) && $type === Database::VAR_VECTOR) {
+                    $decoded = \json_decode($node, true);
+                    if (\is_array($decoded)) {
+                        $node = $decoded;
+                    }
+                }
+
+                foreach (\array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
                 $value[$index] = $node;

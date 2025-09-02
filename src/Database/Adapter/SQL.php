@@ -1542,6 +1542,19 @@ abstract class SQL extends Adapter
     ): mixed;
 
     /**
+     * Get vector distance calculation for ORDER BY clause
+     * 
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $alias
+     * @return string|null
+     */
+    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    {
+        return null;
+    }
+
+    /**
      * @param string $value
      * @return string
      */
@@ -2363,6 +2376,23 @@ abstract class SQL extends Adapter
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
+        // Extract vector queries for ORDER BY
+        $vectorQueries = [];
+        $filterQueries = [];
+        foreach ($queries as $query) {
+            if (in_array($query->getMethod(), [
+                Query::TYPE_VECTOR_DOT,
+                Query::TYPE_VECTOR_COSINE,
+                Query::TYPE_VECTOR_EUCLIDEAN,
+            ])) {
+                $vectorQueries[] = $query;
+            } else {
+                $filterQueries[] = $query;
+            }
+        }
+
+        $queries = $filterQueries;
+
         $cursorWhere = [];
 
         foreach ($orderAttributes as $i => $originalAttribute) {
@@ -2441,6 +2471,21 @@ abstract class SQL extends Adapter
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        // Add vector distance calculations to ORDER BY
+        $vectorOrders = [];
+        foreach ($vectorQueries as $query) {
+            $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
+            if ($vectorOrder) {
+                $vectorOrders[] = $vectorOrder;
+            }
+        }
+
+        if (!empty($vectorOrders)) {
+            // Vector orders should come first for similarity search
+            $orders = \array_merge($vectorOrders, $orders);
+        }
+
         $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
 
         $sqlLimit = '';

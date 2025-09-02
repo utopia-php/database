@@ -863,7 +863,6 @@ class Postgres extends SQL
         $collection = $this->filter($collection);
         $id = $this->filter($id);
 
-
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
 
@@ -1615,16 +1614,9 @@ class Postgres extends SQL
                 return "NOT (to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0))";
 
             case Query::TYPE_VECTOR_DOT:
-                $binds[":{$placeholder}_0"] = '[' . implode(',', $query->getValues()) . ']';
-                return "({$attribute} <#> :{$placeholder}_0)";
-
             case Query::TYPE_VECTOR_COSINE:
-                $binds[":{$placeholder}_0"] = '[' . implode(',', $query->getValues()) . ']';
-                return "({$attribute} <=> :{$placeholder}_0)";
-
             case Query::TYPE_VECTOR_EUCLIDEAN:
-                $binds[":{$placeholder}_0"] = '[' . implode(',', $query->getValues()) . ']';
-                return "({$attribute} <-> :{$placeholder}_0)";
+                return ''; // Handled in ORDER BY clause
 
             case Query::TYPE_BETWEEN:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
@@ -1644,8 +1636,6 @@ class Postgres extends SQL
             case Query::TYPE_NOT_CONTAINS:
                 if ($query->onArray()) {
                     $operator = '@>';
-                } else {
-                    $operator = null;
                 }
 
                 // no break
@@ -1684,6 +1674,35 @@ class Postgres extends SQL
                 $separator = $isNotQuery ? ' AND ' : ' OR ';
                 return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
         }
+    }
+
+    /**
+     * Get vector distance calculation for ORDER BY clause
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $alias
+     * @return string|null
+     * @throws DatabaseException
+     */
+    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    {
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+        
+        $attribute = $this->filter($query->getAttribute());
+        $attribute = $this->quote($attribute);
+        $alias = $this->quote($alias);
+        $placeholder = ID::unique();
+        
+        $vector = '[' . implode(',', \array_map(\floatval(...), $query->getValues())) . ']';
+        $binds[":vector_{$placeholder}"] = $vector;
+
+        return match ($query->getMethod()) {
+            Query::TYPE_VECTOR_DOT => "({$alias}.{$attribute} <#> :vector_{$placeholder}::vector)",
+            Query::TYPE_VECTOR_COSINE => "({$alias}.{$attribute} <=> :vector_{$placeholder}::vector)",
+            Query::TYPE_VECTOR_EUCLIDEAN => "({$alias}.{$attribute} <-> :vector_{$placeholder}::vector)",
+            default => null,
+        };
     }
 
     /**

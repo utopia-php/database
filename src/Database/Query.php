@@ -920,7 +920,7 @@ class Query
      * @param bool $meters
      * @return Query
      */
-    public static function distanceNotEqual(string $attribute, array $values, int|float $distance, $meters = false): self
+    public static function distanceNotEqual(string $attribute, array $values, int|float $distance, bool $meters = false): self
     {
         return new self(self::TYPE_DISTANCE_NOT_EQUAL, $attribute, [[$values,$distance,$meters]]);
     }
@@ -934,7 +934,7 @@ class Query
      * @param bool $meters
      * @return Query
      */
-    public static function distanceGreaterThan(string $attribute, array $values, int|float $distance, $meters = false): self
+    public static function distanceGreaterThan(string $attribute, array $values, int|float $distance, bool $meters = false): self
     {
         return new self(self::TYPE_DISTANCE_GREATER_THAN, $attribute, [[$values,$distance, $meters]]);
     }

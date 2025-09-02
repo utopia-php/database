@@ -49,6 +49,9 @@ class Database
     public const BIG_INT_MAX = PHP_INT_MAX;
     public const DOUBLE_MAX = PHP_FLOAT_MAX;
 
+    // Global SRID for geographic coordinates (WGS84)
+    public const SRID = 4326;
+
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
 

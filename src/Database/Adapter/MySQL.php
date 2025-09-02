@@ -7,6 +7,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Query;
 
 class MySQL extends MariaDB
 {
@@ -76,6 +77,36 @@ class MySQL extends MariaDB
         }
 
         return $size;
+    }
+
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    {
+        $distanceParams = $query->getValues()[0];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+        $binds[":{$placeholder}_1"] = $distanceParams[1];
+
+        $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
+
+        switch ($query->getMethod()) {
+            case Query::TYPE_DISTANCE_EQUAL:
+                $operator = '=';
+                break;
+            case Query::TYPE_DISTANCE_NOT_EQUAL:
+                $operator = '!=';
+                break;
+            case Query::TYPE_DISTANCE_GREATER_THAN:
+                $operator = '>';
+                break;
+            case Query::TYPE_DISTANCE_LESS_THAN:
+                $operator = '<';
+                break;
+            default:
+                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
+        }
+
+        $unit = $useMeters ? ", 'meter'" : '';
+
+        return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0){$unit}) {$operator} :{$placeholder}_1";
     }
 
     public function getSupportForIndexArray(): bool

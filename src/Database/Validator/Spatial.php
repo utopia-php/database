@@ -18,13 +18,18 @@ class Spatial extends Validator
     /**
      * Validate POINT data
      *
-     * @param array<int|float> $value
+     * @param array<mixed> $value
      * @return bool
      */
     protected function validatePoint(array $value): bool
     {
         if (count($value) !== 2) {
             $this->message = 'Point must be an array of two numeric values [x, y]';
+            return false;
+        }
+
+        if (!is_numeric($value[0]) || !is_numeric($value[1])) {
+            $this->message = 'Point coordinates must be numeric values';
             return false;
         }
 
@@ -82,22 +87,33 @@ class Spatial extends Validator
             $value = [$value]; // wrap single ring
         }
 
-        foreach ($value as $ring) {
+        foreach ($value as $ringIndex => $ring) {
             if (!is_array($ring) || empty($ring)) {
-                $this->message = 'Each ring in Polygon must be an array of points';
+                $this->message = "Ring #{$ringIndex} must be an array of points";
                 return false;
             }
 
-            foreach ($ring as $point) {
+            if (count($ring) < 4) {
+                $this->message = "Ring #{$ringIndex} must contain at least 4 points to form a closed polygon";
+                return false;
+            }
+
+            foreach ($ring as $pointIndex => $point) {
                 if (!is_array($point) || count($point) !== 2) {
-                    $this->message = 'Each point in Polygon ring must be an array of two values [x, y]';
+                    $this->message = "Point #{$pointIndex} in ring #{$ringIndex} must be an array of two values [x, y]";
                     return false;
                 }
 
                 if (!is_numeric($point[0]) || !is_numeric($point[1])) {
-                    $this->message = 'Each point in Polygon ring must have numeric coordinates';
+                    $this->message = "Coordinates of point #{$pointIndex} in ring #{$ringIndex} must be numeric";
                     return false;
                 }
+            }
+
+            // Check that the ring is closed (first point == last point)
+            if ($ring[0] !== $ring[count($ring) - 1]) {
+                $this->message = "Ring #{$ringIndex} must be closed (first point must equal last point)";
+                return false;
             }
         }
 

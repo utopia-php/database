@@ -1452,6 +1452,43 @@ class Postgres extends SQL
         return $stmt->fetchColumn();
     }
 
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    {
+        $distanceParams = $query->getValues()[0];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+        $binds[":{$placeholder}_1"] = $distanceParams[1];
+
+        $meters = isset($distanceParams[2]) && $distanceParams[2] === true;
+
+        switch ($query->getMethod()) {
+            case Query::TYPE_DISTANCE_EQUAL:
+                $operator = '=';
+                break;
+            case Query::TYPE_DISTANCE_NOT_EQUAL:
+                $operator = '!=';
+                break;
+            case Query::TYPE_DISTANCE_GREATER_THAN:
+                $operator = '>';
+                break;
+            case Query::TYPE_DISTANCE_LESS_THAN:
+                $operator = '<';
+                break;
+            default:
+                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
+        }
+
+        if ($meters) {
+            // Transform both attribute and input geometry to 3857 (meters) for distance calculation
+            $attr = "ST_Transform({$alias}.{$attribute}, 3857)";
+            $geom = "ST_Transform(ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "), 3857)";
+            return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
+        }
+
+        // Without meters, use the original SRID (e.g., 4326)
+        return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . ")) {$operator} :{$placeholder}_1";
+    }
+
+
     /**
      * Handle spatial queries
      *
@@ -1474,60 +1511,41 @@ class Postgres extends SQL
                 return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_DISTANCE_EQUAL:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_DWithin({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), :{$placeholder}_1)";
-
             case Query::TYPE_DISTANCE_NOT_EQUAL:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "NOT ST_DWithin({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), :{$placeholder}_1)";
-
             case Query::TYPE_DISTANCE_GREATER_THAN:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
-
             case Query::TYPE_DISTANCE_LESS_THAN:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) < :{$placeholder}_1";
-
+                return $this->handleDistanceSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
             case Query::TYPE_EQUAL:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
 
             case Query::TYPE_NOT_EQUAL:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
 
             case Query::TYPE_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
 
             case Query::TYPE_NOT_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
 
             case Query::TYPE_OVERLAPS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
 
             case Query::TYPE_NOT_OVERLAPS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
 
             case Query::TYPE_TOUCHES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
 
             case Query::TYPE_NOT_TOUCHES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
 
             case Query::TYPE_CONTAINS:
             case Query::TYPE_NOT_CONTAINS:
@@ -1536,8 +1554,8 @@ class Postgres extends SQL
                 $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return $isNot
-                    ? "NOT ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))"
-                    : "ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                    ? "NOT ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))"
+                    : "ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
 
             default:
                 throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
@@ -1716,15 +1734,15 @@ class Postgres extends SQL
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
 
-
+                // in all other DB engines, 4326 is the default SRID
             case Database::VAR_POINT:
-                return 'GEOMETRY(POINT)';
+                return 'GEOMETRY(POINT,' . Database::SRID . ')';
 
             case Database::VAR_LINESTRING:
-                return 'GEOMETRY(LINESTRING)';
+                return 'GEOMETRY(LINESTRING,' . Database::SRID . ')';
 
             case Database::VAR_POLYGON:
-                return 'GEOMETRY(POLYGON)';
+                return 'GEOMETRY(POLYGON,' . Database::SRID . ')';
 
             default:
                 throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);

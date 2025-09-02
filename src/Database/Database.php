@@ -4580,7 +4580,7 @@ class Database
             $updates['$createdAt'] = $updates->getCreatedAt();
         }
 
-        if ($updates->getCreatedBy() == null) {
+        if ($updates->getCreatedBy() === null) {
             unset($updates['$createdBy']);
         } else {
             $updates['$createdBy'] = $updates->getCreatedBy();

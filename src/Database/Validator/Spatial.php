@@ -17,6 +17,9 @@ class Spatial extends Validator
 
     /**
      * Validate POINT data
+     *
+     * @param array<int|float> $value
+     * @return bool
      */
     protected function validatePoint(array $value): bool
     {
@@ -25,16 +28,14 @@ class Spatial extends Validator
             return false;
         }
 
-        if (!is_numeric($value[0]) || !is_numeric($value[1])) {
-            $this->message = 'Point coordinates must be numeric values';
-            return false;
-        }
-
         return true;
     }
 
     /**
      * Validate LINESTRING data
+     *
+     * @param array<mixed> $value
+     * @return bool
      */
     protected function validateLineString(array $value): bool
     {
@@ -60,6 +61,9 @@ class Spatial extends Validator
 
     /**
      * Validate POLYGON data
+     *
+     * @param array<mixed> $value
+     * @return bool
      */
     protected function validatePolygon(array $value): bool
     {

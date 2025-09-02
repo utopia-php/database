@@ -338,13 +338,13 @@ class Filter extends Base
                 if (!$this->isValidAttribute($attribute)) {
                     return false;
                 }
-                
+
                 $attributeSchema = $this->schema[$attribute];
                 if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
                     $this->message = 'Vector queries can only be used on vector attributes';
                     return false;
                 }
-                
+
                 if (count($value->getValues()) != 1) {
                     $this->message = \ucfirst($method) . ' queries require exactly one vector value.';
                     return false;

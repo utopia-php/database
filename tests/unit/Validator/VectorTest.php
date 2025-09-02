@@ -11,12 +11,12 @@ class VectorTest extends TestCase
     {
         // Test valid vectors
         $validator = new Vector(3);
-        
+
         $this->assertTrue($validator->isValid([1.0, 2.0, 3.0]));
         $this->assertTrue($validator->isValid([0, 0, 0]));
         $this->assertTrue($validator->isValid([-1.5, 0.0, 2.5]));
         $this->assertTrue($validator->isValid(['1', '2', '3'])); // Numeric strings should pass
-        
+
         // Test invalid vectors
         $this->assertFalse($validator->isValid([1.0, 2.0])); // Wrong dimensions
         $this->assertFalse($validator->isValid([1.0, 2.0, 3.0, 4.0])); // Wrong dimensions
@@ -31,15 +31,15 @@ class VectorTest extends TestCase
         $validator1 = new Vector(1);
         $this->assertTrue($validator1->isValid([5.0]));
         $this->assertFalse($validator1->isValid([1.0, 2.0]));
-        
+
         $validator5 = new Vector(5);
         $this->assertTrue($validator5->isValid([1.0, 2.0, 3.0, 4.0, 5.0]));
         $this->assertFalse($validator5->isValid([1.0, 2.0, 3.0]));
-        
+
         $validator128 = new Vector(128);
         $vector128 = array_fill(0, 128, 1.0);
         $this->assertTrue($validator128->isValid($vector128));
-        
+
         $vector127 = array_fill(0, 127, 1.0);
         $this->assertFalse($validator128->isValid($vector127));
     }
@@ -48,7 +48,7 @@ class VectorTest extends TestCase
     {
         $validator = new Vector(3);
         $this->assertEquals('Value must be an array of floats with 3 dimensions', $validator->getDescription());
-        
+
         $validator256 = new Vector(256);
         $this->assertEquals('Value must be an array of floats with 256 dimensions', $validator256->getDescription());
     }

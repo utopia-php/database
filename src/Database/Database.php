@@ -1891,8 +1891,8 @@ class Database
                     $supportedTypes[] = self::VAR_VECTOR;
                 }
                 if ($this->adapter->getSupportForSpatialAttributes()) {
-                    \array_push($supportedTypes, ...self::SPATIAL_ATTRIBUTES);
-                }                 
+                    \array_push($supportedTypes, ...self::SPATIAL_TYPES);
+                }
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
         }
 
@@ -1942,7 +1942,7 @@ class Database
         }
 
         if ($defaultType === 'array') {
-            // spatial types require the array itself
+            // Spatial types require the array itself
             if (!in_array($type, Database::SPATIAL_TYPES)) {
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value);
@@ -1965,14 +1965,6 @@ class Database
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
-            case self::VAR_POINT:
-            case self::VAR_LINESTRING:
-            case self::VAR_POLYGON:
-                // Spatial types expect arrays as default values
-                if ($defaultType !== 'array') {
-                    throw new DatabaseException('Default value for spatial type ' . $type . ' must be an array');
-                }
-                break;
             case self::VAR_VECTOR:
                 // When validating individual vector components (from recursion), they should be numeric
                 if ($defaultType !== 'double' && $defaultType !== 'integer') {
@@ -1992,8 +1984,8 @@ class Database
                     $supportedTypes[] = self::VAR_VECTOR;
                 }
                 if ($this->adapter->getSupportForSpatialAttributes()) {
-                    \array_push($supportedTypes, ...self::SPATIAL_ATTRIBUTES);
-                }  
+                    \array_push($supportedTypes, ...self::SPATIAL_TYPES);
+                }
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
         }
     }
@@ -2247,8 +2239,8 @@ class Database
                     }
                     if (!empty($array)) {
                         throw new DatabaseException('Spatial attributes cannot be arrays');
-					}
-					break;
+                    }
+                    break;
                 case self::VAR_VECTOR:
                     if (!$this->adapter->getSupportForVectors()) {
                         throw new DatabaseException('Vector type is only supported in PostgreSQL adapter');
@@ -2276,8 +2268,8 @@ class Database
                         $supportedTypes[] = self::VAR_VECTOR;
                     }
                     if ($this->adapter->getSupportForSpatialAttributes()) {
-                        \array_push($supportedTypes, ...self::SPATIAL_ATTRIBUTES);
-                    } 
+                        \array_push($supportedTypes, ...self::SPATIAL_TYPES);
+                    }
                     throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
             }
 
@@ -3264,7 +3256,7 @@ class Database
                     throw new DatabaseException('Vector indexes require exactly one attribute');
                 }
                 break;
-                
+
             default:
                 throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
         }

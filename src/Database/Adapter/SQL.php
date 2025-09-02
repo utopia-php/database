@@ -1130,7 +1130,7 @@ abstract class SQL extends Adapter
                 case Database::VAR_POLYGON:
                     $total += 20;
                     break;
-                
+
                 case Database::VAR_VECTOR:
                     // Each dimension is typically 4 bytes (float32)
                     $total += ($attribute['size'] ?? 0) * 4;
@@ -1548,7 +1548,7 @@ abstract class SQL extends Adapter
 
     /**
      * Get vector distance calculation for ORDER BY clause
-     * 
+     *
      * @param Query $query
      * @param array<string, mixed> $binds
      * @param string $alias

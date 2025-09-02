@@ -201,7 +201,7 @@ class Postgres extends SQL
                 break;
             }
         }
-        
+
         if ($hasVectorAttributes) {
             $this->ensurePgVectorExtension();
         }
@@ -1688,12 +1688,12 @@ class Postgres extends SQL
     protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-        
+
         $attribute = $this->filter($query->getAttribute());
         $attribute = $this->quote($attribute);
         $alias = $this->quote($alias);
         $placeholder = ID::unique();
-        
+
         $values = $query->getValues();
         $vectorArray = $values[0] ?? [];
         $vector = '[' . implode(',', \array_map(\floatval(...), $vectorArray)) . ']';

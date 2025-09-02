@@ -7,10 +7,7 @@ use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Database;
-use Utopia\Database\Document;
-use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\PDO;
-use Utopia\Database\Query;
 
 class PostgresTest extends Base
 {

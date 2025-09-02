@@ -51,7 +51,7 @@ class QueryTest extends TestCase
 
         // Test vector queries
         $vector = [0.1, 0.2, 0.3];
-        
+
         $query = Query::vectorDot('embedding', $vector);
         $this->assertEquals(Query::TYPE_VECTOR_DOT, $query->getMethod());
         $this->assertEquals('embedding', $query->getAttribute());

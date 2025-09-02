@@ -74,6 +74,16 @@ class DocumentsQueriesTest extends TestCase
                     'signed' => false,
                     'array' => false,
                     'filters' => [],
+                ]),
+                new Document([
+                    '$id' => 'id',
+                    'key' => 'id',
+                    'type' => Database::VAR_ID,
+                    'size' => 0,
+                    'required' => false,
+                    'signed' => false,
+                    'array' => false,
+                    'filters' => [],
                 ])
             ],
             'indexes' => [
@@ -118,9 +128,13 @@ class DocumentsQueriesTest extends TestCase
      */
     public function testValidQueries(): void
     {
-        $validator = new DocumentsValidator($this->context);
+        $validator = new DocumentsValidator(
+            $this->context,
+            Database::VAR_INTEGER
+        );
 
         $queries = [
+            Query::notEqual('id', '1000000'),
             Query::equal('description', ['Best movie ever']),
             Query::equal('description', ['']),
             Query::equal('is_bool', [false]),
@@ -151,7 +165,10 @@ class DocumentsQueriesTest extends TestCase
      */
     public function testInvalidQueries(): void
     {
-        $validator = new DocumentsValidator($this->context);
+        $validator = new DocumentsValidator(
+            $this->context,
+            Database::VAR_INTEGER
+        );
 
         $queries = ['{"method":"notEqual","attribute":"title","values":["Iron Man","Ant Man"]}'];
         $this->assertEquals(false, $validator->isValid($queries));
@@ -172,5 +189,7 @@ class DocumentsQueriesTest extends TestCase
         $queries = [Query::equal('title', [])]; // empty array
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Invalid query: Equal queries require at least one value.', $validator->getDescription());
+
+
     }
 }

@@ -5,17 +5,41 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDOException;
 use Utopia\Database\Adapter;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
-use Utopia\Database\PDO;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 
 abstract class SQL extends Adapter
 {
     protected mixed $pdo;
+
+    /**
+     * Controls how many fractional digits are used when binding float parameters.
+     */
+    protected int $floatPrecision = 17;
+
+    /**
+     * Configure float precision for parameter binding/logging.
+     */
+    public function setFloatPrecision(int $precision): void
+    {
+        $this->floatPrecision = $precision;
+    }
+
+    /**
+     * Helper to format a float value according to configured precision for binding/logging.
+     */
+    protected function getFloatPrecision(float $value): string
+    {
+        return sprintf('%.'. $this->floatPrecision . 'F', $value);
+    }
 
     /**
      * Constructor.
@@ -43,20 +67,18 @@ abstract class SQL extends Adapter
                     $this->getPDO()->prepare('ROLLBACK')->execute();
                 }
 
-                $result = $this->getPDO()->beginTransaction();
+                $this->getPDO()->beginTransaction();
+
             } else {
-                $result = $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
+                $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
             }
         } catch (PDOException $e) {
             throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!$result) {
-            throw new TransactionException('Failed to start transaction');
-        }
-
         $this->inTransaction++;
-        return $result;
+
+        return true;
     }
 
     /**
@@ -101,21 +123,17 @@ abstract class SQL extends Adapter
 
         try {
             if ($this->inTransaction > 1) {
-                $result = $this->getPDO()->exec('ROLLBACK TO transaction' . ($this->inTransaction - 1));
+                $this->getPDO()->exec('ROLLBACK TO transaction' . ($this->inTransaction - 1));
                 $this->inTransaction--;
             } else {
-                $result = $this->getPDO()->rollBack();
+                $this->getPDO()->rollBack();
                 $this->inTransaction = 0;
             }
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!$result) {
-            throw new TransactionException('Failed to rollback transaction');
-        }
-
-        return $result;
+        return true;
     }
 
     /**
@@ -202,26 +220,151 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Get Document
+     * Create Attribute
      *
      * @param string $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size
+     * @param bool $signed
+     * @param bool $array
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
+    {
+        $id = $this->quote($this->filter($id));
+        $type = $this->getSQLType($type, $size, $signed, $array, $required);
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Create Attributes
+     *
+     * @param string $collection
+     * @param array<array<string, mixed>> $attributes
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        $parts = [];
+        foreach ($attributes as $attribute) {
+            $id = $this->quote($this->filter($attribute['$id']));
+            $type = $this->getSQLType(
+                $attribute['type'],
+                $attribute['size'],
+                $attribute['signed'] ?? true,
+                $attribute['array'] ?? false,
+                $attribute['required'] ?? false,
+            );
+            $parts[] = "{$id} {$type}";
+        }
+
+        $columns = \implode(', ADD COLUMN ', $parts);
+
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$columns};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Rename Attribute
+     *
+     * @param string $collection
+     * @param string $old
+     * @param string $new
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->quote($this->filter($old));
+        $new = $this->quote($this->filter($new));
+
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} RENAME COLUMN {$old} TO {$new};";
+
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_UPDATE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Delete Attribute
+     *
+     * @param string $collection
+     * @param string $id
+     * @param bool $array
+     * @return bool
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function deleteAttribute(string $collection, string $id, bool $array = false): bool
+    {
+        $id = $this->quote($this->filter($id));
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} DROP COLUMN {$id};";
+        $sql = $this->trigger(Database::EVENT_ATTRIBUTE_DELETE, $sql);
+
+        try {
+            return $this->getPDO()
+                ->prepare($sql)
+                ->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
+     * Get Document
+     *
+     * @param Document $collection
      * @param string $id
      * @param Query[] $queries
      * @param bool $forUpdate
      * @return Document
      * @throws DatabaseException
      */
-    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+    public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
+        $spatialAttributes = $this->getSpatialAttributes($collection);
+        $collection = $collection->getId();
+
         $name = $this->filter($collection);
         $alias = Query::DEFAULT_ALIAS;
         //$selections = $this->getAttributeSelections($queries);
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
+        $alias = Query::DEFAULT_ALIAS;
+
         //, _permissions as {$this->quote('$perms')}
         $sql = "
-		    SELECT {$this->getAttributeProjection($queries)}
+		    SELECT {$this->getAttributeProjection($queries, $spatialAttributes)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             WHERE {$this->quote($alias)}._uid = :_uid 
             {$this->getTenantQuery($collection, $alias)}
@@ -250,7 +393,7 @@ var_dump($sql);
         $document = $document[0];
 
         if (\array_key_exists('_id', $document)) {
-            $document['$internalId'] = $document['_id'];
+            $document['$sequence'] = $document['_id'];
             unset($document['_id']);
         }
         if (\array_key_exists('_uid', $document)) {
@@ -258,7 +401,7 @@ var_dump($sql);
             unset($document['_uid']);
         }
         if (\array_key_exists('_tenant', $document)) {
-            $document['$tenant'] = $document['_tenant'] === null ? null : (int)$document['_tenant'];
+            $document['$tenant'] = $document['_tenant'];
             unset($document['_tenant']);
         }
         if (\array_key_exists('_createdAt', $document)) {
@@ -280,11 +423,32 @@ var_dump($sql);
     }
 
     /**
+     * Helper method to extract spatial type attributes from collection attributes
+     *
+     * @param Document $collection
+     * @return array<int,string>
+     */
+    protected function getSpatialAttributes(Document $collection): array
+    {
+        $collectionAttributes = $collection->getAttribute('attributes', []);
+        $spatialAttributes = [];
+        foreach ($collectionAttributes as $attr) {
+            if ($attr instanceof Document) {
+                $attributeType = $attr->getAttribute('type');
+                if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                    $spatialAttributes[] = $attr->getId();
+                }
+            }
+        }
+        return $spatialAttributes;
+    }
+
+    /**
      * Update documents
      *
      * Updates all documents which match the given query.
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $updates
      * @param array<Document> $documents
      *
@@ -292,11 +456,13 @@ var_dump($sql);
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
         if (empty($documents)) {
             return 0;
         }
+        $spatialAttributes = $this->getSpatialAttributes($collection);
+        $collection = $collection->getId();
 
         $attributes = $updates->getAttributes();
 
@@ -304,7 +470,11 @@ var_dump($sql);
             $attributes['_updatedAt'] = $updates->getUpdatedAt();
         }
 
-        if (!empty($updates->getPermissions())) {
+        if (!empty($updates->getCreatedAt())) {
+            $attributes['_createdAt'] = $updates->getCreatedAt();
+        }
+
+        if ($updates->offsetExists('$permissions')) {
             $attributes['_permissions'] = json_encode($updates->getPermissions());
         }
 
@@ -316,7 +486,12 @@ var_dump($sql);
         $columns = '';
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $columns .= "{$this->quote($column)} = :key_{$bindIndex}";
+
+            if (in_array($attribute, $spatialAttributes)) {
+                $columns .= "{$this->quote($column)} = ST_GeomFromText(:key_{$bindIndex})";
+            } else {
+                $columns .= "{$this->quote($column)} = :key_{$bindIndex}";
+            }
 
             if ($attribute !== \array_key_last($attributes)) {
                 $columns .= ',';
@@ -326,12 +501,12 @@ var_dump($sql);
         }
 
         $name = $this->filter($collection);
-        $internalIds = \array_map(fn ($document) => $document->getInternalId(), $documents);
+        $sequences = \array_map(fn ($document) => $document->getSequence(), $documents);
 
         $sql = "
             UPDATE {$this->getSQLTable($name)}
             SET {$columns}
-            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")
+            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($sequences))) . ")
             {$this->getTenantQuery($collection)}
         ";
 
@@ -342,13 +517,13 @@ var_dump($sql);
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        foreach ($internalIds as $id => $value) {
+        foreach ($sequences as $id => $value) {
             $stmt->bindValue(":_id_{$id}", $value);
         }
 
         $attributeIndex = 0;
-        foreach ($attributes as $value) {
-            if (is_array($value)) {
+        foreach ($attributes as $attributeName => $value) {
+            if (!isset($spatialAttributes[$attributeName]) && is_array($value)) {
                 $value = json_encode($value);
             }
 
@@ -362,7 +537,7 @@ var_dump($sql);
         $affected = $stmt->rowCount();
 
         // Permissions logic
-        if (!empty($updates->getPermissions())) {
+        if ($updates->offsetExists('$permissions')) {
             $removeQueries = [];
             $removeBindValues = [];
 
@@ -370,7 +545,10 @@ var_dump($sql);
             $addBindValues = [];
 
             foreach ($documents as $index => $document) {
-                // Permissions logic
+                if ($document->getAttribute('$skipPermissionsUpdate', false)) {
+                    continue;
+                }
+
                 $sql = "
                     SELECT _type, _permission
                     FROM {$this->getSQLTable($name . '_perms')}
@@ -525,15 +703,15 @@ var_dump($sql);
      * Delete Documents
      *
      * @param string $collection
-     * @param array<string> $internalIds
+     * @param array<string> $sequences
      * @param array<string> $permissionIds
      *
      * @return int
      * @throws DatabaseException
      */
-    public function deleteDocuments(string $collection, array $internalIds, array $permissionIds): int
+    public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
     {
-        if (empty($internalIds)) {
+        if (empty($sequences)) {
             return 0;
         }
 
@@ -542,7 +720,7 @@ var_dump($sql);
 
             $sql = "
             DELETE FROM {$this->getSQLTable($name)} 
-            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($internalIds))) . ")
+            WHERE _id IN (" . \implode(', ', \array_map(fn ($index) => ":_id_{$index}", \array_keys($sequences))) . ")
             {$this->getTenantQuery($collection)}
             ";
 
@@ -550,7 +728,7 @@ var_dump($sql);
 
             $stmt = $this->getPDO()->prepare($sql);
 
-            foreach ($internalIds as $id => $value) {
+            foreach ($sequences as $id => $value) {
                 $stmt->bindValue(":_id_{$id}", $value);
             }
 
@@ -593,49 +771,64 @@ var_dump($sql);
     }
 
     /**
-     * Get internal IDs for the given documents
+     * Assign internal IDs for the given documents
      *
      * @param string $collection
-     * @param array<string> $documentIds
-     * @param array<?int> $documentTenants
-     * @return array<string>
+     * @param array<Document> $documents
+     * @return array<Document>
      * @throws DatabaseException
      */
-    protected function getInternalIds(string $collection, array $documentIds, array $documentTenants = []): array
+    public function getSequences(string $collection, array $documents): array
     {
-        $internalIds = [];
+        $documentIds = [];
+        $keys = [];
+        $binds = [];
 
-        /**
-         * UID, _tenant bottleneck is ~ 5000 rows since we use _uid IN query
-         */
-        foreach (\array_chunk($documentIds, 1000) as $documentIdsChunk) {
-            $sql = "
-                SELECT _uid, _id
-                FROM {$this->getSQLTable($collection)}
-                WHERE {$this->quote('_uid')} IN (" . implode(',', array_map(fn ($index) => ":_key_{$index}", array_keys($documentIdsChunk))) . ")
-                {$this->getTenantQuery($collection, tenantCount: \count($documentIdsChunk))}
-            ";
+        foreach ($documents as $i => $document) {
+            if (empty($document->getSequence())) {
+                $documentIds[] = $document->getId();
 
-            $stmt = $this->getPDO()->prepare($sql);
+                $key = ":uid_{$i}";
 
-            foreach ($documentIdsChunk as $index => $id) {
-                $stmt->bindValue(":_key_{$index}", $id);
-            }
+                $binds[$key] = $document->getId();
+                $keys[] = $key;
 
-            if ($this->sharedTables) {
-                foreach ($documentIdsChunk as $index => $id) {
-                    $stmt->bindValue(":_tenant_{$index}", \array_shift($documentTenants));
+                if ($this->sharedTables) {
+                    $binds[':_tenant_'.$i] = $document->getTenant();
                 }
             }
-
-            $stmt->execute();
-            $results = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => internalId]
-            $stmt->closeCursor();
-
-            $internalIds = [...$internalIds, ...$results];
         }
 
-        return $internalIds;
+        if (empty($documentIds)) {
+            return $documents;
+        }
+
+        $placeholders = implode(',', array_values($keys));
+
+        $sql = "
+            SELECT _uid, _id
+            FROM {$this->getSQLTable($collection)}
+            WHERE {$this->quote('_uid')} IN ({$placeholders})
+            {$this->getTenantQuery($collection, tenantCount: \count($documentIds))}
+            ";
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+
+        $stmt->execute();
+        $sequences = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
+        $stmt->closeCursor();
+
+        foreach ($documents as $document) {
+            if (isset($sequences[$document->getId()])) {
+                $document['$sequence'] = $sequences[$document->getId()];
+            }
+        }
+
+        return $documents;
     }
 
     /**
@@ -886,6 +1079,10 @@ var_dump($sql);
             }
 
             switch ($attribute['type']) {
+                case Database::VAR_ID:
+                    $total += 8; //  BIGINT 8 bytes
+                    break;
+
                 case Database::VAR_STRING:
                     /**
                      * Text / Mediumtext / Longtext
@@ -930,6 +1127,15 @@ var_dump($sql);
                      */
                     $total += 7;
                     break;
+
+                case Database::VAR_POINT:
+                    $total += $this->getMaxPointSize();
+                    break;
+                case Database::VAR_LINESTRING:
+                case Database::VAR_POLYGON:
+                    $total += 20;
+                    break;
+
                 default:
                     throw new DatabaseException('Unknown type: ' . $attribute['type']);
             }
@@ -1234,6 +1440,12 @@ var_dump($sql);
         return false;
     }
 
+    public function getSupportForNumericCasting(): bool
+    {
+        return false;
+    }
+
+
     /**
      * Does the adapter handle Query Array Contains?
      *
@@ -1251,6 +1463,11 @@ var_dump($sql);
      */
     abstract public function getSupportForJSONOverlaps(): bool;
 
+    public function getSupportForIndexArray(): bool
+    {
+        return true;
+    }
+
     public function getSupportForCastIndexArray(): bool
     {
         return false;
@@ -1265,6 +1482,59 @@ var_dump($sql);
     {
         return true;
     }
+
+    public function getSupportForBatchCreateAttributes(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is spatial attributes supported?
+     *
+     * @return bool
+    */
+    public function getSupportForSpatialAttributes(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support null values in spatial indexes?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialIndexNull(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+    */
+    public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
+    }
+
+    /**
+     * @param string $tableName
+     * @param string $columns
+     * @param array<string> $batchKeys
+     * @param array<mixed> $bindValues
+     * @param array<string> $attributes
+     * @param string $attribute
+     * @return mixed
+     */
+    abstract protected function getUpsertStatement(
+        string $tableName,
+        string $columns,
+        array $batchKeys,
+        array $attributes,
+        array $bindValues,
+        string $attribute = '',
+    ): mixed;
 
     /**
      * @param string $value
@@ -1323,22 +1593,22 @@ var_dump($sql);
             case Query::TYPE_STARTS_WITH:
             case Query::TYPE_ENDS_WITH:
             case Query::TYPE_CONTAINS:
+            case Query::TYPE_NOT_STARTS_WITH:
+            case Query::TYPE_NOT_ENDS_WITH:
+            case Query::TYPE_NOT_CONTAINS:
                 return $this->getLikeOperator();
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }
     }
 
-    public function escapeWildcards(string $value): string
-    {
-        $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
-
-        foreach ($wildcards as $wildcard) {
-            $value = \str_replace($wildcard, "\\$wildcard", $value);
-        }
-
-        return $value;
-    }
+    abstract protected function getSQLType(
+        string $type,
+        int $size,
+        bool $signed = true,
+        bool $array = false,
+        bool $required = false
+    ): string;
 
     /**
      * Get SQL Index Type
@@ -1398,7 +1668,7 @@ var_dump($sql);
      */
     protected function getSQLTable(string $name): string
     {
-        return "{$this->quote($this->getDatabase())}.{$this->quote($this->getNamespace().'_'.$this->filter($name))}";
+        return "{$this->quote($this->getDatabase())}.{$this->quote($this->getNamespace() . '_' .$this->filter($name))}";
     }
 
     /**
@@ -1454,6 +1724,20 @@ var_dump($sql);
     }
 
     /**
+     * Size of POINT spatial type
+     *
+     * @return int
+    */
+    abstract protected function getMaxPointSize(): int;
+    /**
+     * @return string
+     */
+    public function getIdAttributeType(): string
+    {
+        return Database::VAR_INTEGER;
+    }
+
+    /**
      * @return int
      */
     public function getMaxIndexLength(): int
@@ -1467,28 +1751,30 @@ var_dump($sql);
     /**
      * @param Query $query
      * @param array<string, mixed> $binds
+     * @param array<mixed> $attributes
      * @return string
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query, array &$binds): string;
+    abstract protected function getSQLCondition(Query $query, array &$binds, array $attributes = []): string;
 
     /**
      * @param array<Query> $queries
      * @param array<string, mixed> $binds
      * @param string $separator
+     * @param array<mixed> $attributes
      * @return string
      * @throws Exception
      */
-    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND', array $attributes = []): string
     {
         $queries = Query::getFilterQueries($queries);
 
         $conditions = [];
         foreach ($queries as $query) {
             if ($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
+                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod(), $attributes);
             } else {
-                $conditions[] = $this->getSQLCondition($query, $binds);
+                $conditions[] = $this->getSQLCondition($query, $binds, $attributes);
             }
         }
 
@@ -1592,8 +1878,10 @@ var_dump($sql);
      * @return string
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selects): string
+    protected function getAttributeProjection(array $selects, array $spatialAttributes = []): string
     {
+        //todo: fix this $spatialAttributes
+
         if (empty($selects)) {
             return Query::DEFAULT_ALIAS.'.*'.$this->addHiddenAttribute($selects);
         }
@@ -1639,67 +1927,11 @@ var_dump($sql);
         return $string.$this->addHiddenAttribute($selects);
     }
 
-    /**
-     * Get the SQL projection given the selected attributes
-     *
-     * @param array<string> $selections
-     * @param string $prefix
-     * @return mixed
-     * @throws Exception
-     */
-    protected function getAttributeProjection_original(array $selections, string $prefix = ''): mixed
-    {
-        if (empty($selections) || \in_array('*', $selections)) {
-            if (!empty($prefix)) {
-                return "{$this->quote($prefix)}.*";
-            }
-            return '*';
-        }
-
-        $selections = \array_diff($selections, ['$id', '$permissions', '$collection']);
-
-        $selections[] = $this->getInternalKeyForAttribute('$id');
-        $selections[] = $this->getInternalKeyForAttribute('$permissions');
-
-        if (\in_array('$internalId', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$internalId');
-            $selections = \array_diff($selections, ['$internalId']);
-        }
-        if (\in_array('$createdAt', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$createdAt');
-            $selections = \array_diff($selections, ['$createdAt']);
-        }
-        if (\in_array('$updatedAt', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$updatedAt');
-            $selections = \array_diff($selections, ['$updatedAt']);
-        }
-        if (\in_array('$collection', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$collection');
-            $selections = \array_diff($selections, ['$collection']);
-        }
-        if (\in_array('$tenant', $selections)) {
-            $selections[] = $this->getInternalKeyForAttribute('$tenant');
-            $selections = \array_diff($selections, ['$tenant']);
-        }
-
-        if (!empty($prefix)) {
-            foreach ($selections as &$selection) {
-                $selection = "{$this->quote($prefix)}.{$this->quote($this->filter($selection))}";
-            }
-        } else {
-            foreach ($selections as &$selection) {
-                $selection = "{$this->quote($this->filter($selection))}";
-            }
-        }
-
-        return \implode(', ', $selections);
-    }
-
     protected function getInternalKeyForAttribute(string $attribute): string
     {
         return match ($attribute) {
             '$id' => '_uid',
-            '$internalId' => '_id',
+            '$sequence' => '_id',
             '$collection' => '_collection',
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
@@ -1709,8 +1941,749 @@ var_dump($sql);
         };
     }
 
+    protected function escapeWildcards(string $value): string
+    {
+        $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
+
+        foreach ($wildcards as $wildcard) {
+            $value = \str_replace($wildcard, "\\$wildcard", $value);
+        }
+
+        return $value;
+    }
+
     protected function processException(PDOException $e): \Exception
     {
         return $e;
+    }
+
+    /**
+     * @param mixed $stmt
+     * @return bool
+     */
+    protected function execute(mixed $stmt): bool
+    {
+        return $stmt->execute();
+    }
+
+    /**
+     * Create Documents in batches
+     *
+     * @param Document $collection
+     * @param array<Document> $documents
+     *
+     * @return array<Document>
+     *
+     * @throws DuplicateException
+     * @throws \Throwable
+     */
+    public function createDocuments(Document $collection, array $documents): array
+    {
+        if (empty($documents)) {
+            return $documents;
+        }
+        $spatialAttributes = $this->getSpatialAttributes($collection);
+        $collection = $collection->getId();
+        try {
+            $name = $this->filter($collection);
+
+            $attributeKeys = Database::INTERNAL_ATTRIBUTE_KEYS;
+
+            $hasSequence = null;
+            foreach ($documents as $document) {
+                $attributes = $document->getAttributes();
+                $attributeKeys = [...$attributeKeys, ...\array_keys($attributes)];
+
+                if ($hasSequence === null) {
+                    $hasSequence = !empty($document->getSequence());
+                } elseif ($hasSequence == empty($document->getSequence())) {
+                    throw new DatabaseException('All documents must have an sequence if one is set');
+                }
+            }
+
+            $attributeKeys = array_unique($attributeKeys);
+
+            if ($hasSequence) {
+                $attributeKeys[] = '_id';
+            }
+
+            if ($this->sharedTables) {
+                $attributeKeys[] = '_tenant';
+            }
+
+            $columns = [];
+            foreach ($attributeKeys as $key => $attribute) {
+                $columns[$key] = $this->quote($this->filter($attribute));
+            }
+
+            $columns = '(' . \implode(', ', $columns) . ')';
+
+            $bindIndex = 0;
+            $batchKeys = [];
+            $bindValues = [];
+            $permissions = [];
+            $bindValuesPermissions = [];
+
+            foreach ($documents as $index => $document) {
+                $attributes = $document->getAttributes();
+                $attributes['_uid'] = $document->getId();
+                $attributes['_createdAt'] = $document->getCreatedAt();
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+                if (!empty($document->getSequence())) {
+                    $attributes['_id'] = $document->getSequence();
+                }
+
+                if ($this->sharedTables) {
+                    $attributes['_tenant'] = $document->getTenant();
+                }
+
+                $bindKeys = [];
+
+                foreach ($attributeKeys as $key) {
+                    $value = $attributes[$key] ?? null;
+                    if (\is_array($value)) {
+                        $value = \json_encode($value);
+                    }
+                    if (in_array($key, $spatialAttributes)) {
+                        $bindKey = 'key_' . $bindIndex;
+                        $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
+                    } else {
+                        $value = (\is_bool($value)) ? (int)$value : $value;
+                        $bindKey = 'key_' . $bindIndex;
+                        $bindKeys[] = ':' . $bindKey;
+                    }
+                    $bindValues[$bindKey] = $value;
+                    $bindIndex++;
+                }
+
+                $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+
+                foreach (Database::PERMISSIONS as $type) {
+                    foreach ($document->getPermissionsByType($type) as $permission) {
+                        $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';
+                        $permission = \str_replace('"', '', $permission);
+                        $permission = "('{$type}', '{$permission}', :_uid_{$index} {$tenantBind})";
+                        $permissions[] = $permission;
+                        $bindValuesPermissions[":_uid_{$index}"] = $document->getId();
+                        if ($this->sharedTables) {
+                            $bindValuesPermissions[":_tenant_{$index}"] = $document->getTenant();
+                        }
+                    }
+                }
+            }
+
+            $batchKeys = \implode(', ', $batchKeys);
+
+            $stmt = $this->getPDO()->prepare("
+                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                VALUES {$batchKeys}
+            ");
+
+            foreach ($bindValues as $key => $value) {
+                $stmt->bindValue($key, $value, $this->getPDOType($value));
+            }
+
+            $this->execute($stmt);
+
+            if (!empty($permissions)) {
+                $tenantColumn = $this->sharedTables ? ', _tenant' : '';
+                $permissions = \implode(', ', $permissions);
+
+                $sqlPermissions = "
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions};
+                ";
+
+                $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
+
+                foreach ($bindValuesPermissions as $key => $value) {
+                    $stmtPermissions->bindValue($key, $value, $this->getPDOType($value));
+                }
+
+                $this->execute($stmtPermissions);
+            }
+
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return $documents;
+    }
+
+    /**
+     * @param Document $collection
+     * @param string $attribute
+     * @param array<Change> $changes
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    public function createOrUpdateDocuments(
+        Document $collection,
+        string $attribute,
+        array $changes
+    ): array {
+        if (empty($changes)) {
+            return $changes;
+        }
+        try {
+            $spatialAttributes = $this->getSpatialAttributes($collection);
+            $collection = $collection->getId();
+            $name = $this->filter($collection);
+            $attribute = $this->filter($attribute);
+
+            $attributes = [];
+            $bindIndex = 0;
+            $batchKeys = [];
+            $bindValues = [];
+
+            foreach ($changes as $change) {
+                $document = $change->getNew();
+                $attributes = $document->getAttributes();
+                $attributes['_uid'] = $document->getId();
+                $attributes['_createdAt'] = $document->getCreatedAt();
+                $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+                if (!empty($document->getSequence())) {
+                    $attributes['_id'] = $document->getSequence();
+                }
+
+                if ($this->sharedTables) {
+                    $attributes['_tenant'] = $document->getTenant();
+                }
+
+                \ksort($attributes);
+
+                $columns = [];
+                foreach (\array_keys($attributes) as $key => $attr) {
+                    /**
+                     * @var string $attr
+                     */
+                    $columns[$key] = "{$this->quote($this->filter($attr))}";
+                }
+                $columns = '(' . \implode(', ', $columns) . ')';
+
+                $bindKeys = [];
+
+                foreach ($attributes as $attributeKey => $attrValue) {
+                    if (\is_array($attrValue)) {
+                        $attrValue = \json_encode($attrValue);
+                    }
+
+                    if (in_array($attributeKey, $spatialAttributes)) {
+                        $bindKey = 'key_' . $bindIndex;
+                        $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
+                    } else {
+                        $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
+                        $bindKey = 'key_' . $bindIndex;
+                        $bindKeys[] = ':' . $bindKey;
+                    }
+                    $bindValues[$bindKey] = $attrValue;
+                    $bindIndex++;
+                }
+
+                $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+            }
+
+            $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $attributes, $bindValues, $attribute);
+            $stmt->execute();
+            $stmt->closeCursor();
+
+            $removeQueries = [];
+            $removeBindValues = [];
+            $addQueries = [];
+            $addBindValues = [];
+
+            foreach ($changes as $index => $change) {
+                $old = $change->getOld();
+                $document = $change->getNew();
+
+                $current = [];
+                foreach (Database::PERMISSIONS as $type) {
+                    $current[$type] = $old->getPermissionsByType($type);
+                }
+
+                // Calculate removals
+                foreach (Database::PERMISSIONS as $type) {
+                    $toRemove = \array_diff($current[$type], $document->getPermissionsByType($type));
+                    if (!empty($toRemove)) {
+                        $removeQueries[] = "(
+                            _document = :_uid_{$index}
+                            " . ($this->sharedTables ? " AND _tenant = :_tenant_{$index}" : '') . "
+                            AND _type = '{$type}'
+                            AND _permission IN (" . \implode(',', \array_map(fn ($i) => ":remove_{$type}_{$index}_{$i}", \array_keys($toRemove))) . ")
+                        )";
+                        $removeBindValues[":_uid_{$index}"] = $document->getId();
+                        if ($this->sharedTables) {
+                            $removeBindValues[":_tenant_{$index}"] = $document->getTenant();
+                        }
+                        foreach ($toRemove as $i => $perm) {
+                            $removeBindValues[":remove_{$type}_{$index}_{$i}"] = $perm;
+                        }
+                    }
+                }
+
+                // Calculate additions
+                foreach (Database::PERMISSIONS as $type) {
+                    $toAdd = \array_diff($document->getPermissionsByType($type), $current[$type]);
+
+                    foreach ($toAdd as $i => $permission) {
+                        $addQuery = "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}";
+
+                        if ($this->sharedTables) {
+                            $addQuery .= ", :_tenant_{$index}";
+                        }
+
+                        $addQuery .= ")";
+                        $addQueries[] = $addQuery;
+                        $addBindValues[":_uid_{$index}"] = $document->getId();
+                        $addBindValues[":add_{$type}_{$index}_{$i}"] = $permission;
+
+                        if ($this->sharedTables) {
+                            $addBindValues[":_tenant_{$index}"] = $document->getTenant();
+                        }
+                    }
+                }
+            }
+
+            // Execute permission removals
+            if (!empty($removeQueries)) {
+                $removeQuery = \implode(' OR ', $removeQueries);
+                $stmtRemovePermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE {$removeQuery}");
+                foreach ($removeBindValues as $key => $value) {
+                    $stmtRemovePermissions->bindValue($key, $value, $this->getPDOType($value));
+                }
+                $stmtRemovePermissions->execute();
+            }
+
+            // Execute permission additions
+            if (!empty($addQueries)) {
+                $sqlAddPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission";
+                if ($this->sharedTables) {
+                    $sqlAddPermissions .= ", _tenant";
+                }
+                $sqlAddPermissions .= ") VALUES " . \implode(', ', $addQueries);
+                $stmtAddPermissions = $this->getPDO()->prepare($sqlAddPermissions);
+                foreach ($addBindValues as $key => $value) {
+                    $stmtAddPermissions->bindValue($key, $value, $this->getPDOType($value));
+                }
+                $stmtAddPermissions->execute();
+            }
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return \array_map(fn ($change) => $change->getNew(), $changes);
+    }
+
+    /**
+     * Build geometry WKT string from array input for spatial queries
+     *
+     * @param array<mixed> $geometry
+     * @return string
+     * @throws DatabaseException
+     */
+    protected function convertArrayToWKT(array $geometry): string
+    {
+        // point [x, y]
+        if (count($geometry) === 2 && is_numeric($geometry[0]) && is_numeric($geometry[1])) {
+            return "POINT({$geometry[0]} {$geometry[1]})";
+        }
+
+        // linestring [[x1, y1], [x2, y2], ...]
+        if (is_array($geometry[0]) && count($geometry[0]) === 2 && is_numeric($geometry[0][0])) {
+            $points = [];
+            foreach ($geometry as $point) {
+                if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
+                    throw new DatabaseException('Invalid point format in geometry array');
+                }
+                $points[] = "{$point[0]} {$point[1]}";
+            }
+            return 'LINESTRING(' . implode(', ', $points) . ')';
+        }
+
+        // polygon [[[x1, y1], [x2, y2], ...], ...]
+        if (is_array($geometry[0]) && is_array($geometry[0][0]) && count($geometry[0][0]) === 2) {
+            $rings = [];
+            foreach ($geometry as $ring) {
+                if (!is_array($ring)) {
+                    throw new DatabaseException('Invalid ring format in polygon geometry');
+                }
+                $points = [];
+                foreach ($ring as $point) {
+                    if (!is_array($point) || count($point) !== 2 || !is_numeric($point[0]) || !is_numeric($point[1])) {
+                        throw new DatabaseException('Invalid point format in polygon ring');
+                    }
+                    $points[] = "{$point[0]} {$point[1]}";
+                }
+                $rings[] = '(' . implode(', ', $points) . ')';
+            }
+            return 'POLYGON(' . implode(', ', $rings) . ')';
+        }
+
+        throw new DatabaseException('Unrecognized geometry array format');
+    }
+
+    /**
+     * Helper method to get attribute type from attributes array
+     *
+     * @param string $attributeName
+     * @param array<mixed> $attributes
+     * @return string|null
+     */
+    protected function getAttributeType(string $attributeName, array $attributes): ?string
+    {
+        foreach ($attributes as $attribute) {
+            if (isset($attribute['$id']) && $attribute['$id'] === $attributeName) {
+                return $attribute['type'] ?? null;
+            }
+            if (isset($attribute['key']) && $attribute['key'] === $attributeName) {
+                return $attribute['type'] ?? null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Find Documents
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
+     * @param string $cursorDirection
+     * @param string $forPermission
+     * @return array<Document>
+     * @throws DatabaseException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    {
+        $spatialAttributes = $this->getSpatialAttributes($collection);
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $collection = $collection->getId();
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = [];
+        $orders = [];
+        $alias = Query::DEFAULT_ALIAS;
+        $binds = [];
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
+        $cursorWhere = [];
+
+        foreach ($orderAttributes as $i => $originalAttribute) {
+            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
+            $attribute = $this->filter($attribute);
+
+            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $direction = $orderType;
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $direction = ($direction === Database::ORDER_ASC)
+                    ? Database::ORDER_DESC
+                    : Database::ORDER_ASC;
+            }
+
+            $orders[] = "{$this->quote($attribute)} {$direction}";
+
+            // Build pagination WHERE clause only if we have a cursor
+            if (!empty($cursor)) {
+                // Special case: No tie breaks. only 1 attribute and it's a unique primary key
+                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
+                    $operator = ($direction === Database::ORDER_DESC)
+                        ? Query::TYPE_LESSER
+                        : Query::TYPE_GREATER;
+
+                    $bindName = ":cursor_pk";
+                    $binds[$bindName] = $cursor[$originalAttribute];
+
+                    $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                    break;
+                }
+
+                $conditions = [];
+
+                // Add equality conditions for previous attributes
+                for ($j = 0; $j < $i; $j++) {
+                    $prevOriginal = $orderAttributes[$j];
+                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
+
+                    $bindName = ":cursor_{$j}";
+                    $binds[$bindName] = $cursor[$prevOriginal];
+
+                    $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
+                }
+
+                // Add comparison for current attribute
+                $operator = ($direction === Database::ORDER_DESC)
+                    ? Query::TYPE_LESSER
+                    : Query::TYPE_GREATER;
+
+                $bindName = ":cursor_{$i}";
+                $binds[$bindName] = $cursor[$originalAttribute];
+
+                $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+
+                $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
+            }
+        }
+
+        if (!empty($cursorWhere)) {
+            $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
+        }
+
+        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
+        }
+
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
+        }
+
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+        }
+
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
+
+        $sqlLimit = '';
+        if (! \is_null($limit)) {
+            $binds[':limit'] = $limit;
+            $sqlLimit = 'LIMIT :limit';
+        }
+
+        if (! \is_null($offset)) {
+            $binds[':offset'] = $offset;
+            $sqlLimit .= ' OFFSET :offset';
+        }
+
+        $selections = $this->getAttributeSelections($queries);
+
+
+        $sql = "
+            SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            {$sqlWhere}
+            {$sqlOrder}
+            {$sqlLimit};
+        ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
+
+        try {
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($binds as $key => $value) {
+                if (gettype($value) === 'double') {
+                    $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
+                } else {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+            }
+
+            $this->execute($stmt);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        $results = $stmt->fetchAll();
+        $stmt->closeCursor();
+
+        foreach ($results as $index => $document) {
+            if (\array_key_exists('_uid', $document)) {
+                $results[$index]['$id'] = $document['_uid'];
+                unset($results[$index]['_uid']);
+            }
+            if (\array_key_exists('_id', $document)) {
+                $results[$index]['$sequence'] = $document['_id'];
+                unset($results[$index]['_id']);
+            }
+            if (\array_key_exists('_tenant', $document)) {
+                $results[$index]['$tenant'] = $document['_tenant'];
+                unset($results[$index]['_tenant']);
+            }
+            if (\array_key_exists('_createdAt', $document)) {
+                $results[$index]['$createdAt'] = $document['_createdAt'];
+                unset($results[$index]['_createdAt']);
+            }
+            if (\array_key_exists('_updatedAt', $document)) {
+                $results[$index]['$updatedAt'] = $document['_updatedAt'];
+                unset($results[$index]['_updatedAt']);
+            }
+            if (\array_key_exists('_permissions', $document)) {
+                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
+                unset($results[$index]['_permissions']);
+            }
+
+            $results[$index] = new Document($results[$index]);
+        }
+
+        if ($cursorDirection === Database::CURSOR_BEFORE) {
+            $results = \array_reverse($results);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Count Documents
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @param int|null $max
+     * @return int
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    {
+        $attributes = $collection->getAttribute("attributes", []);
+        $collection = $collection->getId();
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $binds = [];
+        $where = [];
+        $alias = Query::DEFAULT_ALIAS;
+
+        $limit = '';
+        if (! \is_null($max)) {
+            $binds[':limit'] = $max;
+            $limit = 'LIMIT :limit';
+        }
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
+        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
+        }
+
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
+        }
+
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+        }
+
+        $sqlWhere = !empty($where)
+            ? 'WHERE ' . \implode(' AND ', $where)
+            : '';
+
+        $sql = "
+			SELECT COUNT(1) as sum FROM (
+				SELECT 1
+				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+				{$sqlWhere}
+				{$limit}
+			) table_count
+        ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value, $this->getPDOType($value));
+        }
+
+        $this->execute($stmt);
+
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
+        }
+
+        return $result['sum'] ?? 0;
+    }
+
+    /**
+     * Sum an Attribute
+     *
+     * @param Document $collection
+     * @param string $attribute
+     * @param array<Query> $queries
+     * @param int|null $max
+     * @return int|float
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): int|float
+    {
+        $collectionAttributes = $collection->getAttribute("attributes", []);
+        $collection = $collection->getId();
+        $name = $this->filter($collection);
+        $attribute = $this->filter($attribute);
+        $roles = Authorization::getRoles();
+        $where = [];
+        $alias = Query::DEFAULT_ALIAS;
+        $binds = [];
+
+        $limit = '';
+        if (! \is_null($max)) {
+            $binds[':limit'] = $max;
+            $limit = 'LIMIT :limit';
+        }
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
+        $conditions = $this->getSQLConditions($queries, $binds, attributes:$collectionAttributes);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
+        }
+
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
+        }
+
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+        }
+
+        $sqlWhere = !empty($where)
+            ? 'WHERE ' . \implode(' AND ', $where)
+            : '';
+
+        $sql = "
+			SELECT SUM({$this->quote($attribute)}) as sum FROM (
+				SELECT {$this->quote($attribute)}
+				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+				{$sqlWhere}
+				{$limit}
+			) table_count
+        ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value, $this->getPDOType($value));
+        }
+
+        $this->execute($stmt);
+
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
+        }
+
+        return $result['sum'] ?? 0;
     }
 }

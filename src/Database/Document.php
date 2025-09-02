@@ -27,27 +27,31 @@ class Document extends ArrayObject
      */
     public function __construct(array $input = [])
     {
-        if (isset($input['$id']) && !\is_string($input['$id'])) {
+        if (array_key_exists('$id', $input) && !\is_string($input['$id'])) {
             throw new StructureException('$id must be of type string');
         }
 
-        if (isset($input['$permissions']) && !is_array($input['$permissions'])) {
+        if (array_key_exists('$permissions', $input) && !is_array($input['$permissions'])) {
             throw new StructureException('$permissions must be of type array');
         }
 
-        foreach ($input as $key => &$value) {
+        foreach ($input as $key => $value) {
             if (!\is_array($value)) {
                 continue;
             }
-            if ((isset($value['$id']) || isset($value['$collection']))) {
+
+            if (isset($value['$id']) || isset($value['$collection'])) {
                 $input[$key] = new self($value);
                 continue;
             }
+
             foreach ($value as $childKey => $child) {
                 if ((isset($child['$id']) || isset($child['$collection'])) && (!$child instanceof self)) {
                     $value[$childKey] = new self($child);
                 }
             }
+
+            $input[$key] = $value;
         }
 
         parent::__construct($input);
@@ -62,11 +66,17 @@ class Document extends ArrayObject
     }
 
     /**
-     * @return string
+     * @return string|null
      */
-    public function getInternalId(): string
+    public function getSequence(): ?string
     {
-        return $this->getAttribute('$internalId', '');
+        $sequence = $this->getAttribute('$sequence');
+
+        if ($sequence === null) {
+            return null;
+        }
+
+        return $sequence;
     }
 
     /**
@@ -168,10 +178,12 @@ class Document extends ArrayObject
     public function getTenant(): ?int
     {
         $tenant = $this->getAttribute('$tenant');
-        if ($tenant !== null) {
-            return (int)$tenant;
+
+        if ($tenant === null) {
+            return null;
         }
-        return null;
+
+        return (int) $tenant;
     }
 
     /**
@@ -274,9 +286,7 @@ class Document extends ArrayObject
      */
     public function removeAttribute(string $key): static
     {
-        if (\array_key_exists($key, (array)$this)) {
-            unset($this[$key]);
-        }
+        unset($this[$key]);
 
         /* @phpstan-ignore-next-line */
         return $this;

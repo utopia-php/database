@@ -103,7 +103,10 @@ class IndexedQueriesTest extends TestCase
 
         $context->add($this->collection);
 
-        $validator = new DocumentsValidator($context);
+        $validator = new DocumentsValidator(
+            $context,
+            Database::VAR_INTEGER
+        );
 
         $query = Query::cursorAfter(new Document(['$id' => 'abc']));
         $this->assertEquals(true, $validator->isValid([$query]));

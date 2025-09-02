@@ -27,184 +27,564 @@ trait RelationshipTests
     use ManyToOneTests;
     use ManyToManyTests;
 
-    public function testDeleteRelatedCollection(): void
+    public function testZoo(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createCollection('c2');
+        $database->createCollection('zoo');
+        $database->createAttribute('zoo', 'name', Database::VAR_STRING, 256, true);
+
+        $database->createCollection('veterinarians');
+        $database->createAttribute('veterinarians', 'fullname', Database::VAR_STRING, 256, true);
+
+        $database->createCollection('presidents');
+        $database->createAttribute('presidents', 'first_name', Database::VAR_STRING, 256, true);
+        $database->createAttribute('presidents', 'last_name', Database::VAR_STRING, 256, true);
+        $database->createRelationship(
+            collection: 'presidents',
+            relatedCollection: 'veterinarians',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'votes',
+            twoWayKey: 'presidents'
+        );
+
+        $database->createCollection('__animals');
+        $database->createAttribute('__animals', 'name', Database::VAR_STRING, 256, true);
+        $database->createAttribute('__animals', 'age', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('__animals', 'price', Database::VAR_FLOAT, 0, false);
+        $database->createAttribute('__animals', 'date_of_birth', Database::VAR_DATETIME, 0, true, filters:['datetime']);
+        $database->createAttribute('__animals', 'longtext', Database::VAR_STRING, 100000000, false);
+        $database->createAttribute('__animals', 'is_active', Database::VAR_BOOLEAN, 0, false, default: true);
+        $database->createAttribute('__animals', 'integers', Database::VAR_INTEGER, 0, false, array: true);
+        $database->createAttribute('__animals', 'email', Database::VAR_STRING, 255, false);
+        $database->createAttribute('__animals', 'ip', Database::VAR_STRING, 255, false);
+        $database->createAttribute('__animals', 'url', Database::VAR_STRING, 255, false);
+        $database->createAttribute('__animals', 'enum', Database::VAR_STRING, 255, false);
+
+        $database->createRelationship(
+            collection: 'presidents',
+            relatedCollection: '__animals',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'animal',
+            twoWayKey: 'president'
+        );
+
+        $database->createRelationship(
+            collection: 'veterinarians',
+            relatedCollection: '__animals',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'animals',
+            twoWayKey: 'veterinarian'
+        );
+
+        $database->createRelationship(
+            collection: '__animals',
+            relatedCollection: 'zoo',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'zoo',
+            twoWayKey: 'animals'
+        );
+
+        $zoo = $database->createDocument('zoo', new Document([
+            '$id' => 'zoo1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Bronx Zoo'
+        ]));
+
+        $this->assertEquals('zoo1', $zoo->getId());
+        $this->assertArrayHasKey('animals', $zoo);
+
+        $iguana = $database->createDocument('__animals', new Document([
+            '$id' => 'iguana',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Iguana',
+            'age' => 11,
+            'price' => 50.5,
+            'date_of_birth' => '1975-06-12',
+            'longtext' => 'I am a pretty long text',
+            'is_active' => true,
+            'integers' => [1, 2, 3],
+            'email' => 'iguana@appwrite.io',
+            'enum' => 'maybe',
+            'ip' => '127.0.0.1',
+            'url' => 'https://appwrite.io/',
+            'zoo' => $zoo->getId(),
+        ]));
+
+        $tiger = $database->createDocument('__animals', new Document([
+            '$id' => 'tiger',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Tiger',
+            'age' => 5,
+            'price' => 1000,
+            'date_of_birth' => '2020-06-12',
+            'longtext' => 'I am a hungry tiger',
+            'is_active' => false,
+            'integers' => [9, 2, 3],
+            'email' => 'tiger@appwrite.io',
+            'enum' => 'yes',
+            'ip' => '255.0.0.1',
+            'url' => 'https://appwrite.io/',
+            'zoo' => $zoo->getId(),
+        ]));
+
+        $lama = $database->createDocument('__animals', new Document([
+            '$id' => 'lama',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Lama',
+            'age' => 15,
+            'price' => 1000,
+            'date_of_birth' => '1975-06-12',
+            'is_active' => true,
+            'integers' => null,
+            'email' => null,
+            'enum' => null,
+            'ip' => '255.0.0.1',
+            'url' => 'https://appwrite.io/',
+            'zoo' => null,
+        ]));
+
+        $veterinarian1 = $database->createDocument('veterinarians', new Document([
+            '$id' => 'dr.pol',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'fullname' => 'The Incredible Dr. Pol',
+            'animals' => ['iguana'],
+        ]));
+
+        $veterinarian2 = $database->createDocument('veterinarians', new Document([
+            '$id' => 'dr.seuss',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'fullname' => 'Dr. Seuss',
+            'animals' => ['tiger'],
+        ]));
+
+        $trump = $database->createDocument('presidents', new Document([
+            '$id' => 'trump',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'first_name' => 'Donald',
+            'last_name' => 'Trump',
+            'votes' => [
+                $veterinarian1->getId(),
+                $veterinarian2->getId(),
+            ],
+        ]));
+
+        $bush = $database->createDocument('presidents', new Document([
+            '$id' => 'bush',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'first_name' => 'George',
+            'last_name' => 'Bush',
+            'animal' => 'iguana',
+        ]));
+
+        $biden = $database->createDocument('presidents', new Document([
+            '$id' => 'biden',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'first_name' => 'Joe',
+            'last_name' => 'Biden',
+            'animal' => 'tiger',
+        ]));
+
+        /**
+         * Check Zoo data
+         */
+        $zoo = $database->getDocument('zoo', 'zoo1');
+
+        $this->assertEquals('zoo1', $zoo->getId());
+        $this->assertEquals('Bronx Zoo', $zoo->getAttribute('name'));
+        $this->assertArrayHasKey('animals', $zoo);
+        $this->assertEquals(2, count($zoo->getAttribute('animals')));
+        $this->assertArrayHasKey('president', $zoo->getAttribute('animals')[0]);
+        $this->assertArrayHasKey('veterinarian', $zoo->getAttribute('animals')[0]);
+
+        $zoo = $database->findOne('zoo');
+
+        $this->assertEquals('zoo1', $zoo->getId());
+        $this->assertEquals('Bronx Zoo', $zoo->getAttribute('name'));
+        $this->assertArrayHasKey('animals', $zoo);
+        $this->assertEquals(2, count($zoo->getAttribute('animals')));
+        $this->assertArrayHasKey('president', $zoo->getAttribute('animals')[0]);
+        $this->assertArrayHasKey('veterinarian', $zoo->getAttribute('animals')[0]);
+
+        /**
+         * Check Veterinarians data
+         */
+        $veterinarian = $database->getDocument('veterinarians', 'dr.pol');
+
+        $this->assertEquals('dr.pol', $veterinarian->getId());
+        $this->assertArrayHasKey('presidents', $veterinarian);
+        $this->assertEquals(1, count($veterinarian->getAttribute('presidents')));
+        $this->assertArrayHasKey('animal', $veterinarian->getAttribute('presidents')[0]);
+        $this->assertArrayHasKey('animals', $veterinarian);
+        $this->assertEquals(1, count($veterinarian->getAttribute('animals')));
+        $this->assertArrayHasKey('zoo', $veterinarian->getAttribute('animals')[0]);
+        $this->assertArrayHasKey('president', $veterinarian->getAttribute('animals')[0]);
+
+        $veterinarian = $database->findOne('veterinarians', [
+            Query::equal('$id', ['dr.pol'])
+        ]);
+
+        $this->assertEquals('dr.pol', $veterinarian->getId());
+        $this->assertArrayHasKey('presidents', $veterinarian);
+        $this->assertEquals(1, count($veterinarian->getAttribute('presidents')));
+        $this->assertArrayHasKey('animal', $veterinarian->getAttribute('presidents')[0]);
+        $this->assertArrayHasKey('animals', $veterinarian);
+        $this->assertEquals(1, count($veterinarian->getAttribute('animals')));
+        $this->assertArrayHasKey('zoo', $veterinarian->getAttribute('animals')[0]);
+        $this->assertArrayHasKey('president', $veterinarian->getAttribute('animals')[0]);
+
+        /**
+         * Check Animals data
+         */
+        $animal = $database->getDocument('__animals', 'iguana');
+
+        $this->assertEquals('iguana', $animal->getId());
+        $this->assertArrayHasKey('zoo', $animal);
+        $this->assertEquals('Bronx Zoo', $animal['zoo']->getAttribute('name'));
+        $this->assertArrayHasKey('veterinarian', $animal);
+        $this->assertEquals('dr.pol', $animal['veterinarian']->getId());
+        $this->assertArrayHasKey('presidents', $animal['veterinarian']);
+        $this->assertArrayHasKey('president', $animal);
+        $this->assertEquals('bush', $animal['president']->getId());
+
+        $animal = $database->findOne('__animals', [
+            Query::equal('$id', ['tiger'])
+        ]);
+
+        $this->assertEquals('tiger', $animal->getId());
+        $this->assertArrayHasKey('zoo', $animal);
+        $this->assertEquals('Bronx Zoo', $animal['zoo']->getAttribute('name'));
+        $this->assertArrayHasKey('veterinarian', $animal);
+        $this->assertEquals('dr.seuss', $animal['veterinarian']->getId());
+        $this->assertArrayHasKey('presidents', $animal['veterinarian']);
+        $this->assertArrayHasKey('president', $animal);
+        $this->assertEquals('biden', $animal['president']->getId());
+
+        /**
+         * Check President data
+         */
+        $president = $database->getDocument('presidents', 'trump');
+
+        $this->assertEquals('trump', $president->getId());
+        $this->assertArrayHasKey('animal', $president);
+        $this->assertArrayHasKey('votes', $president);
+        $this->assertEquals(2, count($president['votes']));
+
+        /**
+         * Check President data
+         */
+        $president = $database->findOne('presidents', [
+            Query::equal('$id', ['bush'])
+        ]);
+
+        $this->assertEquals('bush', $president->getId());
+        $this->assertArrayHasKey('animal', $president);
+        $this->assertArrayHasKey('votes', $president);
+        $this->assertEquals(0, count($president['votes']));
+
+        $president = $database->findOne('presidents', [
+            Query::select([
+                '*',
+                'votes.*',
+            ]),
+            Query::equal('$id', ['trump'])
+        ]);
+
+        $this->assertEquals('trump', $president->getId());
+        $this->assertArrayHasKey('votes', $president);
+        $this->assertEquals(2, count($president['votes']));
+        $this->assertArrayNotHasKey('animals', $president['votes'][0]); // Not exist
+
+        $president = $database->findOne('presidents', [
+            Query::select([
+                '*',
+                'votes.*',
+                'votes.animals.*',
+            ]),
+            Query::equal('$id', ['trump'])
+        ]);
+
+        $this->assertEquals('trump', $president->getId());
+        $this->assertArrayHasKey('votes', $president);
+        $this->assertEquals(2, count($president['votes']));
+        $this->assertArrayHasKey('animals', $president['votes'][0]); // Exist
+
+        /**
+         * Check Selects queries
+         */
+        $veterinarian = $database->findOne('veterinarians', [
+            Query::select(['*']), // No resolving
+            Query::equal('$id', ['dr.pol']),
+        ]);
+
+        $this->assertEquals('dr.pol', $veterinarian->getId());
+        $this->assertArrayNotHasKey('presidents', $veterinarian);
+        $this->assertArrayNotHasKey('animals', $veterinarian);
+
+        $veterinarian = $database->findOne(
+            'veterinarians',
+            [
+                Query::select([
+                    'animals.*',
+                ])
+            ]
+        );
+
+        $this->assertEquals('dr.pol', $veterinarian->getId());
+        $this->assertArrayHasKey('animals', $veterinarian);
+        $this->assertArrayNotHasKey('presidents', $veterinarian);
+
+        $animal = $veterinarian['animals'][0];
+
+        $this->assertArrayHasKey('president', $animal);
+        $this->assertEquals('bush', $animal->getAttribute('president')); // Check president is a value
+        $this->assertArrayHasKey('zoo', $animal);
+        $this->assertEquals('zoo1', $animal->getAttribute('zoo')); // Check zoo is a value
+
+        $veterinarian = $database->findOne(
+            'veterinarians',
+            [
+                Query::select([
+                    'animals.*',
+                    'animals.zoo.*',
+                    'animals.president.*',
+                ])
+            ]
+        );
+
+        $this->assertEquals('dr.pol', $veterinarian->getId());
+        $this->assertArrayHasKey('animals', $veterinarian);
+        $this->assertArrayNotHasKey('presidents', $veterinarian);
+
+        $animal = $veterinarian['animals'][0];
+
+        $this->assertArrayHasKey('president', $animal);
+        $this->assertEquals('Bush', $animal->getAttribute('president')->getAttribute('last_name')); // Check president is an object
+        $this->assertArrayHasKey('zoo', $animal);
+        $this->assertEquals('Bronx Zoo', $animal->getAttribute('zoo')->getAttribute('name')); // Check zoo is an object
+    }
+
+    public function testDeleteRelatedCollection(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('c1');
+        $database->createCollection('c2');
 
         // ONE_TO_ONE
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_ONE_TO_ONE,
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertEquals(true, $database->deleteCollection('c1'));
+        $collection = $database->getCollection('c2');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c1');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_ONE_TO_ONE,
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertEquals(true, $database->deleteCollection('c2'));
+        $collection = $database->getCollection('c1');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        static::getDatabase()->createCollection('c2');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c2');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_ONE_TO_ONE,
             twoWay: true
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertEquals(true, $database->deleteCollection('c1'));
+        $collection = $database->getCollection('c2');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c1');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_ONE_TO_ONE,
             twoWay: true
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertEquals(true, $database->deleteCollection('c2'));
+        $collection = $database->getCollection('c1');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
         // ONE_TO_MANY
-        static::getDatabase()->createCollection('c2');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c2');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_ONE_TO_MANY,
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertEquals(true, $database->deleteCollection('c1'));
+        $collection = $database->getCollection('c2');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c1');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_ONE_TO_MANY,
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertEquals(true, $database->deleteCollection('c2'));
+        $collection = $database->getCollection('c1');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        static::getDatabase()->createCollection('c2');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c2');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertEquals(true, $database->deleteCollection('c1'));
+        $collection = $database->getCollection('c2');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c1');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_ONE_TO_MANY,
             twoWay: true
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertEquals(true, $database->deleteCollection('c2'));
+        $collection = $database->getCollection('c1');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
         // RELATION_MANY_TO_ONE
-        static::getDatabase()->createCollection('c2');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c2');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_MANY_TO_ONE,
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertEquals(true, $database->deleteCollection('c1'));
+        $collection = $database->getCollection('c2');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c1');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_MANY_TO_ONE,
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertEquals(true, $database->deleteCollection('c2'));
+        $collection = $database->getCollection('c1');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        static::getDatabase()->createCollection('c2');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c2');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_MANY_TO_ONE,
             twoWay: true
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c1'));
-        $collection = static::getDatabase()->getCollection('c2');
+        $this->assertEquals(true, $database->deleteCollection('c1'));
+        $collection = $database->getCollection('c2');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
-        static::getDatabase()->createCollection('c1');
-        static::getDatabase()->createRelationship(
+        $database->createCollection('c1');
+        $database->createRelationship(
             collection: 'c1',
             relatedCollection: 'c2',
             type: Database::RELATION_MANY_TO_ONE,
             twoWay: true
         );
 
-        $this->assertEquals(true, static::getDatabase()->deleteCollection('c2'));
-        $collection = static::getDatabase()->getCollection('c1');
+        $this->assertEquals(true, $database->deleteCollection('c2'));
+        $collection = $database->getCollection('c1');
         $this->assertCount(0, $collection->getAttribute('attributes'));
         $this->assertCount(0, $collection->getAttribute('indexes'));
     }
 
     public function testVirtualRelationsAttributes(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('v1');
-        static::getDatabase()->createCollection('v2');
+        $database->createCollection('v1');
+        $database->createCollection('v2');
 
         /**
          * RELATION_ONE_TO_ONE
          * TwoWay is false no attribute is created on v2
          */
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'v1',
             relatedCollection: 'v2',
             type: Database::RELATION_ONE_TO_ONE,
@@ -212,7 +592,7 @@ trait RelationshipTests
         );
 
         try {
-            static::getDatabase()->createDocument('v2', new Document([
+            $database->createDocument('v2', new Document([
                 '$id' => 'doc1',
                 '$permissions' => [],
                 'v1' => 'invalid_value',
@@ -223,7 +603,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->createDocument('v2', new Document([
+            $database->createDocument('v2', new Document([
                 '$id' => 'doc1',
                 '$permissions' => [],
                 'v1' => [
@@ -237,7 +617,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->find('v2', [
+            $database->find('v2', [
                 Query::equal('v1', ['virtual_attribute']),
             ]);
             $this->fail('Failed to throw exception');
@@ -248,7 +628,7 @@ trait RelationshipTests
         /**
          * Success for later test update
          */
-        $doc = static::getDatabase()->createDocument('v1', new Document([
+        $doc = $database->createDocument('v1', new Document([
             '$id' => 'man',
             '$permissions' => [
                 Permission::update(Role::any()),
@@ -266,7 +646,7 @@ trait RelationshipTests
         $this->assertEquals('man', $doc->getId());
 
         try {
-            static::getDatabase()->updateDocument('v1', 'man', new Document([
+            $database->updateDocument('v1', 'man', new Document([
                 '$permissions' => [],
                 'v2' => [[
                     '$id' => 'woman',
@@ -278,13 +658,13 @@ trait RelationshipTests
             $this->assertInstanceOf(RelationshipException::class, $e);
         }
 
-        static::getDatabase()->deleteRelationship('v1', 'v2');
+        $database->deleteRelationship('v1', 'v2');
 
         /**
          * RELATION_ONE_TO_MANY
          * No attribute is created in V1 collection
          */
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'v1',
             relatedCollection: 'v2',
             type: Database::RELATION_ONE_TO_MANY,
@@ -292,7 +672,7 @@ trait RelationshipTests
         );
 
         try {
-            static::getDatabase()->createDocument('v1', new Document([
+            $database->createDocument('v1', new Document([
                 '$id' => 'doc1',
                 '$permissions' => [],
                 'v2' => [ // Expecting Array of arrays or array of strings, object provided
@@ -306,7 +686,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->createDocument('v1', new Document([
+            $database->createDocument('v1', new Document([
                 '$permissions' => [],
                 'v2' => 'invalid_value',
             ]));
@@ -316,7 +696,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->createDocument('v2', new Document([
+            $database->createDocument('v2', new Document([
                 '$id' => 'doc1',
                 '$permissions' => [],
                 'v1' => [[  // Expecting a string or an object ,array provided
@@ -332,7 +712,7 @@ trait RelationshipTests
         /**
          * Success for later test update
          */
-        $doc = static::getDatabase()->createDocument('v2', new Document([
+        $doc = $database->createDocument('v2', new Document([
             '$id' => 'v2_uid',
             '$permissions' => [
                 Permission::update(Role::any()),
@@ -352,7 +732,7 @@ trait RelationshipTests
          */
 
         try {
-            static::getDatabase()->updateDocument('v1', 'v1_uid', new Document([
+            $database->updateDocument('v1', 'v1_uid', new Document([
                 '$permissions' => [],
                 'v2' => [ // Expecting array of arrays or array of strings, object given
                     '$id' => 'v2_uid',
@@ -365,7 +745,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->updateDocument('v1', 'v1_uid', new Document([
+            $database->updateDocument('v1', 'v1_uid', new Document([
                 '$permissions' => [],
                 'v2' => 'v2_uid'
             ]));
@@ -375,7 +755,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->updateDocument('v2', 'v2_uid', new Document([
+            $database->updateDocument('v2', 'v2_uid', new Document([
                 '$permissions' => [],
                 'v1' => [
                     '$id' => null, // Invalid value
@@ -392,7 +772,7 @@ trait RelationshipTests
          * Added in Filter.php Text validator for relationship
          */
         try {
-            static::getDatabase()->find('v2', [
+            $database->find('v2', [
                 //@phpstan-ignore-next-line
                 Query::equal('v1', [['doc1']]),
             ]);
@@ -402,7 +782,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->find('v1', [
+            $database->find('v1', [
                 Query::equal('v2', ['virtual_attribute']),
             ]);
             $this->fail('Failed to throw exception');
@@ -410,13 +790,13 @@ trait RelationshipTests
             $this->assertTrue($e instanceof QueryException);
         }
 
-        static::getDatabase()->deleteRelationship('v1', 'v2');
+        $database->deleteRelationship('v1', 'v2');
 
         /**
          * RELATION_MANY_TO_ONE
          * No attribute is created in V2 collection
          */
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'v1',
             relatedCollection: 'v2',
             type: Database::RELATION_MANY_TO_ONE,
@@ -424,7 +804,7 @@ trait RelationshipTests
         );
 
         try {
-            static::getDatabase()->createDocument('v1', new Document([
+            $database->createDocument('v1', new Document([
                 '$id' => 'doc',
                 '$permissions' => [],
                 'v2' => [[ // Expecting an object or a string array provided
@@ -438,7 +818,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->createDocument('v2', new Document([
+            $database->createDocument('v2', new Document([
                 '$permissions' => [],
                 'v1' => 'invalid_value',
             ]));
@@ -448,7 +828,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->createDocument('v2', new Document([
+            $database->createDocument('v2', new Document([
                 '$id' => 'doc',
                 '$permissions' => [],
                 'v1' => [ // Expecting an array, object provided
@@ -462,7 +842,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->find('v2', [
+            $database->find('v2', [
                 Query::equal('v1', ['virtual_attribute']),
             ]);
             $this->fail('Failed to throw exception');
@@ -473,7 +853,7 @@ trait RelationshipTests
         /**
          * Success for later test update
          */
-        $doc = static::getDatabase()->createDocument('v1', new Document([
+        $doc = $database->createDocument('v1', new Document([
             '$id' => 'doc1',
             '$permissions' => [
                 Permission::update(Role::any()),
@@ -491,7 +871,7 @@ trait RelationshipTests
         $this->assertEquals('doc1', $doc->getId());
 
         try {
-            static::getDatabase()->updateDocument('v1', 'doc1', new Document([
+            $database->updateDocument('v1', 'doc1', new Document([
                 '$permissions' => [
                     Permission::update(Role::any()),
                     Permission::read(Role::any()),
@@ -504,7 +884,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->updateDocument('v2', 'doc2', new Document([
+            $database->updateDocument('v2', 'doc2', new Document([
                 '$permissions' => [],
                 'v1' => null
             ]));
@@ -513,13 +893,13 @@ trait RelationshipTests
             $this->assertTrue($e instanceof RelationshipException);
         }
 
-        static::getDatabase()->deleteRelationship('v1', 'v2');
+        $database->deleteRelationship('v1', 'v2');
 
         /**
          * RELATION_MANY_TO_MANY
          * No attribute on V1/v2 collections only on junction table
          */
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'v1',
             relatedCollection: 'v2',
             type: Database::RELATION_MANY_TO_MANY,
@@ -529,7 +909,7 @@ trait RelationshipTests
         );
 
         try {
-            static::getDatabase()->createDocument('v1', new Document([
+            $database->createDocument('v1', new Document([
                 '$permissions' => [],
                 'students' => 'invalid_value',
             ]));
@@ -539,7 +919,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->createDocument('v2', new Document([
+            $database->createDocument('v2', new Document([
                 '$permissions' => [],
                 'classes' => 'invalid_value',
             ]));
@@ -549,7 +929,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->createDocument('v2', new Document([
+            $database->createDocument('v2', new Document([
                 '$id' => 'doc',
                 '$permissions' => [],
                 'classes' => [ // Expected array, object provided
@@ -563,7 +943,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->find('v1', [
+            $database->find('v1', [
                 Query::equal('students', ['virtual_attribute']),
             ]);
             $this->fail('Failed to throw exception');
@@ -572,7 +952,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->find('v2', [
+            $database->find('v2', [
                 Query::equal('classes', ['virtual_attribute']),
             ]);
             $this->fail('Failed to throw exception');
@@ -584,7 +964,7 @@ trait RelationshipTests
          * Success for later test update
          */
 
-        $doc = static::getDatabase()->createDocument('v1', new Document([
+        $doc = $database->createDocument('v1', new Document([
             '$id' => 'class1',
             '$permissions' => [
                 Permission::update(Role::any()),
@@ -611,7 +991,7 @@ trait RelationshipTests
         $this->assertEquals('class1', $doc->getId());
 
         try {
-            static::getDatabase()->updateDocument('v1', 'class1', new Document([
+            $database->updateDocument('v1', 'class1', new Document([
                 '$permissions' => [
                     Permission::update(Role::any()),
                     Permission::read(Role::any()),
@@ -630,7 +1010,7 @@ trait RelationshipTests
         }
 
         try {
-            static::getDatabase()->updateDocument('v1', 'class1', new Document([
+            $database->updateDocument('v1', 'class1', new Document([
                 '$permissions' => [
                     Permission::update(Role::any()),
                     Permission::read(Role::any()),
@@ -645,22 +1025,25 @@ trait RelationshipTests
 
     public function testStructureValidationAfterRelationsAttribute(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection("structure_1", [], [], [Permission::create(Role::any())]);
-        static::getDatabase()->createCollection("structure_2", [], [], [Permission::create(Role::any())]);
+        $database->createCollection("structure_1", [], [], [Permission::create(Role::any())]);
+        $database->createCollection("structure_2", [], [], [Permission::create(Role::any())]);
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: "structure_1",
             relatedCollection: "structure_2",
             type: Database::RELATION_ONE_TO_ONE,
         );
 
         try {
-            static::getDatabase()->createDocument('structure_1', new Document([
+            $database->createDocument('structure_1', new Document([
                 '$permissions' => [
                     Permission::read(Role::any()),
                 ],
@@ -676,7 +1059,10 @@ trait RelationshipTests
 
     public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -697,13 +1083,13 @@ trait RelationshipTests
             Permission::delete(Role::any()),
         ];
         for ($i = 1; $i < 6; $i++) {
-            static::getDatabase()->createCollection("level{$i}", [$attribute], [], $permissions);
+            $database->createCollection("level{$i}", [$attribute], [], $permissions);
         }
 
         for ($i = 1; $i < 5; $i++) {
             $collectionId = $i;
             $relatedCollectionId = $i + 1;
-            static::getDatabase()->createRelationship(
+            $database->createRelationship(
                 collection: "level{$collectionId}",
                 relatedCollection: "level{$relatedCollectionId}",
                 type: Database::RELATION_ONE_TO_ONE,
@@ -712,7 +1098,7 @@ trait RelationshipTests
         }
 
         // Create document with relationship with nested data
-        $level1 = static::getDatabase()->createDocument('level1', new Document([
+        $level1 = $database->createDocument('level1', new Document([
             '$id' => 'level1',
             '$permissions' => [],
             'name' => 'Level 1',
@@ -737,18 +1123,18 @@ trait RelationshipTests
                 ],
             ],
         ]));
-        static::getDatabase()->updateDocument('level1', $level1->getId(), new Document($level1->getArrayCopy()));
-        $updatedLevel1 = static::getDatabase()->getDocument('level1', $level1->getId());
+        $database->updateDocument('level1', $level1->getId(), new Document($level1->getArrayCopy()));
+        $updatedLevel1 = $database->getDocument('level1', $level1->getId());
         $this->assertEquals($level1, $updatedLevel1);
 
         try {
-            static::getDatabase()->updateDocument('level1', $level1->getId(), $level1->setAttribute('name', 'haha'));
+            $database->updateDocument('level1', $level1->getId(), $level1->setAttribute('name', 'haha'));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(AuthorizationException::class, $e);
         }
         $level1->setAttribute('name', 'Level 1');
-        static::getDatabase()->updateCollection('level3', [
+        $database->updateCollection('level3', [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
@@ -761,11 +1147,11 @@ trait RelationshipTests
         $level2->setAttribute('level3', $level3);
         $level1->setAttribute('level2', $level2);
 
-        $level1 = static::getDatabase()->updateDocument('level1', $level1->getId(), $level1);
+        $level1 = $database->updateDocument('level1', $level1->getId(), $level1);
         $this->assertEquals('updated value', $level1['level2']['level3']['name']);
 
         for ($i = 1; $i < 6; $i++) {
-            static::getDatabase()->deleteCollection("level{$i}");
+            $database->deleteCollection("level{$i}");
         }
     }
 
@@ -773,24 +1159,27 @@ trait RelationshipTests
 
     public function testUpdateAttributeRenameRelationshipTwoWay(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('rn_rs_test_a');
-        static::getDatabase()->createCollection('rn_rs_test_b');
+        $database->createCollection('rn_rs_test_a');
+        $database->createCollection('rn_rs_test_b');
 
-        static::getDatabase()->createAttribute('rn_rs_test_b', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('rn_rs_test_b', 'name', Database::VAR_STRING, 255, true);
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             'rn_rs_test_a',
             'rn_rs_test_b',
             Database::RELATION_ONE_TO_ONE,
             true
         );
 
-        $docA = static::getDatabase()->createDocument('rn_rs_test_a', new Document([
+        $docA = $database->createDocument('rn_rs_test_a', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
@@ -803,45 +1192,48 @@ trait RelationshipTests
             ]
         ]));
 
-        $docB = static::getDatabase()->getDocument('rn_rs_test_b', 'b1');
+        $docB = $database->getDocument('rn_rs_test_b', 'b1');
         $this->assertArrayHasKey('rn_rs_test_a', $docB->getAttributes());
         $this->assertEquals('B1', $docB->getAttribute('name'));
 
         // Rename attribute
-        static::getDatabase()->updateRelationship(
+        $database->updateRelationship(
             collection: 'rn_rs_test_a',
             id: 'rn_rs_test_b',
             newKey: 'rn_rs_test_b_renamed'
         );
 
         // Rename again
-        static::getDatabase()->updateRelationship(
+        $database->updateRelationship(
             collection: 'rn_rs_test_a',
             id: 'rn_rs_test_b_renamed',
             newKey: 'rn_rs_test_b_renamed_2'
         );
 
         // Check our data is OK
-        $docA = static::getDatabase()->getDocument('rn_rs_test_a', $docA->getId());
+        $docA = $database->getDocument('rn_rs_test_a', $docA->getId());
         $this->assertArrayHasKey('rn_rs_test_b_renamed_2', $docA->getAttributes());
         $this->assertEquals($docB->getId(), $docA->getAttribute('rn_rs_test_b_renamed_2')['$id']);
     }
 
     public function testNoInvalidKeysWithRelationships(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
-        static::getDatabase()->createCollection('species');
-        static::getDatabase()->createCollection('creatures');
-        static::getDatabase()->createCollection('characteristics');
+        $database->createCollection('species');
+        $database->createCollection('creatures');
+        $database->createCollection('characteristics');
 
-        static::getDatabase()->createAttribute('species', 'name', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('creatures', 'name', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('characteristics', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('species', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('creatures', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('characteristics', 'name', Database::VAR_STRING, 255, true);
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'species',
             relatedCollection: 'creatures',
             type: Database::RELATION_ONE_TO_ONE,
@@ -849,7 +1241,7 @@ trait RelationshipTests
             id: 'creature',
             twoWayKey:'species'
         );
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'creatures',
             relatedCollection: 'characteristics',
             type: Database::RELATION_ONE_TO_ONE,
@@ -858,7 +1250,7 @@ trait RelationshipTests
             twoWayKey:'creature'
         );
 
-        $species = static::getDatabase()->createDocument('species', new Document([
+        $species = $database->createDocument('species', new Document([
             '$id' => ID::custom('1'),
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -880,7 +1272,7 @@ trait RelationshipTests
                 ]
             ]
         ]));
-        static::getDatabase()->updateDocument('species', $species->getId(), new Document([
+        $database->updateDocument('species', $species->getId(), new Document([
             '$id' => ID::custom('1'),
             '$collection' => 'species',
             'creature' => [
@@ -894,38 +1286,45 @@ trait RelationshipTests
             ]
         ]));
 
-        $updatedSpecies = static::getDatabase()->getDocument('species', $species->getId());
+        $updatedSpecies = $database->getDocument('species', $species->getId());
 
         $this->assertEquals($species, $updatedSpecies);
     }
 
     public function testSelectRelationshipAttributes(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('make');
-        static::getDatabase()->createCollection('model');
+        $database->createCollection('make');
+        $database->createCollection('model');
 
-        static::getDatabase()->createAttribute('make', 'name', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('model', 'name', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('model', 'year', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('make', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('make', 'origin', Database::VAR_STRING, 255, true);
+        $database->createAttribute('model', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('model', 'year', Database::VAR_INTEGER, 0, true);
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'make',
             relatedCollection: 'model',
             type: Database::RELATION_ONE_TO_MANY,
-            id: 'models'
+            twoWay: true,
+            id: 'models',
+            twoWayKey: 'make',
         );
 
-        static::getDatabase()->createDocument('make', new Document([
+        $database->createDocument('make', new Document([
             '$id' => 'ford',
             '$permissions' => [
                 Permission::read(Role::any()),
             ],
             'name' => 'Ford',
+            'origin' => 'USA',
             'models' => [
                 [
                     '$id' => 'fiesta',
@@ -947,10 +1346,8 @@ trait RelationshipTests
         ]));
 
         // Select some parent attributes, some child attributes
-        $make = static::getDatabase()->findOne('make', [
-            //Query::select('name'),
-            Query::select('models.name'),
-            Query::select('*'), // Added this to make tests pass, perhaps to add in to nesting queries?
+        $make = $database->findOne('make', [
+            Query::select(['name', 'models.name']),
         ]);
 
         if ($make->isEmpty()) {
@@ -963,114 +1360,113 @@ trait RelationshipTests
         $this->assertEquals('Focus', $make['models'][1]['name']);
         $this->assertArrayNotHasKey('year', $make['models'][0]);
         $this->assertArrayNotHasKey('year', $make['models'][1]);
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayHasKey('$permissions', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
 
         // Select internal attributes
-        $make = static::getDatabase()->findOne('make', [
-            Query::select('name'),
-            Query::select('$id')
+        $make = $database->findOne('make', [
+            Query::select(['name', '$id']),
         ]);
 
         if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
+        $this->assertArrayHasKey('name', $make);
         $this->assertArrayHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
-
-        $make = static::getDatabase()->findOne('make', [
-            Query::select('name'),
-            Query::select('$internalId')
-        ]);
-
-        if ($make->isEmpty()) {
-            throw new Exception('Make not found');
-        }
-
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
-
-        $make = static::getDatabase()->findOne('make', [
-            Query::select('name'),
-            Query::select('$collection'),
-        ]);
-
-        if ($make->isEmpty()) {
-            throw new Exception('Make not found');
-        }
-
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
+        $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
-
-        $make = static::getDatabase()->findOne('make', [
-            Query::select('name'),
-            Query::select('$createdAt'),
-        ]);
-
-        if ($make->isEmpty()) {
-            throw new Exception('Make not found');
-        }
-
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
         $this->assertArrayHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
-
-        $make = static::getDatabase()->findOne('make', [
-            Query::select('name'),
-            Query::select('$updatedAt'),
-        ]);
-
-        if ($make->isEmpty()) {
-            throw new Exception('Make not found');
-        }
-
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
         $this->assertArrayHasKey('$updatedAt', $make);
-        $this->assertArrayNotHasKey('$permissions', $make);
+        $this->assertArrayHasKey('$permissions', $make);
 
-        $make = static::getDatabase()->findOne('make', [
-            Query::select('name'),
-            Query::select('$permissions'),
+        $make = $database->findOne('make', [
+            Query::select(['name', '$sequence']),
         ]);
 
         if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
-        $this->assertArrayNotHasKey('$id', $make);
-        $this->assertArrayNotHasKey('$internalId', $make);
-        $this->assertArrayNotHasKey('$collection', $make);
-        $this->assertArrayNotHasKey('$createdAt', $make);
-        $this->assertArrayNotHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('name', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$permissions', $make);
+
+        $make = $database->findOne('make', [
+            Query::select(['name', '$collection']),
+        ]);
+
+        if ($make->isEmpty()) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayHasKey('name', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$permissions', $make);
+
+        $make = $database->findOne('make', [
+            Query::select(['name', '$createdAt']),
+        ]);
+
+        if ($make->isEmpty()) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayHasKey('name', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$permissions', $make);
+
+        $make = $database->findOne('make', [
+            Query::select(['name', '$updatedAt']),
+        ]);
+
+        if ($make->isEmpty()) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayHasKey('name', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
+        $this->assertArrayHasKey('$permissions', $make);
+
+        $make = $database->findOne('make', [
+            Query::select(['name', '$permissions']),
+        ]);
+
+        if ($make->isEmpty()) {
+            throw new Exception('Make not found');
+        }
+
+        $this->assertArrayHasKey('name', $make);
+        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$sequence', $make);
+        $this->assertArrayHasKey('$collection', $make);
+        $this->assertArrayHasKey('$createdAt', $make);
+        $this->assertArrayHasKey('$updatedAt', $make);
         $this->assertArrayHasKey('$permissions', $make);
 
         // Select all parent attributes, some child attributes
-        $make = static::getDatabase()->findOne('make', [
-            Query::select('*'),
-            Query::select('models.year')
+        $make = $database->findOne('make', [
+            Query::select(['*', 'models.year']),
         ]);
 
         if ($make->isEmpty()) {
@@ -1085,9 +1481,8 @@ trait RelationshipTests
         $this->assertEquals(2011, $make['models'][1]['year']);
 
         // Select all parent attributes, all child attributes
-        $make = static::getDatabase()->findOne('make', [
-            Query::select('*'),
-            Query::select('models.*')
+        $make = $database->findOne('make', [
+            Query::select(['*', 'models.*']),
         ]);
 
         if ($make->isEmpty()) {
@@ -1103,8 +1498,8 @@ trait RelationshipTests
 
         // Select all parent attributes, all child attributes
         // Must select parent if selecting children
-        $make = static::getDatabase()->findOne('make', [
-            Query::select('models.*')
+        $make = $database->findOne('make', [
+            Query::select(['models.*']),
         ]);
 
         if ($make->isEmpty()) {
@@ -1119,34 +1514,96 @@ trait RelationshipTests
         $this->assertEquals(2011, $make['models'][1]['year']);
 
         // Select all parent attributes, no child attributes
-        $make = static::getDatabase()->findOne('make', [
-            Query::select('name'),
+        $make = $database->findOne('make', [
+            Query::select(['name']),
         ]);
 
         if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
-
         $this->assertEquals('Ford', $make['name']);
         $this->assertArrayNotHasKey('models', $make);
+
+        // Select some parent attributes, all child attributes
+        $make = $database->findOne('make', [
+            Query::select(['name', 'models.*']),
+        ]);
+
+        $this->assertEquals('Ford', $make['name']);
+        $this->assertEquals(2, \count($make['models']));
+
+        /*
+         * FROM CHILD TO PARENT
+         */
+
+        // Select some parent attributes, some child attributes
+        $model = $database->findOne('model', [
+            Query::select(['name', 'make.name']),
+        ]);
+
+        $this->assertEquals('Fiesta', $model['name']);
+        $this->assertEquals('Ford', $model['make']['name']);
+        $this->assertArrayNotHasKey('origin', $model['make']);
+        $this->assertArrayNotHasKey('year', $model);
+        $this->assertArrayHasKey('name', $model);
+
+        // Select all parent attributes, some child attributes
+        $model = $database->findOne('model', [
+            Query::select(['*', 'make.name']),
+        ]);
+
+        $this->assertEquals('Fiesta', $model['name']);
+        $this->assertEquals('Ford', $model['make']['name']);
+        $this->assertArrayHasKey('year', $model);
+
+        // Select all parent attributes, all child attributes
+        $model = $database->findOne('model', [
+            Query::select(['*', 'make.*']),
+        ]);
+
+        $this->assertEquals('Fiesta', $model['name']);
+        $this->assertEquals('Ford', $model['make']['name']);
+        $this->assertArrayHasKey('year', $model);
+        $this->assertArrayHasKey('name', $model['make']);
+
+        // Select all parent attributes, no child attributes
+        $model = $database->findOne('model', [
+            Query::select(['*']),
+        ]);
+
+        $this->assertEquals('Fiesta', $model['name']);
+        $this->assertArrayHasKey('make', $model);
+        $this->assertArrayHasKey('year', $model);
+
+        // Select some parent attributes, all child attributes
+        $model = $database->findOne('model', [
+            Query::select(['name', 'make.*']),
+        ]);
+
+        $this->assertEquals('Fiesta', $model['name']);
+        $this->assertEquals('Ford', $model['make']['name']);
+        $this->assertEquals('USA', $model['make']['origin']);
     }
 
     public function testInheritRelationshipPermissions(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('lawns', permissions: [Permission::create(Role::any())], documentSecurity: true);
-        static::getDatabase()->createCollection('trees', permissions: [Permission::create(Role::any())], documentSecurity: true);
-        static::getDatabase()->createCollection('birds', permissions: [Permission::create(Role::any())], documentSecurity: true);
+        $database->createCollection('lawns', permissions: [Permission::create(Role::any())], documentSecurity: true);
+        $database->createCollection('trees', permissions: [Permission::create(Role::any())], documentSecurity: true);
+        $database->createCollection('birds', permissions: [Permission::create(Role::any())], documentSecurity: true);
 
-        static::getDatabase()->createAttribute('lawns', 'name', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('trees', 'name', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('birds', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('lawns', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('trees', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('birds', 'name', Database::VAR_STRING, 255, true);
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'lawns',
             relatedCollection: 'trees',
             type: Database::RELATION_ONE_TO_MANY,
@@ -1154,7 +1611,7 @@ trait RelationshipTests
             twoWayKey: 'lawn',
             onDelete: Database::RELATION_MUTATE_CASCADE,
         );
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'trees',
             relatedCollection: 'birds',
             type: Database::RELATION_MANY_TO_MANY,
@@ -1169,7 +1626,7 @@ trait RelationshipTests
             Permission::delete(Role::user('user2')),
         ];
 
-        static::getDatabase()->createDocument('lawns', new Document([
+        $database->createDocument('lawns', new Document([
             '$id' => 'lawn1',
             '$permissions' => $permissions,
             'name' => 'Lawn 1',
@@ -1191,13 +1648,13 @@ trait RelationshipTests
             ],
         ]));
 
-        $lawn1 = static::getDatabase()->getDocument('lawns', 'lawn1');
+        $lawn1 = $database->getDocument('lawns', 'lawn1');
         $this->assertEquals($permissions, $lawn1->getPermissions());
         $this->assertEquals($permissions, $lawn1['trees'][0]->getPermissions());
         $this->assertEquals($permissions, $lawn1['trees'][0]['birds'][0]->getPermissions());
         $this->assertEquals($permissions, $lawn1['trees'][0]['birds'][1]->getPermissions());
 
-        $tree1 = static::getDatabase()->getDocument('trees', 'tree1');
+        $tree1 = $database->getDocument('trees', 'tree1');
         $this->assertEquals($permissions, $tree1->getPermissions());
         $this->assertEquals($permissions, $tree1['lawn']->getPermissions());
         $this->assertEquals($permissions, $tree1['birds'][0]->getPermissions());
@@ -1209,18 +1666,21 @@ trait RelationshipTests
      */
     public function testEnforceRelationshipPermissions(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
-        $lawn1 = static::getDatabase()->getDocument('lawns', 'lawn1');
+        $lawn1 = $database->getDocument('lawns', 'lawn1');
         $this->assertEquals('Lawn 1', $lawn1['name']);
 
         // Try update root document
         try {
-            static::getDatabase()->updateDocument(
+            $database->updateDocument(
                 'lawns',
                 $lawn1->getId(),
                 $lawn1->setAttribute('name', 'Lawn 1 Updated')
@@ -1232,7 +1692,7 @@ trait RelationshipTests
 
         // Try delete root document
         try {
-            static::getDatabase()->deleteDocument(
+            $database->deleteDocument(
                 'lawns',
                 $lawn1->getId(),
             );
@@ -1241,11 +1701,11 @@ trait RelationshipTests
             $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
         }
 
-        $tree1 = static::getDatabase()->getDocument('trees', 'tree1');
+        $tree1 = $database->getDocument('trees', 'tree1');
 
         // Try update nested document
         try {
-            static::getDatabase()->updateDocument(
+            $database->updateDocument(
                 'trees',
                 $tree1->getId(),
                 $tree1->setAttribute('name', 'Tree 1 Updated')
@@ -1257,7 +1717,7 @@ trait RelationshipTests
 
         // Try delete nested document
         try {
-            static::getDatabase()->deleteDocument(
+            $database->deleteDocument(
                 'trees',
                 $tree1->getId(),
             );
@@ -1266,11 +1726,11 @@ trait RelationshipTests
             $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
         }
 
-        $bird1 = static::getDatabase()->getDocument('birds', 'bird1');
+        $bird1 = $database->getDocument('birds', 'bird1');
 
         // Try update multi-level nested document
         try {
-            static::getDatabase()->updateDocument(
+            $database->updateDocument(
                 'birds',
                 $bird1->getId(),
                 $bird1->setAttribute('name', 'Bird 1 Updated')
@@ -1282,7 +1742,7 @@ trait RelationshipTests
 
         // Try delete multi-level nested document
         try {
-            static::getDatabase()->deleteDocument(
+            $database->deleteDocument(
                 'birds',
                 $bird1->getId(),
             );
@@ -1293,10 +1753,10 @@ trait RelationshipTests
 
         Authorization::setRole(Role::user('user1')->toString());
 
-        $bird1 = static::getDatabase()->getDocument('birds', 'bird1');
+        $bird1 = $database->getDocument('birds', 'bird1');
 
         // Try update multi-level nested document
-        $bird1 = static::getDatabase()->updateDocument(
+        $bird1 = $database->updateDocument(
             'birds',
             $bird1->getId(),
             $bird1->setAttribute('name', 'Bird 1 Updated')
@@ -1307,17 +1767,17 @@ trait RelationshipTests
         Authorization::setRole(Role::user('user2')->toString());
 
         // Try delete multi-level nested document
-        $deleted = static::getDatabase()->deleteDocument(
+        $deleted = $database->deleteDocument(
             'birds',
             $bird1->getId(),
         );
 
         $this->assertEquals(true, $deleted);
-        $tree1 = static::getDatabase()->getDocument('trees', 'tree1');
+        $tree1 = $database->getDocument('trees', 'tree1');
         $this->assertEquals(1, count($tree1['birds']));
 
         // Try update nested document
-        $tree1 = static::getDatabase()->updateDocument(
+        $tree1 = $database->updateDocument(
             'trees',
             $tree1->getId(),
             $tree1->setAttribute('name', 'Tree 1 Updated')
@@ -1326,17 +1786,17 @@ trait RelationshipTests
         $this->assertEquals('Tree 1 Updated', $tree1['name']);
 
         // Try delete nested document
-        $deleted = static::getDatabase()->deleteDocument(
+        $deleted = $database->deleteDocument(
             'trees',
             $tree1->getId(),
         );
 
         $this->assertEquals(true, $deleted);
-        $lawn1 = static::getDatabase()->getDocument('lawns', 'lawn1');
+        $lawn1 = $database->getDocument('lawns', 'lawn1');
         $this->assertEquals(0, count($lawn1['trees']));
 
         // Create document with no permissions
-        static::getDatabase()->createDocument('lawns', new Document([
+        $database->createDocument('lawns', new Document([
             '$id' => 'lawn2',
             'name' => 'Lawn 2',
             'trees' => [
@@ -1353,19 +1813,22 @@ trait RelationshipTests
             ],
         ]));
 
-        $lawn2 = static::getDatabase()->getDocument('lawns', 'lawn2');
+        $lawn2 = $database->getDocument('lawns', 'lawn2');
         $this->assertEquals(true, $lawn2->isEmpty());
 
-        $tree2 = static::getDatabase()->getDocument('trees', 'tree2');
+        $tree2 = $database->getDocument('trees', 'tree2');
         $this->assertEquals(true, $tree2->isEmpty());
 
-        $bird3 = static::getDatabase()->getDocument('birds', 'bird3');
+        $bird3 = $database->getDocument('birds', 'bird3');
         $this->assertEquals(true, $bird3->isEmpty());
     }
 
     public function testCreateRelationshipMissingCollection(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1373,7 +1836,7 @@ trait RelationshipTests
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Collection not found');
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'missing',
             relatedCollection: 'missing',
             type: Database::RELATION_ONE_TO_MANY,
@@ -1383,17 +1846,20 @@ trait RelationshipTests
 
     public function testCreateRelationshipMissingRelatedCollection(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('test');
+        $database->createCollection('test');
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Related collection not found');
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'test',
             relatedCollection: 'missing',
             type: Database::RELATION_ONE_TO_MANY,
@@ -1403,15 +1869,18 @@ trait RelationshipTests
 
     public function testCreateDuplicateRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('test1');
-        static::getDatabase()->createCollection('test2');
+        $database->createCollection('test1');
+        $database->createCollection('test2');
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'test1',
             relatedCollection: 'test2',
             type: Database::RELATION_ONE_TO_MANY,
@@ -1421,7 +1890,7 @@ trait RelationshipTests
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Attribute already exists');
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'test1',
             relatedCollection: 'test2',
             type: Database::RELATION_ONE_TO_MANY,
@@ -1431,18 +1900,21 @@ trait RelationshipTests
 
     public function testCreateInvalidRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('test3');
-        static::getDatabase()->createCollection('test4');
+        $database->createCollection('test3');
+        $database->createCollection('test4');
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Invalid relationship type');
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'test3',
             relatedCollection: 'test4',
             type: 'invalid',
@@ -1453,13 +1925,16 @@ trait RelationshipTests
 
     public function testDeleteMissingRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         try {
-            static::getDatabase()->deleteRelationship('test', 'test2');
+            $database->deleteRelationship('test', 'test2');
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertEquals('Relationship not found', $e->getMessage());
@@ -1468,15 +1943,18 @@ trait RelationshipTests
 
     public function testCreateInvalidIntValueRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('invalid1');
-        static::getDatabase()->createCollection('invalid2');
+        $database->createCollection('invalid1');
+        $database->createCollection('invalid2');
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'invalid1',
             relatedCollection: 'invalid2',
             type: Database::RELATION_ONE_TO_ONE,
@@ -1486,7 +1964,7 @@ trait RelationshipTests
         $this->expectException(RelationshipException::class);
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
-        static::getDatabase()->createDocument('invalid1', new Document([
+        $database->createDocument('invalid1', new Document([
             '$id' => ID::unique(),
             'invalid2' => 10,
         ]));
@@ -1497,7 +1975,10 @@ trait RelationshipTests
      */
     public function testCreateInvalidObjectValueRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1505,7 +1986,7 @@ trait RelationshipTests
         $this->expectException(RelationshipException::class);
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
-        static::getDatabase()->createDocument('invalid1', new Document([
+        $database->createDocument('invalid1', new Document([
             '$id' => ID::unique(),
             'invalid2' => new \stdClass(),
         ]));
@@ -1516,12 +1997,15 @@ trait RelationshipTests
      */
     public function testCreateInvalidArrayIntValueRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'invalid1',
             relatedCollection: 'invalid2',
             type: Database::RELATION_ONE_TO_MANY,
@@ -1533,7 +2017,7 @@ trait RelationshipTests
         $this->expectException(RelationshipException::class);
         $this->expectExceptionMessage('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
 
-        static::getDatabase()->createDocument('invalid1', new Document([
+        $database->createDocument('invalid1', new Document([
             '$id' => ID::unique(),
             'invalid3' => [10],
         ]));
@@ -1541,21 +2025,24 @@ trait RelationshipTests
 
     public function testCreateEmptyValueRelationship(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('null1');
-        static::getDatabase()->createCollection('null2');
+        $database->createCollection('null1');
+        $database->createCollection('null2');
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'null1',
             relatedCollection: 'null2',
             type: Database::RELATION_ONE_TO_ONE,
             twoWay: true,
         );
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'null1',
             relatedCollection: 'null2',
             type: Database::RELATION_ONE_TO_MANY,
@@ -1563,7 +2050,7 @@ trait RelationshipTests
             id: 'null3',
             twoWayKey: 'null4',
         );
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'null1',
             relatedCollection: 'null2',
             type: Database::RELATION_MANY_TO_ONE,
@@ -1571,7 +2058,7 @@ trait RelationshipTests
             id: 'null4',
             twoWayKey: 'null5',
         );
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'null1',
             relatedCollection: 'null2',
             type: Database::RELATION_MANY_TO_MANY,
@@ -1580,21 +2067,21 @@ trait RelationshipTests
             twoWayKey: 'null7',
         );
 
-        $document = static::getDatabase()->createDocument('null1', new Document([
+        $document = $database->createDocument('null1', new Document([
             '$id' => ID::unique(),
             'null2' => null,
         ]));
 
         $this->assertEquals(null, $document->getAttribute('null2'));
 
-        $document = static::getDatabase()->createDocument('null2', new Document([
+        $document = $database->createDocument('null2', new Document([
             '$id' => ID::unique(),
             'null1' => null,
         ]));
 
         $this->assertEquals(null, $document->getAttribute('null1'));
 
-        $document = static::getDatabase()->createDocument('null1', new Document([
+        $document = $database->createDocument('null1', new Document([
             '$id' => ID::unique(),
             'null3' => null,
         ]));
@@ -1602,35 +2089,35 @@ trait RelationshipTests
         // One to many will be empty array instead of null
         $this->assertEquals([], $document->getAttribute('null3'));
 
-        $document = static::getDatabase()->createDocument('null2', new Document([
+        $document = $database->createDocument('null2', new Document([
             '$id' => ID::unique(),
             'null4' => null,
         ]));
 
         $this->assertEquals(null, $document->getAttribute('null4'));
 
-        $document = static::getDatabase()->createDocument('null1', new Document([
+        $document = $database->createDocument('null1', new Document([
             '$id' => ID::unique(),
             'null4' => null,
         ]));
 
         $this->assertEquals(null, $document->getAttribute('null4'));
 
-        $document = static::getDatabase()->createDocument('null2', new Document([
+        $document = $database->createDocument('null2', new Document([
             '$id' => ID::unique(),
             'null5' => null,
         ]));
 
         $this->assertEquals([], $document->getAttribute('null5'));
 
-        $document = static::getDatabase()->createDocument('null1', new Document([
+        $document = $database->createDocument('null1', new Document([
             '$id' => ID::unique(),
             'null6' => null,
         ]));
 
         $this->assertEquals([], $document->getAttribute('null6'));
 
-        $document = static::getDatabase()->createDocument('null2', new Document([
+        $document = $database->createDocument('null2', new Document([
             '$id' => ID::unique(),
             'null7' => null,
         ]));
@@ -1640,20 +2127,23 @@ trait RelationshipTests
 
     public function testUpdateRelationshipToExistingKey(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        static::getDatabase()->createCollection('ovens');
-        static::getDatabase()->createCollection('cakes');
+        $database->createCollection('ovens');
+        $database->createCollection('cakes');
 
-        static::getDatabase()->createAttribute('ovens', 'maxTemp', Database::VAR_INTEGER, 0, true);
-        static::getDatabase()->createAttribute('ovens', 'owner', Database::VAR_STRING, 255, true);
-        static::getDatabase()->createAttribute('cakes', 'height', Database::VAR_INTEGER, 0, true);
-        static::getDatabase()->createAttribute('cakes', 'colour', Database::VAR_STRING, 255, true);
+        $database->createAttribute('ovens', 'maxTemp', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('ovens', 'owner', Database::VAR_STRING, 255, true);
+        $database->createAttribute('cakes', 'height', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('cakes', 'colour', Database::VAR_STRING, 255, true);
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'ovens',
             relatedCollection: 'cakes',
             type: Database::RELATION_ONE_TO_MANY,
@@ -1663,14 +2153,14 @@ trait RelationshipTests
         );
 
         try {
-            static::getDatabase()->updateRelationship('ovens', 'cakes', newKey: 'owner');
+            $database->updateRelationship('ovens', 'cakes', newKey: 'owner');
             $this->fail('Failed to throw exception');
         } catch (DuplicateException $e) {
             $this->assertEquals('Relationship already exists', $e->getMessage());
         }
 
         try {
-            static::getDatabase()->updateRelationship('ovens', 'cakes', newTwoWayKey: 'height');
+            $database->updateRelationship('ovens', 'cakes', newTwoWayKey: 'height');
             $this->fail('Failed to throw exception');
         } catch (DuplicateException $e) {
             $this->assertEquals('Related attribute already exists', $e->getMessage());
@@ -1791,11 +2281,14 @@ trait RelationshipTests
 
     public function testUpdateDocumentWithRelationships(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForRelationships()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
-        static::getDatabase()->createCollection('userProfiles', [
+        $database->createCollection('userProfiles', [
             new Document([
                 '$id' => ID::custom('username'),
                 'type' => Database::VAR_STRING,
@@ -1813,7 +2306,7 @@ trait RelationshipTests
             Permission::update(Role::any()),
             Permission::delete(Role::any())
         ]);
-        static::getDatabase()->createCollection('links', [
+        $database->createCollection('links', [
             new Document([
                 '$id' => ID::custom('title'),
                 'type' => Database::VAR_STRING,
@@ -1831,7 +2324,7 @@ trait RelationshipTests
             Permission::update(Role::any()),
             Permission::delete(Role::any())
         ]);
-        static::getDatabase()->createCollection('videos', [
+        $database->createCollection('videos', [
             new Document([
                 '$id' => ID::custom('title'),
                 'type' => Database::VAR_STRING,
@@ -1849,7 +2342,7 @@ trait RelationshipTests
             Permission::update(Role::any()),
             Permission::delete(Role::any())
         ]);
-        static::getDatabase()->createCollection('products', [
+        $database->createCollection('products', [
             new Document([
                 '$id' => ID::custom('title'),
                 'type' => Database::VAR_STRING,
@@ -1867,7 +2360,7 @@ trait RelationshipTests
             Permission::update(Role::any()),
             Permission::delete(Role::any())
         ]);
-        static::getDatabase()->createCollection('settings', [
+        $database->createCollection('settings', [
             new Document([
                 '$id' => ID::custom('metaTitle'),
                 'type' => Database::VAR_STRING,
@@ -1885,7 +2378,7 @@ trait RelationshipTests
             Permission::update(Role::any()),
             Permission::delete(Role::any())
         ]);
-        static::getDatabase()->createCollection('appearance', [
+        $database->createCollection('appearance', [
             new Document([
                 '$id' => ID::custom('metaTitle'),
                 'type' => Database::VAR_STRING,
@@ -1903,7 +2396,7 @@ trait RelationshipTests
             Permission::update(Role::any()),
             Permission::delete(Role::any())
         ]);
-        static::getDatabase()->createCollection('group', [
+        $database->createCollection('group', [
             new Document([
                 '$id' => ID::custom('name'),
                 'type' => Database::VAR_STRING,
@@ -1921,7 +2414,7 @@ trait RelationshipTests
             Permission::update(Role::any()),
             Permission::delete(Role::any())
         ]);
-        static::getDatabase()->createCollection('community', [
+        $database->createCollection('community', [
             new Document([
                 '$id' => ID::custom('name'),
                 'type' => Database::VAR_STRING,
@@ -1940,21 +2433,21 @@ trait RelationshipTests
             Permission::delete(Role::any())
         ]);
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'userProfiles',
             relatedCollection: 'links',
             type: Database::RELATION_ONE_TO_MANY,
             id: 'links'
         );
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'userProfiles',
             relatedCollection: 'videos',
             type: Database::RELATION_ONE_TO_MANY,
             id: 'videos'
         );
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'userProfiles',
             relatedCollection: 'products',
             type: Database::RELATION_ONE_TO_MANY,
@@ -1963,35 +2456,35 @@ trait RelationshipTests
             twoWayKey: 'userProfile',
         );
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'userProfiles',
             relatedCollection: 'settings',
             type: Database::RELATION_ONE_TO_ONE,
             id: 'settings'
         );
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'userProfiles',
             relatedCollection: 'appearance',
             type: Database::RELATION_ONE_TO_ONE,
             id: 'appearance'
         );
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'userProfiles',
             relatedCollection: 'group',
             type: Database::RELATION_MANY_TO_ONE,
             id: 'group'
         );
 
-        static::getDatabase()->createRelationship(
+        $database->createRelationship(
             collection: 'userProfiles',
             relatedCollection: 'community',
             type: Database::RELATION_MANY_TO_ONE,
             id: 'community'
         );
 
-        $profile = static::getDatabase()->createDocument('userProfiles', new Document([
+        $profile = $database->createDocument('userProfiles', new Document([
             '$id' => '1',
             'username' => 'user1',
             'links' => [
@@ -2054,7 +2547,7 @@ trait RelationshipTests
             'name' => 'New Group Name',
         ]);
 
-        $updatedProfile = static::getDatabase()->updateDocument('userProfiles', '1', $profile);
+        $updatedProfile = $database->updateDocument('userProfiles', '1', $profile);
 
         $this->assertEquals('New Link Value', $updatedProfile->getAttribute('links')[0]->getAttribute('title'));
         $this->assertEquals('New Meta Title', $updatedProfile->getAttribute('settings')->getAttribute('metaTitle'));
@@ -2067,24 +2560,24 @@ trait RelationshipTests
         $this->assertEquals('Community 1', $updatedProfile->getAttribute('community')->getAttribute('name'));
 
         // updating document using two way key in one to many relationship
-        $product = static::getDatabase()->getDocument('products', 'product1');
+        $product = $database->getDocument('products', 'product1');
         $product->setAttribute('userProfile', [
             '$id' => '1',
             'username' => 'updated user value',
         ]);
-        $updatedProduct = static::getDatabase()->updateDocument('products', 'product1', $product);
+        $updatedProduct = $database->updateDocument('products', 'product1', $product);
         $this->assertEquals('updated user value', $updatedProduct->getAttribute('userProfile')->getAttribute('username'));
         $this->assertEquals('Product 1', $updatedProduct->getAttribute('title'));
         $this->assertEquals('product1', $updatedProduct->getId());
         $this->assertEquals('1', $updatedProduct->getAttribute('userProfile')->getId());
 
-        static::getDatabase()->deleteCollection('userProfiles');
-        static::getDatabase()->deleteCollection('links');
-        static::getDatabase()->deleteCollection('settings');
-        static::getDatabase()->deleteCollection('group');
-        static::getDatabase()->deleteCollection('community');
-        static::getDatabase()->deleteCollection('videos');
-        static::getDatabase()->deleteCollection('products');
-        static::getDatabase()->deleteCollection('appearance');
+        $database->deleteCollection('userProfiles');
+        $database->deleteCollection('links');
+        $database->deleteCollection('settings');
+        $database->deleteCollection('group');
+        $database->deleteCollection('community');
+        $database->deleteCollection('videos');
+        $database->deleteCollection('products');
+        $database->deleteCollection('appearance');
     }
 }

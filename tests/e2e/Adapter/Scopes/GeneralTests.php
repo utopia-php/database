@@ -25,7 +25,10 @@ trait GeneralTests
 {
     public function testPing(): void
     {
-        $this->assertEquals(true, static::getDatabase()->ping());
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $this->assertEquals(true, $database->ping());
     }
 
     /**
@@ -43,11 +46,14 @@ trait GeneralTests
             return;
         }
 
-        static::getDatabase()->createCollection('global-timeouts');
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection('global-timeouts');
 
         $this->assertEquals(
             true,
-            static::getDatabase()->createAttribute(
+            $database->createAttribute(
                 collection: 'global-timeouts',
                 id: 'longtext',
                 type: Database::VAR_STRING,
@@ -57,7 +63,7 @@ trait GeneralTests
         );
 
         for ($i = 0; $i < 20; $i++) {
-            static::getDatabase()->createDocument('global-timeouts', new Document([
+            $database->createDocument('global-timeouts', new Document([
                 'longtext' => file_get_contents(__DIR__ . '/../../../resources/longtext.txt'),
                 '$permissions' => [
                     Permission::read(Role::any()),
@@ -67,16 +73,16 @@ trait GeneralTests
             ]));
         }
 
-        static::getDatabase()->setTimeout(1);
+        $database->setTimeout(1);
 
         try {
-            static::getDatabase()->find('global-timeouts', [
+            $database->find('global-timeouts', [
                 Query::notEqual('longtext', 'appwrite'),
             ]);
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
-            static::getDatabase()->clearTimeout();
-            static::getDatabase()->deleteCollection('global-timeouts');
+            $database->clearTimeout();
+            $database->deleteCollection('global-timeouts');
             $this->assertInstanceOf(TimeoutException::class, $e);
         }
     }
@@ -87,36 +93,70 @@ trait GeneralTests
     {
         Authorization::disable();
 
-        static::getDatabase()->setPreserveDates(true);
+        /** @var Database $database */
+        $database = static::getDatabase();
 
-        static::getDatabase()->createCollection('preserve_update_dates');
+        $database->setPreserveDates(true);
 
-        static::getDatabase()->createAttribute('preserve_update_dates', 'attr1', Database::VAR_STRING, 10, false);
+        $database->createCollection('preserve_update_dates');
 
-        $doc1 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+        $database->createAttribute('preserve_update_dates', 'attr1', Database::VAR_STRING, 10, false);
+
+        $doc1 = $database->createDocument('preserve_update_dates', new Document([
             '$id' => 'doc1',
             '$permissions' => [],
             'attr1' => 'value1',
         ]));
 
-        $doc2 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+        $doc2 = $database->createDocument('preserve_update_dates', new Document([
             '$id' => 'doc2',
             '$permissions' => [],
             'attr1' => 'value2',
         ]));
 
-        $doc3 = static::getDatabase()->createDocument('preserve_update_dates', new Document([
+        $doc3 = $database->createDocument('preserve_update_dates', new Document([
             '$id' => 'doc3',
             '$permissions' => [],
             'attr1' => 'value3',
         ]));
+        // updating with empty dates
+        try {
+            $doc1->setAttribute('$updatedAt', '');
+            $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
+            $this->fail('Failed to throw structure exception');
 
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+        }
+
+        try {
+            $this->getDatabase()->updateDocuments(
+                'preserve_update_dates',
+                new Document([
+                    '$updatedAt' => ''
+                ]),
+                [
+                    Query::equal('$id', [
+                        $doc2->getId(),
+                        $doc3->getId()
+                    ])
+                ]
+            );
+            $this->fail('Failed to throw structure exception');
+
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+        }
+
+        // non empty dates
         $newDate = '2000-01-01T10:00:00.000+00:00';
 
         $doc1->setAttribute('$updatedAt', $newDate);
-        $doc1 = static::getDatabase()->updateDocument('preserve_update_dates', 'doc1', $doc1);
+        $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
         $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
-        $doc1 = static::getDatabase()->getDocument('preserve_update_dates', 'doc1');
+        $doc1 = $database->getDocument('preserve_update_dates', 'doc1');
         $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
 
         $this->getDatabase()->updateDocuments(
@@ -132,14 +172,14 @@ trait GeneralTests
             ]
         );
 
-        $doc2 = static::getDatabase()->getDocument('preserve_update_dates', 'doc2');
-        $doc3 = static::getDatabase()->getDocument('preserve_update_dates', 'doc3');
+        $doc2 = $database->getDocument('preserve_update_dates', 'doc2');
+        $doc3 = $database->getDocument('preserve_update_dates', 'doc3');
         $this->assertEquals($newDate, $doc2->getAttribute('$updatedAt'));
         $this->assertEquals($newDate, $doc3->getAttribute('$updatedAt'));
 
-        static::getDatabase()->deleteCollection('preserve_update_dates');
+        $database->deleteCollection('preserve_update_dates');
 
-        static::getDatabase()->setPreserveDates(false);
+        $database->setPreserveDates(false);
 
         Authorization::reset();
     }
@@ -148,22 +188,62 @@ trait GeneralTests
     {
         Authorization::disable();
 
-        static::getDatabase()->setPreserveDates(true);
+        /** @var Database $database */
+        $database = static::getDatabase();
 
-        static::getDatabase()->createCollection('preserve_create_dates');
+        $database->setPreserveDates(true);
 
-        static::getDatabase()->createAttribute('preserve_create_dates', 'attr1', Database::VAR_STRING, 10, false);
+        $database->createCollection('preserve_create_dates');
 
+        $database->createAttribute('preserve_create_dates', 'attr1', Database::VAR_STRING, 10, false);
+
+        // empty string for $createdAt should throw Structure exception
+        try {
+            $date = '';
+            $database->createDocument('preserve_create_dates', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'attr1' => 'value1',
+                '$createdAt' => $date
+            ]));
+            $this->fail('Failed to throw structure exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
+        }
+
+        try {
+            $database->createDocuments('preserve_create_dates', [
+                new Document([
+                    '$id' => 'doc2',
+                    '$permissions' => [],
+                    'attr1' => 'value2',
+                    '$createdAt' => $date
+                ]),
+                new Document([
+                    '$id' => 'doc3',
+                    '$permissions' => [],
+                    'attr1' => 'value3',
+                    '$createdAt' => $date
+                ]),
+            ], batchSize: 2);
+            $this->fail('Failed to throw structure exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
+        }
+
+        // non empty date
         $date = '2000-01-01T10:00:00.000+00:00';
 
-        static::getDatabase()->createDocument('preserve_create_dates', new Document([
+        $database->createDocument('preserve_create_dates', new Document([
             '$id' => 'doc1',
             '$permissions' => [],
             'attr1' => 'value1',
             '$createdAt' => $date
         ]));
 
-        static::getDatabase()->createDocuments('preserve_create_dates', [
+        $database->createDocuments('preserve_create_dates', [
             new Document([
                 '$id' => 'doc2',
                 '$permissions' => [],
@@ -174,20 +254,37 @@ trait GeneralTests
                 '$id' => 'doc3',
                 '$permissions' => [],
                 'attr1' => 'value3',
-                '$createdAt' => $date
+                '$createdAt' => $date,
+            ]),
+            new Document([
+                '$id' => 'doc4',
+                '$permissions' => [],
+                'attr1' => 'value3',
+                '$createdAt' => null,
+            ]),
+            new Document([
+                '$id' => 'doc5',
+                '$permissions' => [],
+                'attr1' => 'value3',
             ]),
         ], batchSize: 2);
 
-        $doc1 = static::getDatabase()->getDocument('preserve_create_dates', 'doc1');
-        $doc2 = static::getDatabase()->getDocument('preserve_create_dates', 'doc2');
-        $doc3 = static::getDatabase()->getDocument('preserve_create_dates', 'doc3');
+        $doc1 = $database->getDocument('preserve_create_dates', 'doc1');
+        $doc2 = $database->getDocument('preserve_create_dates', 'doc2');
+        $doc3 = $database->getDocument('preserve_create_dates', 'doc3');
+        $doc4 = $database->getDocument('preserve_create_dates', 'doc4');
+        $doc5 = $database->getDocument('preserve_create_dates', 'doc5');
         $this->assertEquals($date, $doc1->getAttribute('$createdAt'));
         $this->assertEquals($date, $doc2->getAttribute('$createdAt'));
         $this->assertEquals($date, $doc3->getAttribute('$createdAt'));
+        $this->assertNotEmpty($date, $doc4->getAttribute('$createdAt'));
+        $this->assertNotEquals($date, $doc4->getAttribute('$createdAt'));
+        $this->assertNotEmpty($date, $doc5->getAttribute('$createdAt'));
+        $this->assertNotEquals($date, $doc5->getAttribute('$createdAt'));
 
-        static::getDatabase()->deleteCollection('preserve_create_dates');
+        $database->deleteCollection('preserve_create_dates');
 
-        static::getDatabase()->setPreserveDates(false);
+        $database->setPreserveDates(false);
 
         Authorization::reset();
     }
@@ -271,7 +368,11 @@ trait GeneralTests
         ]);
 
         $this->expectException(Exception::class);
-        static::getDatabase()->find('movies', [
+
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->find('movies', [
             Query::limit(2),
             Query::offset(0),
             Query::cursorAfter($document)
@@ -405,7 +506,7 @@ trait GeneralTests
         $this->assertEquals(1, \count($docs));
         $this->assertEquals($doc1Id, $docs[0]->getId());
 
-        if (static::getDatabase()->getAdapter()->getSupportForUpserts()) {
+        if ($database->getAdapter()->getSupportForUpserts()) {
             // Test upsert with tenant per doc
             $doc3Id = ID::unique();
             $database
@@ -521,7 +622,10 @@ trait GeneralTests
 
     public function testCacheFallback(): void
     {
-        if (!static::getDatabase()->getAdapter()->getSupportForCacheSkipOnFailure()) {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForCacheSkipOnFailure()) {
             $this->expectNotToPerformAssertions();
             return;
         }

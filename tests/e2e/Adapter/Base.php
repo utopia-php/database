@@ -11,6 +11,7 @@ use Tests\E2E\Adapter\Scopes\IndexTests;
 use Tests\E2E\Adapter\Scopes\JoinsTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
+use Tests\E2E\Adapter\Scopes\SpatialTests;
 use Utopia\Database\Database;
 use Utopia\Database\Validator\Authorization;
 
@@ -25,6 +26,7 @@ abstract class Base extends TestCase
     use IndexTests;
     use PermissionTests;
     use RelationshipTests;
+    use SpatialTests;
     use GeneralTests;
 
     protected static string $namespace;

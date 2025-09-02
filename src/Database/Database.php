@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
@@ -19,6 +20,7 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -38,6 +40,8 @@ class Database
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
+    public const VAR_ID = 'id';
+    public const VAR_OBJECT_ID = 'objectId';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
@@ -45,6 +49,13 @@ class Database
 
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
+
+    // Spatial Types
+    public const VAR_POINT = 'point';
+    public const VAR_LINESTRING = 'linestring';
+    public const VAR_POLYGON = 'polygon';
+
+    public const SPATIAL_TYPES = [self::VAR_POINT,self::VAR_LINESTRING, self::VAR_POLYGON];
 
     // Index Types
     public const INDEX_KEY = 'key';
@@ -136,6 +147,7 @@ class Database
     public const EVENT_PERMISSIONS_DELETE = 'permissions_delete';
 
     public const EVENT_ATTRIBUTE_CREATE = 'attribute_create';
+    public const EVENT_ATTRIBUTES_CREATE = 'attributes_create';
     public const EVENT_ATTRIBUTE_UPDATE = 'attribute_update';
     public const EVENT_ATTRIBUTE_DELETE = 'attribute_delete';
 
@@ -162,9 +174,9 @@ class Database
             'filters' => [],
         ],
         [
-            '$id' => '$internalId',
-            'type' => self::VAR_STRING,
-            'size' => Database::LENGTH_KEY,
+            '$id' => '$sequence',
+            'type' => self::VAR_ID,
+            'size' => 0,
             'required' => true,
             'signed' => true,
             'array' => false,
@@ -182,6 +194,7 @@ class Database
         [
             '$id' => '$tenant',
             'type' => self::VAR_INTEGER,
+            //'type' => self::VAR_ID, // Inconsistency with other VAR_ID since this is an INT
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -340,6 +353,11 @@ class Database
     protected int $relationshipFetchDepth = 1;
 
     protected bool $filter = true;
+
+    /**
+     * @var array<string, bool>|null
+     */
+    protected ?array $disabledFilters = [];
 
     protected bool $validate = true;
 
@@ -806,17 +824,35 @@ class Database
      *
      * @template T
      * @param callable(): T $callback
+     * @param array<string>|null $filters
      * @return T
      */
-    public function skipFilters(callable $callback): mixed
+    public function skipFilters(callable $callback, ?array $filters = null): mixed
     {
-        $initial = $this->filter;
-        $this->disableFilters();
+        if (empty($filters)) {
+            $initial = $this->filter;
+            $this->disableFilters();
+
+            try {
+                return $callback();
+            } finally {
+                $this->filter = $initial;
+            }
+        }
+
+        $previous = $this->filter;
+        $previousDisabled = $this->disabledFilters;
+        $disabled = [];
+        foreach ($filters as $name) {
+            $disabled[$name] = true;
+        }
+        $this->disabledFilters = $disabled;
 
         try {
             return $callback();
         } finally {
-            $this->filter = $initial;
+            $this->filter = $previous;
+            $this->disabledFilters = $previousDisabled;
         }
     }
 
@@ -1046,6 +1082,16 @@ class Database
     }
 
     /**
+     * Clear global collections
+     *
+     * @return void
+     */
+    public function resetGlobalCollections(): void
+    {
+        $this->globalCollections = [];
+    }
+
+    /**
      * Get list of keywords that cannot be used
      *
      * @return string[]
@@ -1257,7 +1303,11 @@ class Database
             $validator = new IndexValidator(
                 $attributes,
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForSpatialIndexNull(),
+                $this->adapter->getSupportForSpatialIndexOrder(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -1544,12 +1594,206 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
+        $attribute = $this->validateAttribute(
+            $collection,
+            $id,
+            $type,
+            $size,
+            $required,
+            $default,
+            $signed,
+            $array,
+            $format,
+            $formatOptions,
+            $filters
+        );
+
+        $collection->setAttribute(
+            'attributes',
+            $attribute,
+            Document::SET_TYPE_APPEND
+        );
+
+        try {
+            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array, $required);
+
+            if (!$created) {
+                throw new DatabaseException('Failed to create attribute');
+            }
+        } catch (DuplicateException $e) {
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
+            }
+        }
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedDocument(self::METADATA, $collection->getId());
+
+        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+
+        return true;
+    }
+
+    /**
+     * Create Attribute
+     *
+     * @param string $collection
+     * @param array<array<string, mixed>> $attributes
+     * @return bool
+     * @throws AuthorizationException
+     * @throws ConflictException
+     * @throws DatabaseException
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws StructureException
+     * @throws Exception
+     */
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        if (empty($attributes)) {
+            throw new DatabaseException('No attributes to create');
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $attributeDocuments = [];
+        foreach ($attributes as $attribute) {
+            if (!isset($attribute['$id'])) {
+                throw new DatabaseException('Missing attribute key');
+            }
+            if (!isset($attribute['type'])) {
+                throw new DatabaseException('Missing attribute type');
+            }
+            if (!isset($attribute['size'])) {
+                throw new DatabaseException('Missing attribute size');
+            }
+            if (!isset($attribute['required'])) {
+                throw new DatabaseException('Missing attribute required');
+            }
+            if (!isset($attribute['default'])) {
+                $attribute['default'] = null;
+            }
+            if (!isset($attribute['signed'])) {
+                $attribute['signed'] = true;
+            }
+            if (!isset($attribute['array'])) {
+                $attribute['array'] = false;
+            }
+            if (!isset($attribute['format'])) {
+                $attribute['format'] = null;
+            }
+            if (!isset($attribute['formatOptions'])) {
+                $attribute['formatOptions'] = [];
+            }
+            if (!isset($attribute['filters'])) {
+                $attribute['filters'] = [];
+            }
+
+            $attributeDocument = $this->validateAttribute(
+                $collection,
+                $attribute['$id'],
+                $attribute['type'],
+                $attribute['size'],
+                $attribute['required'],
+                $attribute['default'],
+                $attribute['signed'],
+                $attribute['array'],
+                $attribute['format'],
+                $attribute['formatOptions'],
+                $attribute['filters']
+            );
+
+            $collection->setAttribute(
+                'attributes',
+                $attributeDocument,
+                Document::SET_TYPE_APPEND
+            );
+
+            $attributeDocuments[] = $attributeDocument;
+        }
+
+        try {
+            $created = $this->adapter->createAttributes($collection->getId(), $attributes);
+
+            if (!$created) {
+                throw new DatabaseException('Failed to create attributes');
+            }
+        } catch (DuplicateException $e) {
+            // No attributes were in a metadata, but at least one of them was present on the table
+            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
+            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
+                throw $e;
+            }
+        }
+
+        if ($collection->getId() !== self::METADATA) {
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        }
+
+        $this->purgeCachedCollection($collection->getId());
+        $this->purgeCachedDocument(self::METADATA, $collection->getId());
+
+        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+
+        return true;
+    }
+
+    /**
+     * @param Document $collection
+     * @param string $id
+     * @param string $type
+     * @param int $size
+     * @param bool $required
+     * @param mixed $default
+     * @param bool $signed
+     * @param bool $array
+     * @param string $format
+     * @param array<string, mixed> $formatOptions
+     * @param array<string> $filters
+     * @return Document
+     * @throws DuplicateException
+     * @throws LimitException
+     * @throws Exception
+     */
+    private function validateAttribute(
+        Document $collection,
+        string $id,
+        string $type,
+        int $size,
+        bool $required,
+        mixed $default,
+        bool $signed,
+        bool $array,
+        ?string $format,
+        array $formatOptions,
+        array $filters
+    ): Document {
         // Attribute IDs are case-insensitive
         $attributes = $collection->getAttribute('attributes', []);
+
         /** @var array<Document> $attributes */
         foreach ($attributes as $attribute) {
             if (\strtolower($attribute->getId()) === \strtolower($id)) {
-                throw new DuplicateException('Attribute already exists');
+                throw new DuplicateException('Attribute already exists in metadata');
+            }
+        }
+
+        if ($this->adapter->getSupportForSchemaAttributes() && !($this->getSharedTables() && $this->isMigrating())) {
+            $schema = $this->getSchemaAttributes($collection->getId());
+            foreach ($schema as $attribute) {
+                $newId = $this->adapter->filter($attribute->getId());
+                if (\strtolower($newId) === \strtolower($id)) {
+                    throw new DuplicateException('Attribute already exists in schema');
+                }
             }
         }
 
@@ -1579,13 +1823,10 @@ class Database
 
         $this->checkAttribute($collection, $attribute);
 
-        $collection->setAttribute(
-            'attributes',
-            $attribute,
-            Document::SET_TYPE_APPEND
-        );
-
         switch ($type) {
+            case self::VAR_ID:
+
+                break;
             case self::VAR_STRING:
                 if ($size > $this->adapter->getLimitForString()) {
                     throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
@@ -1602,8 +1843,22 @@ class Database
             case self::VAR_DATETIME:
             case self::VAR_RELATIONSHIP:
                 break;
+            case self::VAR_POINT:
+            case self::VAR_LINESTRING:
+            case self::VAR_POLYGON:
+                // Check if adapter supports spatial attributes
+                if (!$this->adapter->getSupportForSpatialAttributes()) {
+                    throw new DatabaseException('Spatial attributes are not supported');
+                }
+                if (!empty($size)) {
+                    throw new DatabaseException('Size must be empty for spatial attributes');
+                }
+                if (!empty($array)) {
+                    throw new DatabaseException('Spatial attributes cannot be arrays');
+                }
+                break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
 
         // Only execute when $default is given
@@ -1615,29 +1870,7 @@ class Database
             $this->validateDefaultTypes($type, $default);
         }
 
-        try {
-            $created = $this->adapter->createAttribute($collection->getId(), $id, $type, $size, $signed, $array);
-
-            if (!$created) {
-                throw new DatabaseException('Failed to create attribute');
-            }
-        } catch (DuplicateException $e) {
-            // HACK: Metadata should still be updated, can be removed when null tenant collections are supported.
-            if (!$this->adapter->getSharedTables() || !$this->isMigrating()) {
-                throw $e;
-            }
-        }
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
-
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
-
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
-
-        return true;
+        return $attribute;
     }
 
     /**
@@ -1674,8 +1907,11 @@ class Database
         }
 
         if ($defaultType === 'array') {
-            foreach ($default as $value) {
-                $this->validateDefaultTypes($type, $value);
+            // spatial types require the array itself
+            if (!in_array($type, Database::SPATIAL_TYPES)) {
+                foreach ($default as $value) {
+                    $this->validateDefaultTypes($type, $value);
+                }
             }
             return;
         }
@@ -1694,8 +1930,16 @@ class Database
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
+            case self::VAR_POINT:
+            case self::VAR_LINESTRING:
+            case self::VAR_POLYGON:
+                // Spatial types expect arrays as default values
+                if ($defaultType !== 'array') {
+                    throw new DatabaseException('Default value for spatial type ' . $type . ' must be an array');
+                }
+                // no break
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
     }
 
@@ -1936,6 +2180,20 @@ class Database
                         throw new DatabaseException('Size must be empty');
                     }
                     break;
+
+                case self::VAR_POINT:
+                case self::VAR_LINESTRING:
+                case self::VAR_POLYGON:
+                    if (!$this->adapter->getSupportForSpatialAttributes()) {
+                        throw new DatabaseException('Spatial attributes are not supported');
+                    }
+                    if (!empty($size)) {
+                        throw new DatabaseException('Size must be empty for spatial attributes');
+                    }
+                    if (!empty($array)) {
+                        throw new DatabaseException('Spatial attributes cannot be arrays');
+                    }
+                    break;
                 default:
                     throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
             }
@@ -1984,6 +2242,35 @@ class Database
                 throw new LimitException('Row width limit reached. Cannot update attribute.');
             }
 
+            if (in_array($type, self::SPATIAL_TYPES, true) && !$this->adapter->getSupportForSpatialIndexNull()) {
+                $attributeMap = [];
+                foreach ($attributes as $attrDoc) {
+                    $key = \strtolower($attrDoc->getAttribute('key', $attrDoc->getAttribute('$id')));
+                    $attributeMap[$key] = $attrDoc;
+                }
+
+                $indexes = $collectionDoc->getAttribute('indexes', []);
+                foreach ($indexes as $index) {
+                    if ($index->getAttribute('type') !== self::INDEX_SPATIAL) {
+                        continue;
+                    }
+                    $indexAttributes = $index->getAttribute('attributes', []);
+                    foreach ($indexAttributes as $attributeName) {
+                        $lookup = \strtolower($attributeName);
+                        if (!isset($attributeMap[$lookup])) {
+                            continue;
+                        }
+                        $attrDoc = $attributeMap[$lookup];
+                        $attrType = $attrDoc->getAttribute('type');
+                        $attrRequired = (bool)$attrDoc->getAttribute('required', false);
+
+                        if (in_array($attrType, self::SPATIAL_TYPES, true) && !$attrRequired) {
+                            throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.');
+                        }
+                    }
+                }
+            }
+
             if ($altering) {
                 $indexes = $collectionDoc->getAttribute('indexes');
 
@@ -2016,7 +2303,11 @@ class Database
                     $validator = new IndexValidator(
                         $attributes,
                         $this->adapter->getMaxIndexLength(),
-                        $this->adapter->getInternalIndexesKeys()
+                        $this->adapter->getInternalIndexesKeys(),
+                        $this->adapter->getSupportForIndexArray(),
+                        $this->adapter->getSupportForSpatialAttributes(),
+                        $this->adapter->getSupportForSpatialIndexNull(),
+                        $this->adapter->getSupportForSpatialIndexOrder(),
                     );
 
                     foreach ($indexes as $index) {
@@ -2130,10 +2421,12 @@ class Database
             }
         }
 
-        $deleted = $this->adapter->deleteAttribute($collection->getId(), $id);
-
-        if (!$deleted) {
-            throw new DatabaseException('Failed to delete attribute');
+        try {
+            if (!$this->adapter->deleteAttribute($collection->getId(), $id)) {
+                throw new DatabaseException('Failed to delete attribute');
+            }
+        } catch (NotFoundException) {
+            // Ignore
         }
 
         $collection->setAttribute('attributes', \array_values($attributes));
@@ -2328,7 +2621,7 @@ class Database
         $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
 
         if ($type === self::RELATION_MANY_TO_MANY) {
-            $this->silent(fn () => $this->createCollection('_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId(), [
+            $this->silent(fn () => $this->createCollection('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence(), [
                 new Document([
                     '$id' => $id,
                     'key' => $id,
@@ -2871,16 +3164,28 @@ class Database
                 }
                 break;
 
+            case self::INDEX_SPATIAL:
+                if (!$this->adapter->getSupportForSpatialAttributes()) {
+                    throw new DatabaseException('Spatial indexes are not supported');
+                }
+                if (!empty($orders) && !$this->adapter->getSupportForSpatialIndexOrder()) {
+                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
+                }
+                break;
+
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL);
         }
 
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
-
+        $indexAttributesWithTypes = [];
+        $indexAttributesRequired = [];
         foreach ($attributes as $i => $attr) {
             foreach ($collectionAttributes as $collectionAttribute) {
                 if ($collectionAttribute->getAttribute('key') === $attr) {
+                    $indexAttributesWithTypes[$attr] = $collectionAttribute->getAttribute('type');
+                    $indexAttributesRequired[$attr] = $collectionAttribute->getAttribute('required', false);
 
                     /**
                      * mysql does not save length in collection when length = attributes size
@@ -2903,6 +3208,29 @@ class Database
             }
         }
 
+        // Validate spatial index constraints
+        if ($type === self::INDEX_SPATIAL) {
+            foreach ($attributes as $attr) {
+                if (!isset($indexAttributesWithTypes[$attr])) {
+                    throw new DatabaseException('Attribute "' . $attr . '" not found in collection');
+                }
+
+                $attributeType = $indexAttributesWithTypes[$attr];
+                if (!in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
+                    throw new DatabaseException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                }
+            }
+
+            // Check spatial index null constraints for adapters that don't support null values
+            if (!$this->adapter->getSupportForSpatialIndexNull()) {
+                foreach ($attributes as $attr) {
+                    if (!$indexAttributesRequired[$attr]) {
+                        throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attr . '" as required or create the index on a column with no null values.');
+                    }
+                }
+            }
+        }
+
         $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -2918,7 +3246,11 @@ class Database
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
                 $this->adapter->getMaxIndexLength(),
-                $this->adapter->getInternalIndexesKeys()
+                $this->adapter->getInternalIndexesKeys(),
+                $this->adapter->getSupportForIndexArray(),
+                $this->adapter->getSupportForSpatialAttributes(),
+                $this->adapter->getSupportForSpatialIndexNull(),
+                $this->adapter->getSupportForSpatialIndexOrder(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -2926,7 +3258,7 @@ class Database
         }
 
         try {
-            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders);
+            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);
 
             if (!$created) {
                 throw new DatabaseException('Failed to create index');
@@ -3037,6 +3369,8 @@ class Database
         $context = new QueryContext();
         $context->add($collection);
 
+        $this->checkQueriesType($queries);
+
         if ($this->validate) {
             $validator = new DocumentsValidator($context);
             if (!$validator->isValid($queries)) {
@@ -3049,36 +3383,9 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $nestedSelections = [];
-
-        foreach ($selects as $i => $q) {
-            if (\str_contains($q->getAttribute(), '.')) {
-                $key = \explode('.', $q->getAttribute())[0];
-
-                foreach ($relationships as $relationship) {
-                    if ($relationship->getAttribute('key') === $key) {
-                        $nestedSelections[] = Query::select(
-                            \implode('.', \array_slice(\explode('.', $q->getAttribute()), 1))
-                        );
-
-                        switch ($relationship->getAttribute('options')['relationType']) {
-                            case Database::RELATION_MANY_TO_MANY:
-                            case Database::RELATION_ONE_TO_MANY:
-                                unset($selects[$i]);
-                                break;
-
-                            case Database::RELATION_MANY_TO_ONE:
-                            case Database::RELATION_ONE_TO_ONE:
-                                $q->setAttribute($key);
-                                $selects[$i] = $q;
-                                break;
-                        }
-                    }
-                }
-            }
-        }
-
-        $selects = \array_values($selects); // Since we may unset above
+        $selects = Query::groupByType($queries)['selections'];
+        $selections = $this->validateSelections($collection, $selects);
+        $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3120,7 +3427,7 @@ class Database
         }
 
         $document = $this->adapter->getDocument(
-            $collection->getId(),
+            $collection,
             $id,
             $selects,
             $forUpdate
@@ -3133,7 +3440,6 @@ class Database
         if ($document->isEmpty()) {
             return $document;
         }
-
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
@@ -3149,7 +3455,7 @@ class Database
         $document = $this->decode($context, $document, $selects);
         $this->map = [];
 
-        if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+        if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
         }
 
@@ -3168,37 +3474,11 @@ class Database
             }
         }
 
-        // Remove internal attributes if not queried for select query
-        // $id, $permissions and $collection are the default selected attributes for (MariaDB, MySQL, SQLite, Postgres)
-        // All internal attributes are default selected attributes for (MongoDB)
-
-//        if (!empty($selects)) {
-//            $selectedAttributes = array_map(
-//                fn ($q) => $q->getAttribute(),
-//                array_filter($selects, fn ($q) => $q->isSystem() === false)
-//            );
-//
-//            if (!in_array('*', $selectedAttributes)){
-//                foreach ($this->getInternalAttributes() as $internalAttribute) {
-//                    if (!in_array($internalAttribute['$id'], $selectedAttributes, true)) {
-//                        $document->removeAttribute($internalAttribute['$id']);
-//                    }
-//                }
-//            }
-//        }
-
-//        if (!empty($selects)){
-//            $selectedAttributes = array_map(fn ($q) => $q->getAttribute(), $selects);
-//
-//            if (!in_array('*', $selectedAttributes) && !in_array('$collection', $selectedAttributes)) {
-//                $document->removeAttribute('$collection');
-//            }
-//
-//            var_dump($selectedAttributes);
-//        }
-
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
+        /**
+         * reminder
+         */
         $document->removeAttribute('$perms');
 
         return $document;
@@ -3207,17 +3487,23 @@ class Database
     /**
      * @param Document $collection
      * @param Document $document
-     * @param array<Query> $queries
+     * @param array<string, array<Query>> $selects
      * @return Document
      * @throws DatabaseException
      */
-    private function populateDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
+    private function populateDocumentRelationships(Document $collection, Document $document, array $selects = []): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
-        $relationships = \array_filter($attributes, function ($attribute) {
-            return $attribute['type'] === Database::VAR_RELATIONSHIP;
-        });
+        $relationships = [];
+
+        foreach ($attributes as $attribute) {
+            if ($attribute['type'] === Database::VAR_RELATIONSHIP) {
+                if (empty($selects) || array_key_exists($attribute['key'], $selects)) {
+                    $relationships[] = $attribute;
+                }
+            }
+        }
 
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
@@ -3227,6 +3513,8 @@ class Database
             $twoWay = $relationship['options']['twoWay'];
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
+
+            $queries = $selects[$key] ?? [];
 
             if (!empty($value)) {
                 $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();
@@ -3417,13 +3705,30 @@ class Database
                         Query::limit(PHP_INT_MAX)
                     ]));
 
-                    $related = [];
+                    $relatedIds = [];
                     foreach ($junctions as $junction) {
-                        $related[] = $this->getDocument(
-                            $relatedCollection->getId(),
-                            $junction->getAttribute($key),
-                            $queries
-                        );
+                        $relatedIds[] = $junction->getAttribute($key);
+                    }
+
+                    $related = [];
+                    if (!empty($relatedIds)) {
+                        $foundRelated = $this->find($relatedCollection->getId(), [
+                            Query::equal('$id', $relatedIds),
+                            Query::limit(PHP_INT_MAX),
+                            ...$queries
+                        ]);
+
+                        // Preserve the order of related documents to match the junction order
+                        $relatedById = [];
+                        foreach ($foundRelated as $doc) {
+                            $relatedById[$doc->getId()] = $doc;
+                        }
+
+                        foreach ($relatedIds as $relatedId) {
+                            if (isset($relatedById[$relatedId])) {
+                                $related[] = $relatedById[$relatedId];
+                            }
+                        }
                     }
 
                     $this->relationshipFetchDepth--;
@@ -3484,8 +3789,12 @@ class Database
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
-            ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
-            ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+            ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
+            ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+
+        if (empty($document->getPermissions())) {
+            $document->setAttribute('$permissions', []);
+        }
 
         if ($this->adapter->getSharedTables()) {
             if ($this->adapter->getTenantPerDocument()) {
@@ -3511,6 +3820,7 @@ class Database
 
         $structure = new Structure(
             $collection,
+            $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
         );
@@ -3522,8 +3832,7 @@ class Database
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
-
-            return $this->adapter->createDocument($collection->getId(), $document);
+            return $this->adapter->createDocument($collection, $document);
         });
 
         if ($this->resolveRelationships) {
@@ -3533,6 +3842,7 @@ class Database
         $context = new QueryContext();
         $context->add($collection);
 
+        $document = $this->casting($context, $document);
         $document = $this->decode($context, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
@@ -3589,8 +3899,12 @@ class Database
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
-                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+                ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
+                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+
+            if (empty($document->getPermissions())) {
+                $document->setAttribute('$permissions', []);
+            }
 
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {
@@ -3606,6 +3920,7 @@ class Database
 
             $validator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -3620,14 +3935,17 @@ class Database
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             $batch = $this->withTransaction(function () use ($collection, $chunk) {
-                return $this->adapter->createDocuments($collection->getId(), $chunk);
+                return $this->adapter->createDocuments($collection, $chunk);
             });
+
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
             foreach ($batch as $document) {
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
 
+                $document = $this->casting($context, $document);
                 $document = $this->decode($context, $document);
                 $onNext && $onNext($document);
                 $modified++;
@@ -3984,21 +4302,33 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        $document = $this->withTransaction(function () use ($collection, $id, $document) {
+        $newUpdatedAt = $document->getUpdatedAt();
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
             $time = DateTime::now();
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
+            $skipPermissionsUpdate = true;
+
+            if ($document->offsetExists('$permissions')) {
+                $originalPermissions = $old->getPermissions();
+                $currentPermissions  = $document->getPermissions();
+
+                sort($originalPermissions);
+                sort($currentPermissions);
+
+                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+            }
+            $createdAt = $document->getCreatedAt();
+
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
-            $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
+            $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
                 $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
             }
-
             $document = new Document($document);
 
             $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
@@ -4122,8 +4452,7 @@ class Database
             }
 
             if ($shouldUpdate) {
-                $updatedAt = $document->getUpdatedAt();
-                $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+                $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
             }
 
             // Check if document was updated after the request timestamp
@@ -4136,6 +4465,7 @@ class Database
 
             $structureValidator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -4147,7 +4477,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-            $this->adapter->updateDocument($collection->getId(), $id, $document);
+            $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
             $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
@@ -4177,6 +4507,7 @@ class Database
      * @param array<Query> $queries
      * @param int $batchSize
      * @param callable|null $onNext
+     * @param callable|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws ConflictException
@@ -4193,6 +4524,7 @@ class Database
         array $queries = [],
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         if ($updates->isEmpty()) {
             return 0;
@@ -4215,9 +4547,12 @@ class Database
         $context = new QueryContext();
         $context->add($collection);
 
+        $this->checkQueriesType($queries);
+
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
+                $this->adapter->getIdAttributeType(),
                 maxValuesCount: $this->maxQueryValues,
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime()
@@ -4228,34 +4563,35 @@ class Database
             }
         }
 
-        $limit = Query::getLimitQuery($queries);
+        $grouped = Query::groupByType($queries);
+        $limit = $grouped['limit'];
+        $cursor = $grouped['cursor'];
 
-        $cursor = new Document();
-        $cursorQuery = Query::getCursorQueries($queries);
-        if (! is_null($cursorQuery)) {
-            $cursor = $cursorQuery->getCursorDocument($cursorQuery);
-            if ($cursor->getCollection() !== $collection->getId()) {
-                throw new DatabaseException("cursor Document must be from the same Collection.");
-            }
+        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new DatabaseException("Cursor document must be from the same Collection.");
         }
 
         unset($updates['$id']);
-        unset($updates['$createdAt']);
         unset($updates['$tenant']);
+
+        if (($updates->getCreatedAt() === null || !$this->preserveDates)) {
+            unset($updates['$createdAt']);
+        } else {
+            $updates['$createdAt'] = $updates->getCreatedAt();
+        }
 
         if ($this->adapter->getSharedTables()) {
             $updates['$tenant'] = $this->adapter->getTenant();
         }
 
-        if (!$this->preserveDates) {
-            $updates['$updatedAt'] = DateTime::now();
-        }
+        $updatedAt = $updates->getUpdatedAt();
+        $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
 
         $updates = $this->encode($collection, $updates);
-
         // Check new document structure
         $validator = new PartialStructure(
             $collection,
+            $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
         );
@@ -4279,7 +4615,7 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (!$last->isEmpty()) {
+            if (!empty($last)) {
                 $new[] = Query::cursorAfter($last);
             }
 
@@ -4293,41 +4629,66 @@ class Database
                 break;
             }
 
-            foreach ($batch as &$document) {
-                $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+            $currentPermissions  = $updates->getPermissions();
+            sort($currentPermissions);
 
-                if ($this->resolveRelationships) {
-                    $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
+                foreach ($batch as $index => $document) {
+
+                    $skipPermissionsUpdate = true;
+
+                    if ($updates->offsetExists('$permissions')) {
+                        if (!$document->offsetExists('$permissions')) {
+                            throw new QueryException('Permission document missing in select');
+                        }
+
+                        $originalPermissions = $document->getPermissions();
+                        sort($originalPermissions);
+
+                        $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+                    }
+
+                    $document->setAttribute('$skipPermissionsUpdate', $skipPermissionsUpdate);
+
+                    $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+
+                    if ($this->resolveRelationships) {
+                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
+                    }
+
+                    $document = $new;
+
+                    // Check if document was updated after the request timestamp
+                    try {
+                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    } catch (Exception $e) {
+                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                    }
+
+                    if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                        throw new ConflictException('Document was updated after the request timestamp');
+                    }
+
+                    $batch[$index] = $this->encode($collection, $document);
                 }
 
-                $document = $new;
-
-                // Check if document was updated after the request timestamp
-                try {
-                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-                } catch (Exception $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                }
-
-                if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                    throw new ConflictException('Document was updated after the request timestamp');
-                }
-
-                $document = $this->encode($collection, $document);
-            }
-
-            $this->withTransaction(function () use ($collection, $updates, $batch) {
                 $this->adapter->updateDocuments(
-                    $collection->getId(),
+                    $collection,
                     $updates,
                     $batch
                 );
             });
 
             foreach ($batch as $doc) {
+                $doc->removeAttribute('$skipPermissionsUpdate');
+
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($context, $doc);
-                $onNext && $onNext($doc);
+                try {
+                    $onNext && $onNext($doc);
+                } catch (Throwable $th) {
+                    $onError ? $onError($th) : throw $th;
+                }
                 $modified++;
             }
 
@@ -4383,8 +4744,8 @@ class Database
 
             if ($oldValue == $value) {
                 if (
-                    ($relationType === Database::RELATION_ONE_TO_ONE ||
-                        ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
+                    ($relationType === Database::RELATION_ONE_TO_ONE
+                        || ($relationType === Database::RELATION_MANY_TO_ONE && $side === Database::RELATION_SIDE_PARENT)) &&
                     $value instanceof Document
                 ) {
                     $document->setAttribute($key, $value->getId());
@@ -4510,7 +4871,7 @@ class Database
                                     $this->skipRelationships(fn () => $this->updateDocument(
                                         $relatedCollection->getId(),
                                         $oldRelated->getId(),
-                                        $oldRelated->setAttribute($twoWayKey, null)
+                                        new Document([$twoWayKey => null])
                                     ));
                                 }
                                 break;
@@ -4536,7 +4897,7 @@ class Database
                                 } elseif ($item instanceof Document) {
                                     return $item->getId();
                                 } else {
-                                    throw new RelationshipException('Invalid relationship value. No ID provided.');
+                                    throw new RelationshipException('Invalid relationship value. Must be either a document or document ID.');
                                 }
                             }, $value);
 
@@ -4736,8 +5097,8 @@ class Database
     private function getJunctionCollection(Document $collection, Document $relatedCollection, string $side): string
     {
         return $side === Database::RELATION_SIDE_PARENT
-            ? '_' . $collection->getInternalId() . '_' . $relatedCollection->getInternalId()
-            : '_' . $relatedCollection->getInternalId() . '_' . $collection->getInternalId();
+            ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
+            : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
     }
 
     /**
@@ -4793,10 +5154,11 @@ class Database
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
+        $collectionAttributes = $collection->getAttribute('attributes', []);
         $time = DateTime::now();
-
         $created = 0;
         $updated = 0;
+        $seenIds = [];
 
         $context = new QueryContext();
         $context->add($collection);
@@ -4814,12 +5176,21 @@ class Database
                 )));
             }
 
-            $updatesPermissions = \in_array('$permissions', \array_keys($document->getArrayCopy()))
-                && $document->getPermissions() != $old->getPermissions();
+            $skipPermissionsUpdate = true;
+
+            if ($document->offsetExists('$permissions')) {
+                $originalPermissions = $old->getPermissions();
+                $currentPermissions  = $document->getPermissions();
+
+                sort($originalPermissions);
+                sort($currentPermissions);
+
+                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+            }
 
             if (
                 empty($attribute)
-                && !$updatesPermissions
+                && $skipPermissionsUpdate
                 && $old->getAttributes() == $document->getAttributes()
             ) {
                 // If not updating a single attribute and the
@@ -4849,16 +5220,33 @@ class Database
                 throw new AuthorizationException($validator->getDescription());
             }
 
-            $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
 
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
-                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt)
+                ->removeAttribute('$sequence');
 
-            if (!$updatesPermissions) {
+            $createdAt = $document->getCreatedAt();
+            if ($createdAt === null || !$this->preserveDates) {
+                $document->setAttribute('$createdAt', $old->isEmpty() ? $time : $old->getCreatedAt());
+            } else {
+                $document->setAttribute('$createdAt', $createdAt);
+            }
+
+            // Force matching optional parameter sets
+            // Doesn't use decode as that intentionally skips null defaults to reduce payload size
+            foreach ($collectionAttributes as $attr) {
+                if (!$attr->getAttribute('required') && !\array_key_exists($attr['$id'], (array)$document)) {
+                    $document->setAttribute(
+                        $attr['$id'],
+                        $old->getAttribute($attr['$id'], ($attr['default'] ?? null))
+                    );
+                }
+            }
+
+            if ($skipPermissionsUpdate) {
                 $document->setAttribute('$permissions', $old->getPermissions());
             }
 
@@ -4879,6 +5267,7 @@ class Database
 
             $validator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -4887,9 +5276,24 @@ class Database
                 throw new StructureException($validator->getDescription());
             }
 
+            if (!$old->isEmpty()) {
+                // Check if document was updated after the request timestamp
+                try {
+                    $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
+                } catch (Exception $e) {
+                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                }
+
+                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    throw new ConflictException('Document was updated after the request timestamp');
+                }
+            }
+
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
+
+            $seenIds[] = $document->getId();
 
             $documents[$key] = new Change(
                 old: $old,
@@ -4897,15 +5301,22 @@ class Database
             );
         }
 
+        // Required because *some* DBs will allow duplicate IDs for upsert
+        if (\count($seenIds) !== \count(\array_unique($seenIds))) {
+            throw new DuplicateException('Duplicate document IDs found in the input array.');
+        }
+
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
             /**
              * @var array<Change> $chunk
              */
             $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
-                $collection->getId(),
+                $collection,
                 $attribute,
                 $chunk
             )));
+
+            $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
@@ -4946,43 +5357,31 @@ class Database
     /**
      * Increase a document attribute by a value
      *
-     * @param string $collection
-     * @param string $id
-     * @param string $attribute
-     * @param int|float $value
-     * @param int|float|null $max
-     * @return bool
-     *
+     * @param string $collection The collection ID
+     * @param string $id The document ID
+     * @param string $attribute The attribute to increase
+     * @param int|float $value The value to increase the attribute by, can be a float
+     * @param int|float|null $max The maximum value the attribute can reach after the increase, null means no limit
+     * @return Document
      * @throws AuthorizationException
      * @throws DatabaseException
-     * @throws Exception
+     * @throws LimitException
+     * @throws NotFoundException
+     * @throws TypeException
+     * @throws \Throwable
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
-    {
+    public function increaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value = 1,
+        int|float|null $max = null
+    ): Document {
         if ($value <= 0) { // Can be a float
-            throw new DatabaseException('Value must be numeric and greater than 0');
-        }
-
-        $validator = new Authorization(self::PERMISSION_UPDATE);
-
-        /* @var $document Document */
-        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
-
-        if ($document->isEmpty()) {
-            return false;
+            throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->getId() !== self::METADATA) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            if (!$validator->isValid([
-                ...$collection->getUpdate(),
-                ...($documentSecurity ? $document->getUpdate() : [])
-            ])) {
-                throw new AuthorizationException($validator->getDescription());
-            }
-        }
 
         $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
             return $a['$id'] === $attribute;
@@ -4992,46 +5391,66 @@ class Database
             throw new NotFoundException('Attribute not found');
         }
 
-        $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
+        $whiteList = [
+            self::VAR_INTEGER,
+            self::VAR_FLOAT
+        ];
 
-        /**
-         * @var Document $attr
-         */
+        /** @var Document $attr */
         $attr = \end($attr);
-        if (!in_array($attr->getAttribute('type'), $whiteList)) {
-            throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
+        if (!\in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
+            throw new TypeException('Attribute must be an integer or float and can not be an array.');
         }
 
-        if ($max && ($document->getAttribute($attribute) + $value > $max)) {
-            throw new DatabaseException('Attribute value exceeds maximum limit: ' . $max);
-        }
+        $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $max) {
+            /* @var $document Document */
+            $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
-        $time = DateTime::now();
-        $updatedAt = $document->getUpdatedAt();
-        $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            if ($document->isEmpty()) {
+                throw new NotFoundException('Document not found');
+            }
 
-        // Check if document was updated after the request timestamp
-        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-            throw new ConflictException('Document was updated after the request timestamp');
-        }
+            $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        $max = $max ? $max - $value : null;
+            if ($collection->getId() !== self::METADATA) {
+                $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                if (!$validator->isValid([
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $document->getUpdate() : [])
+                ])) {
+                    throw new AuthorizationException($validator->getDescription());
+                }
+            }
 
-        $result = $this->adapter->increaseDocumentAttribute(
-            $collection->getId(),
-            $id,
-            $attribute,
-            $value,
-            $updatedAt,
-            max: $max
-        );
+            if (!\is_null($max) && ($document->getAttribute($attribute) + $value > $max)) {
+                throw new LimitException('Attribute value exceeds maximum limit: ' . $max);
+            }
+
+            $time = DateTime::now();
+            $updatedAt = $document->getUpdatedAt();
+            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $max = $max ? $max - $value : null;
+
+            $this->adapter->increaseDocumentAttribute(
+                $collection->getId(),
+                $id,
+                $attribute,
+                $value,
+                $updatedAt,
+                max: $max
+            );
+
+            return $document->setAttribute(
+                $attribute,
+                $document->getAttribute($attribute) + $value
+            );
+        });
 
         $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
 
-        return $result;
+        return $document;
     }
 
 
@@ -5043,37 +5462,23 @@ class Database
      * @param string $attribute
      * @param int|float $value
      * @param int|float|null $min
-     * @return bool
+     * @return Document
      *
      * @throws AuthorizationException
      * @throws DatabaseException
      */
-    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
-    {
+    public function decreaseDocumentAttribute(
+        string $collection,
+        string $id,
+        string $attribute,
+        int|float $value = 1,
+        int|float|null $min = null
+    ): Document {
         if ($value <= 0) { // Can be a float
-            throw new DatabaseException('Value must be numeric and greater than 0');
-        }
-
-        $validator = new Authorization(self::PERMISSION_UPDATE);
-
-        /* @var $document Document */
-        $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection, $id))); // Skip ensures user does not need read permission for this
-
-        if ($document->isEmpty()) {
-            return false;
+            throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->getId() !== self::METADATA) {
-            $documentSecurity = $collection->getAttribute('documentSecurity', false);
-            if (!$validator->isValid([
-                ...$collection->getUpdate(),
-                ...($documentSecurity ? $document->getUpdate() : [])
-            ])) {
-                throw new AuthorizationException($validator->getDescription());
-            }
-        }
 
         $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
             return $a['$id'] === $attribute;
@@ -5083,46 +5488,68 @@ class Database
             throw new NotFoundException('Attribute not found');
         }
 
-        $whiteList = [self::VAR_INTEGER, self::VAR_FLOAT];
+        $whiteList = [
+            self::VAR_INTEGER,
+            self::VAR_FLOAT
+        ];
 
         /**
          * @var Document $attr
          */
         $attr = \end($attr);
-        if (!in_array($attr->getAttribute('type'), $whiteList)) {
-            throw new DatabaseException('Attribute type must be one of: ' . implode(',', $whiteList));
+        if (!\in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
+            throw new TypeException('Attribute must be an integer or float and can not be an array.');
         }
 
-        if ($min && ($document->getAttribute($attribute) - $value < $min)) {
-            throw new DatabaseException('Attribute value Exceeds minimum limit ' . $min);
-        }
+        $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $min) {
+            /* @var $document Document */
+            $document = Authorization::skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
-        $time = DateTime::now();
-        $updatedAt = $document->getUpdatedAt();
-        $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            if ($document->isEmpty()) {
+                throw new NotFoundException('Document not found');
+            }
 
-        // Check if document was updated after the request timestamp
-        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-        if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-            throw new ConflictException('Document was updated after the request timestamp');
-        }
+            $validator = new Authorization(self::PERMISSION_UPDATE);
 
-        $min = $min ? $min + $value : null;
+            if ($collection->getId() !== self::METADATA) {
+                $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                if (!$validator->isValid([
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $document->getUpdate() : [])
+                ])) {
+                    throw new AuthorizationException($validator->getDescription());
+                }
+            }
 
-        $result = $this->adapter->increaseDocumentAttribute(
-            $collection->getId(),
-            $id,
-            $attribute,
-            $value * -1,
-            $updatedAt,
-            min: $min
-        );
+            if (!\is_null($min) && ($document->getAttribute($attribute) - $value < $min)) {
+                throw new LimitException('Attribute value exceeds minimum limit: ' . $min);
+            }
+
+            $time = DateTime::now();
+            $updatedAt = $document->getUpdatedAt();
+            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $min = $min ? $min + $value : null;
+
+            $this->adapter->increaseDocumentAttribute(
+                $collection->getId(),
+                $id,
+                $attribute,
+                $value * -1,
+                $updatedAt,
+                min: $min
+            );
+
+            return $document->setAttribute(
+                $attribute,
+                $document->getAttribute($attribute) - $value
+            );
+        });
 
         $this->purgeCachedDocument($collection->getId(), $id);
 
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
-        return $result;
+        return $document;
     }
 
     /**
@@ -5581,6 +6008,7 @@ class Database
      * @param array<Query> $queries
      * @param int $batchSize
      * @param callable|null $onNext
+     * @param callable|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws DatabaseException
@@ -5592,6 +6020,7 @@ class Database
         array $queries = [],
         int $batchSize = self::DELETE_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
@@ -5620,29 +6049,28 @@ class Database
         $queries = Query::addSelect($queries, Query::select('$createdAt'));
         $queries = Query::addSelect($queries, Query::select('$updatedAt'));
 
+        $this->checkQueriesType($queries);
+
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
+                $this->adapter->getIdAttributeType(),
                 maxValuesCount: $this->maxQueryValues,
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime()
             );
-
 
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
         }
 
-        $limit = Query::getLimitQuery($queries);
+        $grouped = Query::groupByType($queries);
+        $limit = $grouped['limit'];
+        $cursor = $grouped['cursor'];
 
-        $cursor = new Document();
-        $cursorQuery = Query::getCursorQueries($queries);
-        if (! is_null($cursorQuery)) {
-            $cursor = $cursorQuery->getCursorDocument($cursorQuery);
-            if ($cursor->getCollection() !== $collection->getId()) {
-                throw new DatabaseException("cursor Document must be from the same Collection.");
-            }
+        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new DatabaseException("Cursor document must be from the same Collection.");
         }
 
         $originalLimit = $limit;
@@ -5660,7 +6088,7 @@ class Database
                 Query::limit($batchSize)
             ];
 
-            if (!$last->isEmpty()) {
+            if (!empty($last)) {
                 $new[] = Query::cursorAfter($last);
             }
 
@@ -5677,37 +6105,38 @@ class Database
                 break;
             }
 
-            $internalIds = [];
+            $sequences = [];
             $permissionIds = [];
-            foreach ($batch as $document) {
-                $internalIds[] = $document->getInternalId();
-                if (!empty($document->getPermissions())) {
-                    $permissionIds[] = $document->getId();
+
+            $this->withTransaction(function () use ($collection, $sequences, $permissionIds, $batch) {
+                foreach ($batch as $document) {
+                    $sequences[] = $document->getSequence();
+                    if (!empty($document->getPermissions())) {
+                        $permissionIds[] = $document->getId();
+                    }
+
+                    if ($this->resolveRelationships) {
+                        $document = $this->silent(fn () => $this->deleteDocumentRelationships(
+                            $collection,
+                            $document
+                        ));
+                    }
+
+                    // Check if document was updated after the request timestamp
+                    try {
+                        $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                    } catch (Exception $e) {
+                        throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                    }
+
+                    if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                        throw new ConflictException('Document was updated after the request timestamp');
+                    }
                 }
 
-                if ($this->resolveRelationships) {
-                    $document = $this->silent(fn () => $this->deleteDocumentRelationships(
-                        $collection,
-                        $document
-                    ));
-                }
-
-                // Check if document was updated after the request timestamp
-                try {
-                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-                } catch (Exception $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                }
-
-                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                    throw new ConflictException('Document was updated after the request timestamp');
-                }
-            }
-
-            $this->withTransaction(function () use ($collection, $internalIds, $permissionIds) {
                 $this->adapter->deleteDocuments(
                     $collection->getId(),
-                    $internalIds,
+                    $sequences,
                     $permissionIds
                 );
             });
@@ -5720,8 +6149,11 @@ class Database
                 } else {
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
-
-                $onNext && $onNext($document);
+                try {
+                    $onNext && $onNext($document);
+                } catch (Throwable $th) {
+                    $onError ? $onError($th) : throw $th;
+                }
                 $modified++;
             }
 
@@ -5834,9 +6266,12 @@ class Database
             $context->addSkipAuth($this->adapter->filter($_collection->getId()), $forPermission, $skipAuth);
         }
 
+        $this->checkQueriesType($queries);
+
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
+                $this->adapter->getIdAttributeType(),
                 maxValuesCount: $this->maxQueryValues,
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime()
@@ -5857,81 +6292,65 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $filters = Query::getFilterQueries($queries);
-        $selects = Query::getSelectQueries($queries);
-        $limit = Query::getLimitQuery($queries, 25);
-        $offset = Query::getOffsetQuery($queries, 0);
-        $orders = Query::getOrderQueries($queries);
+//        $filters = Query::getFilterQueries($queries);
+//        $selects = Query::getSelectQueries($queries);
+//        $limit = Query::getLimitQuery($queries, 25);
+//        $offset = Query::getOffsetQuery($queries, 0);
+//        $orders = Query::getOrderQueries($queries);
 
-        $cursor = [];
-        $cursorDirection = Database::CURSOR_AFTER;
-        $cursorQuery = Query::getCursorQueries($queries);
-        if (! is_null($cursorQuery)) {
-            $cursor = $cursorQuery->getCursorDocument($cursorQuery);
-            $cursorDirection = $cursorQuery->getCursorDirection();
 
-            if ($cursor->getCollection() !== $collection->getId()) {
-                throw new DatabaseException("cursor Document must be from the same Collection.");
-            }
-
-            $cursor = $this->encode($collection, $cursor)->getArrayCopy();
-        }
+        $grouped = Query::groupByType($queries);
+        $filters = $grouped['filters'];
+        $selects = $grouped['selections'];
+        $limit = $grouped['limit'];
+        $offset = $grouped['offset'];
+        $orderAttributes = $grouped['orderAttributes'];
+        $orderTypes = $grouped['orderTypes'];
+        $cursor = $grouped['cursor'];
+        $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
 
         $uniqueOrderBy = false;
-        foreach ($orders as $order) {
-            if ($order->getAttribute() === '$id' || $order->getAttribute() === '$sequence') {
+        foreach ($orderAttributes as $order) {
+            if ($order === '$id' || $order === '$sequence') {
                 $uniqueOrderBy = true;
             }
         }
 
         if ($uniqueOrderBy === false) {
-            $orders[] = Query::orderAsc();
+            $orderAttributes[] = '$sequence';
         }
 
-        foreach ($orders as $order) {
-            if (!empty($cursor) && !isset($cursor[$order->getAttribute()])) {
-                throw new OrderException(
-                    message: "Order attribute '{$order->getAttribute()}' is empty",
-                    attribute: $order->getAttribute()
-                );
-            }
-        }
-
-        $nestedSelections = [];
-
-        foreach ($selects as $i => $q) {
-            if (\str_contains($q->getAttribute(), '.')) {
-                $key = \explode('.', $q->getAttribute())[0];
-                foreach ($relationships as $relationship) {
-                    if ($relationship->getAttribute('key') === $key) {
-                        $nestedSelections[] = Query::select(
-                            \implode('.', \array_slice(\explode('.', $q->getAttribute()), 1))
-                        );
-
-                        switch ($relationship->getAttribute('options')['relationType']) {
-                            case Database::RELATION_MANY_TO_MANY:
-                            case Database::RELATION_ONE_TO_MANY:
-                                unset($selects[$i]);
-                                break;
-
-                            case Database::RELATION_MANY_TO_ONE:
-                            case Database::RELATION_ONE_TO_ONE:
-                                $q->setAttribute($key);
-                                $selects[$i] = $q;
-                                break;
-                        }
-                    }
+        if (!empty($cursor)) {
+            foreach ($orderAttributes as $order) {
+                if ($cursor->getAttribute($order) === null) {
+                    throw new OrderException(
+                        message: "Order attribute '{$order}' is empty",
+                        attribute: $order
+                    );
                 }
             }
         }
 
-        $selects = \array_values($selects); // Since we may unset above
+        if (!empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
+            throw new DatabaseException("cursor Document must be from the same Collection.");
+        }
+
+        $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
+
+        /**  @var array<Query> $queries */
+        $queries = \array_merge(
+            $selects,
+            self::convertQueries($collection, $filters)
+        );
+
+        $selections = $this->validateSelections($collection, $selects);
+        $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         $results = $this->adapter->find(
             $context,
             $queries,
-            $limit,
-            $offset,
+            $limit ?? 25,
+            $offset ?? 0,
             $cursor,
             $cursorDirection,
             $forPermission,
@@ -5948,6 +6367,9 @@ class Database
             if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
+
+            $node = $this->casting($collection, $node);
+            $node = $this->decode($collection, $node, $selections);
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
@@ -5974,20 +6396,17 @@ class Database
      */
     public function foreach(string $collection, callable $callback, array $queries = [], string $forPermission = Database::PERMISSION_READ): void
     {
-        $cursorQuery = Query::getCursorQueries($queries);
-        if (! is_null($cursorQuery)) {
-            if ($cursorQuery->getCursorDirection() === Database::CURSOR_BEFORE) {
-                throw new DatabaseException('Cursor ' . Database::CURSOR_BEFORE . ' not supported in this method.');
-            }
-        }
+        $grouped = Query::groupByType($queries);
+        $limitExists = $grouped['limit'] !== null;
+        $limit = $grouped['limit'] ?? 25;
+        $offset = $grouped['offset'];
 
-        $offset = Query::getOffsetQuery($queries);
+        $cursor = $grouped['cursor'];
+        $cursorDirection = $grouped['cursorDirection'];
 
-        $limitExists = true;
-        $limit = Query::getLimitQuery($queries);
-        if (is_null($limit)) {
-            $limit = 25;
-            $limitExists = false;
+        // Cursor before is not supported
+        if ($cursor !== null && $cursorDirection === Database::CURSOR_BEFORE) {
+            throw new DatabaseException('Cursor ' . Database::CURSOR_BEFORE . ' not supported in this method.');
         }
 
         $sum = $limit;
@@ -6063,6 +6482,8 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        $this->checkQueriesType($queries);
+
         /**
          * @var $collection Document
          */
@@ -6074,14 +6495,12 @@ class Database
         $context = new QueryContext();
         $context->add($collection);
 
-        $authorization = new Authorization(self::PERMISSION_READ);
-        if ($authorization->isValid($collection->getRead())) {
-            $skipAuth = true;
-        }
+        $this->checkQueriesType($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
+                $this->adapter->getIdAttributeType(),
                 maxValuesCount: $this->maxQueryValues,
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime()
@@ -6089,6 +6508,12 @@ class Database
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
+        }
+
+
+        $authorization = new Authorization(self::PERMISSION_READ);
+        if ($authorization->isValid($collection->getRead())) {
+            $skipAuth = true;
         }
 
         /**
@@ -6101,7 +6526,7 @@ class Database
          */
         $queries = self::convertQueries($context, $queries);
 
-        $getCount = fn () => $this->adapter->count($collection->getId(), $queries, $max);
+        $getCount = fn () => $this->adapter->count($collection, $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
@@ -6142,9 +6567,12 @@ class Database
             $skipAuth = true;
         }
 
+        $this->checkQueriesType($queries);
+
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
+                $this->adapter->getIdAttributeType(),
                 maxValuesCount: $this->maxQueryValues,
                 minAllowedDate: $this->adapter->getMinDateTime(),
                 maxAllowedDate: $this->adapter->getMaxDateTime()
@@ -6201,13 +6629,10 @@ class Database
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-
-        $internalAttributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
-            // We don't want to encode permissions into a JSON string
-            return $attribute['$id'] !== '$permissions';
-        });
-
-        $attributes = \array_merge($attributes, $internalAttributes);
+        $internalDateAttributes = ['$createdAt','$updatedAt'];
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
 
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
@@ -6215,6 +6640,15 @@ class Database
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
+
+            if (in_array($key, $internalDateAttributes) && is_string($value) && empty($value)) {
+                $document->setAttribute($key, null);
+                continue;
+            }
+
+            if ($key === '$permissions') {
+                continue;
+            }
 
             // Continue on optional param with no default
             if (is_null($value) && is_null($default)) {
@@ -6230,18 +6664,26 @@ class Database
                 $value = ($array) ? $value : [$value];
             }
 
-            foreach ($value as &$node) {
-                if (($node !== null)) {
+            foreach ($value as $index => $node) {
+                if ($node !== null) {
+                    // Handle spatial data encoding
+                    $attributeType = $attribute['type'] ?? '';
+                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+                        if (is_array($node)) {
+                            $node = $this->encodeSpatialData($node, $attributeType);
+                        }
+                    }
+
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
+                    $value[$index] = $node;
                 }
             }
 
             if (!$array) {
                 $value = $value[0];
             }
-
             $document->setAttribute($key, $value);
         }
 
@@ -6279,6 +6721,10 @@ class Database
         foreach ($document as $key => $value) {
             if($key === '$perms'){
                 $new->setAttribute($key, $value);
+                continue;
+            }
+
+            if ($key === '$permissions') {
                 continue;
             }
 
@@ -6320,6 +6766,7 @@ class Database
                 $attributeKey = $attribute['$id'];
             }
 
+            $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
 
@@ -6327,9 +6774,14 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
+                if (is_string($node) && in_array($type, Database::SPATIAL_TYPES)) {
+                    $node = $this->decodeSpatialData($node);
+                }
+
                 foreach (array_reverse($filters) as $filter) {
                     $value[$index] = $this->decodeAttribute($filter, $node, $document, $key);
                 }
+                $value[$index] = $node;
             }
 
             $value = ($array) ? $value : $value[0];
@@ -6373,6 +6825,10 @@ class Database
         $new = new Document();
 
         foreach ($document as $key => $value) {
+
+            if ($key === '$permissions') {
+                continue;
+            }
 
             if($key === '$perms'){
                 $new->setAttribute($key, $value);
@@ -6433,20 +6889,28 @@ class Database
                 $value = [$value];
             }
 
-            foreach ($value as $i => $node) {
+            foreach ($value as $index => $node) {
                 switch ($type) {
+                    case self::VAR_ID:
+                        // Disabled until Appwrite migrates to use real int ID's for MySQL
+                        //$type = $this->adapter->getIdAttributeType();
+                        //\settype($node, $type);
+                        $node = (string)$node;
+                        break;
                     case self::VAR_BOOLEAN:
-                        $value[$i] = (bool)$node;
+                        $node = (bool)$node;
                         break;
 
                     case self::VAR_INTEGER:
-                        $value[$i] = (int)$node;
+                        $node = (int)$node;
                         break;
 
                     case self::VAR_FLOAT:
-                        $value[$i] = (float)$node;
+                        $node = (float)$node;
                         break;
                 }
+
+                $value[$index] = $node;
             }
 
             $value = ($array) ? $value : $value[0];
@@ -6508,6 +6972,10 @@ class Database
             return $value;
         }
 
+        if (!\is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
+            return $value;
+        }
+
         if (!array_key_exists($filter, self::$filters) && !array_key_exists($filter, $this->instanceFilters)) {
             throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
         }
@@ -6553,7 +7021,7 @@ class Database
      */
     public static function convertQueries(QueryContext $context, array $queries): array
     {
-        foreach ($queries as $i => $query) {
+        foreach ($queries as $index => $query) {
             if ($query->isNested() || $query->isJoin()) {
                 $values = self::convertQueries($context, $query->getValues());
                 $query->setValues($values);
@@ -6561,7 +7029,7 @@ class Database
 
             $query = self::convertQuery($context, $query);
 
-            $queries[$i] = $query;
+            $queries[$index] = $query;
         }
 
         return $queries;
@@ -6656,7 +7124,7 @@ class Database
 
         $tenantSegment = $this->adapter->getTenant();
 
-        if (isset($this->globalCollections[$collectionId])) {
+        if ($collectionId === self::METADATA && isset($this->globalCollections[$documentId])) {
             $tenantSegment = null;
         }
 
@@ -6682,5 +7150,211 @@ class Database
             $documentKey ?? null,
             $documentHashKey ?? null
         ];
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return void
+     * @throws QueryException
+     */
+    private function checkQueriesType(array $queries): void
+    {
+        foreach ($queries as $query) {
+            if (!$query instanceof Query) {
+                throw new QueryException('Invalid query type: "' . \gettype($query) . '". Expected instances of "' . Query::class . '"');
+            }
+
+            if ($query->isNested()) {
+                $this->checkQueriesType($query->getValues());
+            }
+        }
+    }
+
+    /**
+     * Process relationship queries, extracting nested selections.
+     *
+     * @param array<Document> $relationships
+     * @param array<Query> $queries
+     * @return array<string, array<Query>> $selects
+     */
+    private function processRelationshipQueries(
+        array $relationships,
+        array $queries,
+    ): array {
+        $nestedSelections = [];
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() !== Query::TYPE_SELECT) {
+                continue;
+            }
+
+            $values = $query->getValues();
+            foreach ($values as $valueIndex => $value) {
+                if (!\str_contains($value, '.')) {
+                    continue;
+                }
+
+                $nesting = \explode('.', $value);
+                $selectedKey = \array_shift($nesting); // Remove and return first item
+
+                $relationship = \array_values(\array_filter(
+                    $relationships,
+                    fn (Document $relationship) => $relationship->getAttribute('key') === $selectedKey,
+                ))[0] ?? null;
+
+                if (!$relationship) {
+                    continue;
+                }
+
+                // Shift the top level off the dot-path to pass the selection down the chain
+                // 'foo.bar.baz' becomes 'bar.baz'
+
+                $nestingPath = \implode('.', $nesting);
+                // If nestingPath is empty, it means we want all fields (*) for this relationship
+                if (empty($nestingPath)) {
+                    $nestedSelections[$selectedKey][] = Query::select(['*']);
+                } else {
+                    $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
+                }
+
+                $type = $relationship->getAttribute('options')['relationType'];
+                $side = $relationship->getAttribute('options')['side'];
+
+                switch ($type) {
+                    case Database::RELATION_MANY_TO_MANY:
+                        unset($values[$valueIndex]);
+                        break;
+                    case Database::RELATION_ONE_TO_MANY:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            unset($values[$valueIndex]);
+                        } else {
+                            $values[$valueIndex] = $selectedKey;
+                        }
+                        break;
+                    case Database::RELATION_MANY_TO_ONE:
+                        if ($side === Database::RELATION_SIDE_PARENT) {
+                            $values[$valueIndex] = $selectedKey;
+                        } else {
+                            unset($values[$valueIndex]);
+                        }
+                        break;
+                    case Database::RELATION_ONE_TO_ONE:
+                        $values[$valueIndex] = $selectedKey;
+                        break;
+                }
+            }
+
+            $finalValues = \array_values($values);
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                if (empty($finalValues)) {
+                    $finalValues = ['*'];
+                }
+            }
+            $query->setValues($finalValues);
+        }
+
+        return $nestedSelections;
+    }
+
+    /**
+     * Encode spatial data from array format to WKT (Well-Known Text) format
+     *
+     * @param mixed $value
+     * @param string $type
+     * @return string
+     * @throws DatabaseException
+     */
+    protected function encodeSpatialData(mixed $value, string $type): string
+    {
+        $validator = new Spatial($type);
+        $validator->isValid($value);
+
+        switch ($type) {
+            case self::VAR_POINT:
+                return "POINT({$value[0]} {$value[1]})";
+
+            case self::VAR_LINESTRING:
+                $points = [];
+                foreach ($value as $point) {
+                    $points[] = "{$point[0]} {$point[1]}";
+                }
+                return 'LINESTRING(' . implode(', ', $points) . ')';
+
+            case self::VAR_POLYGON:
+                // Check if this is a single ring (flat array of points) or multiple rings
+                $isSingleRing = count($value) > 0 && is_array($value[0]) &&
+                    count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
+
+                if ($isSingleRing) {
+                    // Convert single ring format [[x1,y1], [x2,y2], ...] to multi-ring format
+                    $value = [$value];
+                }
+
+                $rings = [];
+                foreach ($value as $ring) {
+                    $points = [];
+                    foreach ($ring as $point) {
+                        $points[] = "{$point[0]} {$point[1]}";
+                    }
+                    $rings[] = '(' . implode(', ', $points) . ')';
+                }
+                return 'POLYGON(' . implode(', ', $rings) . ')';
+
+            default:
+                throw new DatabaseException('Unknown spatial type: ' . $type);
+        }
+    }
+
+    /**
+     * Decode spatial data from WKT (Well-Known Text) format to array format
+     *
+     * @param string $wkt
+     * @return array<mixed>
+     * @throws DatabaseException
+     */
+    public function decodeSpatialData(string $wkt): array
+    {
+        $upper = strtoupper($wkt);
+
+        // POINT(x y)
+        if (str_starts_with($upper, 'POINT(')) {
+            $start = strpos($wkt, '(') + 1;
+            $end   = strrpos($wkt, ')');
+            $inside = substr($wkt, $start, $end - $start);
+
+            $coords = explode(' ', trim($inside));
+            return [(float)$coords[0], (float)$coords[1]];
+        }
+
+        // LINESTRING(x1 y1, x2 y2, ...)
+        if (str_starts_with($upper, 'LINESTRING(')) {
+            $start = strpos($wkt, '(') + 1;
+            $end   = strrpos($wkt, ')');
+            $inside = substr($wkt, $start, $end - $start);
+
+            $points = explode(',', $inside);
+            return array_map(function ($point) {
+                $coords = explode(' ', trim($point));
+                return [(float)$coords[0], (float)$coords[1]];
+            }, $points);
+        }
+
+        // POLYGON((x1,y1),(x2,y2))
+        if (str_starts_with($upper, 'POLYGON((')) {
+            $start = strpos($wkt, '((') + 2;
+            $end   = strrpos($wkt, '))');
+            $inside = substr($wkt, $start, $end - $start);
+
+            $rings = explode('),(', $inside);
+            return array_map(function ($ring) {
+                $points = explode(',', $ring);
+                return array_map(function ($point) {
+                    $coords = explode(' ', trim($point));
+                    return [(float)$coords[0], (float)$coords[1]];
+                }, $points);
+            }, $rings);
+        }
+
+        return [$wkt];
     }
 }

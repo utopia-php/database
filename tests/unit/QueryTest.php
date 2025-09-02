@@ -87,6 +87,62 @@ class QueryTest extends TestCase
         $this->assertEquals(Query::TYPE_IS_NOT_NULL, $query->getMethod());
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
+
+        // Test new NOT query types
+        $query = Query::notContains('tags', ['test', 'example']);
+
+        $this->assertEquals(Query::TYPE_NOT_CONTAINS, $query->getMethod());
+        $this->assertEquals('tags', $query->getAttribute());
+        $this->assertEquals(['test', 'example'], $query->getValues());
+
+        $query = Query::notSearch('content', 'keyword');
+
+        $this->assertEquals(Query::TYPE_NOT_SEARCH, $query->getMethod());
+        $this->assertEquals('content', $query->getAttribute());
+        $this->assertEquals(['keyword'], $query->getValues());
+
+        $query = Query::notStartsWith('title', 'prefix');
+
+        $this->assertEquals(Query::TYPE_NOT_STARTS_WITH, $query->getMethod());
+        $this->assertEquals('title', $query->getAttribute());
+        $this->assertEquals(['prefix'], $query->getValues());
+
+        $query = Query::notEndsWith('url', '.html');
+
+        $this->assertEquals(Query::TYPE_NOT_ENDS_WITH, $query->getMethod());
+        $this->assertEquals('url', $query->getAttribute());
+        $this->assertEquals(['.html'], $query->getValues());
+
+        $query = Query::notBetween('score', 10, 20);
+
+        $this->assertEquals(Query::TYPE_NOT_BETWEEN, $query->getMethod());
+        $this->assertEquals('score', $query->getAttribute());
+        $this->assertEquals([10, 20], $query->getValues());
+
+        // Test new date query wrapper methods
+        $query = Query::createdBefore('2023-01-01T00:00:00.000Z');
+
+        $this->assertEquals(Query::TYPE_LESSER, $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+
+        $query = Query::createdAfter('2023-01-01T00:00:00.000Z');
+
+        $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+
+        $query = Query::updatedBefore('2023-12-31T23:59:59.999Z');
+
+        $this->assertEquals(Query::TYPE_LESSER, $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::updatedAfter('2023-12-31T23:59:59.999Z');
+
+        $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
     }
 
     /**
@@ -139,6 +195,32 @@ class QueryTest extends TestCase
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals(8.5, $query->getValues()[0]);
 
+        // Test new NOT query types parsing
+        $query = Query::parse(Query::notContains('tags', ['unwanted', 'spam'])->toString());
+        $this->assertEquals('notContains', $query->getMethod());
+        $this->assertEquals('tags', $query->getAttribute());
+        $this->assertEquals(['unwanted', 'spam'], $query->getValues());
+
+        $query = Query::parse(Query::notSearch('content', 'unwanted content')->toString());
+        $this->assertEquals('notSearch', $query->getMethod());
+        $this->assertEquals('content', $query->getAttribute());
+        $this->assertEquals(['unwanted content'], $query->getValues());
+
+        $query = Query::parse(Query::notStartsWith('title', 'temp')->toString());
+        $this->assertEquals('notStartsWith', $query->getMethod());
+        $this->assertEquals('title', $query->getAttribute());
+        $this->assertEquals(['temp'], $query->getValues());
+
+        $query = Query::parse(Query::notEndsWith('filename', '.tmp')->toString());
+        $this->assertEquals('notEndsWith', $query->getMethod());
+        $this->assertEquals('filename', $query->getAttribute());
+        $this->assertEquals(['.tmp'], $query->getValues());
+
+        $query = Query::parse(Query::notBetween('score', 0, 50)->toString());
+        $this->assertEquals('notBetween', $query->getMethod());
+        $this->assertEquals('score', $query->getAttribute());
+        $this->assertEquals([0, 50], $query->getValues());
+
         $query = Query::parse(Query::notEqual('director', 'null')->toString());
         $this->assertEquals('notEqual', $query->getMethod());
         $this->assertEquals('director', $query->getAttribute());
@@ -170,6 +252,27 @@ class QueryTest extends TestCase
         $this->assertEquals('alias', $query->getAlias());
         $this->assertEquals('as', $query->getAs());
         //$this->assertEquals(['title', 'director'], $query->getValues());
+
+        // Test new date query wrapper methods parsing
+        $query = Query::parse(Query::createdBefore('2023-01-01T00:00:00.000Z')->toString());
+        $this->assertEquals('lessThan', $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+
+        $query = Query::parse(Query::createdAfter('2023-01-01T00:00:00.000Z')->toString());
+        $this->assertEquals('greaterThan', $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z'], $query->getValues());
+
+        $query = Query::parse(Query::updatedBefore('2023-12-31T23:59:59.999Z')->toString());
+        $this->assertEquals('lessThan', $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::parse(Query::updatedAfter('2023-12-31T23:59:59.999Z')->toString());
+        $this->assertEquals('greaterThan', $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
 
         $query = Query::parse(Query::between('age', 15, 18)->toString());
         $this->assertEquals('between', $query->getMethod());
@@ -254,7 +357,13 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('greaterThan'));
         $this->assertTrue(Query::isMethod('greaterThanEqual'));
         $this->assertTrue(Query::isMethod('contains'));
+        $this->assertTrue(Query::isMethod('notContains'));
         $this->assertTrue(Query::isMethod('search'));
+        $this->assertTrue(Query::isMethod('notSearch'));
+        $this->assertTrue(Query::isMethod('startsWith'));
+        $this->assertTrue(Query::isMethod('notStartsWith'));
+        $this->assertTrue(Query::isMethod('endsWith'));
+        $this->assertTrue(Query::isMethod('notEndsWith'));
         $this->assertTrue(Query::isMethod('orderDesc'));
         $this->assertTrue(Query::isMethod('orderAsc'));
         $this->assertTrue(Query::isMethod('limit'));
@@ -264,6 +373,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('isNull'));
         $this->assertTrue(Query::isMethod('isNotNull'));
         $this->assertTrue(Query::isMethod('between'));
+        $this->assertTrue(Query::isMethod('notBetween'));
         $this->assertTrue(Query::isMethod('select'));
         $this->assertTrue(Query::isMethod('or'));
         $this->assertTrue(Query::isMethod('and'));
@@ -275,7 +385,13 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(Query::TYPE_GREATER));
         $this->assertTrue(Query::isMethod(Query::TYPE_GREATER_EQUAL));
         $this->assertTrue(Query::isMethod(Query::TYPE_CONTAINS));
+        $this->assertTrue(Query::isMethod(Query::TYPE_NOT_CONTAINS));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SEARCH));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_NOT_SEARCH));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_STARTS_WITH));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_NOT_STARTS_WITH));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_ENDS_WITH));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_NOT_ENDS_WITH));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDER_ASC));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDER_DESC));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_LIMIT));
@@ -285,6 +401,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NOT_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_BETWEEN));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_NOT_BETWEEN));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_SELECT));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_OR));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_AND));
@@ -292,6 +409,17 @@ class QueryTest extends TestCase
         $this->assertFalse(Query::isMethod('invalid'));
         $this->assertFalse(Query::isMethod('lte '));
     }
+
+    public function testNewQueryTypesInTypesArray(): void
+    {
+        // Test that all new query types are included in the TYPES array
+        $this->assertContains(Query::TYPE_NOT_CONTAINS, Query::TYPES);
+        $this->assertContains(Query::TYPE_NOT_SEARCH, Query::TYPES);
+        $this->assertContains(Query::TYPE_NOT_STARTS_WITH, Query::TYPES);
+        $this->assertContains(Query::TYPE_NOT_ENDS_WITH, Query::TYPES);
+        $this->assertContains(Query::TYPE_NOT_BETWEEN, Query::TYPES);
+    }
+
 
     /**
      * @throws QueryException

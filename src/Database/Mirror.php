@@ -356,6 +356,40 @@ class Mirror extends Database
         return $result;
     }
 
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        $result = $this->source->createAttributes($collection, $attributes);
+
+        if ($this->destination === null) {
+            return $result;
+        }
+
+        try {
+            foreach ($attributes as &$attribute) {
+                foreach ($this->writeFilters as $filter) {
+                    $document = $filter->beforeCreateAttribute(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        attributeId: $attribute['$id'],
+                        attribute: new Document($attribute),
+                    );
+
+                    $attribute = $document->getArrayCopy();
+                }
+            }
+
+            $result = $this->destination->createAttributes(
+                $collection,
+                $attributes,
+            );
+        } catch (\Throwable $err) {
+            $this->logError('createAttributes', $err);
+        }
+
+        return $result;
+    }
+
     public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         $document = $this->source->updateAttribute(
@@ -679,6 +713,7 @@ class Mirror extends Database
         array $queries = [],
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         $modified = 0;
 
@@ -690,7 +725,8 @@ class Mirror extends Database
             function ($doc) use ($onNext, &$modified) {
                 $onNext && $onNext($doc);
                 $modified++;
-            }
+            },
+            $onError
         );
 
         if (
@@ -745,6 +781,75 @@ class Mirror extends Database
         return $modified;
     }
 
+    public function createOrUpdateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE, callable|null $onNext = null): int
+    {
+        $modified = 0;
+        $this->source->createOrUpdateDocuments(
+            $collection,
+            $documents,
+            $batchSize,
+            function ($doc) use ($onNext, &$modified) {
+                $onNext && $onNext($doc);
+                $modified++;
+            }
+        );
+
+        if (
+            \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
+            || $this->destination === null
+        ) {
+            return $modified;
+        }
+
+        $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
+        if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
+            return $modified;
+        }
+
+        try {
+            $clones = [];
+
+            foreach ($documents as $document) {
+                $clone = clone $document;
+
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->beforeCreateOrUpdateDocument(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+
+                $clones[] = $clone;
+            }
+
+            $modified = $this->destination->withPreserveDates(
+                fn () =>
+                $this->destination->createOrUpdateDocuments(
+                    $collection,
+                    $clones,
+                    $batchSize,
+                    null,
+                )
+            );
+
+            foreach ($clones as $clone) {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterCreateOrUpdateDocument(
+                        source: $this->source,
+                        destination: $this->destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+            }
+        } catch (\Throwable $err) {
+            $this->logError('createDocuments', $err);
+        }
+        return $modified;
+    }
+
     public function deleteDocument(string $collection, string $id): bool
     {
         $result = $this->source->deleteDocument($collection, $id);
@@ -793,6 +898,7 @@ class Mirror extends Database
         array $queries = [],
         int $batchSize = self::DELETE_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         $modified = 0;
 
@@ -804,6 +910,7 @@ class Mirror extends Database
                 $onNext && $onNext($doc);
                 $modified++;
             },
+            $onError
         );
 
         if (
@@ -914,12 +1021,12 @@ class Mirror extends Database
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): bool
+    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

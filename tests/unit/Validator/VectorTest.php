@@ -47,10 +47,10 @@ class VectorTest extends TestCase
     public function testVectorDescription(): void
     {
         $validator = new Vector(3);
-        $this->assertEquals('Value must be an array of floats with 3 dimensions', $validator->getDescription());
+        $this->assertEquals('Value must be an array of 3 numeric values', $validator->getDescription());
 
         $validator256 = new Vector(256);
-        $this->assertEquals('Value must be an array of floats with 256 dimensions', $validator256->getDescription());
+        $this->assertEquals('Value must be an array of 256 numeric values', $validator256->getDescription());
     }
 
     public function testVectorType(): void

@@ -1801,7 +1801,7 @@ class Postgres extends SQL
 
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
-            
+
             case Database::VAR_POINT:
                 return 'GEOMETRY(POINT,' . Database::SRID . ')';
 

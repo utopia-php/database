@@ -18,6 +18,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         // Test that vector attributes can only be created on PostgreSQL
@@ -62,6 +63,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorErrorCollection');
@@ -82,6 +84,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorLimitCollection');
@@ -102,6 +105,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorDocuments');
@@ -152,6 +156,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorQueries');
@@ -303,6 +308,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorValidation');
@@ -326,6 +332,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorIndexes');
@@ -381,6 +388,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorDimMismatch');
@@ -408,6 +416,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorInvalidTypes');
@@ -450,6 +459,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorNullEmpty');
@@ -489,6 +499,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         // Test with maximum allowed dimensions (16000 for pgvector)
@@ -530,6 +541,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorUpdates');
@@ -571,6 +583,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('multiVector');
@@ -624,6 +637,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorPagination');
@@ -700,6 +714,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorTextSearch');
@@ -774,6 +789,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorSpecialFloats');
@@ -837,6 +853,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorPerf');
@@ -902,6 +919,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorValidation2');
@@ -947,6 +965,7 @@ trait VectorTests
 
         if (!$database->getAdapter()->getSupportForVectors()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('vectorNorm');

@@ -20,6 +20,7 @@ trait SpatialTests
         $collectionName = "test_spatial_Col";
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         };
         $attributes = [
             new Document([
@@ -93,6 +94,7 @@ trait SpatialTests
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_spatial_doc_';
@@ -848,6 +850,7 @@ trait SpatialTests
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'complex_shapes_';
@@ -1278,6 +1281,7 @@ trait SpatialTests
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_combinations_';
@@ -1408,6 +1412,7 @@ trait SpatialTests
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_spatial_bulk_ops';
@@ -1713,6 +1718,7 @@ trait SpatialTests
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
         $collectionName = 'spatial_agg_';
         try {
@@ -1800,6 +1806,7 @@ trait SpatialTests
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_update_attrs_';
@@ -1886,6 +1893,7 @@ trait SpatialTests
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_defaults_';

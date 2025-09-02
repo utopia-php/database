@@ -1872,10 +1872,10 @@ class Database
                     throw new DatabaseException('Vector type cannot be an array');
                 }
                 if ($size <= 0) {
-                    throw new DatabaseException('Vector size must be a positive integer');
+                    throw new DatabaseException('Vector dimensions must be a positive integer');
                 }
                 if ($size > self::VECTOR_MAX_SIZE) {
-                    throw new DatabaseException('Vector size cannot exceed ' . self::VECTOR_MAX_SIZE);
+                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::VECTOR_MAX_SIZE);
                 }
                 break;
             default:
@@ -3256,8 +3256,17 @@ class Database
                 }
                 break;
 
+            case Database::INDEX_HNSW_EUCLIDEAN:
+            case Database::INDEX_HNSW_COSINE:
+            case Database::INDEX_HNSW_DOT:
+                // Vector indexes - validate that we have a single vector attribute
+                if (count($attributes) !== 1) {
+                    throw new DatabaseException('Vector indexes require exactly one attribute');
+                }
+                break;
+                
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
         }
 
         /** @var array<Document> $collectionAttributes */

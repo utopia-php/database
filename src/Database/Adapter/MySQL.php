@@ -79,6 +79,16 @@ class MySQL extends MariaDB
         return $size;
     }
 
+    /**
+     * Handle distance spatial queries
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $attribute
+     * @param string $alias
+     * @param string $placeholder
+     * @return string
+    */
     protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
     {
         $distanceParams = $query->getValues()[0];

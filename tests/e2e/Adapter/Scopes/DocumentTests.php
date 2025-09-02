@@ -6104,71 +6104,72 @@ trait DocumentTests
             'string' => 'upserted_test2',
             'number' => 250
         ]);
-        $upsertCount = $database->createOrUpdateDocuments($collection, [$upsertDoc]);
-        $this->assertEquals(1, $upsertCount);
+        if ($database->getAdapter()->getSupportForUpserts()) {
+            $upsertCount = $database->createOrUpdateDocuments($collection, [$upsertDoc]);
+            $this->assertEquals(1, $upsertCount);
 
-        $upsertedDoc = $database->getDocument($collection, 'test2');
-        $this->assertEquals('explicit_creator', $upsertedDoc->getCreatedBy()); // Should preserve original creator
-        $this->assertEquals('test_user_2', $upsertedDoc->getUpdatedBy()); // Should update to current user
+            $upsertedDoc = $database->getDocument($collection, 'test2');
+            $this->assertEquals('explicit_creator', $upsertedDoc->getCreatedBy()); // Should preserve original creator
+            $this->assertEquals('test_user_2', $upsertedDoc->getUpdatedBy()); // Should update to current user
 
-        $upsertNewDoc = new Document([
-            '$id' => 'test5',
-            'string' => 'new_test5',
-            'number' => 500,
-            '$createdBy' => 'new_creator',
-            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
-        ]);
-        $upsertNewCount = $database->createOrUpdateDocuments($collection, [$upsertNewDoc]);
-        $this->assertEquals(1, $upsertNewCount);
-
-        $newUpsertedDoc = $database->getDocument($collection, 'test5');
-        $this->assertEquals('new_creator', $newUpsertedDoc->getCreatedBy()); // Should use explicit creator
-        $this->assertEquals('test_user_2', $newUpsertedDoc->getUpdatedBy()); // Should use current user
-
-
-        $bulkDocs = [
-            new Document([
-                '$id' => 'bulk1',
-                'string' => 'bulk1',
-                'number' => 600,
+            $upsertNewDoc = new Document([
+                '$id' => 'test5',
+                'string' => 'new_test5',
+                'number' => 500,
+                '$createdBy' => 'new_creator',
                 '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
-            ]),
-            new Document([
-                '$id' => 'bulk2',
-                'string' => 'bulk2',
-                'number' => 700,
-                '$createdBy' => 'bulk_creator',
-                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
-            ]),
-            new Document([
-                '$id' => 'bulk3',
-                'string' => 'bulk3',
-                'number' => 800,
-                '$updatedBy' => 'bulk_updater',
-                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
-            ])
-        ];
-        $bulkCount = $database->createDocuments($collection, $bulkDocs);
-        $this->assertEquals(3, $bulkCount);
+            ]);
 
-        $bulkDoc1 = $database->getDocument($collection, 'bulk1');
-        $bulkDoc2 = $database->getDocument($collection, 'bulk2');
-        $bulkDoc3 = $database->getDocument($collection, 'bulk3');
+            $upsertNewCount = $database->createOrUpdateDocuments($collection, [$upsertNewDoc]);
+            $this->assertEquals(1, $upsertNewCount);
 
-        $this->assertEquals('test_user_2', $bulkDoc1->getCreatedBy());
-        $this->assertEquals('test_user_2', $bulkDoc1->getUpdatedBy());
+            $newUpsertedDoc = $database->getDocument($collection, 'test5');
+            $this->assertEquals('new_creator', $newUpsertedDoc->getCreatedBy()); // Should use explicit creator
+            $this->assertEquals('test_user_2', $newUpsertedDoc->getUpdatedBy()); // Should use current user
 
-        $this->assertEquals('bulk_creator', $bulkDoc2->getCreatedBy());
-        $this->assertEquals('test_user_2', $bulkDoc2->getUpdatedBy());
 
-        $this->assertEquals('test_user_2', $bulkDoc3->getCreatedBy());
-        $this->assertEquals('bulk_updater', $bulkDoc3->getUpdatedBy());
+            $bulkDocs = [
+                new Document([
+                    '$id' => 'bulk1',
+                    'string' => 'bulk1',
+                    'number' => 600,
+                    '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+                ]),
+                new Document([
+                    '$id' => 'bulk2',
+                    'string' => 'bulk2',
+                    'number' => 700,
+                    '$createdBy' => 'bulk_creator',
+                    '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+                ]),
+                new Document([
+                    '$id' => 'bulk3',
+                    'string' => 'bulk3',
+                    'number' => 800,
+                    '$updatedBy' => 'bulk_updater',
+                    '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+                ])
+            ];
+            $bulkCount = $database->createDocuments($collection, $bulkDocs);
+            $this->assertEquals(3, $bulkCount);
 
-        $finalAllDocs = $database->find($collection);
-        $this->assertCount(8, $finalAllDocs);
+            $bulkDoc1 = $database->getDocument($collection, 'bulk1');
+            $bulkDoc2 = $database->getDocument($collection, 'bulk2');
+            $bulkDoc3 = $database->getDocument($collection, 'bulk3');
 
-        $database->deleteCollection($collection);
+            $this->assertEquals('test_user_2', $bulkDoc1->getCreatedBy());
+            $this->assertEquals('test_user_2', $bulkDoc1->getUpdatedBy());
+
+            $this->assertEquals('bulk_creator', $bulkDoc2->getCreatedBy());
+            $this->assertEquals('test_user_2', $bulkDoc2->getUpdatedBy());
+
+            $this->assertEquals('test_user_2', $bulkDoc3->getCreatedBy());
+            $this->assertEquals('bulk_updater', $bulkDoc3->getUpdatedBy());
+
+            $finalAllDocs = $database->find($collection);
+            $this->assertCount(8, $finalAllDocs);
+
+            $database->deleteCollection($collection);
+        }
     }
-
-
 }

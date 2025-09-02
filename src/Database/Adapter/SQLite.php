@@ -526,6 +526,8 @@ class SQLite extends MariaDB
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_createdBy'] = $document->getCreatedBy();
+        $attributes['_updatedBy'] = $document->getUpdatedBy();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
         if ($this->sharedTables) {
@@ -648,6 +650,8 @@ class SQLite extends MariaDB
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_createdBy'] = $document->getCreatedBy();
+        $attributes['_updatedBy'] = $document->getUpdatedBy();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
         if ($this->sharedTables) {

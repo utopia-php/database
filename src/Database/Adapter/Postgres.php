@@ -457,6 +457,12 @@ class Postgres extends SQL
     {
         // Ensure pgvector extension is installed for vector types
         if ($type === Database::VAR_VECTOR) {
+            if ($size <= 0) {
+                throw new DatabaseException('Vector dimensions must be a positive integer');
+            }
+            if ($size > 16000) {
+                throw new DatabaseException('Vector dimensions cannot exceed 16000');
+            }
             $this->ensurePgVectorExtension();
         }
 

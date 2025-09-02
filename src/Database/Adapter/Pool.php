@@ -165,7 +165,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -220,32 +220,32 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+    public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createDocument(string $collection, Document $document): Document
+    public function createDocument(Document $collection, Document $document): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createDocuments(string $collection, array $documents): array
+    public function createDocuments(Document $collection, array $documents): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function updateDocuments(string $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
+    public function createOrUpdateDocuments(Document $collection, string $attribute, array $changes): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -260,17 +260,17 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -430,6 +430,16 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForSpatialAttributes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForSpatialIndexNull(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getCountOfAttributes(Document $collection): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -465,7 +475,13 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
+    /**
+     * @param array<string,mixed> $selections
+     * @param string $prefix
+     * @param array<string,mixed> $spatialAttributes
+     * @return mixed
+     */
+    protected function getAttributeProjection(array $selections, string $prefix, array $spatialAttributes = []): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -506,6 +522,16 @@ class Pool extends Adapter
     }
 
     public function getSequences(string $collection, array $documents): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForSpatialIndexOrder(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

@@ -30,7 +30,11 @@ services:
       - database
 
   postgres:
-    image: postgres:16.4
+    build:
+      context: .
+      dockerfile: postgres.dockerfile
+      args:
+        POSTGRES_VERSION: 16
     container_name: utopia-postgres
     networks:
       - database
@@ -39,9 +43,14 @@ services:
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
+      POSTGRES_DB: root
 
   postgres-mirror:
-    image: postgres:16.4
+    build:
+      context: .
+      dockerfile: postgres.dockerfile
+      args:
+        POSTGRES_VERSION: 16
     container_name: utopia-postgres-mirror
     networks:
       - database
@@ -50,6 +59,7 @@ services:
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
+      POSTGRES_DB: root
 
   mariadb:
     image: mariadb:10.11

@@ -109,4 +109,22 @@ class MySQL extends MariaDB
 
         return parent::processException($e);
     }
+    /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+     */
+    public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return false;
+    }
+    /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+    */
+    public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
+    }
 }

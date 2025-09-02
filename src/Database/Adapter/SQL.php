@@ -2560,6 +2560,14 @@ abstract class SQL extends Adapter
                 $results[$index]['$updatedAt'] = $document['_updatedAt'];
                 unset($results[$index]['_updatedAt']);
             }
+            if (\array_key_exists('_createdBy', $document)) {
+                $results[$index]['$createdBy'] = $document['_createdBy'];
+                unset($results[$index]['_createdBy']);
+            }
+            if (\array_key_exists('_updatedBy', $document)) {
+                $results[$index]['$updatedBy'] = $document['_updatedBy'];
+                unset($results[$index]['_updatedBy']);
+            }
             if (\array_key_exists('_permissions', $document)) {
                 $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
                 unset($results[$index]['_permissions']);

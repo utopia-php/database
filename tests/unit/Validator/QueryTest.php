@@ -120,7 +120,7 @@ class QueryTest extends TestCase
      */
     public function testQuery(): void
     {
-        $validator = new DocumentsValidator($this->context,Database::VAR_INTEGER);
+        $validator = new DocumentsValidator($this->context, Database::VAR_INTEGER);
 
         $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man', 'Ant Man'])]));
         $this->assertEquals(true, $validator->isValid([Query::equal('$id', ['Iron Man'])]));
@@ -192,7 +192,7 @@ class QueryTest extends TestCase
      */
     public function testQueryLimit(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context, Database::VAR_INTEGER);
 
         $response = $validator->isValid([Query::limit(25)]);
         $this->assertEquals(true, $response);
@@ -206,7 +206,7 @@ class QueryTest extends TestCase
      */
     public function testQueryOffset(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context, Database::VAR_INTEGER);
 
         $response = $validator->isValid([Query::offset(25)]);
         $this->assertEquals(true, $response);
@@ -220,7 +220,7 @@ class QueryTest extends TestCase
      */
     public function testQueryOrder(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context, Database::VAR_INTEGER);
 
         $response = $validator->isValid([Query::orderAsc('title')]);
         $this->assertEquals(true, $response);
@@ -240,7 +240,7 @@ class QueryTest extends TestCase
      */
     public function testQueryCursor(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context, Database::VAR_INTEGER);
 
         $response = $validator->isValid([Query::cursorAfter(new Document(['$id' => 'asdf']))]);
         $this->assertEquals(true, $response);
@@ -272,7 +272,7 @@ class QueryTest extends TestCase
      */
     public function testQueryEmpty(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context, Database::VAR_INTEGER);
 
         $response = $validator->isValid([Query::equal('title', [''])]);
         $this->assertEquals(true, $response);
@@ -301,7 +301,7 @@ class QueryTest extends TestCase
      */
     public function testOrQuery(): void
     {
-        $validator = new Documents($this->attributes, []);
+        $validator = new DocumentsValidator($this->context, Database::VAR_INTEGER);
 
         $this->assertFalse($validator->isValid(
             [Query::or(

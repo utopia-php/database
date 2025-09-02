@@ -607,7 +607,7 @@ trait CollectionTests
         $collection_1 = $database->createCollection('row_size_1');
         $collection_2 = $database->createCollection('row_size_2');
 
-        $this->assertEquals(true, $database->createAttribute($collection_1->getId(), 'attr_1', Database::VAR_STRING, 16000, true));
+        $this->assertEquals(true, $database->createAttribute($collection_1->getId(), 'attr_1', Database::VAR_STRING, 15500, true));
 
         try {
             $database->createAttribute($collection_1->getId(), 'attr_2', Database::VAR_STRING, Database::LENGTH_KEY, true);

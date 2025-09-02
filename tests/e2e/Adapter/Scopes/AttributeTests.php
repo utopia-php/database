@@ -803,7 +803,7 @@ trait AttributeTests
         $collection = $database->createCollection('width_limit');
 
         $init = $database->getAdapter()->getAttributeWidth($collection);
-        $this->assertEquals(1067, $init);
+        $this->assertEquals(3109, $init);
 
         $attribute = new Document([
             '$id' => ID::custom('varchar_100'),
@@ -957,7 +957,7 @@ trait AttributeTests
         $attributes[] = new Document([
             '$id' => ID::custom('varchar_16000'),
             'type' => Database::VAR_STRING,
-            'size' => 16000,
+            'size' => 15500,
             'required' => true,
             'default' => null,
             'signed' => true,

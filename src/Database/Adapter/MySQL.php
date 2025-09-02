@@ -114,9 +114,14 @@ class MySQL extends MariaDB
                 throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
         }
 
-        $unit = $useMeters ? ", 'meter'" : '';
+        if ($useMeters) {
+            $attr = "ST_SRID({$alias}.{$attribute}, " . Database::SRID . ")";
+            $geom = "ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . ")";
+            return "ST_Distance({$attr}, {$geom}, 'metre') {$operator} :{$placeholder}_1";
+        }
 
-        return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0){$unit}) {$operator} :{$placeholder}_1";
+        // Without meters, use default behavior
+        return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) {$operator} :{$placeholder}_1";
     }
 
     public function getSupportForIndexArray(): bool

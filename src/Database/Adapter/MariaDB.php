@@ -1368,7 +1368,7 @@ class MariaDB extends SQL
         $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
         $binds[":{$placeholder}_1"] = $distanceParams[1];
 
-        $meters = isset($distanceParams[2]) && $distanceParams[2] === true;
+        $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
 
         switch ($query->getMethod()) {
             case Query::TYPE_DISTANCE_EQUAL:
@@ -1387,7 +1387,7 @@ class MariaDB extends SQL
                 throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
         }
 
-        if ($meters) {
+        if ($useMeters) {
             return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), 6371000) {$operator} :{$placeholder}_1";
         }
         return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) {$operator} :{$placeholder}_1";

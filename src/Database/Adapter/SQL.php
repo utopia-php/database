@@ -2108,6 +2108,7 @@ abstract class SQL extends Adapter
             $bindIndex = 0;
             $batchKeys = [];
             $bindValues = [];
+            $columns = [];
 
             foreach ($changes as $change) {
                 $document = $change->getNew();
@@ -2117,9 +2118,15 @@ abstract class SQL extends Adapter
                 $attributes['_updatedAt'] = $document->getUpdatedAt();
                 $attributes['_permissions'] = \json_encode($document->getPermissions());
 
-                if (!empty($document->getSequence())) {
-                    $attributes['_id'] = $document->getSequence();
+                $attributes['_id'] = null;
+
+                if (!empty($change->getOld()->getSequence())) {
+                    $attributes['_id'] = $change->getOld()->getSequence();
                 }
+
+//                if (!empty($document->getSequence())) {
+//                    $attributes['_id'] = $document->getSequence();
+//                }
 
                 if ($this->sharedTables) {
                     $attributes['_tenant'] = $document->getTenant();

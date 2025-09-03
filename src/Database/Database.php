@@ -4449,6 +4449,10 @@ class Database
             return $document;
         });
 
+        if ($document->isEmpty()) {
+            return $document;
+        }
+
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }

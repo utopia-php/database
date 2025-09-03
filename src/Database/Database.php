@@ -1326,7 +1326,6 @@ class Database
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->getSupportForIndexArray(),
-                $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
             );
@@ -2395,7 +2394,6 @@ class Database
                         $this->adapter->getMaxIndexLength(),
                         $this->adapter->getInternalIndexesKeys(),
                         $this->adapter->getSupportForIndexArray(),
-                        $this->adapter->getSupportForSpatialAttributes(),
                         $this->adapter->getSupportForSpatialIndexNull(),
                         $this->adapter->getSupportForSpatialIndexOrder(),
                     );
@@ -3271,9 +3269,6 @@ class Database
                 if (!$this->adapter->getSupportForVectors()) {
                     throw new DatabaseException('Vector indexes are not supported');
                 }
-                if (\count($attributes) !== 1) {
-                    throw new DatabaseException('Vector indexes require exactly one attribute');
-                }
                 break;
 
             default:
@@ -3283,12 +3278,10 @@ class Database
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];
-        $indexAttributesRequired = [];
         foreach ($attributes as $i => $attr) {
             foreach ($collectionAttributes as $collectionAttribute) {
                 if ($collectionAttribute->getAttribute('key') === $attr) {
                     $indexAttributesWithTypes[$attr] = $collectionAttribute->getAttribute('type');
-                    $indexAttributesRequired[$attr] = $collectionAttribute->getAttribute('required', false);
 
                     /**
                      * mysql does not save length in collection when length = attributes size
@@ -3311,29 +3304,6 @@ class Database
             }
         }
 
-        // Validate spatial index constraints
-        if ($type === self::INDEX_SPATIAL) {
-            foreach ($attributes as $attr) {
-                if (!isset($indexAttributesWithTypes[$attr])) {
-                    throw new DatabaseException('Attribute "' . $attr . '" not found in collection');
-                }
-
-                $attributeType = $indexAttributesWithTypes[$attr];
-                if (!in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    throw new DatabaseException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
-                }
-            }
-
-            // Check spatial index null constraints for adapters that don't support null values
-            if (!$this->adapter->getSupportForSpatialIndexNull()) {
-                foreach ($attributes as $attr) {
-                    if (!$indexAttributesRequired[$attr]) {
-                        throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attr . '" as required or create the index on a column with no null values.');
-                    }
-                }
-            }
-        }
-
         $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -3351,7 +3321,6 @@ class Database
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->getSupportForIndexArray(),
-                $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
             );

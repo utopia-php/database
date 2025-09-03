@@ -14,6 +14,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
 
 abstract class SQL extends Adapter
@@ -355,8 +356,6 @@ abstract class SQL extends Adapter
         $collection = $collection->getId();
 
         $name = $this->filter($collection);
-        $alias = Query::DEFAULT_ALIAS;
-        //$selections = $this->getAttributeSelections($queries);
 
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
@@ -1841,49 +1840,12 @@ var_dump($sql);
      * @return string
      * @throws Exception
      */
-    protected function addHiddenAttribute(array $selects): string
-    {
-        $hash = [Query::DEFAULT_ALIAS => true];
-
-        foreach ($selects as $select) {
-            $alias = $select->getAlias();
-            if (!isset($hash[$alias])){
-                $hash[$alias] = true;
-            }
-        }
-
-        $hash = array_keys($hash);
-
-        $strings = [];
-
-        foreach ($hash as $alias) {
-            $strings[] = $alias.'._uid as '.$this->quote($alias.'::$id');
-            $strings[] = $alias.'._id as '.$this->quote($alias.'::$internalId');
-            $strings[] = $alias.'._permissions as '.$this->quote($alias.'::$permissions');
-            $strings[] = $alias.'._createdAt as '.$this->quote($alias.'::$createdAt');
-            $strings[] = $alias.'._updatedAt as '.$this->quote($alias.'::$updatedAt');
-
-            if ($this->sharedTables) {
-                $strings[] = $alias.'._tenant as '.$this->quote($alias.'::$tenant');
-            }
-        }
-
-        return ', '.implode(', ', $strings);
-    }
-
-    /**
-     * Get the SQL projection given the selected attributes
-     *
-     * @param array<Query> $selects
-     * @return string
-     * @throws Exception
-     */
     protected function getAttributeProjection(array $selects, array $spatialAttributes = []): string
     {
         //todo: fix this $spatialAttributes
 
         if (empty($selects)) {
-            return Query::DEFAULT_ALIAS.'.*'.$this->addHiddenAttribute($selects);
+            return Query::DEFAULT_ALIAS.'.*';
         }
 
         $string = '';
@@ -1924,7 +1886,7 @@ var_dump($sql);
             $string .= "{$this->quote($alias)}.{$attribute}{$as}";
         }
 
-        return $string.$this->addHiddenAttribute($selects);
+        return $string;
     }
 
     protected function getInternalKeyForAttribute(string $attribute): string
@@ -2346,51 +2308,66 @@ var_dump($sql);
         return null;
     }
 
+
     /**
      * Find Documents
      *
-     * @param Document $collection
+     * @param QueryContext $context
      * @param array<Query> $queries
      * @param int|null $limit
      * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<Query> $selects
+     * @param array<Query> $filters
+     * @param array<Query> $joins
+     * @param array<Query> $orderQueries
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-    {
-        $spatialAttributes = $this->getSpatialAttributes($collection);
-        $attributes = $collection->getAttribute('attributes', []);
+    public function find(
+        QueryContext $context,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $cursor = [],
+        string $cursorDirection = Database::CURSOR_AFTER,
+        string $forPermission = Database::PERMISSION_READ,
+        array $selects = [],
+        array $filters = [],
+        array $joins = [],
+        array $orderQueries = []
+    ): array {
+        unset($queries); // remove this since we pass explicit queries
 
-        $collection = $collection->getId();
-        $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
-        $where = [];
-        $orders = [];
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
+        $name = $context->getCollections()[0]->getId();
+        $name = $this->filter($name);
+
+        $roles = Authorization::getRoles();
+        $where = [];
+        $orders = [];
+
+        $filters = array_map(fn ($query) => clone $query, $filters);
 
         $cursorWhere = [];
 
-        foreach ($orderAttributes as $i => $originalAttribute) {
+        foreach ($orderQueries as $i => $order) {
+            $orderAlias = $order->getAlias();
+            $attribute  = $order->getAttribute();
+            $originalAttribute = $attribute;
             $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
 
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            $direction = $orderType;
+            $direction = $order->getOrderDirection();
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $direction = ($direction === Database::ORDER_ASC)
-                    ? Database::ORDER_DESC
-                    : Database::ORDER_ASC;
+                $direction = ($direction === Database::ORDER_ASC) ? Database::ORDER_DESC : Database::ORDER_ASC;
             }
 
             $orders[] = "{$this->quote($attribute)} {$direction}";
@@ -2398,7 +2375,7 @@ var_dump($sql);
             // Build pagination WHERE clause only if we have a cursor
             if (!empty($cursor)) {
                 // Special case: No tie breaks. only 1 attribute and it's a unique primary key
-                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
+                if (count($orderQueries) === 1 && $i === 0 && $originalAttribute === '$sequence') {
                     $operator = ($direction === Database::ORDER_DESC)
                         ? Query::TYPE_LESSER
                         : Query::TYPE_GREATER;
@@ -2406,7 +2383,7 @@ var_dump($sql);
                     $bindName = ":cursor_pk";
                     $binds[$bindName] = $cursor[$originalAttribute];
 
-                    $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                    $cursorWhere[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
                     break;
                 }
 
@@ -2414,13 +2391,14 @@ var_dump($sql);
 
                 // Add equality conditions for previous attributes
                 for ($j = 0; $j < $i; $j++) {
-                    $prevOriginal = $orderAttributes[$j];
+                    $prevQuery = $orderQueries[$j];
+                    $prevOriginal = $prevQuery->getAttribute();
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
 
                     $bindName = ":cursor_{$j}";
                     $binds[$bindName] = $cursor[$prevOriginal];
 
-                    $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
+                    $conditions[] = "{$this->quote($orderAlias)}.{$this->quote($prevAttr)} = {$bindName}";
                 }
 
                 // Add comparison for current attribute
@@ -2431,7 +2409,7 @@ var_dump($sql);
                 $bindName = ":cursor_{$i}";
                 $binds[$bindName] = $cursor[$originalAttribute];
 
-                $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                $conditions[] = "{$this->quote($orderAlias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
 
                 $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
             }
@@ -2441,18 +2419,37 @@ var_dump($sql);
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
+        $sqlJoin = '';
+        foreach ($joins as $join) {
+            $permissions = '';
+            $collection = $join->getCollection();
+            $collection = $this->filter($collection);
+
+            $skipAuth = $context->skipAuth($collection, $forPermission);
+            if (! $skipAuth) {
+                $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias(), $forPermission);
+            }
+
+            $sqlJoin .= "INNER JOIN {$this->getSQLTable($collection)} AS {$this->quote($join->getAlias())}
+            ON {$this->getSQLConditions($join->getValues(), $binds)}
+            {$permissions}
+            {$this->getTenantQuery($collection, $join->getAlias())}
+            ";
+        }
+
+        $conditions = $this->getSQLConditions($filters, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        $skipAuth = $context->skipAuth($name, $forPermission);
+        if (! $skipAuth) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
         if ($this->sharedTables) {
             $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+            $where[] = "{$this->getTenantQuery($name, $alias, condition: '')}";
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -2469,17 +2466,15 @@ var_dump($sql);
             $sqlLimit .= ' OFFSET :offset';
         }
 
-        $selections = $this->getAttributeSelections($queries);
-
-
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
+            SELECT {$this->getAttributeProjection($selects)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            {$sqlJoin}
             {$sqlWhere}
             {$sqlOrder}
             {$sqlLimit};
         ";
-
+var_dump($sql);
         $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
 
         try {
@@ -2494,12 +2489,12 @@ var_dump($sql);
             }
 
             $this->execute($stmt);
+            $results = $stmt->fetchAll();
+            $stmt->closeCursor();
+
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
-
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
 
         foreach ($results as $index => $document) {
             if (\array_key_exists('_uid', $document)) {

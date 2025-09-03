@@ -3387,7 +3387,9 @@ class Database
         );
 
         $selects = Query::groupByType($queries)['selections'];
-        $selections = $this->validateSelections($collection, $selects);
+        $selects = Query::getSelectQueries($queries);
+
+        //$selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         $validator = new Authorization(self::PERMISSION_READ);
@@ -6295,12 +6297,6 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-//        $filters = Query::getFilterQueries($queries);
-//        $selects = Query::getSelectQueries($queries);
-//        $limit = Query::getLimitQuery($queries, 25);
-//        $offset = Query::getOffsetQuery($queries, 0);
-//        $orders = Query::getOrderQueries($queries);
-
 
         $grouped = Query::groupByType($queries);
         $filters = $grouped['filters'];
@@ -6312,23 +6308,29 @@ class Database
         $cursor = $grouped['cursor'];
         $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
 
+        $filters = Query::getFilterQueries($queries);
+        $selects = Query::getSelectQueries($queries);
+        $limit = Query::getLimitQuery($queries, 25);
+        $offset = Query::getOffsetQuery($queries, 0);
+        $orders = Query::getOrderQueries($queries);
+
         $uniqueOrderBy = false;
-        foreach ($orderAttributes as $order) {
-            if ($order === '$id' || $order === '$sequence') {
+        foreach ($orders as $order) {
+            if ($order->getAttribute() === '$id' || $order->getAttribute() === '$sequence') {
                 $uniqueOrderBy = true;
             }
         }
 
         if ($uniqueOrderBy === false) {
-            $orderAttributes[] = '$sequence';
+            $orders[] = Query::orderAsc(); // In joins we should not add a default order, we should validate when using a cursor we should have a unique order
         }
 
         if (!empty($cursor)) {
-            foreach ($orderAttributes as $order) {
-                if ($cursor->getAttribute($order) === null) {
+            foreach ($orders as $order) {
+                if ($cursor->getAttribute($order->getAttribute()) === null) {
                     throw new OrderException(
-                        message: "Order attribute '{$order}' is empty",
-                        attribute: $order
+                        message: "Order attribute '{$order->getAttribute()}' is empty",
+                        attribute: $order->getAttribute()
                     );
                 }
             }
@@ -6340,13 +6342,6 @@ class Database
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
-        /**  @var array<Query> $queries */
-        $queries = \array_merge(
-            $selects,
-            self::convertQueries($collection, $filters)
-        );
-
-        $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         $results = $this->adapter->find(
@@ -6364,15 +6359,12 @@ class Database
         );
 
         foreach ($results as $index => $node) {
-            $node = $this->casting($context, $node, $selects);
-            $node = $this->decode($context, $node, $selects);
-
-            if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+            if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
 
-            $node = $this->casting($collection, $node);
-            $node = $this->decode($collection, $node, $selections);
+            $node = $this->casting($context, $node, $selects);
+            $node = $this->decode($collection, $node, $selects);
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
@@ -6993,6 +6985,65 @@ class Database
     }
 
     /**
+     * Validate if a set of attributes can be selected from the collection
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @return array<string>
+     * @throws QueryException
+     */
+    private function validateSelections(Document $collection, array $queries): array
+    {
+        if (empty($queries)) {
+            return [];
+        }
+
+        $selections = [];
+        $relationshipSelections = [];
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() == Query::TYPE_SELECT) {
+                foreach ($query->getValues() as $value) {
+                    if (\str_contains($value, '.')) {
+                        $relationshipSelections[] = $value;
+                        continue;
+                    }
+                    $selections[] = $value;
+                }
+            }
+        }
+
+        // Allow querying internal attributes
+        $keys = \array_map(
+            fn ($attribute) => $attribute['$id'],
+            self::getInternalAttributes()
+        );
+
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            if ($attribute['type'] !== self::VAR_RELATIONSHIP) {
+                // Fallback to $id when key property is not present in metadata table for some tables such as Indexes or Attributes
+                $keys[] = $attribute['key'] ?? $attribute['$id'];
+            }
+        }
+
+        $invalid = \array_diff($selections, $keys);
+        if (!empty($invalid) && !\in_array('*', $invalid)) {
+            throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
+        }
+
+        $selections = \array_merge($selections, $relationshipSelections);
+
+        $selections[] = '$id';
+        $selections[] = '$sequence';
+        $selections[] = '$collection';
+        $selections[] = '$createdAt';
+        $selections[] = '$updatedAt';
+        $selections[] = '$permissions';
+
+        return \array_values(\array_unique($selections));
+    }
+
+    /**
      * Get adapter attribute limit, accounting for internal metadata
      * Returns 0 to indicate no limit
      *
@@ -7215,9 +7266,9 @@ class Database
                 $nestingPath = \implode('.', $nesting);
                 // If nestingPath is empty, it means we want all fields (*) for this relationship
                 if (empty($nestingPath)) {
-                    $nestedSelections[$selectedKey][] = Query::select(['*']);
+                    $nestedSelections[$selectedKey][] = Query::select('*');
                 } else {
-                    $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
+                    $nestedSelections[$selectedKey][] = Query::select($nestingPath);
                 }
 
                 $type = $relationship->getAttribute('options')['relationType'];

@@ -1155,29 +1155,6 @@ abstract class Adapter
     abstract protected function getAttributeProjection(array $selects): string;
 
     /**
-     * Get all selected attributes from queries
-     *
-     * @param Query[] $queries
-     * @return string[]
-     */
-    protected function getAttributeSelections(array $queries): array
-    {
-        $selections = [];
-
-        foreach ($queries as $query) {
-            switch ($query->getMethod()) {
-                case Query::TYPE_SELECT:
-                    foreach ($query->getValues() as $value) {
-                        $selections[] = $value;
-                    }
-                    break;
-            }
-        }
-
-        return $selections;
-    }
-
-    /**
      * Filter Keys
      *
      * @param string $value

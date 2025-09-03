@@ -5576,7 +5576,9 @@ class Database
             return $result;
         });
 
-        $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
+        if ($deleted) {
+            $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
+        }
 
         return $deleted;
     }

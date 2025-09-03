@@ -1520,6 +1520,7 @@ class Database
     public function deleteCollection(string $id): bool
     {
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        var_dump($collection->getAttribute('attributes'));
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
@@ -1528,6 +1529,7 @@ class Database
         if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
+
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes'),
@@ -6364,7 +6366,7 @@ class Database
             }
 
             $node = $this->casting($context, $node, $selects);
-            $node = $this->decode($collection, $node, $selects);
+            $node = $this->decode($context, $node, $selects);
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());

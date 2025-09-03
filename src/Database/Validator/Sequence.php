@@ -46,7 +46,7 @@ class Sequence extends Validator
         }
 
         switch ($this->idAttributeType) {
-            case Database::VAR_OBJECT_ID:
+            case Database::VAR_UUID:
                 return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
 
             case Database::VAR_INTEGER:

@@ -460,8 +460,8 @@ class Postgres extends SQL
             if ($size <= 0) {
                 throw new DatabaseException('Vector dimensions must be a positive integer');
             }
-            if ($size > 16000) {
-                throw new DatabaseException('Vector dimensions cannot exceed 16000');
+            if ($size > Database::VECTOR_MAX_DIMENSIONS) {
+                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::VECTOR_MAX_DIMENSIONS);
             }
             $this->ensurePgVectorExtension();
         }
@@ -565,7 +565,24 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $type = $this->getSQLType($type, $size, $signed, $array, false);
+
+        if ($type === Database::VAR_VECTOR) {
+            if ($size <= 0) {
+                throw new DatabaseException('Vector dimensions must be a positive integer');
+            }
+            if ($size > Database::VECTOR_MAX_DIMENSIONS) {
+                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::VECTOR_MAX_DIMENSIONS);
+            }
+            $this->ensurePgVectorExtension();
+        }
+
+        $type = $this->getSQLType(
+            $type,
+            $size,
+            $signed,
+            $array,
+            required: false
+        );
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";

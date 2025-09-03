@@ -36,23 +36,19 @@ use Utopia\Database\Validator\Structure;
 
 class Database
 {
-    public const VAR_STRING = 'string';
     // Simple Types
+    public const VAR_STRING = 'string';
     public const VAR_INTEGER = 'integer';
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
+
+    // ID types
     public const VAR_ID = 'id';
-    public const VAR_OBJECT_ID = 'objectId';
+    public const VAR_UUID = 'uuid';
+
+    // Vector types
     public const VAR_VECTOR = 'vector';
-
-    public const INT_MAX = 2147483647;
-    public const BIG_INT_MAX = PHP_INT_MAX;
-    public const DOUBLE_MAX = PHP_FLOAT_MAX;
-    public const VECTOR_MAX_SIZE = 16000; // pgvector limit
-
-    // Global SRID for geographic coordinates (WGS84)
-    public const SRID = 4326;
 
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
@@ -62,7 +58,12 @@ class Database
     public const VAR_LINESTRING = 'linestring';
     public const VAR_POLYGON = 'polygon';
 
-    public const SPATIAL_TYPES = [self::VAR_POINT,self::VAR_LINESTRING, self::VAR_POLYGON];
+    // All spatial types
+    public const SPATIAL_TYPES = [
+        self::VAR_POINT,
+        self::VAR_LINESTRING,
+        self::VAR_POLYGON
+    ];
 
     // Index Types
     public const INDEX_KEY = 'key';
@@ -72,7 +73,16 @@ class Database
     public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';
     public const INDEX_HNSW_DOT = 'hnsw_dot';
+
+    // Max limits
+    public const INT_MAX = 2147483647;
+    public const BIG_INT_MAX = PHP_INT_MAX;
+    public const DOUBLE_MAX = PHP_FLOAT_MAX;
+    public const VECTOR_MAX_DIMENSIONS = 16000;
     public const ARRAY_INDEX_LENGTH = 255;
+
+    // Global SRID for geographic coordinates (WGS84)
+    public const SRID = 4326;
 
     // Relation Types
     public const RELATION_ONE_TO_ONE = 'oneToOne';
@@ -409,7 +419,8 @@ class Database
         Adapter $adapter,
         Cache $cache,
         array $filters = []
-    ) {
+    )
+    {
         $this->adapter = $adapter;
         $this->cache = $cache;
         $this->instanceFilters = $filters;
@@ -1786,7 +1797,8 @@ class Database
         ?string $format,
         array $formatOptions,
         array $filters
-    ): Document {
+    ): Document
+    {
         // Attribute IDs are case-insensitive
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -1877,8 +1889,8 @@ class Database
                 if ($size <= 0) {
                     throw new DatabaseException('Vector dimensions must be a positive integer');
                 }
-                if ($size > self::VECTOR_MAX_SIZE) {
-                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::VECTOR_MAX_SIZE);
+                if ($size > self::VECTOR_MAX_DIMENSIONS) {
+                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
                 }
                 break;
             default:
@@ -2254,8 +2266,8 @@ class Database
                     if ($size <= 0) {
                         throw new DatabaseException('Vector size must be a positive integer');
                     }
-                    if ($size > self::VECTOR_MAX_SIZE) {
-                        throw new DatabaseException('Vector size cannot exceed ' . self::VECTOR_MAX_SIZE);
+                    if ($size > self::VECTOR_MAX_DIMENSIONS) {
+                        throw new DatabaseException('Vector size cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
                     }
                     break;
                 default:
@@ -2627,7 +2639,8 @@ class Database
         ?string $id = null,
         ?string $twoWayKey = null,
         string $onDelete = Database::RELATION_MUTATE_RESTRICT
-    ): bool {
+    ): bool
+    {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -2818,7 +2831,8 @@ class Database
         ?string $newTwoWayKey = null,
         ?bool $twoWay = null,
         ?string $onDelete = null
-    ): bool {
+    ): bool
+    {
         if (
             \is_null($newKey)
             && \is_null($newTwoWayKey)
@@ -3254,8 +3268,10 @@ class Database
             case Database::INDEX_HNSW_EUCLIDEAN:
             case Database::INDEX_HNSW_COSINE:
             case Database::INDEX_HNSW_DOT:
-                // Vector indexes - validate that we have a single vector attribute
-                if (count($attributes) !== 1) {
+                if (!$this->adapter->getSupportForVectors()) {
+                    throw new DatabaseException('Vector indexes are not supported');
+                }
+                if (\count($attributes) !== 1) {
                     throw new DatabaseException('Vector indexes require exactly one attribute');
                 }
                 break;
@@ -3920,7 +3936,8 @@ class Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
-    ): int {
+    ): int
+    {
         if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
@@ -4205,7 +4222,8 @@ class Database
         bool $twoWay,
         string $twoWayKey,
         string $side,
-    ): string {
+    ): string
+    {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if ($twoWay) {
@@ -4286,7 +4304,8 @@ class Database
         bool $twoWay,
         string $twoWayKey,
         string $side,
-    ): void {
+    ): void
+    {
         // Get the related document, will be empty on permissions failure
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId));
 
@@ -4362,7 +4381,7 @@ class Database
 
             if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
-                $currentPermissions  = $document->getPermissions();
+                $currentPermissions = $document->getPermissions();
 
                 sort($originalPermissions);
                 sort($currentPermissions);
@@ -4571,7 +4590,8 @@ class Database
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
-    ): int {
+    ): int
+    {
         if ($updates->isEmpty()) {
             return 0;
         }
@@ -4676,7 +4696,7 @@ class Database
                 break;
             }
 
-            $currentPermissions  = $updates->getPermissions();
+            $currentPermissions = $updates->getPermissions();
             sort($currentPermissions);
 
             $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
@@ -4909,7 +4929,7 @@ class Database
                                     $document->setAttribute($key, $related->getId());
                                     break;
                                 }
-                                // no break
+                            // no break
                             case 'NULL':
                                 if (!\is_null($oldValue?->getId())) {
                                     $oldRelated = $this->skipRelationships(
@@ -5164,7 +5184,8 @@ class Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
-    ): int {
+    ): int
+    {
         return $this->createOrUpdateDocumentsWithIncrease(
             $collection,
             '',
@@ -5193,7 +5214,8 @@ class Database
         array $documents,
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): int {
+    ): int
+    {
         if (empty($documents)) {
             return 0;
         }
@@ -5223,7 +5245,7 @@ class Database
 
             if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
-                $currentPermissions  = $document->getPermissions();
+                $currentPermissions = $document->getPermissions();
 
                 sort($originalPermissions);
                 sort($currentPermissions);
@@ -5419,7 +5441,8 @@ class Database
         string $attribute,
         int|float $value = 1,
         int|float|null $max = null
-    ): Document {
+    ): Document
+    {
         if ($value <= 0) { // Can be a float
             throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
@@ -5516,7 +5539,8 @@ class Database
         string $attribute,
         int|float $value = 1,
         int|float|null $min = null
-    ): Document {
+    ): Document
+    {
         if ($value <= 0) { // Can be a float
             throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
@@ -5773,7 +5797,8 @@ class Database
         bool $twoWay,
         string $twoWayKey,
         string $side
-    ): void {
+    ): void
+    {
         if ($value instanceof Document && $value->isEmpty()) {
             $value = null;
         }
@@ -6063,7 +6088,8 @@ class Database
         int $batchSize = self::DELETE_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
-    ): int {
+    ): int
+    {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
@@ -6597,7 +6623,7 @@ class Database
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-        $internalDateAttributes = ['$createdAt','$updatedAt'];
+        $internalDateAttributes = ['$createdAt', '$updatedAt'];
         foreach ($this->getInternalAttributes() as $attribute) {
             $attributes[] = $attribute;
         }
@@ -7021,7 +7047,7 @@ class Database
             }
         }
 
-        if (! $attribute->isEmpty()) {
+        if (!$attribute->isEmpty()) {
             $query->setOnArray($attribute->getAttribute('array', false));
 
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
@@ -7138,7 +7164,8 @@ class Database
     private function processRelationshipQueries(
         array $relationships,
         array $queries,
-    ): array {
+    ): array
+    {
         $nestedSelections = [];
 
         foreach ($queries as $query) {
@@ -7279,7 +7306,7 @@ class Database
         // POINT(x y)
         if (str_starts_with($upper, 'POINT(')) {
             $start = strpos($wkt, '(') + 1;
-            $end   = strrpos($wkt, ')');
+            $end = strrpos($wkt, ')');
             $inside = substr($wkt, $start, $end - $start);
 
             $coords = explode(' ', trim($inside));
@@ -7289,7 +7316,7 @@ class Database
         // LINESTRING(x1 y1, x2 y2, ...)
         if (str_starts_with($upper, 'LINESTRING(')) {
             $start = strpos($wkt, '(') + 1;
-            $end   = strrpos($wkt, ')');
+            $end = strrpos($wkt, ')');
             $inside = substr($wkt, $start, $end - $start);
 
             $points = explode(',', $inside);
@@ -7302,7 +7329,7 @@ class Database
         // POLYGON((x1,y1),(x2,y2))
         if (str_starts_with($upper, 'POLYGON((')) {
             $start = strpos($wkt, '((') + 2;
-            $end   = strrpos($wkt, '))');
+            $end = strrpos($wkt, '))');
             $inside = substr($wkt, $start, $end - $start);
 
             $rings = explode('),(', $inside);

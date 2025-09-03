@@ -4275,6 +4275,9 @@ class Database
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
+            if ($old->isEmpty()) {
+                return new Document();
+            }
 
             $skipPermissionsUpdate = true;
 
@@ -4412,10 +4415,6 @@ class Database
                 } elseif (!$shouldUpdate && !$readValidator->isValid($readPermissions)) {
                     throw new AuthorizationException($readValidator->getDescription());
                 }
-            }
-
-            if ($old->isEmpty()) {
-                return new Document();
             }
 
             if ($shouldUpdate) {

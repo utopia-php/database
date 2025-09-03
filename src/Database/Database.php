@@ -3355,7 +3355,7 @@ class Database
          */
         //$selects[] = Query::select('$id'); // Do we need this?
         //$selects[] = Query::select('$permissions',  system: true);
-        $queries = Query::addSelect($queries, Query::select('$permissions',  system: true));
+        //$queries = Query::addSelect($queries, Query::select('$permissions',  system: true));
 //        $queries = Query::add($queries, Query::select('$id'));
 //        $queries = Query::add($queries, Query::select('$createdAt'));
 //        $queries = Query::add($queries, Query::select('$createdAt'));
@@ -3372,7 +3372,10 @@ class Database
         $this->checkQueriesType($queries);
 
         if ($this->validate) {
-            $validator = new DocumentsValidator($context);
+            $validator = new DocumentsValidator(
+                $context,
+                $this->adapter->getIdAttributeType()
+            );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }

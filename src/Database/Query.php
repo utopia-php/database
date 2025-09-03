@@ -402,11 +402,12 @@ class Query
 
     /**
      * Check if method is a spatial-only query method
+     * @param $method
      * @return bool
      */
-    public function isSpatialQuery(): bool
+    public static function isSpatialQuery($method): bool
     {
-        return match ($this->method) {
+        return match ($method) {
             self::TYPE_CROSSES,
             self::TYPE_NOT_CROSSES,
             self::TYPE_DISTANCE_EQUAL,

@@ -1,4 +1,4 @@
-<phpunit 
+<phpunit
     backupGlobals="false"
     backupStaticAttributes="false"
     bootstrap="vendor/autoload.php"
@@ -7,7 +7,8 @@
     convertNoticesToExceptions="true"
     convertWarningsToExceptions="true"
     processIsolation="false"
-    stopOnFailure="true">
+    stopOnFailure="true"
+>
     <testsuites>
         <testsuite name="unit">
             <directory>./tests/unit</directory>
@@ -16,14 +17,4 @@
             <directory>./tests/e2e/Adapter</directory>
         </testsuite>
     </testsuites>
-    <coverage processUncoveredFiles="true">
-        <include>
-            <directory suffix=".php">./src/</directory>
-            <directory suffix=".php">./tests/</directory>
-        </include>
-        <report>
-            <clover outputFile="tmp/clover.xml"/>
-            <html outputDirectory="tmp/coverage"/>
-        </report>
-    </coverage>
 </phpunit>

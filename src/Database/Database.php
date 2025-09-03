@@ -3440,6 +3440,7 @@ class Database
             $forUpdate
         );
 
+        var_dump($document);
 //        $permissions = new Document([
 //            '$permissions' => $document->getAttribute('$perms')
 //        ]);
@@ -6697,6 +6698,109 @@ class Database
      * @throws DatabaseException
      */
     public function decode(QueryContext $context, Document $document, array $selects = []): Document
+    {
+        foreach ($context->getCollections() as $collection) {
+            $document = $this->decodeOriginal($collection, $document, $selects);
+        }
+
+        return $document;
+    }
+
+
+    /**
+     * Decode Document
+     *
+     * @param Document $collection
+     * @param Document $document
+     * @param array<Query> $selects
+     * @return Document
+     * @throws DatabaseException
+     */
+    public function decodeOriginal(Document $collection, Document $document, array $selects = []): Document
+    {
+        $attributes = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn ($attribute) => $attribute['type'] !== self::VAR_RELATIONSHIP
+        );
+
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn ($attribute) => $attribute['type'] === self::VAR_RELATIONSHIP
+        );
+
+        foreach ($relationships as $relationship) {
+            $key = $relationship['$id'] ?? '';
+
+            if (
+                \array_key_exists($key, (array)$document)
+                || \array_key_exists($this->adapter->filter($key), (array)$document)
+            ) {
+                $value = $document->getAttribute($key);
+                $value ??= $document->getAttribute($this->adapter->filter($key));
+                $document->removeAttribute($this->adapter->filter($key));
+                $document->setAttribute($key, $value);
+            }
+        }
+
+        foreach ($this->getInternalAttributes() as $attribute) {
+            $attributes[] = $attribute;
+        }
+
+        foreach ($attributes as $attribute) {
+            $key = $attribute['$id'] ?? '';
+            $type = $attribute['type'] ?? '';
+            $array = $attribute['array'] ?? false;
+            $filters = $attribute['filters'] ?? [];
+            $value = $document->getAttribute($key);
+
+            if ($key === '$permissions') {
+                continue;
+            }
+
+            if (\is_null($value)) {
+                $value = $document->getAttribute($this->adapter->filter($key));
+
+                if (!\is_null($value)) {
+                    $document->removeAttribute($this->adapter->filter($key));
+                }
+            }
+
+            $value = ($array) ? $value : [$value];
+            $value = (is_null($value)) ? [] : $value;
+
+            foreach ($value as $index => $node) {
+                if (is_string($node) && in_array($type, Database::SPATIAL_TYPES)) {
+                    $node = $this->decodeSpatialData($node);
+                }
+
+                foreach (array_reverse($filters) as $filter) {
+                    $node = $this->decodeAttribute($filter, $node, $document, $key);
+                }
+                $value[$index] = $node;
+            }
+
+            if (
+                empty($selections)
+                || \in_array($key, $selections)
+                || \in_array('*', $selections)
+            ) {
+                $document->setAttribute($key, ($array) ? $value : $value[0]);
+            }
+        }
+
+        return $document;
+    }
+
+    /**
+     * Decode Document
+     *
+     * @param QueryContext $context
+     * @param Document $document
+     * @param array<Query> $selects
+     * @return Document
+     * @throws DatabaseException
+     */
+    public function decode_joins(QueryContext $context, Document $document, array $selects = []): Document
     {
         $internals = [];
         $schema = [];

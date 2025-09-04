@@ -3352,19 +3352,9 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        /**
-         * Auth requires $permissions
-         */
-        //$selects[] = Query::select('$id'); // Do we need this?
-        //$selects[] = Query::select('$permissions',  system: true);
-        //$queries = Query::addSelect($queries, Query::select('$permissions',  system: true));
-//        $queries = Query::add($queries, Query::select('$id'));
-//        $queries = Query::add($queries, Query::select('$createdAt'));
-//        $queries = Query::add($queries, Query::select('$createdAt'));
-
         $selects = Query::getSelectQueries($queries);
-        if (count($selects) !== count($queries)) {
-            // Do we want this check?
+
+        if (count($selects) !== count($queries)) { // Do we want this check?
             throw new QueryException('Only select queries are allowed');
         }
 
@@ -3388,7 +3378,7 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $selects = Query::groupByType($queries)['selections'];
+        //$selects = Query::groupByType($queries)['selections'];
         $selects = Query::getSelectQueries($queries);
 
         //$selections = $this->validateSelections($collection, $selects);
@@ -3413,16 +3403,16 @@ class Database
         if ($cached) {
             $document = new Document($cached);
 
-//            $permissions = new Document([
-//                '$permissions' => $document->getAttribute('$perms')
-//            ]);
-//
-//            $document->removeAttribute('$perms');
+            $permissions = new Document([
+                '$permissions' => $document->getAttribute('$perms')
+            ]);
+
+            $document->removeAttribute('$perms');
 
             if ($collection->getId() !== self::METADATA) {
                 if (!$validator->isValid([
                     ...$collection->getRead(),
-                    ...($documentSecurity ? $document->getRead() : [])
+                    ...($documentSecurity ? $permissions->getRead() : [])
                 ])) {
                     return new Document();
                 }
@@ -3440,19 +3430,20 @@ class Database
             $forUpdate
         );
 
-//        $permissions = new Document([
-//            '$permissions' => $document->getAttribute('$perms')
-//        ]);
-
         if ($document->isEmpty()) {
             return $document;
         }
+
+        $permissions = new Document([
+            '$permissions' => $document->getAttribute('$perms')
+        ]);
+
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
                 ...$collection->getRead(),
-                ...($documentSecurity ? $document->getRead() : [])
+                ...($documentSecurity ? $permissions->getRead() : [])
             ])) {
                 return new Document();
             }
@@ -3481,12 +3472,9 @@ class Database
             }
         }
 
-        $this->trigger(self::EVENT_DOCUMENT_READ, $document);
-
-        /**
-         * reminder
-         */
         $document->removeAttribute('$perms');
+
+        $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
         return $document;
     }
@@ -6263,6 +6251,8 @@ class Database
         $context = new QueryContext();
         $context->add($collection);
 
+        $queries = self::convertQueries($context, $queries);
+
         $joins = Query::getJoinQueries($queries);
 
         foreach ($joins as $join) {
@@ -6300,11 +6290,6 @@ class Database
                 throw new QueryException($validator->getDescription());
             }
         }
-
-        /**
-         * Convert Queries
-         */
-        $queries = self::convertQueries($context, $queries);
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
@@ -6892,7 +6877,6 @@ class Database
         $new = new Document();
 
         foreach ($document as $key => $value) {
-
             if($key === '$perms'){
                 $new->setAttribute($key, $value);
                 continue;

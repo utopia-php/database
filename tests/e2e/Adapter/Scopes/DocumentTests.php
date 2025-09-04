@@ -1318,12 +1318,12 @@ trait DocumentTests
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
         $this->assertArrayNotHasKey('with-dash', $document->getAttributes());
-        $this->assertArrayHasKey('$id', $document);
-        $this->assertArrayHasKey('$sequence', $document);
-        $this->assertArrayHasKey('$createdAt', $document);
-        $this->assertArrayHasKey('$updatedAt', $document);
-        $this->assertArrayHasKey('$permissions', $document);
-        $this->assertArrayHasKey('$collection', $document);
+        $this->assertArrayNotHasKey('$id', $document);
+        $this->assertArrayNotHasKey('$sequence', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$collection', $document);
 
         $document = $database->getDocument('documents', $documentId, [
             Query::select('string'),

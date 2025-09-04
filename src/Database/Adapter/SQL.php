@@ -361,9 +361,8 @@ abstract class SQL extends Adapter
 
         $alias = Query::DEFAULT_ALIAS;
 
-        //, _permissions as {$this->quote('$perms')}
         $sql = "
-		    SELECT {$this->getAttributeProjection($queries, $spatialAttributes)}
+		    SELECT {$this->getAttributeProjection($queries, $spatialAttributes)}, _permissions as {$this->quote('$perms')}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             WHERE {$this->quote($alias)}._uid = :_uid 
             {$this->getTenantQuery($collection, $alias)}
@@ -416,7 +415,7 @@ var_dump($sql);
             unset($document['_permissions']);
         }
 
-        //$document['$perms'] = json_decode($document['$perms'], true);
+        $document['$perms'] = json_decode($document['$perms'], true);
 
         return new Document($document);
     }

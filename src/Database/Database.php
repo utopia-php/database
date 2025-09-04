@@ -5087,11 +5087,15 @@ class Database
             $collection,
             '',
             [$document],
-            function (Document $doc) use (&$result) {
+            function (Document $doc, ?Document $_old = null) use (&$result) {
                 $result = $doc;
             }
         );
 
+        if ($result === null) {
+            // No-op (unchanged): return the current persisted doc
+            $result = $this->getDocument($collection, $document->getId());
+        }
         return $result;
     }
 

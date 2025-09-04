@@ -722,8 +722,8 @@ class Mirror extends Database
             $updates,
             $queries,
             $batchSize,
-            function ($doc) use ($onNext, &$modified) {
-                $onNext && $onNext($doc);
+            function ($doc, $old) use ($onNext, &$modified) {
+                $onNext && $onNext($doc, $old);
                 $modified++;
             },
             $onError
@@ -781,10 +781,15 @@ class Mirror extends Database
         return $modified;
     }
 
-    public function createOrUpdateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE, callable|null $onNext = null): int
-    {
+    public function upsertDocuments(
+        string $collection,
+        array $documents,
+        int $batchSize = Database::INSERT_BATCH_SIZE,
+        ?callable $onNext = null,
+        ?callable $onError = null,
+    ): int {
         $modified = 0;
-        $this->source->createOrUpdateDocuments(
+        $this->source->upsertDocuments(
             $collection,
             $documents,
             $batchSize,
@@ -826,7 +831,7 @@ class Mirror extends Database
 
             $modified = $this->destination->withPreserveDates(
                 fn () =>
-                $this->destination->createOrUpdateDocuments(
+                $this->destination->upsertDocuments(
                     $collection,
                     $clones,
                     $batchSize,

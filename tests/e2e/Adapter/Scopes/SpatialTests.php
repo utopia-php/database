@@ -1581,7 +1581,7 @@ trait SpatialTests
             ]], $document->getAttribute('area'));
         }
 
-        // Test 3: createOrUpdateDocuments with spatial data
+        // Test 3: upsertDocuments with spatial data
         $upsertDocuments = [
             new Document([
                 '$id' => 'upsert1',
@@ -1622,7 +1622,7 @@ trait SpatialTests
         ];
 
         $upsertResults = [];
-        $upsertCount = $database->createOrUpdateDocuments($collectionName, $upsertDocuments, onNext: function ($doc) use (&$upsertResults) {
+        $upsertCount = $database->upsertDocuments($collectionName, $upsertDocuments, onNext: function ($doc) use (&$upsertResults) {
             $upsertResults[] = $doc;
         });
 

@@ -419,8 +419,7 @@ class Database
         Adapter $adapter,
         Cache $cache,
         array $filters = []
-    )
-    {
+    ) {
         $this->adapter = $adapter;
         $this->cache = $cache;
         $this->instanceFilters = $filters;
@@ -1796,8 +1795,7 @@ class Database
         ?string $format,
         array $formatOptions,
         array $filters
-    ): Document
-    {
+    ): Document {
         // Attribute IDs are case-insensitive
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -2637,8 +2635,7 @@ class Database
         ?string $id = null,
         ?string $twoWayKey = null,
         string $onDelete = Database::RELATION_MUTATE_RESTRICT
-    ): bool
-    {
+    ): bool {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
@@ -2829,8 +2826,7 @@ class Database
         ?string $newTwoWayKey = null,
         ?bool $twoWay = null,
         ?string $onDelete = null
-    ): bool
-    {
+    ): bool {
         if (
             \is_null($newKey)
             && \is_null($newTwoWayKey)
@@ -3905,8 +3901,7 @@ class Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
-    ): int
-    {
+    ): int {
         if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
@@ -4191,8 +4186,7 @@ class Database
         bool $twoWay,
         string $twoWayKey,
         string $side,
-    ): string
-    {
+    ): string {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if ($twoWay) {
@@ -4273,8 +4267,7 @@ class Database
         bool $twoWay,
         string $twoWayKey,
         string $side,
-    ): void
-    {
+    ): void {
         // Get the related document, will be empty on permissions failure
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId));
 
@@ -4559,8 +4552,7 @@ class Database
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
-    ): int
-    {
+    ): int {
         if ($updates->isEmpty()) {
             return 0;
         }
@@ -4898,7 +4890,7 @@ class Database
                                     $document->setAttribute($key, $related->getId());
                                     break;
                                 }
-                            // no break
+                                // no break
                             case 'NULL':
                                 if (!\is_null($oldValue?->getId())) {
                                     $oldRelated = $this->skipRelationships(
@@ -5153,8 +5145,7 @@ class Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
-    ): int
-    {
+    ): int {
         return $this->createOrUpdateDocumentsWithIncrease(
             $collection,
             '',
@@ -5183,8 +5174,7 @@ class Database
         array $documents,
         ?callable $onNext = null,
         int $batchSize = self::INSERT_BATCH_SIZE
-    ): int
-    {
+    ): int {
         if (empty($documents)) {
             return 0;
         }
@@ -5410,8 +5400,7 @@ class Database
         string $attribute,
         int|float $value = 1,
         int|float|null $max = null
-    ): Document
-    {
+    ): Document {
         if ($value <= 0) { // Can be a float
             throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
@@ -5508,8 +5497,7 @@ class Database
         string $attribute,
         int|float $value = 1,
         int|float|null $min = null
-    ): Document
-    {
+    ): Document {
         if ($value <= 0) { // Can be a float
             throw new \InvalidArgumentException('Value must be numeric and greater than 0');
         }
@@ -5766,8 +5754,7 @@ class Database
         bool $twoWay,
         string $twoWayKey,
         string $side
-    ): void
-    {
+    ): void {
         if ($value instanceof Document && $value->isEmpty()) {
             $value = null;
         }
@@ -6057,8 +6044,7 @@ class Database
         int $batchSize = self::DELETE_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
-    ): int
-    {
+    ): int {
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }
@@ -7133,8 +7119,7 @@ class Database
     private function processRelationshipQueries(
         array $relationships,
         array $queries,
-    ): array
-    {
+    ): array {
         $nestedSelections = [];
 
         foreach ($queries as $query) {

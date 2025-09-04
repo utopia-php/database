@@ -37,8 +37,14 @@ class Index extends Validator
      * @param bool $spatialIndexOrderSupport
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [], bool $arrayIndexSupport = false, bool $spatialIndexSupport = false, bool $spatialIndexNullSupport = false, bool $spatialIndexOrderSupport = false)
-    {
+    public function __construct(
+        array $attributes,
+        int $maxLength,
+        array $reservedKeys = [],
+        bool $arrayIndexSupport = false,
+        bool $spatialIndexNullSupport = false,
+        bool $spatialIndexOrderSupport = false,
+    ) {
         $this->maxLength = $maxLength;
         $this->reservedKeys = $reservedKeys;
         $this->arrayIndexSupport = $arrayIndexSupport;
@@ -308,8 +314,8 @@ class Index extends Validator
         $type = $index->getAttribute('type');
 
         if (
-            $type !== Database::INDEX_HNSW_DOT ||
-            $type !== Database::INDEX_HNSW_COSINE ||
+            $type !== Database::INDEX_HNSW_DOT &&
+            $type !== Database::INDEX_HNSW_COSINE &&
             $type !== Database::INDEX_HNSW_EUCLIDEAN
         ) {
             return true;

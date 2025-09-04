@@ -2745,6 +2745,98 @@ trait DocumentTests
         $this->assertEquals(0, count($documents));
     }
 
+    public function testFindCreatedBetween(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        /**
+         * Test Query::createdBetween wrapper
+         */
+        $pastDate = '1900-01-01T00:00:00.000Z';
+        $futureDate = '2050-01-01T00:00:00.000Z';
+        $recentPastDate = '2020-01-01T00:00:00.000Z';
+        $nearFutureDate = '2025-01-01T00:00:00.000Z';
+
+        // All documents should be between past and future
+        $documents = $database->find('movies', [
+            Query::createdBetween($pastDate, $futureDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertGreaterThan(0, count($documents));
+
+        // No documents should exist in this range
+        $documents = $database->find('movies', [
+            Query::createdBetween($pastDate, $pastDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertEquals(0, count($documents));
+
+        // Documents created between recent past and near future
+        $documents = $database->find('movies', [
+            Query::createdBetween($recentPastDate, $nearFutureDate),
+            Query::limit(25)
+        ]);
+
+        $count = count($documents);
+
+        // Same count should be returned with expanded range
+        $documents = $database->find('movies', [
+            Query::createdBetween($pastDate, $nearFutureDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertGreaterThanOrEqual($count, count($documents));
+    }
+
+    public function testFindUpdatedBetween(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        /**
+         * Test Query::updatedBetween wrapper
+         */
+        $pastDate = '1900-01-01T00:00:00.000Z';
+        $futureDate = '2050-01-01T00:00:00.000Z';
+        $recentPastDate = '2020-01-01T00:00:00.000Z';
+        $nearFutureDate = '2025-01-01T00:00:00.000Z';
+
+        // All documents should be between past and future
+        $documents = $database->find('movies', [
+            Query::updatedBetween($pastDate, $futureDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertGreaterThan(0, count($documents));
+
+        // No documents should exist in this range
+        $documents = $database->find('movies', [
+            Query::updatedBetween($pastDate, $pastDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertEquals(0, count($documents));
+
+        // Documents updated between recent past and near future
+        $documents = $database->find('movies', [
+            Query::updatedBetween($recentPastDate, $nearFutureDate),
+            Query::limit(25)
+        ]);
+
+        $count = count($documents);
+
+        // Same count should be returned with expanded range
+        $documents = $database->find('movies', [
+            Query::updatedBetween($pastDate, $nearFutureDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertGreaterThanOrEqual($count, count($documents));
+    }
+
     public function testFindLimit(): void
     {
         /** @var Database $database */

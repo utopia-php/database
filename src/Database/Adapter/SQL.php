@@ -2090,7 +2090,7 @@ abstract class SQL extends Adapter
      * @return array<Document>
      * @throws DatabaseException
      */
-    public function createOrUpdateDocuments(
+    public function upsertDocuments(
         Document $collection,
         string $attribute,
         array $changes

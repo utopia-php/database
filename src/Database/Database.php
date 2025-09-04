@@ -60,7 +60,7 @@ class Database
     public const VAR_LINESTRING = 'linestring';
     public const VAR_POLYGON = 'polygon';
 
-    public const SPATIAL_TYPES = [self::VAR_POINT,self::VAR_LINESTRING, self::VAR_POLYGON];
+    public const SPATIAL_TYPES = [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON];
 
     // Index Types
     public const INDEX_KEY = 'key';
@@ -3826,7 +3826,8 @@ class Database
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
-     * @param callable|null $onNext
+     * @param (callable(Document): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws StructureException
@@ -3838,6 +3839,7 @@ class Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
@@ -3914,7 +3916,13 @@ class Database
 
                 $document = $this->casting($collection, $document);
                 $document = $this->decode($collection, $document);
-                $onNext && $onNext($document);
+
+                try {
+                    $onNext && $onNext($document);
+                } catch (\Throwable $e) {
+                    $onError ? $onError($e) : throw $e;
+                }
+
                 $modified++;
             }
         }
@@ -4283,7 +4291,7 @@ class Database
 
             if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
-                $currentPermissions  = $document->getPermissions();
+                $currentPermissions = $document->getPermissions();
 
                 sort($originalPermissions);
                 sort($currentPermissions);
@@ -4473,8 +4481,8 @@ class Database
      * @param Document $updates
      * @param array<Query> $queries
      * @param int $batchSize
-     * @param callable|null $onNext
-     * @param callable|null $onError
+     * @param (callable(Document $updated, Document $old): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws ConflictException
@@ -4597,12 +4605,12 @@ class Database
                 break;
             }
 
-            $currentPermissions  = $updates->getPermissions();
+            $old = array_map(fn ($doc) => clone $doc, $batch);
+            $currentPermissions = $updates->getPermissions();
             sort($currentPermissions);
 
             $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
                 foreach ($batch as $index => $document) {
-
                     $skipPermissionsUpdate = true;
 
                     if ($updates->offsetExists('$permissions')) {
@@ -4647,13 +4655,12 @@ class Database
                 );
             });
 
-            foreach ($batch as $doc) {
+            foreach ($batch as $index => $doc) {
                 $doc->removeAttribute('$skipPermissionsUpdate');
-
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
                 try {
-                    $onNext && $onNext($doc);
+                    $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {
                     $onError ? $onError($th) : throw $th;
                 }
@@ -5070,27 +5077,61 @@ class Database
     }
 
     /**
+     * Create or update a document.
+     *
+     * @param string $collection
+     * @param Document $document
+     * @return Document
+     * @throws StructureException
+     * @throws Throwable
+     */
+    public function upsertDocument(
+        string $collection,
+        Document $document,
+    ): Document {
+        $result = null;
+
+        $this->upsertDocumentsWithIncrease(
+            $collection,
+            '',
+            [$document],
+            function (Document $doc, ?Document $_old = null) use (&$result) {
+                $result = $doc;
+            }
+        );
+
+        if ($result === null) {
+            // No-op (unchanged): return the current persisted doc
+            $result = $this->getDocument($collection, $document->getId());
+        }
+        return $result;
+    }
+
+    /**
      * Create or update documents.
      *
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
-     * @param callable|null $onNext
+     * @param (callable(Document, ?Document): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws StructureException
      * @throws \Throwable
      */
-    public function createOrUpdateDocuments(
+    public function upsertDocuments(
         string $collection,
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null
     ): int {
-        return $this->createOrUpdateDocumentsWithIncrease(
+        return $this->upsertDocumentsWithIncrease(
             $collection,
             '',
             $documents,
             $onNext,
+            $onError,
             $batchSize
         );
     }
@@ -5101,18 +5142,20 @@ class Database
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
-     * @param callable|null $onNext
+     * @param (callable(Document, ?Document): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @param int $batchSize
      * @return int
      * @throws StructureException
      * @throws \Throwable
      * @throws Exception
      */
-    public function createOrUpdateDocumentsWithIncrease(
+    public function upsertDocumentsWithIncrease(
         string $collection,
         string $attribute,
         array $documents,
         ?callable $onNext = null,
+        ?callable $onError = null,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
         if (empty($documents)) {
@@ -5144,7 +5187,7 @@ class Database
 
             if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
-                $currentPermissions  = $document->getPermissions();
+                $currentPermissions = $document->getPermissions();
 
                 sort($originalPermissions);
                 sort($currentPermissions);
@@ -5274,7 +5317,7 @@ class Database
             /**
              * @var array<Change> $chunk
              */
-            $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
+            $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->upsertDocuments(
                 $collection,
                 $attribute,
                 $chunk
@@ -5290,7 +5333,7 @@ class Database
                 }
             }
 
-            foreach ($batch as $doc) {
+            foreach ($batch as $index => $doc) {
                 if ($this->resolveRelationships) {
                     $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
@@ -5305,7 +5348,13 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                $onNext && $onNext($doc);
+                $old = $chunk[$index]->getOld();
+
+                try {
+                    $onNext && $onNext($doc, $old->isEmpty() ? null : $old);
+                } catch (\Throwable $th) {
+                    $onError ? $onError($th) : throw $th;
+                }
             }
         }
 
@@ -5972,8 +6021,8 @@ class Database
      * @param string $collection
      * @param array<Query> $queries
      * @param int $batchSize
-     * @param callable|null $onNext
-     * @param callable|null $onError
+     * @param (callable(Document, Document): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws DatabaseException
@@ -6065,6 +6114,7 @@ class Database
                 break;
             }
 
+            $old = array_map(fn ($doc) => clone $doc, $batch);
             $sequences = [];
             $permissionIds = [];
 
@@ -6101,7 +6151,7 @@ class Database
                 );
             });
 
-            foreach ($batch as $document) {
+            foreach ($batch as $index => $document) {
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($document->getTenant(), function () use ($collection, $document) {
                         $this->purgeCachedDocument($collection->getId(), $document->getId());
@@ -6110,7 +6160,7 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
                 try {
-                    $onNext && $onNext($document);
+                    $onNext && $onNext($document, $old[$index]);
                 } catch (Throwable $th) {
                     $onError ? $onError($th) : throw $th;
                 }
@@ -6520,7 +6570,7 @@ class Database
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-        $internalDateAttributes = ['$createdAt','$updatedAt'];
+        $internalDateAttributes = ['$createdAt', '$updatedAt'];
         foreach ($this->getInternalAttributes() as $attribute) {
             $attributes[] = $attribute;
         }
@@ -6937,7 +6987,7 @@ class Database
             }
         }
 
-        if (! $attribute->isEmpty()) {
+        if (!$attribute->isEmpty()) {
             $query->setOnArray($attribute->getAttribute('array', false));
 
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
@@ -7195,7 +7245,7 @@ class Database
         // POINT(x y)
         if (str_starts_with($upper, 'POINT(')) {
             $start = strpos($wkt, '(') + 1;
-            $end   = strrpos($wkt, ')');
+            $end = strrpos($wkt, ')');
             $inside = substr($wkt, $start, $end - $start);
 
             $coords = explode(' ', trim($inside));
@@ -7205,7 +7255,7 @@ class Database
         // LINESTRING(x1 y1, x2 y2, ...)
         if (str_starts_with($upper, 'LINESTRING(')) {
             $start = strpos($wkt, '(') + 1;
-            $end   = strrpos($wkt, ')');
+            $end = strrpos($wkt, ')');
             $inside = substr($wkt, $start, $end - $start);
 
             $points = explode(',', $inside);
@@ -7218,7 +7268,7 @@ class Database
         // POLYGON((x1,y1),(x2,y2))
         if (str_starts_with($upper, 'POLYGON((')) {
             $start = strpos($wkt, '((') + 2;
-            $end   = strrpos($wkt, '))');
+            $end = strrpos($wkt, '))');
             $inside = substr($wkt, $start, $end - $start);
 
             $rings = explode('),(', $inside);

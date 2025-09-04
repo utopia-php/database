@@ -159,6 +159,18 @@ class QueryTest extends TestCase
         $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
         $this->assertEquals('$updatedAt', $query->getAttribute());
         $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::createdBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z');
+
+        $this->assertEquals(Query::TYPE_BETWEEN, $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::updatedBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z');
+
+        $this->assertEquals(Query::TYPE_BETWEEN, $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
     }
 
     /**
@@ -288,6 +300,16 @@ class QueryTest extends TestCase
         $this->assertEquals('greaterThan', $query->getMethod());
         $this->assertEquals('$updatedAt', $query->getAttribute());
         $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::parse(Query::createdBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z')->toString());
+        $this->assertEquals('between', $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::parse(Query::updatedBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z')->toString());
+        $this->assertEquals('between', $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
 
         $query = Query::parse(Query::between('age', 15, 18)->toString());
         $this->assertEquals('between', $query->getMethod());

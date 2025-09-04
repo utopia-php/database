@@ -742,6 +742,30 @@ class Query
     }
 
     /**
+     * Helper method to create Query for documents created between two dates
+     *
+     * @param string $start
+     * @param string $end
+     * @return Query
+     */
+    public static function createdBetween(string $start, string $end): self
+    {
+        return self::between('$createdAt', $start, $end);
+    }
+
+    /**
+     * Helper method to create Query for documents updated between two dates
+     *
+     * @param string $start
+     * @param string $end
+     * @return Query
+     */
+    public static function updatedBetween(string $start, string $end): self
+    {
+        return self::between('$updatedAt', $start, $end);
+    }
+
+    /**
      * @param array<Query> $queries
      * @return Query
      */

@@ -749,7 +749,7 @@ abstract class Adapter
      * @param array<Change> $changes
      * @return array<Document>
      */
-    abstract public function createOrUpdateDocuments(
+    abstract public function upsertDocuments(
         Document $collection,
         string $attribute,
         array $changes

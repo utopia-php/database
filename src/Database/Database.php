@@ -1878,7 +1878,7 @@ class Database
                 break;
             case self::VAR_VECTOR:
                 if (!$this->adapter->getSupportForVectors()) {
-                    throw new DatabaseException('Vector type is only supported in PostgreSQL adapter');
+                    throw new DatabaseException('Vector type is not supported by the current database adapter');
                 }
                 if ($array) {
                     throw new DatabaseException('Vector type cannot be an array');
@@ -1888,6 +1888,21 @@ class Database
                 }
                 if ($size > self::VECTOR_MAX_DIMENSIONS) {
                     throw new DatabaseException('Vector dimensions cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
+                }
+                
+                // Validate default value if provided
+                if ($default !== null) {
+                    if (!is_array($default)) {
+                        throw new DatabaseException('Vector default value must be an array');
+                    }
+                    if (count($default) !== $size) {
+                        throw new DatabaseException('Vector default value must have exactly ' . $size . ' elements');
+                    }
+                    foreach ($default as $component) {
+                        if (!is_numeric($component)) {
+                            throw new DatabaseException('Vector default value must contain only numeric elements');
+                        }
+                    }
                 }
                 break;
             default:
@@ -2261,10 +2276,10 @@ class Database
                         throw new DatabaseException('Vector type cannot be an array');
                     }
                     if ($size <= 0) {
-                        throw new DatabaseException('Vector size must be a positive integer');
+                        throw new DatabaseException('Vector dimensions must be a positive integer');
                     }
                     if ($size > self::VECTOR_MAX_DIMENSIONS) {
-                        throw new DatabaseException('Vector size cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
+                        throw new DatabaseException('Vector dimensions cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
                     }
                     break;
                 default:

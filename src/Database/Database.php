@@ -3827,6 +3827,7 @@ class Database
      * @param array<Document> $documents
      * @param int $batchSize
      * @param (callable(Document): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws StructureException
@@ -3838,6 +3839,7 @@ class Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
@@ -3914,7 +3916,13 @@ class Database
 
                 $document = $this->casting($collection, $document);
                 $document = $this->decode($collection, $document);
-                $onNext && $onNext($document);
+
+                try {
+                    $onNext && $onNext($document);
+                } catch (\Throwable $e) {
+                    $onError ? $onError($e) : throw $e;
+                }
+
                 $modified++;
             }
         }

@@ -119,4 +119,24 @@ class AuthorizationTest extends TestCase
 
         $this->assertEquals(true, Authorization::$status);
     }
+
+    public function testSetUserFromRoles(): void
+    {
+        $currentUserRole = Role::user("123");
+        Authorization::setRole(Role::user("123")->toString());
+        $this->assertEquals($currentUserRole->getIdentifier(), Authorization::getUser());
+
+        $roles = [];
+        $roles[] = Role::user("123");
+        $roles[] = Role::user("123", 'verififed');
+        $roles[] = Role::user("126", 'unverififed');
+        $roles[] = Role::any();
+        $roles[] = Role::users();
+
+        foreach ($roles as $role) {
+            Authorization::setRole($role->toString());
+        }
+        $expectedRole = Role::user("126", 'unverififed');
+        $this->assertEquals($expectedRole->getIdentifier(), Authorization::getUser());
+    }
 }

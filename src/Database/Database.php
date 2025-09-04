@@ -4636,6 +4636,15 @@ class Database
                 break;
             }
 
+            /**
+             * Check and tests for required attributes
+             */
+            foreach (['$permissions', '$sequence'] as $required) {
+                if (!$batch[0]->offsetExists($required)) {
+                    throw new QueryException("Missing required attribute {$required} in select query");
+                }
+            }
+
             $currentPermissions  = $updates->getPermissions();
             sort($currentPermissions);
 
@@ -6050,12 +6059,6 @@ class Database
         $context = new QueryContext();
         $context->add($collection);
 
-        $queries = Query::addSelect($queries, Query::select('$id'));
-        $queries = Query::addSelect($queries, Query::select('$permissions'));
-        $queries = Query::addSelect($queries, Query::select('$internalId'));
-        $queries = Query::addSelect($queries, Query::select('$createdAt'));
-        $queries = Query::addSelect($queries, Query::select('$updatedAt'));
-
         $this->checkQueriesType($queries);
 
         if ($this->validate) {
@@ -6110,6 +6113,15 @@ class Database
 
             if (empty($batch)) {
                 break;
+            }
+
+            /**
+             * Check and tests for required attributes
+             */
+            foreach (['$permissions', '$sequence'] as $required) {
+                if (!$batch[0]->offsetExists($required)) {
+                    throw new QueryException("Missing required attribute {$required} in select query");
+                }
             }
 
             $sequences = [];
@@ -6481,16 +6493,15 @@ class Database
 
         $this->checkQueriesType($queries);
 
-        /**
-         * @var $collection Document
-         */
-
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
 
         $context = new QueryContext();
         $context->add($collection);
+
+        $queries = Query::getFilterQueries($queries);
+        $queries = self::convertQueries($context, $queries);
 
         $this->checkQueriesType($queries);
 
@@ -6507,21 +6518,10 @@ class Database
             }
         }
 
-
         $authorization = new Authorization(self::PERMISSION_READ);
         if ($authorization->isValid($collection->getRead())) {
             $skipAuth = true;
         }
-
-        /**
-         * We allow only filters
-         */
-        $queries = Query::getFilterQueries($queries);
-
-        /**
-         * Convert Queries
-         */
-        $queries = self::convertQueries($context, $queries);
 
         $getCount = fn () => $this->adapter->count($collection, $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
@@ -6548,10 +6548,6 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        /**
-         * @var $collection Document
-         */
-
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
@@ -6563,6 +6559,9 @@ class Database
         if ($authorization->isValid($collection->getRead())) {
             $skipAuth = true;
         }
+
+        $queries = Query::getFilterQueries($queries);
+        $queries = self::convertQueries($context, $queries);
 
         $this->checkQueriesType($queries);
 
@@ -6579,17 +6578,7 @@ class Database
             }
         }
 
-        /**
-         * We allow only filters
-         */
-        $queries = Query::getFilterQueries($queries);
-
-        /**
-         * Convert Queries
-         */
-        $queries = self::convertQueries($context, $queries);
-
-        $getCount = fn () => $this->adapter->sum($collection->getId(), $attribute, $queries, $max);
+        $getCount = fn () => $this->adapter->sum($collection, $attribute, $queries, $max);
         $sum = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);

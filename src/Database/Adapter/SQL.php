@@ -1860,7 +1860,7 @@ var_dump($sql);
 
             $attribute = match ($attribute) {
                 '$id' => '_uid',
-                '$internalId' => '_id',
+                '$sequence' => '_id',
                 '$tenant' => '_tenant',
                 '$createdAt' => '_createdAt',
                 '$updatedAt' => '_updatedAt',

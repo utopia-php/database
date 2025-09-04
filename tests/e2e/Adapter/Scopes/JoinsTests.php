@@ -228,7 +228,7 @@ trait JoinsTests
             $db->find(
                 '__users',
                 [
-                    Query::relationEqual('', '$id', '', '$internalId'),
+                    Query::relationEqual('', '$id', '', '$sequence'),
                 ]
             );
             $this->fail('Failed to throw exception');
@@ -384,7 +384,7 @@ trait JoinsTests
             [
                 Query::select('$permissions', as: '___permissions'),
                 Query::select('$id', as: '___uid'),
-                Query::select('$internalId', as: '___id'),
+                Query::select('$sequence', as: '___id'),
                 Query::select('$createdAt', as: '___created'),
                 Query::select('user_id', as: 'user_id_as'),
                 Query::select('float', as: 'float_as'),
@@ -397,7 +397,7 @@ trait JoinsTests
         $this->assertArrayHasKey('___uid', $document);
         $this->assertArrayNotHasKey('$id', $document);
         $this->assertArrayHasKey('___id', $document);
-        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$sequence', $document);
         $this->assertArrayHasKey('___created', $document);
         $this->assertArrayNotHasKey('$createdAt', $document);
         $this->assertArrayHasKey('user_id_as', $document);
@@ -433,7 +433,7 @@ trait JoinsTests
             '__sessions',
             [
                 Query::select('$id', as: '___uid'),
-                Query::select('$internalId', as: '___id'),
+                Query::select('$sequence', as: '___id'),
                 Query::select('$createdAt', as: '___created'),
                 Query::select('user_id', as: 'user_id_as'),
                 Query::select('float', as: 'float_as'),
@@ -444,7 +444,7 @@ trait JoinsTests
         $this->assertArrayHasKey('___uid', $document);
         $this->assertArrayNotHasKey('$id', $document);
         $this->assertArrayHasKey('___id', $document);
-        $this->assertArrayNotHasKey('$internalId', $document);
+        $this->assertArrayNotHasKey('$sequence', $document);
         $this->assertArrayHasKey('___created', $document);
         $this->assertArrayNotHasKey('$createdAt', $document);
         $this->assertArrayHasKey('user_id_as', $document);

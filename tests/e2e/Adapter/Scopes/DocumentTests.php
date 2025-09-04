@@ -3562,7 +3562,7 @@ trait DocumentTests
             $this->assertArrayNotHasKey('price', $document);
             $this->assertArrayNotHasKey('active', $document);
             $this->assertArrayNotHasKey('$id', $document);
-            $this->assertArrayNotHasKey('$internalId', $document);
+            $this->assertArrayNotHasKey('$sequence', $document);
             $this->assertArrayNotHasKey('$collection', $document);
             $this->assertArrayNotHasKey('$createdAt', $document);
             $this->assertArrayHasKey('$updatedAt', $document);

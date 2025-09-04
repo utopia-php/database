@@ -27,7 +27,7 @@ class Query
     public const TYPE_ENDS_WITH = 'endsWith';
     public const TYPE_NOT_ENDS_WITH = 'notEndsWith';
 
-    // General spatial method constants (for spatial-only operations)
+    // Spatial methods
     public const TYPE_CROSSES = 'crosses';
     public const TYPE_NOT_CROSSES = 'notCrosses';
     public const TYPE_DISTANCE_EQUAL = 'distanceEqual';
@@ -40,6 +40,11 @@ class Query
     public const TYPE_NOT_OVERLAPS = 'notOverlaps';
     public const TYPE_TOUCHES = 'touches';
     public const TYPE_NOT_TOUCHES = 'notTouches';
+
+    // Vector query methods
+    public const TYPE_VECTOR_DOT = 'vectorDot';
+    public const TYPE_VECTOR_COSINE = 'vectorCosine';
+    public const TYPE_VECTOR_EUCLIDEAN = 'vectorEuclidean';
 
     public const TYPE_SELECT = 'select';
 
@@ -90,6 +95,9 @@ class Query
         self::TYPE_NOT_OVERLAPS,
         self::TYPE_TOUCHES,
         self::TYPE_NOT_TOUCHES,
+        self::TYPE_VECTOR_DOT,
+        self::TYPE_VECTOR_COSINE,
+        self::TYPE_VECTOR_EUCLIDEAN,
         self::TYPE_SELECT,
         self::TYPE_ORDER_DESC,
         self::TYPE_ORDER_ASC,
@@ -273,7 +281,10 @@ class Query
             self::TYPE_NOT_TOUCHES,
             self::TYPE_OR,
             self::TYPE_AND,
-            self::TYPE_SELECT => true,
+            self::TYPE_SELECT,
+            self::TYPE_VECTOR_DOT,
+            self::TYPE_VECTOR_COSINE,
+            self::TYPE_VECTOR_EUCLIDEAN => true,
             default => false,
         };
     }
@@ -919,8 +930,6 @@ class Query
         $this->onArray = $bool;
     }
 
-    // Spatial query methods
-
     /**
      * Helper method to create Query with distanceEqual method
      *
@@ -1071,5 +1080,41 @@ class Query
     public static function notTouches(string $attribute, array $values): self
     {
         return new self(self::TYPE_NOT_TOUCHES, $attribute, $values);
+    }
+
+    /**
+     * Helper method to create Query with vectorDot method
+     *
+     * @param string $attribute
+     * @param array<float> $vector
+     * @return Query
+     */
+    public static function vectorDot(string $attribute, array $vector): self
+    {
+        return new self(self::TYPE_VECTOR_DOT, $attribute, [$vector]);
+    }
+
+    /**
+     * Helper method to create Query with vectorCosine method
+     *
+     * @param string $attribute
+     * @param array<float> $vector
+     * @return Query
+     */
+    public static function vectorCosine(string $attribute, array $vector): self
+    {
+        return new self(self::TYPE_VECTOR_COSINE, $attribute, [$vector]);
+    }
+
+    /**
+     * Helper method to create Query with vectorEuclidean method
+     *
+     * @param string $attribute
+     * @param array<float> $vector
+     * @return Query
+     */
+    public static function vectorEuclidean(string $attribute, array $vector): self
+    {
+        return new self(self::TYPE_VECTOR_EUCLIDEAN, $attribute, [$vector]);
     }
 }

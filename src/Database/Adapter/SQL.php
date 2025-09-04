@@ -1131,6 +1131,11 @@ abstract class SQL extends Adapter
                     $total += 20;
                     break;
 
+                case Database::VAR_VECTOR:
+                    // Each dimension is typically 4 bytes (float32)
+                    $total += ($attribute['size'] ?? 0) * 4;
+                    break;
+
                 default:
                     throw new DatabaseException('Unknown type: ' . $attribute['type']);
             }
@@ -1484,7 +1489,7 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Is spatial attributes supported?
+     * Are spatial attributes supported?
      *
      * @return bool
     */
@@ -1514,6 +1519,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Is vector type supported?
+     *
+     * @return bool
+     */
+    public function getSupportForVectors(): bool
+    {
+        return false;
+    }
+
+    /**
      * @param string $tableName
      * @param string $columns
      * @param array<string> $batchKeys
@@ -1530,6 +1545,19 @@ abstract class SQL extends Adapter
         array $bindValues,
         string $attribute = '',
     ): mixed;
+
+    /**
+     * Get vector distance calculation for ORDER BY clause
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $alias
+     * @return string|null
+     */
+    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    {
+        return null;
+    }
 
     /**
      * @param string $value
@@ -1592,6 +1620,10 @@ abstract class SQL extends Adapter
             case Query::TYPE_NOT_ENDS_WITH:
             case Query::TYPE_NOT_CONTAINS:
                 return $this->getLikeOperator();
+            case Query::TYPE_VECTOR_DOT:
+            case Query::TYPE_VECTOR_COSINE:
+            case Query::TYPE_VECTOR_EUCLIDEAN:
+                throw new DatabaseException('Vector queries are only supported in PostgreSQL adapter');
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }
@@ -2349,6 +2381,23 @@ abstract class SQL extends Adapter
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
+        // Extract vector queries for ORDER BY
+        $vectorQueries = [];
+        $filterQueries = [];
+        foreach ($queries as $query) {
+            if (in_array($query->getMethod(), [
+                Query::TYPE_VECTOR_DOT,
+                Query::TYPE_VECTOR_COSINE,
+                Query::TYPE_VECTOR_EUCLIDEAN,
+            ])) {
+                $vectorQueries[] = $query;
+            } else {
+                $filterQueries[] = $query;
+            }
+        }
+
+        $queries = $filterQueries;
+
         $cursorWhere = [];
 
         foreach ($orderAttributes as $i => $originalAttribute) {
@@ -2427,7 +2476,22 @@ abstract class SQL extends Adapter
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
+
+        // Add vector distance calculations to ORDER BY
+        $vectorOrders = [];
+        foreach ($vectorQueries as $query) {
+            $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
+            if ($vectorOrder) {
+                $vectorOrders[] = $vectorOrder;
+            }
+        }
+
+        if (!empty($vectorOrders)) {
+            // Vector orders should come first for similarity search
+            $orders = \array_merge($vectorOrders, $orders);
+        }
+
+        $sqlOrder = !empty($orders) ? 'ORDER BY ' . implode(', ', $orders) : '';
 
         $sqlLimit = '';
         if (! \is_null($limit)) {
@@ -2441,7 +2505,6 @@ abstract class SQL extends Adapter
         }
 
         $selections = $this->getAttributeSelections($queries);
-
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}

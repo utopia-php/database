@@ -356,6 +356,10 @@ class Structure extends Validator
                     $validators[] = new Spatial($type);
                     break;
 
+                case Database::VAR_VECTOR:
+                    $validators[] = new Vector($attribute['size'] ?? 0);
+                    break;
+
                 default:
                     $this->message = 'Unknown attribute type "'.$type.'"';
                     return false;

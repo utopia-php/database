@@ -3440,7 +3440,6 @@ class Database
             $forUpdate
         );
 
-        var_dump($document);
 //        $permissions = new Document([
 //            '$permissions' => $document->getAttribute('$perms')
 //        ]);
@@ -6691,25 +6690,6 @@ class Database
     /**
      * Decode Document
      *
-     * @param QueryContext $context
-     * @param Document $document
-     * @param array<Query> $selects
-     * @return Document
-     * @throws DatabaseException
-     */
-    public function decode(QueryContext $context, Document $document, array $selects = []): Document
-    {
-        foreach ($context->getCollections() as $collection) {
-            $document = $this->decodeOriginal($collection, $document, $selects);
-        }
-
-        return $document;
-    }
-
-
-    /**
-     * Decode Document
-     *
      * @param Document $collection
      * @param Document $document
      * @param array<Query> $selects
@@ -6800,7 +6780,7 @@ class Database
      * @return Document
      * @throws DatabaseException
      */
-    public function decode_joins(QueryContext $context, Document $document, array $selects = []): Document
+    public function decode(QueryContext $context, Document $document, array $selects = []): Document
     {
         $internals = [];
         $schema = [];
@@ -6822,10 +6802,6 @@ class Database
         foreach ($document as $key => $value) {
             if($key === '$perms'){
                 $new->setAttribute($key, $value);
-                continue;
-            }
-
-            if ($key === '$permissions') {
                 continue;
             }
 
@@ -6880,8 +6856,9 @@ class Database
                 }
 
                 foreach (array_reverse($filters) as $filter) {
-                    $value[$index] = $this->decodeAttribute($filter, $node, $document, $key);
+                    $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
+
                 $value[$index] = $node;
             }
 
@@ -6926,10 +6903,6 @@ class Database
         $new = new Document();
 
         foreach ($document as $key => $value) {
-
-            if ($key === '$permissions') {
-                continue;
-            }
 
             if($key === '$perms'){
                 $new->setAttribute($key, $value);

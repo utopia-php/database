@@ -330,7 +330,15 @@ class Index extends Validator
 
         $attribute = $this->attributes[\strtolower($attributes[0])] ?? new Document();
         if ($attribute->getAttribute('type') !== Database::VAR_VECTOR) {
-            throw new DatabaseException('Vector index can only be created on vector attributes.');
+            $this->message = 'Vector index can only be created on vector attributes';
+            return false;
+        }
+
+        $orders = $index->getAttribute('orders', []);
+        $lengths = $index->getAttribute('lengths', []);
+        if (!empty($orders) || \count(\array_filter($lengths)) > 0) {
+            $this->message = 'Vector indexes do not support orders or lengths';
+            return false;
         }
 
         return true;

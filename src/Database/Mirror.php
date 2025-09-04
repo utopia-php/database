@@ -793,8 +793,8 @@ class Mirror extends Database
             $collection,
             $documents,
             $batchSize,
-            function ($doc) use ($onNext, &$modified) {
-                $onNext && $onNext($doc);
+            function ($doc, $old) use ($onNext, &$modified) {
+                $onNext && $onNext($doc, $old);
                 $modified++;
             }
         );
@@ -911,8 +911,8 @@ class Mirror extends Database
             $collection,
             $queries,
             $batchSize,
-            function ($doc) use (&$modified, $onNext) {
-                $onNext && $onNext($doc);
+            function ($doc, $old) use (&$modified, $onNext) {
+                $onNext && $onNext($doc, $old);
                 $modified++;
             },
             $onError

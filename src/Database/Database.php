@@ -4592,7 +4592,7 @@ class Database
                 array_merge($new, $queries),
                 forPermission: Database::PERMISSION_UPDATE
             ));
-            
+
             if (empty($batch)) {
                 break;
             }
@@ -5101,7 +5101,7 @@ class Database
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
-     * @param (callable(Document): void)|null $onNext
+     * @param (callable(Document, ?Document): void)|null $onNext
      * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws StructureException
@@ -5130,7 +5130,8 @@ class Database
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
-     * @param callable|null $onNext
+     * @param (callable(Document, ?Document): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @param int $batchSize
      * @return int
      * @throws StructureException
@@ -5320,7 +5321,7 @@ class Database
                 }
             }
 
-            foreach ($batch as $doc) {
+            foreach ($batch as $index => $doc) {
                 if ($this->resolveRelationships) {
                     $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
@@ -5335,7 +5336,13 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                $onNext && $onNext($doc);
+                $old = $chunk[$index]->getOld();
+
+                try {
+                    $onNext && $onNext($doc, $old->isEmpty() ? null : $old);
+                } catch (\Throwable $th) {
+                    $onError ? $onError($th) : throw $th;
+                }
             }
         }
 
@@ -6002,7 +6009,7 @@ class Database
      * @param string $collection
      * @param array<Query> $queries
      * @param int $batchSize
-     * @param (callable(Document): void)|null $onNext
+     * @param (callable(Document, Document): void)|null $onNext
      * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws AuthorizationException
@@ -6095,6 +6102,7 @@ class Database
                 break;
             }
 
+            $old = array_map(fn ($doc) => clone $doc, $batch);
             $sequences = [];
             $permissionIds = [];
 
@@ -6131,7 +6139,7 @@ class Database
                 );
             });
 
-            foreach ($batch as $document) {
+            foreach ($batch as $index => $document) {
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($document->getTenant(), function () use ($collection, $document) {
                         $this->purgeCachedDocument($collection->getId(), $document->getId());
@@ -6140,7 +6148,7 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
                 try {
-                    $onNext && $onNext($document);
+                    $onNext && $onNext($document, $old[$index]);
                 } catch (Throwable $th) {
                     $onError ? $onError($th) : throw $th;
                 }

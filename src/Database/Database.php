@@ -4338,6 +4338,9 @@ class Database
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
+            if ($old->isEmpty()) {
+                return new Document();
+            }
 
             $skipPermissionsUpdate = true;
 
@@ -4477,10 +4480,6 @@ class Database
                 }
             }
 
-            if ($old->isEmpty()) {
-                return new Document();
-            }
-
             if ($shouldUpdate) {
                 $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
             }
@@ -4512,6 +4511,10 @@ class Database
 
             return $document;
         });
+
+        if ($document->isEmpty()) {
+            return $document;
+        }
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
@@ -5636,7 +5639,9 @@ class Database
             return $result;
         });
 
-        $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
+        if ($deleted) {
+            $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
+        }
 
         return $deleted;
     }

@@ -1889,7 +1889,7 @@ class Database
                 if ($size > self::VECTOR_MAX_DIMENSIONS) {
                     throw new DatabaseException('Vector dimensions cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
                 }
-                
+
                 // Validate default value if provided
                 if ($default !== null) {
                     if (!is_array($default)) {

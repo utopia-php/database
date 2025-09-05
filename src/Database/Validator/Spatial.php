@@ -136,12 +136,12 @@ class Spatial extends Validator
 
     public function isArray(): bool
     {
-        return false;
+        return true;
     }
 
     public function getType(): string
     {
-        return 'spatial';
+        return self::TYPE_ARRAY;
     }
 
     /**

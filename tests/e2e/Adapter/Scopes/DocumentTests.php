@@ -1323,7 +1323,7 @@ trait DocumentTests
         $this->assertArrayNotHasKey('$createdAt', $document);
         $this->assertArrayNotHasKey('$updatedAt', $document);
         $this->assertArrayNotHasKey('$permissions', $document);
-        $this->assertArrayNotHasKey('$collection', $document);
+        $this->assertArrayHasKey('$collection', $document);
 
         $document = $database->getDocument('documents', $documentId, [
             Query::select('string'),
@@ -1332,10 +1332,10 @@ trait DocumentTests
         ]);
 
         $this->assertArrayHasKey('$id', $document);
-        $this->assertArrayHasKey('$sequence', $document);
-        $this->assertArrayHasKey('$createdAt', $document);
-        $this->assertArrayHasKey('$updatedAt', $document);
-        $this->assertArrayHasKey('$permissions', $document);
+        $this->assertArrayNotHasKey('$sequence', $document);
+        $this->assertArrayNotHasKey('$createdAt', $document);
+        $this->assertArrayNotHasKey('$updatedAt', $document);
+        $this->assertArrayNotHasKey('$permissions', $document);
         $this->assertArrayHasKey('$collection', $document);
         $this->assertArrayHasKey('string', $document);
         $this->assertArrayHasKey('integer_signed', $document);

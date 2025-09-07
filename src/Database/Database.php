@@ -3352,12 +3352,6 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        $selects = Query::getSelectQueries($queries);
-
-        if (count($selects) !== count($queries)) { // Do we want this check?
-            throw new QueryException('Only select queries are allowed');
-        }
-
         $context = new QueryContext();
         $context->add($collection);
 
@@ -3378,8 +3372,8 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        //$selects = Query::groupByType($queries)['selections'];
         $selects = Query::getSelectQueries($queries);
+        [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions',  system: true));
 
         //$selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
@@ -3403,16 +3397,10 @@ class Database
         if ($cached) {
             $document = new Document($cached);
 
-            $permissions = new Document([
-                '$permissions' => $document->getAttribute('$perms')
-            ]);
-
-            $document->removeAttribute('$perms');
-
             if ($collection->getId() !== self::METADATA) {
                 if (!$validator->isValid([
                     ...$collection->getRead(),
-                    ...($documentSecurity ? $permissions->getRead() : [])
+                    ...($documentSecurity ? $document->getRead() : [])
                 ])) {
                     return new Document();
                 }
@@ -3434,16 +3422,12 @@ class Database
             return $document;
         }
 
-        $permissions = new Document([
-            '$permissions' => $document->getAttribute('$perms')
-        ]);
-
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
             if (!$validator->isValid([
                 ...$collection->getRead(),
-                ...($documentSecurity ? $permissions->getRead() : [])
+                ...($documentSecurity ? $document->getRead() : [])
             ])) {
                 return new Document();
             }
@@ -3472,7 +3456,9 @@ class Database
             }
         }
 
-        $document->removeAttribute('$perms');
+        if($permissionsAdded){
+            $document->removeAttribute('$permissions');
+        }
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
@@ -6774,11 +6760,6 @@ class Database
         $new = new Document();
 
         foreach ($document as $key => $value) {
-            if($key === '$perms'){
-                $new->setAttribute($key, $value);
-                continue;
-            }
-
             $alias = Query::DEFAULT_ALIAS;
             $attributeKey = '';
 
@@ -6877,11 +6858,6 @@ class Database
         $new = new Document();
 
         foreach ($document as $key => $value) {
-            if($key === '$perms'){
-                $new->setAttribute($key, $value);
-                continue;
-            }
-
             $alias = Query::DEFAULT_ALIAS;
             $attributeKey = '';
 

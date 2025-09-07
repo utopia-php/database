@@ -41,6 +41,8 @@ class Database
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
+    public const VAR_ID = 'id';
+    public const VAR_UUID7 = 'uuid7';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
@@ -167,8 +169,8 @@ class Database
         ],
         [
             '$id' => '$sequence',
-            'type' => self::VAR_STRING,
-            'size' => Database::LENGTH_KEY,
+            'type' => self::VAR_ID,
+            'size' => 0,
             'required' => true,
             'signed' => true,
             'array' => false,
@@ -186,6 +188,7 @@ class Database
         [
             '$id' => '$tenant',
             'type' => self::VAR_INTEGER,
+            //'type' => self::VAR_ID, // Inconsistency with other VAR_ID since this is an INT
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -1789,6 +1792,9 @@ class Database
         $this->checkAttribute($collection, $attribute);
 
         switch ($type) {
+            case self::VAR_ID:
+
+                break;
             case self::VAR_STRING:
                 if ($size > $this->adapter->getLimitForString()) {
                     throw new DatabaseException('Max size allowed for string is: ' . number_format($this->adapter->getLimitForString()));
@@ -3285,7 +3291,7 @@ class Database
         $document = $this->decode($collection, $document, $selections);
         $this->map = [];
 
-        if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+        if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
         }
 
@@ -3312,11 +3318,11 @@ class Database
     /**
      * @param Document $collection
      * @param Document $document
-     * @param array<Query> $queries
+     * @param array<string, array<Query>> $selects
      * @return Document
      * @throws DatabaseException
      */
-    private function populateDocumentRelationships(Document $collection, Document $document, array $queries = []): Document
+    private function populateDocumentRelationships(Document $collection, Document $document, array $selects = []): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -3332,6 +3338,8 @@ class Database
             $twoWay = $relationship['options']['twoWay'];
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
+
+            $queries = $selects[$key] ?? [];
 
             if (!empty($value)) {
                 $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();
@@ -3606,8 +3614,12 @@ class Database
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
-            ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
-            ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+            ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
+            ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+
+        if (empty($document->getPermissions())) {
+            $document->setAttribute('$permissions', []);
+        }
 
         if ($this->adapter->getSharedTables()) {
             if ($this->adapter->getTenantPerDocument()) {
@@ -3633,6 +3645,7 @@ class Database
 
         $structure = new Structure(
             $collection,
+            $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
         );
@@ -3709,8 +3722,12 @@ class Database
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt)
-                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+                ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
+                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+
+            if (empty($document->getPermissions())) {
+                $document->setAttribute('$permissions', []);
+            }
 
             if ($this->adapter->getSharedTables()) {
                 if ($this->adapter->getTenantPerDocument()) {
@@ -3726,6 +3743,7 @@ class Database
 
             $validator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -4110,8 +4128,8 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        $document = $this->withTransaction(function () use ($collection, $id, $document) {
+        $newUpdatedAt = $document->getUpdatedAt();
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
             $time = DateTime::now();
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -4128,10 +4146,11 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
+            $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
-            $document['$createdAt'] = $old->getCreatedAt();                 // Make sure user doesn't switch createdAt
+            $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
                 $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
@@ -4259,8 +4278,7 @@ class Database
             }
 
             if ($shouldUpdate) {
-                $updatedAt = $document->getUpdatedAt();
-                $document->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt);
+                $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
             }
 
             // Check if document was updated after the request timestamp
@@ -4273,6 +4291,7 @@ class Database
 
             $structureValidator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -4362,6 +4381,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -4381,22 +4401,26 @@ class Database
         }
 
         unset($updates['$id']);
-        unset($updates['$createdAt']);
         unset($updates['$tenant']);
+
+        if (($updates->getCreatedAt() === null || !$this->preserveDates)) {
+            unset($updates['$createdAt']);
+        } else {
+            $updates['$createdAt'] = $updates->getCreatedAt();
+        }
 
         if ($this->adapter->getSharedTables()) {
             $updates['$tenant'] = $this->adapter->getTenant();
         }
 
-        if (!$this->preserveDates) {
-            $updates['$updatedAt'] = DateTime::now();
-        }
+        $updatedAt = $updates->getUpdatedAt();
+        $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
 
         $updates = $this->encode($collection, $updates);
-
         // Check new document structure
         $validator = new PartialStructure(
             $collection,
+            $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
         );
@@ -4434,8 +4458,27 @@ class Database
                 break;
             }
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch) {
-                foreach ($batch as &$document) {
+            $currentPermissions  = $updates->getPermissions();
+            sort($currentPermissions);
+
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
+                foreach ($batch as $index => $document) {
+
+                    $skipPermissionsUpdate = true;
+
+                    if ($updates->offsetExists('$permissions')) {
+                        if (!$document->offsetExists('$permissions')) {
+                            throw new QueryException('Permission document missing in select');
+                        }
+
+                        $originalPermissions = $document->getPermissions();
+                        sort($originalPermissions);
+
+                        $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+                    }
+
+                    $document->setAttribute('$skipPermissionsUpdate', $skipPermissionsUpdate);
+
                     $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
 
                     if ($this->resolveRelationships) {
@@ -4455,14 +4498,9 @@ class Database
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
 
-                    $document = $this->encode($collection, $document);
-                    $document = $this->adapter->castingBefore($collection, $document);
-
+                    $batch[$index] = $this->encode($collection, $document);
+                    $batch[$index] = $this->adapter->castingBefore($collection, $document);
                 }
-
-                unset($document);
-
-                $updates = $this->adapter->castingBefore($collection, $updates);
 
                 $this->adapter->updateDocuments(
                     $collection->getId(),
@@ -4471,8 +4509,13 @@ class Database
                 );
             });
 
+            $updates = $this->adapter->castingBefore($collection, $updates);
+
+
             foreach ($batch as $doc) {
                 $doc = $this->adapter->castingAfter($collection, $doc);
+                $doc->removeAttribute('$skipPermissionsUpdate');
+
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
                 try {
@@ -4950,7 +4993,6 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
-        $processedDocuments = []; // Track which documents were actually processed
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                 $old = Authorization::skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
@@ -4963,7 +5005,7 @@ class Database
                     $document->getId(),
                 )));
             }
-          
+
             $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
@@ -4986,9 +5028,6 @@ class Database
                 unset($documents[$key]);
                 continue;
             }
-
-            // Track that this document was processed
-            $processedDocuments[$document->getId()] = true;
 
             // If old is empty, check if user has create permission on the collection
             // If old is not empty, check if user has update permission on the collection
@@ -5016,14 +5055,14 @@ class Database
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$updatedAt', empty($updatedAt) || !$this->preserveDates ? $time : $updatedAt)
+                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt)
                 ->removeAttribute('$sequence');
 
-            if ($old->isEmpty()) {
-                $createdAt = $document->getCreatedAt();
-                $document->setAttribute('$createdAt', empty($createdAt) || !$this->preserveDates ? $time : $createdAt);
+            $createdAt = $document->getCreatedAt();
+            if ($createdAt === null || !$this->preserveDates) {
+                $document->setAttribute('$createdAt', $old->isEmpty() ? $time : $old->getCreatedAt());
             } else {
-                $document['$createdAt'] = $old->getCreatedAt();
+                $document->setAttribute('$createdAt', $createdAt);
             }
 
             // Force matching optional parameter sets
@@ -5058,6 +5097,7 @@ class Database
 
             $validator = new Structure(
                 $collection,
+                $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
             );
@@ -5103,15 +5143,14 @@ class Database
             /**
              * @var array<Change> $chunk
              */
-
             $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
                 $collection->getId(),
                 $attribute,
                 $chunk
             )));
-           
+
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
-          
+
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
                     $created++;
@@ -5138,10 +5177,7 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                // Only call onNext for documents that were actually processed
-                if (isset($processedDocuments[$doc->getId()])) {
-                    $onNext && $onNext($doc);
-                }
+                $onNext && $onNext($doc);
             }
         }
 
@@ -5150,7 +5186,7 @@ class Database
             'created' => $created,
             'updated' => $updated,
         ]));
-  
+
         return $created + $updated;
     }
 
@@ -5222,7 +5258,7 @@ class Database
                 }
             }
 
-            if ($max && ($document->getAttribute($attribute) + $value > $max)) {
+            if (!\is_null($max) && ($document->getAttribute($attribute) + $value > $max)) {
                 throw new LimitException('Attribute value exceeds maximum limit: ' . $max);
             }
 
@@ -5321,7 +5357,7 @@ class Database
                 }
             }
 
-            if ($min && ($document->getAttribute($attribute) - $value < $min)) {
+            if (!\is_null($min) && ($document->getAttribute($attribute) - $value < $min)) {
                 throw new LimitException('Attribute value exceeds minimum limit: ' . $min);
             }
 
@@ -5848,6 +5884,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime()
@@ -6043,6 +6080,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -6130,12 +6168,11 @@ class Database
 
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
-        foreach ($results as &$node) {
+        foreach ($results as $index => $node) {
 
             $node = $this->adapter->castingAfter($collection, $node);
 
-
-            if ($this->resolveRelationships && (empty($selects) || !empty($nestedSelections))) {
+            if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
 
@@ -6145,9 +6182,9 @@ class Database
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
             }
-        }
 
-        unset($node);
+            $results[$index] = $node;
+        }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
@@ -6261,6 +6298,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -6311,6 +6349,7 @@ class Database
             $validator = new DocumentsValidator(
                 $attributes,
                 $indexes,
+                $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
@@ -6358,7 +6397,7 @@ class Database
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-
+        $internalDateAttributes = ['$createdAt','$updatedAt'];
         foreach ($this->getInternalAttributes() as $attribute) {
             $attributes[] = $attribute;
         }
@@ -6370,10 +6409,12 @@ class Database
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
+            if (in_array($key, $internalDateAttributes) && is_string($value) && empty($value)) {
+                $document->setAttribute($key, null);
+                continue;
+            }
+
             if ($key === '$permissions') {
-                if (empty($value)) {
-                    $document->setAttribute('$permissions', []); // set default value
-                }
                 continue;
             }
 
@@ -6391,18 +6432,18 @@ class Database
                 $value = ($array) ? $value : [$value];
             }
 
-            foreach ($value as &$node) {
-                if (($node !== null)) {
+            foreach ($value as $index => $node) {
+                if ($node !== null) {
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
+                    $value[$index] = $node;
                 }
             }
 
             if (!$array) {
                 $value = $value[0];
             }
-
             $document->setAttribute($key, $value);
         }
 
@@ -6453,6 +6494,10 @@ class Database
             $array = $attribute['array'] ?? false;
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
+
+            if ($key === '$permissions') {
+                continue;
+            }
 
             if (\is_null($value)) {
                 $value = $document->getAttribute($this->adapter->filter($key));
@@ -6513,6 +6558,10 @@ class Database
                 continue;
             }
 
+            if ($key === '$permissions') {
+                continue;
+            }
+
             if ($array) {
                 $value = !is_string($value)
                     ? $value
@@ -6523,6 +6572,12 @@ class Database
 
             foreach ($value as $index => $node) {
                 switch ($type) {
+                    case self::VAR_ID:
+                        // Disabled until Appwrite migrates to use real int ID's for MySQL
+                        //$type = $this->adapter->getIdAttributeType();
+                        //\settype($node, $type);
+                        $node = (string)$node;
+                        break;
                     case self::VAR_BOOLEAN:
                         $node = (bool)$node;
                         break;
@@ -6694,50 +6749,80 @@ class Database
     }
 
     /**
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @return array<Query>
-     * @throws QueryException
-     * @throws Exception
-     */
+ * @param Document $collection
+ * @param array<Query> $queries
+ * @return array<Query>
+ * @throws QueryException
+ */
     public function convertQueries(Document $collection, array $queries): array
     {
-        $attributes = $collection->getAttribute('attributes', []);
 
+        $attributes = $collection->getAttribute('attributes', []);
         foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
             $attributes[] = new Document($attribute);
         }
 
+        $map = [];
         foreach ($attributes as $attribute) {
-            foreach ($queries as $query) {
-                if ($query->getAttribute() === $attribute->getId()) {
-                    $query->setOnArray($attribute->getAttribute('array', false));
-                }
-            }
+            $map[$attribute->getId()] = $attribute;
+        }
 
-            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
-                foreach ($queries as $index => $query) {
-                    if ($query->getAttribute() === $attribute->getId()) {
-                        $values = $query->getValues();
-                        foreach ($values as $valueIndex => $value) {
-                            try {
-                                if ($this->adapter->isMongo()) {
-                                    $values[$valueIndex] = $this->adapter->setUTCDatetime($value);
-                                } else {
-                                    $values[$valueIndex] = DateTime::setTimezone($value);
-                                }
-                            } catch (\Throwable $e) {
-                                throw new QueryException($e->getMessage(), $e->getCode(), $e);
-                            }
-                        }
-                        $query->setValues($values);
-                        $queries[$index] = $query;
-                    }
-                }
-            }
+        foreach ($queries as $i => $query) {
+            $queries[$i] = $this->processQuery($query, $map);
         }
 
         return $queries;
+    }
+
+    /**
+     * Recursively normalizes a single Query (and any nested Query objects inside its values).
+     *
+     * @param \Utopia\Database\Query $query
+     * @param array<string,Document> $map
+     * @return \Utopia\Database\Query
+     * @throws QueryException
+     */
+    private function processQuery(\Utopia\Database\Query $query, array $map): \Utopia\Database\Query
+    {
+        $attrId = $query->getAttribute();
+
+        if (!empty($map[$attrId])) {
+            $attr = $map[$attrId];
+
+            $query->setOnArray((bool) $attr->getAttribute('array', false));
+
+            // Normalize datetime values if needed
+            if ($attr->getAttribute('type') === Database::VAR_DATETIME) {
+                $values = $query->getValues();
+                foreach ($values as $idx => $val) {
+                    try {
+                        $values[$idx] = $this->adapter->isMongo()
+                            ? $this->adapter->setUTCDatetime($val)
+                            : DateTime::setTimezone($val);
+                    } catch (\Throwable $e) {
+                        throw new QueryException($e->getMessage(), (int) $e->getCode(), $e);
+                    }
+                }
+                $query->setValues($values);
+            }
+        }
+
+        $values = $query->getValues();
+        foreach ($values as $i => $v) {
+            if ($v instanceof \Utopia\Database\Query) {
+                $values[$i] = $this->processQuery($v, $map);
+            } elseif (is_array($v)) {
+                foreach ($v as $j => $vv) {
+                    if ($vv instanceof \Utopia\Database\Query) {
+                        $v[$j] = $this->processQuery($vv, $map);
+                    }
+                }
+                $values[$i] = $v;
+            }
+        }
+        $query->setValues($values);
+
+        return $query;
     }
 
     /**
@@ -6833,7 +6918,7 @@ class Database
      *
      * @param array<Document> $relationships
      * @param array<Query> $queries
-     * @return array<Query>
+     * @return array<string, array<Query>> $selects
      */
     private function processRelationshipQueries(
         array $relationships,
@@ -6852,7 +6937,8 @@ class Database
                     continue;
                 }
 
-                $selectedKey = \explode('.', $value)[0];
+                $nesting = \explode('.', $value);
+                $selectedKey = \array_shift($nesting); // Remove and return first item
 
                 $relationship = \array_values(\array_filter(
                     $relationships,
@@ -6865,9 +6951,9 @@ class Database
 
                 // Shift the top level off the dot-path to pass the selection down the chain
                 // 'foo.bar.baz' becomes 'bar.baz'
-                $nestedSelections[] = Query::select([
-                    \implode('.', \array_slice(\explode('.', $value), 1))
-                ]);
+
+                $nestingPath = \implode('.', $nesting);
+                $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
 
                 $type = $relationship->getAttribute('options')['relationType'];
                 $side = $relationship->getAttribute('options')['side'];
@@ -6895,6 +6981,7 @@ class Database
                         break;
                 }
             }
+
             $query->setValues(\array_values($values));
         }
 

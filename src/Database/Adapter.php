@@ -863,6 +863,13 @@ abstract class Adapter
     abstract public function getMinDateTime(): \DateTime;
 
     /**
+     * Get the primitive type of the primary key type for this adapter
+     *
+     * @return string
+     */
+    abstract public function getIdAttributeType(): string;
+
+    /**
      * Get the maximum supported DateTime value
      *
      * @return \DateTime
@@ -1200,15 +1207,6 @@ abstract class Adapter
      * @throws DatabaseException
      */
     abstract public function getSchemaAttributes(string $collection): array;
-
-    /**
-     * Get the query to check for tenant when in shared tables mode
-     *
-     * @param string $collection   The collection being queried
-     * @param string $alias  The alias of the parent collection if in a subquery
-     * @return string
-     */
-    abstract public function getTenantQuery(string $collection, string $alias = ''): string;
 
     /**
      * @param mixed $stmt

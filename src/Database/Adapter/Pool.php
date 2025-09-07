@@ -485,12 +485,12 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function getTenantQuery(string $collection, string $alias = ''): string
+    protected function execute(mixed $stmt): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    protected function execute(mixed $stmt): bool
+    public function getIdAttributeType(): string
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

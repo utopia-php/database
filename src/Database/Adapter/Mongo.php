@@ -353,7 +353,7 @@ class Mongo extends Adapter
             $this->getClient()->createCollection($id);
 
         } catch (MongoException $e) {
-            throw new Duplicate($e->getMessage(), $e->getCode(), $e);
+            throw $this->processException($e);
         }
 
         $internalIndex = [
@@ -402,6 +402,8 @@ class Mongo extends Adapter
              */
             $newIndexes = [];
 
+            $collectionAttributes = $attributes;
+
             // using $i and $j as counters to distinguish from $key
             foreach ($indexes as $i => $index) {
 
@@ -416,7 +418,7 @@ class Mongo extends Adapter
                 }
 
                 foreach ($attributes as $attribute) {
-                    $attribute = $this->filter($attribute);
+                    $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
 
                     switch ($index->getAttribute('type')) {
                         case Database::INDEX_KEY:
@@ -439,7 +441,34 @@ class Mongo extends Adapter
                     $key[$attribute] = $order;
                 }
 
-                $newIndexes[$i] = ['key' => $key, 'name' => $this->filter($index->getId()), 'unique' => $unique];
+                $newIndexes[$i] = [
+                    'key' => $key,
+                    'name' => $this->filter($index->getId()),
+                    'unique' => $unique
+                ];
+
+                // Add partial filter for indexes to avoid indexing null values
+                if (in_array($index->getAttribute('type'), [
+                    Database::INDEX_UNIQUE,
+                    Database::INDEX_KEY
+                ])) {
+                    $partialFilter = [];
+                    foreach ($attributes as $attr) {
+                        // Find the matching attribute in collectionAttributes to get its type
+                        $attrType = 'string'; // Default fallback
+                        foreach ($collectionAttributes as $collectionAttr) {
+                            if ($collectionAttr->getId() === $attr) {
+                                $attrType = $this->getMongoTypeCode($collectionAttr->getAttribute('type'));
+                                break;
+                            }
+                        }
+                        // Use both $exists: true and $type to exclude nulls and ensure correct type
+                        $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
+                    }
+                    if (!empty($partialFilter)) {
+                        $newIndexes[$i]['partialFilterExpression'] = $partialFilter;
+                    }
+                }
             }
 
             if (!$this->getClient()->createIndexes($id, $newIndexes)) {
@@ -488,7 +517,7 @@ class Mongo extends Adapter
     {
         $namespace = $this->getNamespace();
         $collection = $this->filter($collection);
-        $collection = $namespace. '_' . $collection;
+        $collection = $namespace . '_' . $collection;
 
         $command = [
             'collStats' => $collection,
@@ -767,14 +796,13 @@ class Mongo extends Adapter
      * @return bool
      * @throws Exception
      */
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $collation = []): bool
+    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
 
         $indexes = [];
         $options = [];
-
         $indexes['name'] = $id;
 
         // If sharedTables, always add _tenant as the first key
@@ -783,16 +811,15 @@ class Mongo extends Adapter
         }
 
         foreach ($attributes as $i => $attribute) {
-            $attribute = $this->filter($attribute);
-
+            $attributes[$i]  = $this->filter($this->getInternalKeyForAttribute($attribute));
             $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
-            $indexes['key'][$attribute] = $orderType;
+            $indexes['key'][$attributes[$i] ] = $orderType;
 
             switch ($type) {
                 case Database::INDEX_KEY:
                     break;
                 case Database::INDEX_FULLTEXT:
-                    $indexes['key'][$attribute] = 'text';
+                    $indexes['key'][$attributes[$i]] = 'text';
                     break;
                 case Database::INDEX_UNIQUE:
                     $indexes['unique'] = true;
@@ -815,6 +842,19 @@ class Mongo extends Adapter
                 'locale' => 'en',
                 'strength' => 1,
             ];
+        }
+
+        // Add partial filter for indexes to avoid indexing null values
+        if (in_array($type, [Database::INDEX_UNIQUE, Database::INDEX_KEY])) {
+            $partialFilter = [];
+            foreach ($attributes as $i => $attr) {
+                $attrType = $indexAttributeTypes[$i] ?? 'string'; // Default to string if type not provided
+                $attrType = $this->getMongoTypeCode($attrType);
+                $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
+            }
+            if (!empty($partialFilter)) {
+                $indexes['partialFilterExpression'] = $partialFilter;
+            }
         }
 
         return $this->client->createIndexes($name, [$indexes], $options);
@@ -846,6 +886,23 @@ class Mongo extends Adapter
             }
         }
 
+        // Extract attribute types from the collection document
+        $indexAttributeTypes = [];
+        if (isset($collectionDocument['attributes'])) {
+            $attributes = json_decode($collectionDocument['attributes'], true);
+            if ($attributes && $index) {
+                // Map index attributes to their types
+                foreach ($index['attributes'] as $attrName) {
+                    foreach ($attributes as $attr) {
+                        if ($attr['key'] === $attrName) {
+                            $indexAttributeTypes[] = $attr['type'];
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         if ($index
             && $this->deleteIndex($collection, $old)
             && $this->createIndex(
@@ -855,6 +912,8 @@ class Mongo extends Adapter
                 $index['attributes'],
                 $index['lengths'] ?? [],
                 $index['orders'] ?? [],
+                $indexAttributeTypes, // Use extracted attribute types
+                []
             )) {
             return true;
         }
@@ -896,7 +955,7 @@ class Mongo extends Adapter
         $filters = ['_uid' => $id];
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = $this->getTenantFilters($collection);
         }
 
         $options = [];
@@ -912,7 +971,7 @@ class Mongo extends Adapter
         if (empty($result)) {
             return new Document([]);
         }
-      
+
         $result = $this->replaceChars('_', '$', (array)$result[0]);
 
         return new Document($result);
@@ -929,7 +988,7 @@ class Mongo extends Adapter
      */
     public function createDocument(string $collection, Document $document): Document
     {
-       
+
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
         $sequence = $document->getSequence();
@@ -949,21 +1008,22 @@ class Mongo extends Adapter
         $options = $this->addTransactionContext([]);
         $result = $this->insertDocument($name, $this->removeNullKeys($record), $options);
         $result = $this->replaceChars('_', '$', $result);
+        // in order to keep the original object refrence.
+        foreach ($result as $key => $value) {
+            $document->setAttribute($key, $value);
+        }
 
-        return new Document($result);
+        return $document;
     }
-
 
     /**
      * Returns the document after casting from
-     *@param Document $collection
+     * @param Document $collection
      * @param Document $document
-
      * @return Document
      */
-    public function castingAfter($collection, $document): Document
+    public function castingAfter(Document $collection, Document $document): Document
     {
-
         if (!$this->getSupportForInternalCasting()) {
             return $document;
         }
@@ -1000,7 +1060,7 @@ class Mongo extends Adapter
                         break;
                     case Database::VAR_DATETIME :
                         if ($node instanceof UTCDateTime) {
-                            $node =  DateTime::format($node->toDateTime());
+                            $node = DateTime::format($node->toDateTime());
                         }
                         break;
                     default:
@@ -1016,14 +1076,13 @@ class Mongo extends Adapter
 
     /**
      * Returns the document after casting to
-     *@param Document $collection
+     * @param Document $collection
      * @param Document $document
-
      * @return Document
+     * @throws Exception
      */
-    public function castingBefore($collection, $document): Document
+    public function castingBefore(Document $collection, Document $document): Document
     {
-
         if (!$this->getSupportForInternalCasting()) {
             return $document;
         }
@@ -1090,7 +1149,7 @@ class Mongo extends Adapter
         $options = $this->addTransactionContext([]);
         $records = [];
         $hasSequence = null;
-        $documents = array_map(fn ($doc) => clone $doc, $documents);
+        $documents = \array_map(fn ($doc) => clone $doc, $documents);
 
         foreach ($documents as $document) {
             $sequence = $document->getSequence();
@@ -1101,19 +1160,13 @@ class Mongo extends Adapter
                 throw new DatabaseException('All documents must have an sequence if one is set');
             }
 
-            $document->removeAttribute('$sequence');
-
-            if ($this->sharedTables) {
-                $document->setAttribute('$tenant', $this->getTenant());
-            }
-
             $record = $this->replaceChars('$', '_', (array)$document);
 
             if (!empty($sequence)) {
                 $record['_id'] = $sequence;
             }
 
-            $records[] = $this->removeNullKeys($record);
+            $records[] = $record;
         }
 
         $documents = $this->client->insertMany($name, $records, $options);
@@ -1136,14 +1189,13 @@ class Mongo extends Adapter
      */
     private function insertDocument(string $name, array $document, array $options = []): array
     {
-
         try {
             $result = $this->client->insert($name, $document, $options);
             $filters = [];
             $filters['_uid'] = $document['_uid'];
 
             if ($this->sharedTables) {
-                $filters['_tenant'] = $this->getTenant();
+                $filters['_tenant'] = $this->getTenantFilters($name);
             }
 
             // in order to get the document we need to pass  the transaction context to the find.
@@ -1153,18 +1205,11 @@ class Mongo extends Adapter
                 array_merge($options, ['limit' => 1])
             )->cursor->firstBatch[0];
 
-            /**
-             * TODO Do we even need this find?
-             * We can just return the result from the insertDocument.
-             */
-
             return $this->client->toArray($result);
         } catch (MongoException $e) {
-            throw new Duplicate($e->getMessage());
+            throw $this->processException($e);
         }
     }
-
-
 
     /**
      * Update Document
@@ -1172,9 +1217,10 @@ class Mongo extends Adapter
      * @param string $collection
      * @param string $id
      * @param Document $document
-     *
+     * @param bool $skipPermissions
      * @return Document
-     * @throws Exception
+     * @throws DatabaseException
+     * @throws Duplicate
      */
     public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
     {
@@ -1183,19 +1229,20 @@ class Mongo extends Adapter
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
 
-    
         $filters = [];
         $filters['_uid'] = $id;
+
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = $this->getTenantFilters($collection);
         }
+
         try {
             unset($record['_id']); // Don't update _id
 
             $options = $this->addTransactionContext([]);
             $this->client->update($name, $filters, $record, $options);
         } catch (MongoException $e) {
-            throw new Duplicate($e->getMessage());
+            throw $this->processException($e);
         }
 
         return $document;
@@ -1227,7 +1274,7 @@ class Mongo extends Adapter
         $filters = $this->buildFilters($queries);
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = $this->getTenantFilters($collection);
         }
 
         $record = $updates->getArrayCopy();
@@ -1240,7 +1287,7 @@ class Mongo extends Adapter
         try {
             $this->client->update($name, $filters, $updateQuery, multi: true, options: $options);
         } catch (MongoException $e) {
-            throw new Duplicate($e->getMessage());
+            throw $this->processException($e);
         }
 
         return 1;
@@ -1272,7 +1319,7 @@ class Mongo extends Adapter
                 $attributes['_permissions'] = $document->getPermissions();
 
                 if (!empty($document->getSequence())) {
-                    $attributes['_id'] = new ObjectId($document->getSequence());
+                    $attributes['_id'] = $document->getSequence();
                 }
 
                 if ($this->sharedTables) {
@@ -1280,29 +1327,45 @@ class Mongo extends Adapter
                 }
 
                 $record = $this->replaceChars('$', '_', $attributes);
-                $record = $this->removeNullKeys($record);
 
                 // Build filter for upsert
-                $filter = ['_uid' => $document->getId()];
+                $filters = ['_uid' => $document->getId()];
 
                 if ($this->sharedTables) {
-                    $filter['_tenant'] = $document->getTenant();
+                    $filters['_tenant'] = $this->getTenantFilters($collection);
                 }
 
+                unset($record['_id']); // Don't update _id
+
                 if (!empty($attribute)) {
-                    // Increment specific attribute
+                    // Get the attribute value before removing it from $set
+                    $attributeValue = $record[$attribute] ?? 0;
+
+                    // Remove the attribute from $set since we're incrementing it
+                    // it is requierd to mimic the behaver of SQL on duplicate key update
+                    unset($record[$attribute]);
+
+                    // Increment the specific attribute and update all other fields
                     $update = [
-                        '$inc' => [$attribute => $record[$attribute] ?? 0],
-                        '$set' => ['_updatedAt' => $record['_updatedAt']]
+                        '$inc' => [$attribute => $attributeValue],
+                        '$set' => $record
                     ];
                 } else {
                     // Update all fields
-                    unset($record['_id']); // Don't update _id
-                    $update = ['$set' => $record];
+                    $update = [
+                        '$set' => $record
+                    ];
+
+                    // Add UUID7 _id for new documents in upsert operations
+                    if (empty($document->getSequence())) {
+                        $update['$setOnInsert'] = [
+                            '_id' => $this->client->createUuid()
+                        ];
+                    }
                 }
 
                 $operations[] = [
-                    'filter' => $filter,
+                    'filter' => $filters,
                     'update' => $update,
                 ];
             }
@@ -1318,7 +1381,7 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
-      
+
         return \array_map(fn ($change) => $change->getNew(), $changes);
     }
 
@@ -1328,6 +1391,8 @@ class Mongo extends Adapter
      * @param string $collection
      * @param array<Document> $documents
      * @return array<Document>
+     * @throws DatabaseException
+     * @throws MongoException
      */
     public function getSequences(string $collection, array $documents): array
     {
@@ -1353,15 +1418,15 @@ class Mongo extends Adapter
         $filters = ['_uid' => ['$in' => $documentIds]];
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = ['$in' => $documentTenants];
+            $filters['_tenant'] = $this->getTenantFilters($collection, $documentTenants);
         }
 
-            $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
+        $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
 
-            foreach ($results->cursor->firstBatch as $result) {
-                $sequences[$result->_uid] = (string)$result->_id;
-            }
-    
+        foreach ($results->cursor->firstBatch as $result) {
+            $sequences[$result->_uid] = (string)$result->_id;
+        }
+
         foreach ($documents as $document) {
             if (isset($sequences[$document->getId()])) {
                 $document['$sequence'] = $sequences[$document->getId()];
@@ -1392,7 +1457,7 @@ class Mongo extends Adapter
         $filters = ['_uid' => $id];
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = $this->getTenantFilters($collection);
         }
 
         if ($max) {
@@ -1432,8 +1497,9 @@ class Mongo extends Adapter
 
         $filters = [];
         $filters['_uid'] = $id;
+
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = $this->getTenantFilters($collection);
         }
 
         $options = $this->addTransactionContext([]);
@@ -1454,10 +1520,14 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
 
+        foreach ($sequences as $index => $sequence) {
+            $sequences[$index] = $sequence;
+        }
+
         $filters = $this->buildFilters([new Query(Query::TYPE_EQUAL, '_id', $sequences)]);
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = $this->getTenantFilters($collection);
         }
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
@@ -1496,7 +1566,6 @@ class Mongo extends Adapter
         if (!empty($newKey) && $newKey !== $id) {
             return $this->renameAttribute($collection, $id, $newKey);
         }
-
         return true;
     }
 
@@ -1541,14 +1610,13 @@ class Mongo extends Adapter
      */
     public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $filters = $this->buildFilters($queries);
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenant();
+            $filters['_tenant'] = $this->getTenantFilters($collection);
         }
 
         // permissions
@@ -1608,7 +1676,7 @@ class Mongo extends Adapter
 
                     $tmp = $cursor[$originalPrev];
                     if ($originalPrev === '$sequence') {
-                        $tmp = new ObjectId($tmp);
+                        $tmp = $tmp;
                     }
 
                     $andConditions[] = [
@@ -1619,8 +1687,6 @@ class Mongo extends Adapter
                 $tmp = $cursor[$originalAttribute];
 
                 if ($originalAttribute === '$sequence') {
-                    $tmp = new ObjectId($tmp);
-
                     /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
                     if (count($orderAttributes) === 1) {
                         $filters[$attribute] = [
@@ -1675,6 +1741,25 @@ class Mongo extends Adapter
     }
 
 
+    /**
+     * Converts Appwrite database type to MongoDB BSON type code.
+     *
+     * @param string $appwriteType
+     * @return string
+     */
+    private function getMongoTypeCode(string $appwriteType): string
+    {
+        return match ($appwriteType) {
+            Database::VAR_STRING => 'string',
+            Database::VAR_INTEGER => 'int',
+            Database::VAR_FLOAT => 'double',
+            Database::VAR_BOOLEAN => 'bool',
+            Database::VAR_DATETIME => 'date',
+            Database::VAR_ID => 'string',
+            Database::VAR_UUID7 => 'string',
+            default => 'string'
+        };
+    }
 
     /**
      * Converts timestamp to Mongo\BSON datetime format.
@@ -1747,6 +1832,10 @@ class Mongo extends Adapter
         // queries
         $filters = $this->buildFilters($queries);
 
+        if ($this->sharedTables) {
+            $filters['_tenant'] = $this->getTenantFilters($collection);
+        }
+
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
             $roles = \implode('|', Authorization::getRoles());
@@ -1774,6 +1863,10 @@ class Mongo extends Adapter
         // queries
         $queries = array_map(fn ($query) => clone $query, $queries);
         $filters = $this->buildFilters($queries);
+
+        if ($this->sharedTables) {
+            $filters['_tenant'] = $this->getTenantFilters($collection);
+        }
 
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
@@ -1861,7 +1954,7 @@ class Mongo extends Adapter
                 unset($result['$id']);
             }
             if (array_key_exists('$sequence', $array)) {
-                $result['_id'] = new ObjectId($array['$sequence']);
+                $result['_id'] = $array['$sequence'];
                 unset($result['$sequence']);
             }
             if (array_key_exists('$tenant', $array)) {
@@ -1911,7 +2004,7 @@ class Mongo extends Adapter
             $query->setAttribute('_id');
             $values = $query->getValues();
             foreach ($values as $k => $v) {
-                $values[$k] = new ObjectId($v);
+                $values[$k] = $v;
             }
             $query->setValues($values);
         } elseif ($query->getAttribute() === '$createdAt') {
@@ -1993,10 +2086,10 @@ class Mongo extends Adapter
         switch ($method) {
             case Query::TYPE_STARTS_WITH:
                 $value = $this->escapeWildcards($value);
-                return $value.'.*';
+                return $value . '.*';
             case Query::TYPE_ENDS_WITH:
                 $value = $this->escapeWildcards($value);
-                return '.*'.$value;
+                return '.*' . $value;
             default:
                 return $value;
         }
@@ -2015,7 +2108,7 @@ class Mongo extends Adapter
         return match ($order) {
             Database::ORDER_ASC => 1,
             Database::ORDER_DESC => -1,
-            default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' .  Database::ORDER_DESC),
+            default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' . Database::ORDER_DESC),
         };
     }
 
@@ -2422,8 +2515,29 @@ class Mongo extends Adapter
 
     protected function processException(Exception $e): \Exception
     {
+        // Timeout
         if ($e->getCode() === 50) {
             return new Timeout('Query timed out', $e->getCode(), $e);
+        }
+
+        // Duplicate key error (MongoDB error code 11000)
+        if ($e->getCode() === 11000) {
+            return new Duplicate('Document already exists', $e->getCode(), $e);
+        }
+
+        // Duplicate key error for unique index (MongoDB error code 11001)
+        if ($e->getCode() === 11001) {
+            return new Duplicate('Document already exists', $e->getCode(), $e);
+        }
+
+        // Collection already exists (MongoDB error code 48)
+        if ($e->getCode() === 48) {
+            return new Duplicate('Collection already exists', $e->getCode(), $e);
+        }
+
+        // Index already exists (MongoDB error code 85)
+        if ($e->getCode() === 85) {
+            return new Duplicate('Index already exists', $e->getCode(), $e);
         }
 
         return $e;
@@ -2441,6 +2555,14 @@ class Mongo extends Adapter
     protected function execute(mixed $stmt): bool
     {
         return true;
+    }
+
+    /**
+     * @return string
+     */
+    public function getIdAttributeType(): string
+    {
+        return Database::VAR_UUID7;
     }
 
     /**
@@ -2466,10 +2588,37 @@ class Mongo extends Adapter
         return [];
     }
 
-    public function getTenantQuery(string $collection, string $parentAlias = ''): string
-    {
-        // ** tenant in mongodb is an int but we need to return a string in order to be compatible with the rest of the code
-        return (string)$this->getTenant();
-    }
+    /**
+     * @param string $collection
+     * @param array<int> $tenants
+     * @return int|null|array<string, array<int>>
+     */
+    public function getTenantFilters(
+        string $collection,
+        array $tenants = [],
+    ): int|null|array {
+        $values = [];
+        if (!$this->sharedTables) {
+            return $values;
+        }
 
+        if (\count($tenants) === 0) {
+            $values[] = $this->getTenant();
+        } else {
+            for ($index = 0; $index < \count($tenants); $index++) {
+                $values[] = $tenants[$index];
+            }
+        }
+
+        if ($collection === Database::METADATA) {
+            $values[] = null;
+        }
+
+        if (\count($values) === 1) {
+            return $values[0];
+        }
+
+
+        return ['$in' => $values];
+    }
 }

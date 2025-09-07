@@ -11,6 +11,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
@@ -39,6 +40,12 @@ trait DocumentTests
         $this->assertEquals(true, $database->createAttribute('documents', 'colors', Database::VAR_STRING, 32, true, null, true, true));
         $this->assertEquals(true, $database->createAttribute('documents', 'empty', Database::VAR_STRING, 32, false, null, true, true));
         $this->assertEquals(true, $database->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
+        $this->assertEquals(true, $database->createAttribute('documents', 'id', Database::VAR_ID, 0, false, null));
+
+        $sequence = '1000000';
+       if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc' ;
+        }
 
         $document = $database->createDocument('documents', new Document([
             '$permissions' => [
@@ -66,6 +73,7 @@ trait DocumentTests
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
             'with-dash' => 'Works',
+            'id' => $sequence,
         ]));
 
         $this->assertNotEmpty(true, $document->getId());
@@ -89,11 +97,19 @@ trait DocumentTests
         $this->assertEquals(['pink', 'green', 'blue'], $document->getAttribute('colors'));
         $this->assertEquals([], $document->getAttribute('empty'));
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
+        $this->assertIsString($document->getAttribute('id'));
+        $this->assertEquals($sequence, $document->getAttribute('id'));
+
+
+        $sequence = '56000';
+       if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+            $sequence = '01890dd5-7331-7f3a-9c1b-123456789def' ;
+        }
 
         // Test create document with manual internal id
         $manualIdDocument = $database->createDocument('documents', new Document([
             '$id' => '56000',
-            '$sequence' => '56000',
+            '$sequence' => $sequence,
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user(ID::custom('1'))),
@@ -121,7 +137,7 @@ trait DocumentTests
             'with-dash' => 'Works',
         ]));
 
-        $this->assertEquals('56000', $manualIdDocument->getSequence());
+        $this->assertEquals($sequence, $manualIdDocument->getSequence());
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
@@ -143,10 +159,11 @@ trait DocumentTests
         $this->assertEquals(['pink', 'green', 'blue'], $manualIdDocument->getAttribute('colors'));
         $this->assertEquals([], $manualIdDocument->getAttribute('empty'));
         $this->assertEquals('Works', $manualIdDocument->getAttribute('with-dash'));
+        $this->assertEquals(null, $manualIdDocument->getAttribute('id'));
 
         $manualIdDocument = $database->getDocument('documents', '56000');
 
-        $this->assertEquals('56000', $manualIdDocument->getSequence());
+        $this->assertEquals($sequence, $manualIdDocument->getSequence());
         $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
@@ -206,6 +223,101 @@ trait DocumentTests
             $this->assertTrue($e instanceof StructureException);
             $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
         }
+
+        try {
+            $database->createDocument('documents', new Document([
+                '$sequence' => '0',
+                '$permissions' => [],
+                'string' => '',
+                'integer_signed' => 1,
+                'integer_unsigned' => 1,
+                'bigint_signed' => 1,
+                'bigint_unsigned' => 1,
+                'float_signed' => 1,
+                'float_unsigned' => 1,
+                'boolean' => true,
+                'colors' => [],
+                'empty' => [],
+                'with-dash' => '',
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
+        }
+
+        /**
+         * Insert ID attribute with NULL
+         */
+
+        $documentIdNull = $database->createDocument('documents', new Document([
+            'id' => null,
+            '$permissions' => [Permission::read(Role::any())],
+            'string' => '',
+            'integer_signed' => 1,
+            'integer_unsigned' => 1,
+            'bigint_signed' => 1,
+            'bigint_unsigned' => 1,
+            'float_signed' => 1,
+            'float_unsigned' => 1,
+            'boolean' => true,
+            'colors' => [],
+            'empty' => [],
+            'with-dash' => '',
+        ]));
+        $this->assertNotEmpty(true, $documentIdNull->getSequence());
+        $this->assertNull($documentIdNull->getAttribute('id'));
+
+        $documentIdNull = $database->getDocument('documents', $documentIdNull->getId());
+        $this->assertNotEmpty(true, $documentIdNull->getId());
+        $this->assertNull($documentIdNull->getAttribute('id'));
+
+        $documentIdNull = $database->findOne('documents', [
+            query::isNull('id')
+        ]);
+        $this->assertNotEmpty(true, $documentIdNull->getId());
+        $this->assertNull($documentIdNull->getAttribute('id'));
+
+        $sequence = '0';
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
+        }
+
+        /**
+         * Insert ID attribute with '0'
+         */
+        $documentId0 = $database->createDocument('documents', new Document([
+            'id' => $sequence,
+            '$permissions' => [Permission::read(Role::any())],
+            'string' => '',
+            'integer_signed' => 1,
+            'integer_unsigned' => 1,
+            'bigint_signed' => 1,
+            'bigint_unsigned' => 1,
+            'float_signed' => 1,
+            'float_unsigned' => 1,
+            'boolean' => true,
+            'colors' => [],
+            'empty' => [],
+            'with-dash' => '',
+        ]));
+        $this->assertNotEmpty(true, $documentId0->getSequence());
+
+        $this->assertIsString($documentId0->getAttribute('id'));
+        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
+
+        $documentId0 = $database->getDocument('documents', $documentId0->getId());
+        $this->assertNotEmpty(true, $documentId0->getSequence());
+        $this->assertIsString($documentId0->getAttribute('id'));
+        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
+
+        $documentId0 = $database->findOne('documents', [
+            query::equal('id', [$sequence])
+        ]);
+        $this->assertNotEmpty(true, $documentId0->getSequence());
+        $this->assertIsString($documentId0->getAttribute('id'));
+        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
+
 
         return $document;
     }
@@ -287,12 +399,19 @@ trait DocumentTests
 
         /** @var array<Document> $documents */
         $documents = [];
-        $count = 10;
-        $sequence = 1_000_000;
+        $offset = 1000000;
+        for ($i = $offset; $i <= ($offset + 10); $i++) {
+            $sequence = (string)$i;
+            if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+                // Replace last 6 digits with $i to make it unique
+                $suffix = str_pad(substr((string)$i, -6), 6, '0', STR_PAD_LEFT);
+                $sequence = '01890dd5-7331-7f3a-9c1b-123456' . $suffix;
+            }
 
-        for ($i = $sequence; $i <= ($sequence + $count); $i++) {
+            $hash[$i] = $sequence;
+
             $documents[] = new Document([
-                '$sequence' => (string)$i,
+                '$sequence' => $sequence,
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::create(Role::any()),
@@ -309,8 +428,9 @@ trait DocumentTests
         $documents = $database->find(__FUNCTION__, [
             Query::orderAsc()
         ]);
+
         foreach ($documents as $index => $document) {
-            $this->assertEquals($sequence + $index, $document->getSequence());
+            $this->assertEquals($hash[$index + $offset], $document->getSequence());
             $this->assertNotEmpty(true, $document->getId());
             $this->assertEquals('text', $document->getAttribute('string'));
         }
@@ -433,7 +553,7 @@ trait DocumentTests
         ];
 
         $documents = array_map(fn ($d) => new Document($d), $data);
-      
+
         Authorization::disable();
 
         $results = [];
@@ -449,6 +569,11 @@ trait DocumentTests
 
         $this->assertEquals(2, \count($results));
         $this->assertEquals(2, $count);
+
+        foreach ($results as $result) {
+            $this->assertArrayHasKey('$permissions', $result);
+            $this->assertEquals([], $result->getAttribute('$permissions'));
+        }
     }
 
     public function testUpsertDocuments(): void
@@ -1106,8 +1231,31 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        $this->expectException(Exception::class);
-        $this->assertEquals(false, $database->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 10, 99));
+        try {
+            $database->decreaseDocumentAttribute(
+                'increase_decrease',
+                $document->getId(),
+                'decrease',
+                10,
+                99
+            );
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+        }
+
+        try {
+            $database->decreaseDocumentAttribute(
+                'increase_decrease',
+                $document->getId(),
+                'decrease',
+                1000,
+                0
+            );
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+        }
     }
 
     /**
@@ -1845,6 +1993,9 @@ trait DocumentTests
         ]);
 
         $this->assertEquals(1, count($documents));
+
+        $empty = new Document();
+        $this->assertEquals('', $empty->getSequence());
     }
 
     public function testFindOrderBy(): void
@@ -4562,10 +4713,13 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
+        $sequence = '200';
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc' ;
+        }
+
         $document->setAttribute('$id', 'caseSensitive');
-        // Todo 200 van not be ObjectId
-        //$document->setAttribute('$sequence', '200');
-        $document->setAttribute('$sequence', '507f1f77bcf86cd799439011');
+        $document->setAttribute('$sequence', $sequence);
         $database->createDocument($document->getCollection(), $document);
 
         $document->setAttribute('$id', 'CaseSensitive');
@@ -4635,5 +4789,622 @@ trait DocumentTests
             $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
         }
+    }
+
+    public function testDateTimeDocument(): void
+    {
+        /**
+         * @var Database $database
+         */
+        $database = static::getDatabase();
+        $collection = 'create_modify_dates';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+        $this->assertEquals(true, $database->createAttribute($collection, 'datetime', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
+
+        $date = '2000-01-01T10:00:00.000+00:00';
+        // test - default behaviour of external datetime attribute not changed
+        $doc = $database->createDocument($collection, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any()),Permission::write(Role::any()),Permission::update(Role::any())],
+            'datetime' => ''
+        ]));
+        $this->assertNotEmpty($doc->getAttribute('datetime'));
+        $this->assertNotEmpty($doc->getAttribute('$createdAt'));
+        $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
+
+        $doc = $database->getDocument($collection, 'doc1');
+        $this->assertNotEmpty($doc->getAttribute('datetime'));
+        $this->assertNotEmpty($doc->getAttribute('$createdAt'));
+        $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
+
+        $database->setPreserveDates(true);
+        // test - modifying $createdAt and $updatedAt
+        $doc = $database->createDocument($collection, new Document([
+            '$id' => 'doc2',
+            '$permissions' => [Permission::read(Role::any()),Permission::write(Role::any()),Permission::update(Role::any())],
+            '$createdAt' => $date
+        ]));
+
+        $this->assertEquals($doc->getAttribute('$createdAt'), $date);
+        $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
+        $this->assertNotEquals($doc->getAttribute('$updatedAt'), $date);
+
+        $doc = $database->getDocument($collection, 'doc2');
+
+        $this->assertEquals($doc->getAttribute('$createdAt'), $date);
+        $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
+        $this->assertNotEquals($doc->getAttribute('$updatedAt'), $date);
+
+        $database->setPreserveDates(false);
+        $database->deleteCollection($collection);
+    }
+
+    public function testSingleDocumentDateOperations(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        $collection = 'normal_date_operations';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+
+        $database->setPreserveDates(true);
+
+        $createDate = '2000-01-01T10:00:00.000+00:00';
+        $updateDate = '2000-02-01T15:30:00.000+00:00';
+        $date1 = '2000-01-01T10:00:00.000+00:00';
+        $date2 = '2000-02-01T15:30:00.000+00:00';
+        $date3 = '2000-03-01T20:45:00.000+00:00';
+        // Test 1: Create with custom createdAt, then update with custom updatedAt
+        $doc = $database->createDocument($collection, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'initial',
+            '$createdAt' => $createDate
+        ]));
+
+        $this->assertEquals($createDate, $doc->getAttribute('$createdAt'));
+        $this->assertNotEquals($createDate, $doc->getAttribute('$updatedAt'));
+
+        // Update with custom updatedAt
+        $doc->setAttribute('string', 'updated');
+        $doc->setAttribute('$updatedAt', $updateDate);
+        $updatedDoc = $database->updateDocument($collection, 'doc1', $doc);
+
+        $this->assertEquals($createDate, $updatedDoc->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $updatedDoc->getAttribute('$updatedAt'));
+
+        // Test 2: Create with both custom dates
+        $doc2 = $database->createDocument($collection, new Document([
+            '$id' => 'doc2',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'both_dates',
+            '$createdAt' => $createDate,
+            '$updatedAt' => $updateDate
+        ]));
+
+        $this->assertEquals($createDate, $doc2->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $doc2->getAttribute('$updatedAt'));
+
+        // Test 3: Create without dates, then update with custom dates
+        $doc3 = $database->createDocument($collection, new Document([
+            '$id' => 'doc3',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'no_dates'
+        ]));
+
+
+        $doc3->setAttribute('string', 'updated_no_dates');
+        $doc3->setAttribute('$createdAt', $createDate);
+        $doc3->setAttribute('$updatedAt', $updateDate);
+        $updatedDoc3 = $database->updateDocument($collection, 'doc3', $doc3);
+
+        $this->assertEquals($createDate, $updatedDoc3->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $updatedDoc3->getAttribute('$updatedAt'));
+
+        // Test 4: Update only createdAt
+        $doc4 = $database->createDocument($collection, new Document([
+            '$id' => 'doc4',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'initial'
+        ]));
+
+        $originalCreatedAt4 = $doc4->getAttribute('$createdAt');
+        $originalUpdatedAt4 = $doc4->getAttribute('$updatedAt');
+
+        $doc4->setAttribute('$updatedAt', null);
+        $doc4->setAttribute('$createdAt', null);
+        $updatedDoc4 = $database->updateDocument($collection, 'doc4', document: $doc4);
+
+        $this->assertEquals($originalCreatedAt4, $updatedDoc4->getAttribute('$createdAt'));
+        $this->assertNotEquals($originalUpdatedAt4, $updatedDoc4->getAttribute('$updatedAt'));
+
+        // Test 5: Update only updatedAt
+        $updatedDoc4->setAttribute('$updatedAt', $updateDate);
+        $updatedDoc4->setAttribute('$createdAt', $createDate);
+        $finalDoc4 = $database->updateDocument($collection, 'doc4', $updatedDoc4);
+
+        $this->assertEquals($createDate, $finalDoc4->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $finalDoc4->getAttribute('$updatedAt'));
+
+        // Test 6: Create with updatedAt, update with createdAt
+        $doc5 = $database->createDocument($collection, new Document([
+            '$id' => 'doc5',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'doc5',
+            '$updatedAt' => $date2
+        ]));
+
+        $this->assertNotEquals($date2, $doc5->getAttribute('$createdAt'));
+        $this->assertEquals($date2, $doc5->getAttribute('$updatedAt'));
+
+        $doc5->setAttribute('string', 'doc5_updated');
+        $doc5->setAttribute('$createdAt', $date1);
+        $updatedDoc5 = $database->updateDocument($collection, 'doc5', $doc5);
+
+        $this->assertEquals($date1, $updatedDoc5->getAttribute('$createdAt'));
+        $this->assertEquals($date2, $updatedDoc5->getAttribute('$updatedAt'));
+
+        // Test 7: Create with both dates, update with different dates
+        $doc6 = $database->createDocument($collection, new Document([
+            '$id' => 'doc6',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'doc6',
+            '$createdAt' => $date1,
+            '$updatedAt' => $date2
+        ]));
+
+        $this->assertEquals($date1, $doc6->getAttribute('$createdAt'));
+        $this->assertEquals($date2, $doc6->getAttribute('$updatedAt'));
+
+        $doc6->setAttribute('string', 'doc6_updated');
+        $doc6->setAttribute('$createdAt', $date3);
+        $doc6->setAttribute('$updatedAt', $date3);
+        $updatedDoc6 = $database->updateDocument($collection, 'doc6', $doc6);
+
+        $this->assertEquals($date3, $updatedDoc6->getAttribute('$createdAt'));
+        $this->assertEquals($date3, $updatedDoc6->getAttribute('$updatedAt'));
+
+        // Test 8: Preserve dates disabled
+        $database->setPreserveDates(false);
+
+        $customDate = '2000-01-01T10:00:00.000+00:00';
+
+        $doc7 = $database->createDocument($collection, new Document([
+            '$id' => 'doc7',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'doc7',
+            '$createdAt' => $customDate,
+            '$updatedAt' => $customDate
+        ]));
+
+        $this->assertNotEquals($customDate, $doc7->getAttribute('$createdAt'));
+        $this->assertNotEquals($customDate, $doc7->getAttribute('$updatedAt'));
+
+        // Update with custom dates should also be ignored
+        $doc7->setAttribute('string', 'updated');
+        $doc7->setAttribute('$createdAt', $customDate);
+        $doc7->setAttribute('$updatedAt', $customDate);
+        $updatedDoc7 = $database->updateDocument($collection, 'doc7', $doc7);
+
+        $this->assertNotEquals($customDate, $updatedDoc7->getAttribute('$createdAt'));
+        $this->assertNotEquals($customDate, $updatedDoc7->getAttribute('$updatedAt'));
+
+        // Test checking updatedAt updates even old document exists
+        $database->setPreserveDates(true);
+        $doc11 = $database->createDocument($collection, new Document([
+            '$id' => 'doc11',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())],
+            'string' => 'no_dates',
+            '$createdAt' => $customDate
+        ]));
+
+        $newUpdatedAt = $doc11->getUpdatedAt();
+
+        $newDoc11 = new Document([
+            'string' => 'no_dates_update',
+        ]);
+        $updatedDoc7 = $database->updateDocument($collection, 'doc11', $newDoc11);
+        $this->assertNotEquals($newUpdatedAt, $updatedDoc7->getAttribute('$updatedAt'));
+
+        $database->setPreserveDates(false);
+        $database->deleteCollection($collection);
+    }
+
+    public function testBulkDocumentDateOperations(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        $collection = 'bulk_date_operations';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+
+        $database->setPreserveDates(true);
+
+        $createDate = '2000-01-01T10:00:00.000+00:00';
+        $updateDate = '2000-02-01T15:30:00.000+00:00';
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())];
+
+        // Test 1: Bulk create with different date configurations
+        $documents = [
+            new Document([
+                '$id' => 'doc1',
+                '$permissions' => $permissions,
+                'string' => 'doc1',
+                '$createdAt' => $createDate
+            ]),
+            new Document([
+                '$id' => 'doc2',
+                '$permissions' => $permissions,
+                'string' => 'doc2',
+                '$updatedAt' => $updateDate
+            ]),
+            new Document([
+                '$id' => 'doc3',
+                '$permissions' => $permissions,
+                'string' => 'doc3',
+                '$createdAt' => $createDate,
+                '$updatedAt' => $updateDate
+            ]),
+            new Document([
+                '$id' => 'doc4',
+                '$permissions' => $permissions,
+                'string' => 'doc4'
+            ]),
+            new Document([
+                '$id' => 'doc5',
+                '$permissions' => $permissions,
+                'string' => 'doc5',
+                '$createdAt' => null
+            ]),
+            new Document([
+                '$id' => 'doc6',
+                '$permissions' => $permissions,
+                'string' => 'doc6',
+                '$updatedAt' => null
+            ])
+        ];
+
+        $database->createDocuments($collection, $documents);
+
+        // Verify initial state
+        foreach (['doc1', 'doc3'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+        }
+
+        foreach (['doc2', 'doc3'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+        }
+
+        foreach (['doc4', 'doc5', 'doc6'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertNotEmpty($doc->getAttribute('$createdAt'), "createdAt missing for $id");
+            $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt missing for $id");
+        }
+
+        // Test 2: Bulk update with custom dates
+        $updateDoc = new Document([
+            'string' => 'updated',
+            '$createdAt' => $createDate,
+            '$updatedAt' => $updateDate
+        ]);
+        $ids = [];
+        foreach ($documents as $doc) {
+            $ids[] = $doc->getId();
+        }
+        $count = $database->updateDocuments($collection, $updateDoc, [
+            Query::equal('$id', $ids)
+        ]);
+        $this->assertEquals(6, $count);
+
+        foreach (['doc1', 'doc3'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertEquals('updated', $doc->getAttribute('string'), "string mismatch for $id");
+        }
+
+        foreach (['doc2', 'doc4','doc5','doc6'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertEquals('updated', $doc->getAttribute('string'), "string mismatch for $id");
+        }
+
+        // Test 3: Bulk update with preserve dates disabled
+        $database->setPreserveDates(false);
+
+        $customDate = 'should be ignored anyways so no error';
+        $updateDocDisabled = new Document([
+            'string' => 'disabled_update',
+            '$createdAt' => $customDate,
+            '$updatedAt' => $customDate
+        ]);
+
+        $countDisabled = $database->updateDocuments($collection, $updateDocDisabled);
+        $this->assertEquals(6, $countDisabled);
+
+        // Test 4: Bulk update with preserve dates re-enabled
+        $database->setPreserveDates(true);
+
+        $newDate = '2000-03-01T20:45:00.000+00:00';
+        $updateDocEnabled = new Document([
+            'string' => 'enabled_update',
+            '$createdAt' => $newDate,
+            '$updatedAt' => $newDate
+        ]);
+
+        $countEnabled = $database->updateDocuments($collection, $updateDocEnabled);
+        $this->assertEquals(6, $countEnabled);
+
+        $database->setPreserveDates(false);
+        $database->deleteCollection($collection);
+    }
+
+    public function testUpsertDateOperations(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForUpserts()) {
+            return;
+        }
+
+        $collection = 'upsert_date_operations';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+
+        $database->setPreserveDates(true);
+
+        $createDate = '2000-01-01T10:00:00.000+00:00';
+        $updateDate = '2000-02-01T15:30:00.000+00:00';
+        $date1 = '2000-01-01T10:00:00.000+00:00';
+        $date2 = '2000-02-01T15:30:00.000+00:00';
+        $date3 = '2000-03-01T20:45:00.000+00:00';
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()),Permission::update(Role::any())];
+
+        // Test 1: Upsert new document with custom createdAt
+        $upsertResults = [];
+        $database->createOrUpdateDocuments($collection, [
+            new Document([
+                '$id' => 'upsert1',
+                '$permissions' => $permissions,
+                'string' => 'upsert1_initial',
+                '$createdAt' => $createDate
+            ])
+        ], onNext: function ($doc) use (&$upsertResults) {
+            $upsertResults[] = $doc;
+        });
+        $upsertDoc1 = $upsertResults[0];
+
+        $this->assertEquals($createDate, $upsertDoc1->getAttribute('$createdAt'));
+        $this->assertNotEquals($createDate, $upsertDoc1->getAttribute('$updatedAt'));
+
+        // Test 2: Upsert existing document with custom updatedAt
+        $upsertDoc1->setAttribute('string', 'upsert1_updated');
+        $upsertDoc1->setAttribute('$updatedAt', $updateDate);
+        $updatedUpsertResults = [];
+        $database->createOrUpdateDocuments($collection, [$upsertDoc1], onNext: function ($doc) use (&$updatedUpsertResults) {
+            $updatedUpsertResults[] = $doc;
+        });
+        $updatedUpsertDoc1 = $updatedUpsertResults[0];
+
+        $this->assertEquals($createDate, $updatedUpsertDoc1->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $updatedUpsertDoc1->getAttribute('$updatedAt'));
+
+        // Test 3: Upsert new document with both custom dates
+        $upsertResults2 = [];
+        $database->createOrUpdateDocuments($collection, [
+            new Document([
+                '$id' => 'upsert2',
+                '$permissions' => $permissions,
+                'string' => 'upsert2_both_dates',
+                '$createdAt' => $createDate,
+                '$updatedAt' => $updateDate
+            ])
+        ], onNext: function ($doc) use (&$upsertResults2) {
+            $upsertResults2[] = $doc;
+        });
+        $upsertDoc2 = $upsertResults2[0];
+
+        $this->assertEquals($createDate, $upsertDoc2->getAttribute('$createdAt'));
+        $this->assertEquals($updateDate, $upsertDoc2->getAttribute('$updatedAt'));
+
+        // Test 4: Upsert existing document with different dates
+        $upsertDoc2->setAttribute('string', 'upsert2_updated');
+        $upsertDoc2->setAttribute('$createdAt', $date3);
+        $upsertDoc2->setAttribute('$updatedAt', $date3);
+        $updatedUpsertResults2 = [];
+        $database->createOrUpdateDocuments($collection, [$upsertDoc2], onNext: function ($doc) use (&$updatedUpsertResults2) {
+            $updatedUpsertResults2[] = $doc;
+        });
+        $updatedUpsertDoc2 = $updatedUpsertResults2[0];
+
+        $this->assertEquals($date3, $updatedUpsertDoc2->getAttribute('$createdAt'));
+        $this->assertEquals($date3, $updatedUpsertDoc2->getAttribute('$updatedAt'));
+
+        // Test 5: Upsert with preserve dates disabled
+        $database->setPreserveDates(false);
+
+        $customDate = '2000-01-01T10:00:00.000+00:00';
+        $upsertResults3 = [];
+        $database->createOrUpdateDocuments($collection, [
+            new Document([
+                '$id' => 'upsert3',
+                '$permissions' => $permissions,
+                'string' => 'upsert3_disabled',
+                '$createdAt' => $customDate,
+                '$updatedAt' => $customDate
+            ])
+        ], onNext: function ($doc) use (&$upsertResults3) {
+            $upsertResults3[] = $doc;
+        });
+        $upsertDoc3 = $upsertResults3[0];
+
+        $this->assertNotEquals($customDate, $upsertDoc3->getAttribute('$createdAt'));
+        $this->assertNotEquals($customDate, $upsertDoc3->getAttribute('$updatedAt'));
+
+        // Update with custom dates should also be ignored
+        $upsertDoc3->setAttribute('string', 'upsert3_updated');
+        $upsertDoc3->setAttribute('$createdAt', $customDate);
+        $upsertDoc3->setAttribute('$updatedAt', $customDate);
+        $updatedUpsertResults3 = [];
+        $database->createOrUpdateDocuments($collection, [$upsertDoc3], onNext: function ($doc) use (&$updatedUpsertResults3) {
+            $updatedUpsertResults3[] = $doc;
+        });
+        $updatedUpsertDoc3 = $updatedUpsertResults3[0];
+
+        $this->assertNotEquals($customDate, $updatedUpsertDoc3->getAttribute('$createdAt'));
+        $this->assertNotEquals($customDate, $updatedUpsertDoc3->getAttribute('$updatedAt'));
+
+        // Test 6: Bulk upsert operations with custom dates
+        $database->setPreserveDates(true);
+
+        // Test 7: Bulk upsert with different date configurations
+        $upsertDocuments = [
+            new Document([
+                '$id' => 'bulk_upsert1',
+                '$permissions' => $permissions,
+                'string' => 'bulk_upsert1_initial',
+                '$createdAt' => $createDate
+            ]),
+            new Document([
+                '$id' => 'bulk_upsert2',
+                '$permissions' => $permissions,
+                'string' => 'bulk_upsert2_initial',
+                '$updatedAt' => $updateDate
+            ]),
+            new Document([
+                '$id' => 'bulk_upsert3',
+                '$permissions' => $permissions,
+                'string' => 'bulk_upsert3_initial',
+                '$createdAt' => $createDate,
+                '$updatedAt' => $updateDate
+            ]),
+            new Document([
+                '$id' => 'bulk_upsert4',
+                '$permissions' => $permissions,
+                'string' => 'bulk_upsert4_initial'
+            ])
+        ];
+
+        $bulkUpsertResults = [];
+        $database->createOrUpdateDocuments($collection, $upsertDocuments, onNext: function ($doc) use (&$bulkUpsertResults) {
+            $bulkUpsertResults[] = $doc;
+        });
+
+        // Test 8: Verify initial bulk upsert state
+        foreach (['bulk_upsert1', 'bulk_upsert3'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($createDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+        }
+
+        foreach (['bulk_upsert2', 'bulk_upsert3'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($updateDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+        }
+
+        foreach (['bulk_upsert4'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertNotEmpty($doc->getAttribute('$createdAt'), "createdAt missing for $id");
+            $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt missing for $id");
+        }
+
+        // Test 9: Bulk upsert update with custom dates using updateDocuments
+        $newDate = '2000-04-01T12:00:00.000+00:00';
+        $updateUpsertDoc = new Document([
+            'string' => 'bulk_upsert_updated',
+            '$createdAt' => $newDate,
+            '$updatedAt' => $newDate
+        ]);
+
+        $upsertIds = [];
+        foreach ($upsertDocuments as $doc) {
+            $upsertIds[] = $doc->getId();
+        }
+
+        $database->updateDocuments($collection, $updateUpsertDoc, [
+            Query::equal('$id', $upsertIds)
+        ]);
+
+        foreach ($upsertIds as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertEquals($newDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+            $this->assertEquals($newDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+            $this->assertEquals('bulk_upsert_updated', $doc->getAttribute('string'), "string mismatch for $id");
+        }
+
+        // Test 10: checking by passing null to each
+        $updateUpsertDoc = new Document([
+            'string' => 'bulk_upsert_updated',
+            '$createdAt' => null,
+            '$updatedAt' => null
+        ]);
+
+        $upsertIds = [];
+        foreach ($upsertDocuments as $doc) {
+            $upsertIds[] = $doc->getId();
+        }
+
+        $database->updateDocuments($collection, $updateUpsertDoc, [
+            Query::equal('$id', $upsertIds)
+        ]);
+
+        foreach ($upsertIds as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertNotEmpty($doc->getAttribute('$createdAt'), "createdAt mismatch for $id");
+            $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
+        }
+
+        // Test 11: Bulk upsert operations with createOrUpdateDocuments
+        $upsertUpdateDocuments = [];
+        foreach ($upsertDocuments as $doc) {
+            $updatedDoc = clone $doc;
+            $updatedDoc->setAttribute('string', 'bulk_upsert_updated_via_upsert');
+            $updatedDoc->setAttribute('$createdAt', $newDate);
+            $updatedDoc->setAttribute('$updatedAt', $newDate);
+            $upsertUpdateDocuments[] = $updatedDoc;
+        }
+
+        $upsertUpdateResults = [];
+        $countUpsertUpdate = $database->createOrUpdateDocuments($collection, $upsertUpdateDocuments, onNext: function ($doc) use (&$upsertUpdateResults) {
+            $upsertUpdateResults[] = $doc;
+        });
+        $this->assertEquals(4, $countUpsertUpdate);
+
+        foreach ($upsertUpdateResults as $doc) {
+            $this->assertEquals($newDate, $doc->getAttribute('$createdAt'), "createdAt mismatch for upsert update");
+            $this->assertEquals($newDate, $doc->getAttribute('$updatedAt'), "updatedAt mismatch for upsert update");
+            $this->assertEquals('bulk_upsert_updated_via_upsert', $doc->getAttribute('string'), "string mismatch for upsert update");
+        }
+
+        // Test 12: Bulk upsert with preserve dates disabled
+        $database->setPreserveDates(false);
+
+        $customDate = 'should be ignored anyways so no error';
+        $upsertDisabledDocuments = [];
+        foreach ($upsertDocuments as $doc) {
+            $disabledDoc = clone $doc;
+            $disabledDoc->setAttribute('string', 'bulk_upsert_disabled');
+            $disabledDoc->setAttribute('$createdAt', $customDate);
+            $disabledDoc->setAttribute('$updatedAt', $customDate);
+            $upsertDisabledDocuments[] = $disabledDoc;
+        }
+
+        $upsertDisabledResults = [];
+        $countUpsertDisabled = $database->createOrUpdateDocuments($collection, $upsertDisabledDocuments, onNext: function ($doc) use (&$upsertDisabledResults) {
+            $upsertDisabledResults[] = $doc;
+        });
+        $this->assertEquals(4, $countUpsertDisabled);
+
+        foreach ($upsertDisabledResults as $doc) {
+            $this->assertNotEquals($customDate, $doc->getAttribute('$createdAt'), "createdAt should not be custom date when disabled");
+            $this->assertNotEquals($customDate, $doc->getAttribute('$updatedAt'), "updatedAt should not be custom date when disabled");
+            $this->assertEquals('bulk_upsert_disabled', $doc->getAttribute('string'), "string mismatch for disabled upsert");
+        }
+
+        $database->setPreserveDates(false);
+        $database->deleteCollection($collection);
     }
 }

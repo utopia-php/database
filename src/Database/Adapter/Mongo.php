@@ -640,6 +640,7 @@ class Mongo extends Adapter
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
+     * @param array<string, string> $indexAttributeTypes
      * @param array<string, mixed> $collation
      * @return bool
      * @throws Exception

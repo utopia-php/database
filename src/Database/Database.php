@@ -3486,6 +3486,8 @@ class Database
             }
         }
 
+var_dump($relationships);
+
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
             $value = $document->getAttribute($key);
@@ -6345,6 +6347,10 @@ class Database
 
         foreach ($results as $index => $node) {
             if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
+                echo PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL;
+                var_dump('populateDocumentRelationships');
+                var_dump($collection->getId());
+                var_dump($nestedSelections);
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
 
@@ -7261,8 +7267,8 @@ class Database
      * Process relationship queries, extracting nested selections.
      *
      * @param array<Document> $relationships
-     * @param array<Query> $queries Passed by reference; will remove queries if unset
-     * @return array<string, array<Query>> $nestedSelections
+     * @param array<Query> $queries
+     * @return array{0: array<Query>, 1: array<string, array<Query>>}
      */
     private function processRelationshipQueries(
         array $relationships,

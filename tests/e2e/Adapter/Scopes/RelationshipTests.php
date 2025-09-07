@@ -320,10 +320,8 @@ trait RelationshipTests
         $this->assertEquals(0, count($president['votes']));
 
         $president = $database->findOne('presidents', [
-            Query::select([
-                '*',
-                'votes.*',
-            ]),
+            Query::select('*'),
+            Query::select('votes.*'),
             Query::equal('$id', ['trump'])
         ]);
 
@@ -333,11 +331,9 @@ trait RelationshipTests
         $this->assertArrayNotHasKey('animals', $president['votes'][0]); // Not exist
 
         $president = $database->findOne('presidents', [
-            Query::select([
-                '*',
-                'votes.*',
-                'votes.animals.*',
-            ]),
+            Query::select('*'),
+            Query::select('votes.*'),
+            Query::select('votes.animals.*'),
             Query::equal('$id', ['trump'])
         ]);
 
@@ -350,7 +346,7 @@ trait RelationshipTests
          * Check Selects queries
          */
         $veterinarian = $database->findOne('veterinarians', [
-            Query::select(['*']), // No resolving
+            Query::select('*'), // No resolving
             Query::equal('$id', ['dr.pol']),
         ]);
 

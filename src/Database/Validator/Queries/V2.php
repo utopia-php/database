@@ -346,7 +346,7 @@ class V2 extends Validator
             $attribute['type'] !== Database::VAR_STRING &&
             !in_array($attribute['type'], Database::SPATIAL_TYPES)
         ) {
-            throw new \Exception('Invalid query: Cannot query contains on attribute "'.$attributeId.'" because it is not an array or string.');
+            throw new \Exception('Invalid query: Cannot query '.$method.' on attribute "'.$attributeId.'" because it is not an array or string.');
         }
 
         if (

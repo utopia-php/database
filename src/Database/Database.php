@@ -6237,8 +6237,6 @@ class Database
         $context = new QueryContext();
         $context->add($collection);
 
-        $queries = self::convertQueries($context, $queries);
-
         $joins = Query::getJoinQueries($queries);
 
         foreach ($joins as $join) {
@@ -6282,6 +6280,7 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
+        $queries = self::convertQueries($context, $queries);
 
         $grouped = Query::groupByType($queries);
         $filters = $grouped['filters'];
@@ -7122,6 +7121,10 @@ class Database
      */
     public static function convertQuery(QueryContext $context, Query $query): Query
     {
+        if ($query->getMethod() == Query::TYPE_SELECT) {
+            return $query;
+        }
+
         $collection = clone $context->getCollectionByAlias($query->getAlias());
 
         if ($collection->isEmpty()) {
@@ -7150,6 +7153,7 @@ class Database
 
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
                 $values = $query->getValues();
+                var_dump($values);
                 foreach ($values as $valueIndex => $value) {
                     try {
                         $values[$valueIndex] = DateTime::setTimezone($value);

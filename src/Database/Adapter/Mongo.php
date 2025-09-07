@@ -698,7 +698,7 @@ class Mongo extends Adapter
         if (in_array($type, [Database::INDEX_UNIQUE, Database::INDEX_KEY])) {
             $partialFilter = [];
             foreach ($attributes as $i => $attr) {
-                $attrType = $indexAttributeTypes[$i] ?? 'string'; // Default to string if type not provided
+                $attrType = $indexAttributeTypes[$i] ?? Database::VAR_STRING; // Default to string if type not provided
                 $attrType = $this->getMongoTypeCode($attrType);
                 $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
             }
@@ -746,7 +746,7 @@ class Mongo extends Adapter
                 foreach ($index['attributes'] as $attrName) {
                     foreach ($attributes as $attr) {
                         if ($attr['key'] === $attrName) {
-                            $indexAttributeTypes[] = $attr['type'];
+                            $indexAttributeTypes[$attrName] = $attr['type'];
                             break;
                         }
                     }

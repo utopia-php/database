@@ -325,6 +325,7 @@ trait RelationshipTests
             Query::equal('$id', ['trump'])
         ]);
 
+        $this->assertEquals('trump', 'shmuel');
         $this->assertEquals('trump', $president->getId());
         $this->assertArrayHasKey('votes', $president);
         $this->assertEquals(2, count($president['votes']));

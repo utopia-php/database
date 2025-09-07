@@ -3375,8 +3375,8 @@ class Database
         $selects = Query::getSelectQueries($queries);
         [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions',  system: true));
 
-        //$selections = $this->validateSelections($collection, $selects);
-        $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
+        //$selects = $this->validateSelections($collection, $selects);
+        $nestedSelections = $this->processRelationshipQueries($relationships, $selects);
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -6326,7 +6326,8 @@ class Database
 
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
-        $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
+        //$selects = $this->validateSelections($collection, $selects);
+        $nestedSelections = $this->processRelationshipQueries($relationships, $selects);
 
         $results = $this->adapter->find(
             $context,
@@ -7016,7 +7017,7 @@ class Database
      *
      * @param Document $collection
      * @param array<Query> $queries
-     * @return array<string>
+     * @return array<Query>
      * @throws QueryException
      */
     private function validateSelections(Document $collection, array $queries): array
@@ -7025,18 +7026,18 @@ class Database
             return [];
         }
 
+
         $selections = [];
         $relationshipSelections = [];
 
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
-                foreach ($query->getValues() as $value) {
-                    if (\str_contains($value, '.')) {
-                        $relationshipSelections[] = $value;
-                        continue;
-                    }
-                    $selections[] = $value;
+                if (\str_contains($query->getValue(), '.')) {
+                    $relationshipSelections[] = $query;
+                    continue;
                 }
+
+                $selections[] = $query;
             }
         }
 

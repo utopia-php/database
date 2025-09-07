@@ -3376,7 +3376,7 @@ class Database
         [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions',  system: true));
 
         //$selects = $this->validateSelections($collection, $selects);
-        $nestedSelections = $this->processRelationshipQueries($relationships, $selects);
+        [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -6327,7 +6327,7 @@ class Database
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
         //$selects = $this->validateSelections($collection, $selects);
-        $nestedSelections = $this->processRelationshipQueries($relationships, $selects);
+        [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
 
         $results = $this->adapter->find(
             $context,
@@ -7261,86 +7261,80 @@ class Database
      * Process relationship queries, extracting nested selections.
      *
      * @param array<Document> $relationships
-     * @param array<Query> $queries
-     * @return array<string, array<Query>> $selects
+     * @param array<Query> $queries Passed by reference; will remove queries if unset
+     * @return array<string, array<Query>> $nestedSelections
      */
     private function processRelationshipQueries(
         array $relationships,
-        array $queries,
+        array $queries
     ): array {
         $nestedSelections = [];
 
-        foreach ($queries as $query) {
+        $count = \count($queries);
+
+        foreach ($queries as $index => $query) {
             if ($query->getMethod() !== Query::TYPE_SELECT) {
                 continue;
             }
 
-            $values = $query->getValues();
-            foreach ($values as $valueIndex => $value) {
-                if (!\str_contains($value, '.')) {
-                    continue;
-                }
+            $value = $query->getAttribute();
 
-                $nesting = \explode('.', $value);
-                $selectedKey = \array_shift($nesting); // Remove and return first item
-
-                $relationship = \array_values(\array_filter(
-                    $relationships,
-                    fn (Document $relationship) => $relationship->getAttribute('key') === $selectedKey,
-                ))[0] ?? null;
-
-                if (!$relationship) {
-                    continue;
-                }
-
-                // Shift the top level off the dot-path to pass the selection down the chain
-                // 'foo.bar.baz' becomes 'bar.baz'
-
-                $nestingPath = \implode('.', $nesting);
-                // If nestingPath is empty, it means we want all fields (*) for this relationship
-                if (empty($nestingPath)) {
-                    $nestedSelections[$selectedKey][] = Query::select('*');
-                } else {
-                    $nestedSelections[$selectedKey][] = Query::select($nestingPath);
-                }
-
-                $type = $relationship->getAttribute('options')['relationType'];
-                $side = $relationship->getAttribute('options')['side'];
-
-                switch ($type) {
-                    case Database::RELATION_MANY_TO_MANY:
-                        unset($values[$valueIndex]);
-                        break;
-                    case Database::RELATION_ONE_TO_MANY:
-                        if ($side === Database::RELATION_SIDE_PARENT) {
-                            unset($values[$valueIndex]);
-                        } else {
-                            $values[$valueIndex] = $selectedKey;
-                        }
-                        break;
-                    case Database::RELATION_MANY_TO_ONE:
-                        if ($side === Database::RELATION_SIDE_PARENT) {
-                            $values[$valueIndex] = $selectedKey;
-                        } else {
-                            unset($values[$valueIndex]);
-                        }
-                        break;
-                    case Database::RELATION_ONE_TO_ONE:
-                        $values[$valueIndex] = $selectedKey;
-                        break;
-                }
+            if (!\str_contains($value, '.')) {
+                continue;
             }
 
-            $finalValues = \array_values($values);
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                if (empty($finalValues)) {
-                    $finalValues = ['*'];
-                }
+            $nesting = \explode('.', $value);
+            $selectedKey = \array_shift($nesting);
+
+            $relationship = \array_values(\array_filter(
+                $relationships,
+                fn (Document $relationship) => $relationship->getAttribute('key') === $selectedKey
+            ))[0] ?? null;
+
+            if (!$relationship) {
+                continue;
             }
-            $query->setValues($finalValues);
+
+            $nestingPath = \implode('.', $nesting);
+
+            if (empty($nestingPath)) {
+                $nestedSelections[$selectedKey][] = Query::select('*');
+            } else {
+                $nestedSelections[$selectedKey][] = Query::select($nestingPath);
+            }
+
+            $type = $relationship->getAttribute('options')['relationType'];
+            $side = $relationship->getAttribute('options')['side'];
+
+            switch ($type) {
+                case Database::RELATION_MANY_TO_MANY:
+                    $value = null;
+                    break;
+                case Database::RELATION_ONE_TO_MANY:
+                    $value = ($side === Database::RELATION_SIDE_PARENT) ? null : $selectedKey;
+                    break;
+                case Database::RELATION_MANY_TO_ONE:
+                    $value = ($side === Database::RELATION_SIDE_PARENT) ? $selectedKey : null;
+                    break;
+                case Database::RELATION_ONE_TO_ONE:
+                    $value = $selectedKey;
+                    break;
+            }
+
+            if ($value === null) {
+                unset($queries[$index]); // remove query if value is unset
+            } else {
+                $query->setAttribute($value);
+            }
         }
 
-        return $nestedSelections;
+        $queries = array_values($queries);
+
+        if ($count > 0 && empty($queries)) {
+            //$queries[] = Query::select('*');
+        }
+
+        return [$queries, $nestedSelections];
     }
 
     /**

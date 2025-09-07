@@ -325,7 +325,6 @@ trait RelationshipTests
             Query::equal('$id', ['trump'])
         ]);
 
-        $this->assertEquals('trump', 'shmuel');
         $this->assertEquals('trump', $president->getId());
         $this->assertArrayHasKey('votes', $president);
         $this->assertEquals(2, count($president['votes']));
@@ -358,9 +357,7 @@ trait RelationshipTests
         $veterinarian = $database->findOne(
             'veterinarians',
             [
-                Query::select([
-                    'animals.*',
-                ])
+                Query::select('animals.*')
             ]
         );
 
@@ -378,11 +375,9 @@ trait RelationshipTests
         $veterinarian = $database->findOne(
             'veterinarians',
             [
-                Query::select([
-                    'animals.*',
-                    'animals.zoo.*',
-                    'animals.president.*',
-                ])
+                Query::select('animals.*'),
+                Query::select('animals.zoo.*'),
+                Query::select('animals.president.*'),
             ]
         );
 
@@ -1344,7 +1339,9 @@ trait RelationshipTests
 
         // Select some parent attributes, some child attributes
         $make = $database->findOne('make', [
-            Query::select(['name', 'models.name']),
+            Query::select('name'),
+            //Query::select('*'),
+            Query::select('models.name'),
         ]);
 
         if ($make->isEmpty()) {
@@ -1353,6 +1350,8 @@ trait RelationshipTests
 
         $this->assertEquals('Ford', $make['name']);
         $this->assertEquals(2, \count($make['models']));
+        $this->assertEquals('shmuel', 'fogel');
+
         $this->assertEquals('Fiesta', $make['models'][0]['name']);
         $this->assertEquals('Focus', $make['models'][1]['name']);
         $this->assertArrayNotHasKey('year', $make['models'][0]);

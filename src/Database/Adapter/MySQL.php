@@ -82,15 +82,15 @@ class MySQL extends MariaDB
     /**
      * Handle distance spatial queries
      *
-     * @param string $spatialAttributeType
      * @param Query $query
      * @param array<string, mixed> $binds
      * @param string $attribute
+     * @param string $type
      * @param string $alias
      * @param string $placeholder
      * @return string
     */
-    protected function handleDistanceSpatialQueries(string $spatialAttributeType, Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
         $distanceParams = $query->getValues()[0];
         $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);

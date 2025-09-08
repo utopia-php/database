@@ -1355,15 +1355,15 @@ class MariaDB extends SQL
     /**
      * Handle distance spatial queries
      *
-     * @param string $spatialAttributeType
      * @param Query $query
      * @param array<string, mixed> $binds
      * @param string $attribute
+     * @param string $type
      * @param string $alias
      * @param string $placeholder
      * @return string
     */
-    protected function handleDistanceSpatialQueries(string $spatialAttributeType, Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
         $distanceParams = $query->getValues()[0];
         $wkt = $this->convertArrayToWKT($distanceParams[0]);
@@ -1391,7 +1391,7 @@ class MariaDB extends SQL
 
         if ($useMeters) {
             $wktType = $this->getSpatialTypeFromWKT($wkt);
-            $attrType = strtolower($spatialAttributeType);
+            $attrType = strtolower($type);
             if ($wktType != Database::VAR_POINT || $attrType != Database::VAR_POINT) {
                 throw new DatabaseException('Distance in meters is not supported between '.$attrType . ' and '. $wktType);
             }
@@ -1426,7 +1426,7 @@ class MariaDB extends SQL
             case Query::TYPE_DISTANCE_NOT_EQUAL:
             case Query::TYPE_DISTANCE_GREATER_THAN:
             case Query::TYPE_DISTANCE_LESS_THAN:
-                return $this->handleDistanceSpatialQueries($type, $query, $binds, $attribute, $alias, $placeholder);
+                return $this->handleDistanceSpatialQueries($query, $binds, $attribute, $type, $alias, $placeholder);
 
             case Query::TYPE_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);

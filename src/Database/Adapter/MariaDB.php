@@ -1411,7 +1411,7 @@ class MariaDB extends SQL
      * @param string $placeholder
      * @return string
      */
-    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute,string $type, string $alias, string $placeholder): string
+    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
         switch ($query->getMethod()) {
             case Query::TYPE_CROSSES:
@@ -1495,7 +1495,7 @@ class MariaDB extends SQL
         $attributeType = $this->getAttributeType($query->getAttribute(), $attributes);
 
         if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-            return $this->handleSpatialQueries($query, $binds, $attribute, $attributeType,$alias, $placeholder);
+            return $this->handleSpatialQueries($query, $binds, $attribute, $attributeType, $alias, $placeholder);
         }
 
         switch ($query->getMethod()) {

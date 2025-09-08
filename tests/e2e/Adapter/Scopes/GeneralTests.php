@@ -295,7 +295,7 @@ trait GeneralTests
     }
     public function testGetIndexLimit(): void
     {
-        $this->assertEquals(58, $this->getDatabase()->getLimitForIndexes());
+        $this->assertEquals(56, $this->getDatabase()->getLimitForIndexes());
     }
 
     public function testGetId(): void

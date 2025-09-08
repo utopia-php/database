@@ -1218,6 +1218,7 @@ abstract class Adapter
      * @param string $attribute
      * @param int|float $value
      * @param string $updatedAt
+     * @param string|null $updatedBy
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
@@ -1229,6 +1230,7 @@ abstract class Adapter
         string $attribute,
         int|float $value,
         string $updatedAt,
+        ?string $updatedBy,
         int|float|null $min = null,
         int|float|null $max = null
     ): bool;

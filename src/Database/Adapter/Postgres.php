@@ -237,6 +237,8 @@ class Postgres extends SQL
                 " . $sqlTenant . "
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
+                \"_createdBy\" VARCHAR(255) DEFAULT NULL,
+                \"_updatedBy\" VARCHAR(255) DEFAULT NULL,
                 _permissions TEXT DEFAULT NULL,
                 " . \implode(' ', $attributeStrings) . "
                 PRIMARY KEY (_id)
@@ -962,6 +964,8 @@ class Postgres extends SQL
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_createdBy'] = $document->getCreatedBy();
+        $attributes['_updatedBy'] = $document->getUpdatedBy();
         $attributes['_permissions'] = \json_encode($document->getPermissions());
 
         if ($this->sharedTables) {
@@ -1076,6 +1080,8 @@ class Postgres extends SQL
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_createdBy'] = $document->getCreatedBy();
+        $attributes['_updatedBy'] = $document->getUpdatedBy();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
@@ -1344,12 +1350,13 @@ class Postgres extends SQL
      * @param string $attribute
      * @param int|float $value
      * @param string $updatedAt
+     * @param string|null $updatedBy
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
      * @throws DatabaseException
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, ?string $updatedBy, int|float|null $min = null, int|float|null $max = null): bool
     {
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
@@ -1361,7 +1368,8 @@ class Postgres extends SQL
 			UPDATE {$this->getSQLTable($name)} 
 			SET 
 			    \"{$attribute}\" = \"{$attribute}\" + :val,
-                \"_updatedAt\" = :updatedAt
+                \"_updatedAt\" = :updatedAt,
+                \"_updatedBy\" = :updatedBy
 			WHERE _uid = :_uid
 			{$this->getTenantQuery($collection)}
 		";
@@ -1374,6 +1382,7 @@ class Postgres extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
         $stmt->bindValue(':updatedAt', $updatedAt);
+        $stmt->bindValue(':updatedBy', $updatedBy);
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);

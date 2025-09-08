@@ -1340,23 +1340,21 @@ trait RelationshipTests
         // Select some parent attributes, some child attributes
         $make = $database->findOne('make', [
             Query::select('name'),
-            //Query::select('*'),
             Query::select('models.name'),
         ]);
-var_dump($make);
+
         if ($make->isEmpty()) {
             throw new Exception('Make not found');
         }
 
+        var_dump($make);
         $this->assertEquals('Ford', $make['name']);
         $this->assertEquals(2, \count($make['models']));
-        $this->assertEquals('shmuel', 'fogel');
-
         $this->assertEquals('Fiesta', $make['models'][0]['name']);
         $this->assertEquals('Focus', $make['models'][1]['name']);
         $this->assertArrayNotHasKey('year', $make['models'][0]);
         $this->assertArrayNotHasKey('year', $make['models'][1]);
-        $this->assertArrayHasKey('$id', $make);
+        $this->assertArrayHasKey('$id', $make); // Was added by system in processRelationshipQueries
         $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$permissions', $make);
         $this->assertArrayHasKey('$collection', $make);

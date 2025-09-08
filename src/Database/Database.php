@@ -3376,7 +3376,10 @@ class Database
         [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions',  system: true));
 
         //$selects = $this->validateSelections($collection, $selects);
-        [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
+
+        $result = $this->processRelationshipQueries($relationships, $selects);
+        $selects = $result['queries'];
+        $nestedSelections = $result['nestedSelections'];
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3474,6 +3477,10 @@ class Database
      */
     private function populateDocumentRelationships(Document $collection, Document $document, array $selects = []): Document
     {
+        if (empty($document->getId())){
+            throw new DatabaseException('$id is a required field');
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
 
         $relationships = [];
@@ -3485,8 +3492,6 @@ class Database
                 }
             }
         }
-
-var_dump($relationships);
 
         foreach ($relationships as $relationship) {
             $key = $relationship['key'];
@@ -3603,7 +3608,12 @@ var_dump($relationships);
 
                     $this->relationshipFetchDepth++;
                     $this->relationshipFetchStack[] = $relationship;
-
+                    var_dump($relationships);
+                    var_dump($side);
+                    var_dump($document);
+                    /**
+                     * How to force $document->getId() , not to be empty?
+                     */
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
@@ -6329,7 +6339,10 @@ var_dump($relationships);
         $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
 
         //$selects = $this->validateSelections($collection, $selects);
-        [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
+
+        $result = $this->processRelationshipQueries($relationships, $selects);
+        $selects = $result['queries'];
+        $nestedSelections = $result['nestedSelections'];
 
         $results = $this->adapter->find(
             $context,
@@ -7336,11 +7349,14 @@ var_dump($relationships);
 
         $queries = array_values($queries);
 
-        if ($count > 0 && empty($queries)) {
-            //$queries[] = Query::select('*');
-        }
+//        if ($count > 0 && empty($queries)) {
+//            $queries[] = Query::select('*');
+//        }
 
-        return [$queries, $nestedSelections];
+        return [
+            'queries' => $queries,
+            'nestedSelections' => $nestedSelections,
+        ];
     }
 
     /**

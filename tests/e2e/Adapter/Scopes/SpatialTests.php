@@ -135,8 +135,8 @@ trait SpatialTests
                 'notEquals' => Query::notEqual('pointAttr', [[1.0, 1.0]]),
                 'distanceEqual' => Query::distanceEqual('pointAttr', [5.0, 5.0], 1.4142135623730951),
                 'distanceNotEqual' => Query::distanceNotEqual('pointAttr', [1.0, 1.0], 0.0),
-                'intersects' => Query::intersects('pointAttr', [[6.0, 6.0]]),
-                'notIntersects' => Query::notIntersects('pointAttr', [[1.0, 1.0]])
+                'intersects' => Query::intersects('pointAttr', [6.0, 6.0]),
+                'notIntersects' => Query::notIntersects('pointAttr', [1.0, 1.0])
             ];
 
             foreach ($pointQueries as $queryType => $query) {
@@ -151,8 +151,8 @@ trait SpatialTests
                 'notContains' => Query::notContains('lineAttr', [[5.0, 6.0]]), // Point not on the line
                 'equals' => query::equal('lineAttr', [[[1.0, 2.0], [3.0, 4.0]]]), // Exact same linestring
                 'notEquals' => query::notEqual('lineAttr', [[[5.0, 6.0], [7.0, 8.0]]]), // Different linestring
-                'intersects' => Query::intersects('lineAttr', [[1.0, 2.0]]), // Point on the line should intersect
-                'notIntersects' => Query::notIntersects('lineAttr', [[5.0, 6.0]]) // Point not on the line should not intersect
+                'intersects' => Query::intersects('lineAttr', [1.0, 2.0]), // Point on the line should intersect
+                'notIntersects' => Query::notIntersects('lineAttr', [5.0, 6.0]) // Point not on the line should not intersect
             ];
 
             foreach ($lineQueries as $queryType => $query) {
@@ -182,12 +182,12 @@ trait SpatialTests
             $polyQueries = [
                 'contains' => Query::contains('polyAttr', [[5.0, 5.0]]), // Point inside polygon
                 'notContains' => Query::notContains('polyAttr', [[15.0, 15.0]]), // Point outside polygon
-                'intersects' => Query::intersects('polyAttr', [[5.0, 5.0]]), // Point inside polygon should intersect
-                'notIntersects' => Query::notIntersects('polyAttr', [[15.0, 15.0]]), // Point outside polygon should not intersect
+                'intersects' => Query::intersects('polyAttr', [5.0, 5.0]), // Point inside polygon should intersect
+                'notIntersects' => Query::notIntersects('polyAttr', [15.0, 15.0]), // Point outside polygon should not intersect
                 'equals' => query::equal('polyAttr', [[[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]]]), // Exact same polygon
                 'notEquals' => query::notEqual('polyAttr', [[[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [20.0, 20.0]]]]), // Different polygon
-                'overlaps' => Query::overlaps('polyAttr', [[[[5.0, 5.0], [5.0, 15.0], [15.0, 15.0], [15.0, 5.0], [5.0, 5.0]]]]), // Overlapping polygon
-                'notOverlaps' => Query::notOverlaps('polyAttr', [[[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [30.0, 20.0], [20.0, 20.0]]]]) // Non-overlapping polygon
+                'overlaps' => Query::overlaps('polyAttr', [[[5.0, 5.0], [5.0, 15.0], [15.0, 15.0], [15.0, 5.0], [5.0, 5.0]]]), // Overlapping polygon
+                'notOverlaps' => Query::notOverlaps('polyAttr', [[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [30.0, 20.0], [20.0, 20.0]]]) // Non-overlapping polygon
             ];
 
             foreach ($polyQueries as $queryType => $query) {
@@ -935,8 +935,8 @@ trait SpatialTests
             // Test rectangle intersects with another rectangle
             $overlappingRect = $database->find($collectionName, [
                 Query::and([
-                    Query::intersects('rectangle', [[[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]]),
-                    Query::notTouches('rectangle', [[[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]])
+                    Query::intersects('rectangle', [[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]),
+                    Query::notTouches('rectangle', [[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]])
                 ]),
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($overlappingRect);
@@ -1042,7 +1042,7 @@ trait SpatialTests
                 ], Database::PERMISSION_READ);
             } else {
                 $exactSquare = $database->find($collectionName, [
-                    Query::intersects('square', [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]])
+                    Query::intersects('square', [[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]])
                 ], Database::PERMISSION_READ);
             }
             $this->assertNotEmpty($exactSquare);
@@ -1089,13 +1089,13 @@ trait SpatialTests
 
             // Test triangle intersects with point
             $intersectingTriangle = $database->find($collectionName, [
-                Query::intersects('triangle', [[25, 10]]) // Point inside triangle should intersect
+                Query::intersects('triangle', [25, 10]) // Point inside triangle should intersect
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($intersectingTriangle);
 
             // Test triangle doesn't intersect with distant point
             $nonIntersectingTriangle = $database->find($collectionName, [
-                Query::notIntersects('triangle', [[100, 100]]) // Distant point should not intersect
+                Query::notIntersects('triangle', [100, 100]) // Distant point should not intersect
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($nonIntersectingTriangle);
 
@@ -1159,7 +1159,7 @@ trait SpatialTests
 
             // Test complex polygon intersects with line
             $intersectingLine = $database->find($collectionName, [
-                Query::intersects('complex_polygon', [[[0, 10], [20, 10]]]) // Horizontal line through L-shape
+                Query::intersects('complex_polygon', [[0, 10], [20, 10]]) // Horizontal line through L-shape
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($intersectingLine);
 
@@ -1181,13 +1181,13 @@ trait SpatialTests
 
             // Test linestring intersects with point
             $intersectingPoint = $database->find($collectionName, [
-                Query::intersects('multi_linestring', [[10, 10]]) // Point on diagonal line
+                Query::intersects('multi_linestring', [10, 10]) // Point on diagonal line
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($intersectingPoint);
 
             // Test linestring intersects with a horizontal line coincident at y=20
             $touchingLine = $database->find($collectionName, [
-                Query::intersects('multi_linestring', [[[0, 20], [20, 20]]])
+                Query::intersects('multi_linestring', [[0, 20], [20, 20]])
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($touchingLine);
 

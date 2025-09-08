@@ -1520,7 +1520,6 @@ class Database
     public function deleteCollection(string $id): bool
     {
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
-        var_dump($collection->getAttribute('attributes'));
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
@@ -3373,13 +3372,12 @@ class Database
         );
 
         $selects = Query::getSelectQueries($queries);
-        [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions',  system: true));
 
         //$selects = $this->validateSelections($collection, $selects);
 
-        $result = $this->processRelationshipQueries($relationships, $selects);
-        $selects = $result['queries'];
-        $nestedSelections = $result['nestedSelections'];
+        [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
+
+        [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions',  system: true));
 
         $validator = new Authorization(self::PERMISSION_READ);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3459,7 +3457,7 @@ class Database
             }
         }
 
-        if($permissionsAdded){
+        if($permissionsAdded){ // Or remove all queries added by system
             $document->removeAttribute('$permissions');
         }
 
@@ -3478,7 +3476,7 @@ class Database
     private function populateDocumentRelationships(Document $collection, Document $document, array $selects = []): Document
     {
         if (empty($document->getId())){
-            throw new DatabaseException('$id is a required field');
+            throw new DatabaseException('$id is a required for populate Document Relationships');
         }
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -3608,12 +3606,7 @@ class Database
 
                     $this->relationshipFetchDepth++;
                     $this->relationshipFetchStack[] = $relationship;
-                    var_dump($relationships);
-                    var_dump($side);
-                    var_dump($document);
-                    /**
-                     * How to force $document->getId() , not to be empty?
-                     */
+
                     $relatedDocuments = $this->find($relatedCollection->getId(), [
                         Query::equal($twoWayKey, [$document->getId()]),
                         Query::limit(PHP_INT_MAX),
@@ -6340,9 +6333,7 @@ class Database
 
         //$selects = $this->validateSelections($collection, $selects);
 
-        $result = $this->processRelationshipQueries($relationships, $selects);
-        $selects = $result['queries'];
-        $nestedSelections = $result['nestedSelections'];
+        [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
 
         $results = $this->adapter->find(
             $context,
@@ -6360,10 +6351,6 @@ class Database
 
         foreach ($results as $index => $node) {
             if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
-                echo PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL.PHP_EOL;
-                var_dump('populateDocumentRelationships');
-                var_dump($collection->getId());
-                var_dump($nestedSelections);
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
 
@@ -7289,8 +7276,6 @@ class Database
     ): array {
         $nestedSelections = [];
 
-        $count = \count($queries);
-
         foreach ($queries as $index => $query) {
             if ($query->getMethod() !== Query::TYPE_SELECT) {
                 continue;
@@ -7349,14 +7334,14 @@ class Database
 
         $queries = array_values($queries);
 
-//        if ($count > 0 && empty($queries)) {
-//            $queries[] = Query::select('*');
-//        }
+        /**
+         * In order to populateDocumentRelationships we need $id
+         */
+        if (\count($queries) > 0) {
+            [$queries, $idAdded] = Query::addSelect($queries, Query::select('$id',  system: true));
+        }
 
-        return [
-            'queries' => $queries,
-            'nestedSelections' => $nestedSelections,
-        ];
+        return [$queries, $nestedSelections];
     }
 
     /**

@@ -146,7 +146,7 @@ trait ManyToManyTests
         if ($playlist->isEmpty()) {
             throw new Exception('Playlist not found');
         }
-
+var_dump($playlist);
         $this->assertEquals('Song 1', $playlist->getAttribute('songs')[0]->getAttribute('name'));
         $this->assertArrayNotHasKey('length', $playlist->getAttribute('songs')[0]);
 
@@ -1585,7 +1585,8 @@ trait ManyToManyTests
 
         // Use select query to get only name of the related documents
         $docs = $database->find('select_m2m_collection1', [
-            Query::select(['name', 'select_m2m_collection2.name']),
+            Query::select('name'),
+            Query::select('select_m2m_collection2.name'),
         ]);
 
         $this->assertCount(1, $docs);
@@ -1689,7 +1690,9 @@ trait ManyToManyTests
 
         // Query with nested select
         $artists = $database->find('artists', [
-            Query::select(['name', 'albums.name', 'albums.tracks.title'])
+            Query::select('name'),
+            Query::select('albums.name'),
+            Query::select('albums.tracks.title')
         ]);
 
         $this->assertCount(1, $artists);

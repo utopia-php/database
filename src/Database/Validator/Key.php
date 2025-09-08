@@ -76,8 +76,8 @@ class Key extends Validator
         if (\preg_match('/[^A-Za-z0-9\_\-\.]/', $value)) {
             return false;
         }
-        // Updated to 100 to suport mongodb ids
-        if (\mb_strlen($value) > 100) {
+        // At most 36 chars
+        if (\mb_strlen($value) > 36) {
             return false;
         }
 

@@ -1488,9 +1488,8 @@ class Postgres extends SQL
         }
 
         if ($meters) {
-            // Transform both attribute and input geometry to 3857 (meters) for distance calculation
-            $attr = "ST_Transform({$alias}.{$attribute}, 3857)";
-            $geom = "ST_Transform(ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "), 3857)";
+            $attr = "({$alias}.{$attribute}::geography)";
+            $geom = "ST_SetSRID(ST_GeomFromText(:{$placeholder}_0), " . Database::SRID . ")::geography";
             return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
         }
 
@@ -1981,5 +1980,15 @@ class Postgres extends SQL
     public function getSupportForSpatialIndexOrder(): bool
     {
         return false;
+    }
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return true;
     }
 }

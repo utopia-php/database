@@ -1263,4 +1263,14 @@ class SQLite extends MariaDB
     {
         return false;
     }
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return false;
+    }
 }

@@ -2657,4 +2657,11 @@ abstract class SQL extends Adapter
 
         return $result['sum'] ?? 0;
     }
+
+    public function getSpatialTypeFromWKT(string $wkt): string
+    {
+        $wkt = trim($wkt);
+        $pos = strpos($wkt, '(');
+        return strtolower(trim(substr($wkt, 0, $pos)));
+    }
 }

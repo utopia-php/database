@@ -82,6 +82,7 @@ class MySQL extends MariaDB
     /**
      * Handle distance spatial queries
      *
+     * @param string $spatialAttributeType
      * @param Query $query
      * @param array<string, mixed> $binds
      * @param string $attribute
@@ -89,7 +90,7 @@ class MySQL extends MariaDB
      * @param string $placeholder
      * @return string
     */
-    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    protected function handleDistanceSpatialQueries(string $spatialAttributeType, Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
     {
         $distanceParams = $query->getValues()[0];
         $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
@@ -172,5 +173,15 @@ class MySQL extends MariaDB
     public function getSupportForSpatialIndexOrder(): bool
     {
         return false;
+    }
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return true;
     }
 }

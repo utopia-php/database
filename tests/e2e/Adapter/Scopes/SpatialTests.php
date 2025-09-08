@@ -2158,4 +2158,195 @@ trait SpatialTests
             $database->deleteCollection($collectionName);
         }
     }
+
+    public function testSpatialDistanceInMeterForMultiDimensionGeometry(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        if (!$database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
+            $this->markTestSkipped('Adapter does not support spatial distance(in meter) for multidimension');
+        }
+
+        $multiCollection = 'spatial_distance_meters_multi_';
+        try {
+            $database->createCollection($multiCollection);
+
+            // Create spatial attributes
+            $this->assertEquals(true, $database->createAttribute($multiCollection, 'loc', Database::VAR_POINT, 0, true));
+            $this->assertEquals(true, $database->createAttribute($multiCollection, 'line', Database::VAR_LINESTRING, 0, true));
+            $this->assertEquals(true, $database->createAttribute($multiCollection, 'poly', Database::VAR_POLYGON, 0, true));
+
+            // Create indexes
+            $this->assertEquals(true, $database->createIndex($multiCollection, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            $this->assertEquals(true, $database->createIndex($multiCollection, 'idx_line', Database::INDEX_SPATIAL, ['line']));
+            $this->assertEquals(true, $database->createIndex($multiCollection, 'idx_poly', Database::INDEX_SPATIAL, ['poly']));
+
+            // Geometry sets: near origin and far east
+            $docNear = $database->createDocument($multiCollection, new Document([
+                '$id' => 'near',
+                'loc' => [0.0000, 0.0000],
+                'line' => [[0.0000, 0.0000], [0.0010, 0.0000]], // ~111m
+                'poly' => [[
+                    [-0.0010, -0.0010],
+                    [-0.0010,  0.0010],
+                    [ 0.0010,  0.0010],
+                    [ 0.0010, -0.0010],
+                    [-0.0010, -0.0010] // closed
+                ]],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+
+            $docFar = $database->createDocument($multiCollection, new Document([
+                '$id' => 'far',
+                'loc' => [0.2000, 0.0000], // ~22 km east
+                'line' => [[0.2000, 0.0000], [0.2020, 0.0000]],
+                'poly' => [[
+                    [0.1980, -0.0020],
+                    [0.1980,  0.0020],
+                    [0.2020,  0.0020],
+                    [0.2020, -0.0020],
+                    [0.1980, -0.0020] // closed
+                ]],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+
+            $this->assertInstanceOf(Document::class, $docNear);
+            $this->assertInstanceOf(Document::class, $docFar);
+
+            // polygon vs polygon (~1 km from near, ~22 km from far)
+            $polyPolyWithin3km = $database->find($multiCollection, [
+                Query::distanceLessThan('poly', [[
+                    [0.0080, -0.0010],
+                    [0.0080,  0.0010],
+                    [0.0110,  0.0010],
+                    [0.0110, -0.0010],
+                    [0.0080, -0.0010] // closed
+                ]], 3000, true)
+            ], Database::PERMISSION_READ);
+            $this->assertCount(1, $polyPolyWithin3km);
+            $this->assertEquals('near', $polyPolyWithin3km[0]->getId());
+
+            $polyPolyGreater3km = $database->find($multiCollection, [
+                Query::distanceGreaterThan('poly', [[
+                    [0.0080, -0.0010],
+                    [0.0080,  0.0010],
+                    [0.0110,  0.0010],
+                    [0.0110, -0.0010],
+                    [0.0080, -0.0010] // closed
+                ]], 3000, true)
+            ], Database::PERMISSION_READ);
+            $this->assertCount(1, $polyPolyGreater3km);
+            $this->assertEquals('far', $polyPolyGreater3km[0]->getId());
+
+            // point vs polygon (~0 km near, ~22 km far)
+            $ptPolyWithin500 = $database->find($multiCollection, [
+                Query::distanceLessThan('loc', [[
+                    [-0.0010, -0.0010],
+                    [-0.0010,  0.0020],
+                    [ 0.0020,  0.0020],
+                    [-0.0010, -0.0010]
+                ]], 500, true)
+            ], Database::PERMISSION_READ);
+            $this->assertCount(1, $ptPolyWithin500);
+            $this->assertEquals('near', $ptPolyWithin500[0]->getId());
+
+            $ptPolyGreater500 = $database->find($multiCollection, [
+                Query::distanceGreaterThan('loc', [[
+                    [-0.0010, -0.0010],
+                    [-0.0010,  0.0020],
+                    [ 0.0020,  0.0020],
+                    [-0.0010, -0.0010]
+                ]], 500, true)
+            ], Database::PERMISSION_READ);
+            $this->assertCount(1, $ptPolyGreater500);
+            $this->assertEquals('far', $ptPolyGreater500[0]->getId());
+
+            // Zero-distance checks
+            $lineEqualZero = $database->find($multiCollection, [
+                Query::distanceEqual('line', [[0.0000, 0.0000], [0.0010, 0.0000]], 0, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($lineEqualZero);
+            $this->assertEquals('near', $lineEqualZero[0]->getId());
+
+            $polyEqualZero = $database->find($multiCollection, [
+                Query::distanceEqual('poly', [[
+                    [-0.0010, -0.0010],
+                    [-0.0010,  0.0010],
+                    [ 0.0010,  0.0010],
+                    [ 0.0010, -0.0010],
+                    [-0.0010, -0.0010]
+                ]], 0, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($polyEqualZero);
+            $this->assertEquals('near', $polyEqualZero[0]->getId());
+
+        } finally {
+            $database->deleteCollection($multiCollection);
+        }
+    }
+
+    public function testSpatialDistanceInMeterError()
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        if ($database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
+            $this->markTestSkipped('Adapter supports spatial distance (in meter) for multidimension geometries');
+        }
+
+        $collection = 'spatial_distance_error_test';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'loc', Database::VAR_POINT, 0, true));
+        $this->assertEquals(true, $database->createAttribute($collection, 'line', Database::VAR_LINESTRING, 0, true));
+        $this->assertEquals(true, $database->createAttribute($collection, 'poly', Database::VAR_POLYGON, 0, true));
+
+        $doc = $database->createDocument($collection, new Document([
+            '$id' => 'doc1',
+            'loc' => [0.0, 0.0],
+            'line' => [[0.0, 0.0], [0.001, 0.0]],
+            'poly' => [[[ -0.001, -0.001 ], [ -0.001, 0.001 ], [ 0.001, 0.001 ], [ -0.001, -0.001 ]]],
+            '$permissions' => []
+        ]));
+        $this->assertInstanceOf(Document::class, $doc);
+
+        // Invalid geometry pairs (all combinations except POINT vs POINT)
+        $cases = [
+            // Point compared against wrong types
+            ['attr' => 'line', 'geom' => [0.002, 0.0], 'msg' => 'Point vs LineString'],
+            ['attr' => 'poly', 'geom' => [0.002, 0.0], 'msg' => 'Point vs Polygon'],
+
+            // LineString compared against wrong types
+            ['attr' => 'loc', 'geom' => [[0.0, 0.0], [0.001, 0.001]], 'msg' => 'LineString vs Point'],
+            ['attr' => 'poly', 'geom' => [[0.0, 0.0], [0.001, 0.001]], 'msg' => 'LineString vs Polygon'],
+
+            // Polygon compared against wrong types
+            ['attr' => 'loc', 'geom' => [[[0.0, 0.0], [0.001, 0.0], [0.001, 0.001], [0.0, 0.0]]], 'msg' => 'Polygon vs Point'],
+            ['attr' => 'line', 'geom' => [[[0.0, 0.0], [0.001, 0.0], [0.001, 0.001], [0.0, 0.0]]], 'msg' => 'Polygon vs LineString'],
+
+            // Polygon vs Polygon (still invalid for "meters")
+            ['attr' => 'poly', 'geom' => [[[0.002, -0.001], [0.002, 0.001], [0.004, 0.001], [0.002, -0.001]]], 'msg' => 'Polygon vs Polygon'],
+
+            // LineString vs LineString (invalid for "meters")
+            ['attr' => 'line', 'geom' => [[0.002, 0.0], [0.003, 0.0]], 'msg' => 'LineString vs LineString'],
+        ];
+
+        foreach ($cases as $case) {
+            try {
+                $database->find($collection, [
+                    Query::distanceLessThan($case['attr'], $case['geom'], 1000, true)
+                ]);
+                $this->fail('Expected Exception not thrown for ' . $case['msg']);
+            } catch (\Exception $e) {
+                $this->assertInstanceOf(\Exception::class, $e, $case['msg']);
+            }
+        }
+    }
+
 }

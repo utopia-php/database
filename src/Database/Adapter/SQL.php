@@ -2662,6 +2662,9 @@ abstract class SQL extends Adapter
     {
         $wkt = trim($wkt);
         $pos = strpos($wkt, '(');
+        if ($pos === false) {
+            throw new Exception("Not a valid spatialtype");
+        }
         return strtolower(trim(substr($wkt, 0, $pos)));
     }
 }

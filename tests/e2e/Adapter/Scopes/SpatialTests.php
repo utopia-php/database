@@ -2289,7 +2289,7 @@ trait SpatialTests
         }
     }
 
-    public function testSpatialDistanceInMeterError()
+    public function testSpatialDistanceInMeterError(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();
@@ -2316,25 +2316,16 @@ trait SpatialTests
         ]));
         $this->assertInstanceOf(Document::class, $doc);
 
-        // Invalid geometry pairs (all combinations except POINT vs POINT)
+        // Invalid geometry pairs
         $cases = [
-            // Point compared against wrong types
-            ['attr' => 'line', 'geom' => [0.002, 0.0], 'msg' => 'Point vs LineString'],
-            ['attr' => 'poly', 'geom' => [0.002, 0.0], 'msg' => 'Point vs Polygon'],
-
-            // LineString compared against wrong types
-            ['attr' => 'loc', 'geom' => [[0.0, 0.0], [0.001, 0.001]], 'msg' => 'LineString vs Point'],
-            ['attr' => 'poly', 'geom' => [[0.0, 0.0], [0.001, 0.001]], 'msg' => 'LineString vs Polygon'],
-
-            // Polygon compared against wrong types
-            ['attr' => 'loc', 'geom' => [[[0.0, 0.0], [0.001, 0.0], [0.001, 0.001], [0.0, 0.0]]], 'msg' => 'Polygon vs Point'],
-            ['attr' => 'line', 'geom' => [[[0.0, 0.0], [0.001, 0.0], [0.001, 0.001], [0.0, 0.0]]], 'msg' => 'Polygon vs LineString'],
-
-            // Polygon vs Polygon (still invalid for "meters")
-            ['attr' => 'poly', 'geom' => [[[0.002, -0.001], [0.002, 0.001], [0.004, 0.001], [0.002, -0.001]]], 'msg' => 'Polygon vs Polygon'],
-
-            // LineString vs LineString (invalid for "meters")
-            ['attr' => 'line', 'geom' => [[0.002, 0.0], [0.003, 0.0]], 'msg' => 'LineString vs LineString'],
+            ['attr' => 'line', 'geom' => [0.002, 0.0], 'expected' => ['linestring', 'point']],
+            ['attr' => 'poly', 'geom' => [0.002, 0.0], 'expected' => ['polygon', 'point']],
+            ['attr' => 'loc', 'geom' => [[0.0, 0.0], [0.001, 0.001]], 'expected' => ['point', 'linestring']],
+            ['attr' => 'poly', 'geom' => [[0.0, 0.0], [0.001, 0.001]], 'expected' => ['polygon', 'linestring']],
+            ['attr' => 'loc', 'geom' => [[[0.0, 0.0], [0.001, 0.0], [0.001, 0.001], [0.0, 0.0]]], 'expected' => ['point', 'polygon']],
+            ['attr' => 'line', 'geom' => [[[0.0, 0.0], [0.001, 0.0], [0.001, 0.001], [0.0, 0.0]]], 'expected' => ['linestring', 'polygon']],
+            ['attr' => 'poly', 'geom' => [[[0.002, -0.001], [0.002, 0.001], [0.004, 0.001], [0.002, -0.001]]], 'expected' => ['polygon', 'polygon']],
+            ['attr' => 'line', 'geom' => [[0.002, 0.0], [0.003, 0.0]], 'expected' => ['linestring', 'linestring']],
         ];
 
         foreach ($cases as $case) {
@@ -2342,11 +2333,16 @@ trait SpatialTests
                 $database->find($collection, [
                     Query::distanceLessThan($case['attr'], $case['geom'], 1000, true)
                 ]);
-                $this->fail('Expected Exception not thrown for ' . $case['msg']);
+                $this->fail('Expected Exception not thrown for ' . implode(' vs ', $case['expected']));
             } catch (\Exception $e) {
-                $this->assertInstanceOf(\Exception::class, $e, $case['msg']);
+                $this->assertInstanceOf(\Exception::class, $e);
+
+                // Validate exception message contains correct type names
+                $msg = strtolower($e->getMessage());
+                var_dump($msg);
+                $this->assertStringContainsString($case['expected'][0], $msg, 'Attr type missing in exception');
+                $this->assertStringContainsString($case['expected'][1], $msg, 'Geom type missing in exception');
             }
         }
     }
-
 }

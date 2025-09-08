@@ -1358,14 +1358,16 @@ class MariaDB extends SQL
      * @param Query $query
      * @param array<string, mixed> $binds
      * @param string $attribute
+     * @param string $type
      * @param string $alias
      * @param string $placeholder
      * @return string
     */
-    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
         $distanceParams = $query->getValues()[0];
-        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+        $wkt = $this->convertArrayToWKT($distanceParams[0]);
+        $binds[":{$placeholder}_0"] = $wkt;
         $binds[":{$placeholder}_1"] = $distanceParams[1];
 
         $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
@@ -1388,6 +1390,11 @@ class MariaDB extends SQL
         }
 
         if ($useMeters) {
+            $wktType = $this->getSpatialTypeFromWKT($wkt);
+            $attrType = strtolower($type);
+            if ($wktType != Database::VAR_POINT || $attrType != Database::VAR_POINT) {
+                throw new DatabaseException('Distance in meters is not supported between '.$attrType . ' and '. $wktType);
+            }
             return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), 6371000) {$operator} :{$placeholder}_1";
         }
         return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) {$operator} :{$placeholder}_1";
@@ -1399,11 +1406,12 @@ class MariaDB extends SQL
      * @param Query $query
      * @param array<string, mixed> $binds
      * @param string $attribute
+     * @param string $type
      * @param string $alias
      * @param string $placeholder
      * @return string
      */
-    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
         switch ($query->getMethod()) {
             case Query::TYPE_CROSSES:
@@ -1418,7 +1426,7 @@ class MariaDB extends SQL
             case Query::TYPE_DISTANCE_NOT_EQUAL:
             case Query::TYPE_DISTANCE_GREATER_THAN:
             case Query::TYPE_DISTANCE_LESS_THAN:
-                return $this->handleDistanceSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
+                return $this->handleDistanceSpatialQueries($query, $binds, $attribute, $type, $alias, $placeholder);
 
             case Query::TYPE_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
@@ -1487,7 +1495,7 @@ class MariaDB extends SQL
         $attributeType = $this->getAttributeType($query->getAttribute(), $attributes);
 
         if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-            return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
+            return $this->handleSpatialQueries($query, $binds, $attribute, $attributeType, $alias, $placeholder);
         }
 
         switch ($query->getMethod()) {
@@ -1867,5 +1875,15 @@ class MariaDB extends SQL
     public function getSupportForSpatialIndexOrder(): bool
     {
         return true;
+    }
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+    */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return false;
     }
 }

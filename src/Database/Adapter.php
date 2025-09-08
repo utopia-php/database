@@ -1078,6 +1078,13 @@ abstract class Adapter
     abstract public function getSupportForBoundaryInclusiveContains(): bool;
 
     /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

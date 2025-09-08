@@ -144,6 +144,11 @@ class Spatial extends Validator
         return self::TYPE_ARRAY;
     }
 
+    public function getSpatialType(): string
+    {
+        return $this->spatialType;
+    }
+
     /**
      * Main validation entrypoint
      */

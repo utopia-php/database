@@ -2657,4 +2657,14 @@ abstract class SQL extends Adapter
 
         return $result['sum'] ?? 0;
     }
+
+    public function getSpatialTypeFromWKT(string $wkt): string
+    {
+        $wkt = trim($wkt);
+        $pos = strpos($wkt, '(');
+        if ($pos === false) {
+            throw new DatabaseException("Invalid spatial type");
+        }
+        return strtolower(trim(substr($wkt, 0, $pos)));
+    }
 }

@@ -4276,7 +4276,7 @@ class Database
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
             if ($old->isEmpty()) {
-                return new Document();
+                throw new NotFoundException('Document not found');
             }
 
             $skipPermissionsUpdate = true;
@@ -5539,7 +5539,7 @@ class Database
             ));
 
             if ($document->isEmpty()) {
-                return false;
+                throw new NotFoundException('Document not found');
             }
 
             $validator = new Authorization(self::PERMISSION_DELETE);

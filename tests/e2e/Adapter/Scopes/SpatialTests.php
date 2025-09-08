@@ -4,6 +4,8 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -340,7 +342,12 @@ trait SpatialTests
 
             // Create spatial indexes
             $this->assertEquals(true, $database->createIndex($collectionName, 'idx_point', Database::INDEX_SPATIAL, ['pointAttr']));
-            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
+            if ($database->getAdapter()->getSupportForSpatialIndexNull()) {
+                $this->assertEquals(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
+            } else {
+                // Attribute was created as required above; directly create index once
+                $this->assertEquals(true, $database->createIndex($collectionName, 'idx_line', Database::INDEX_SPATIAL, ['lineAttr']));
+            }
             $this->assertEquals(true, $database->createIndex($collectionName, 'idx_poly', Database::INDEX_SPATIAL, ['polyAttr']));
 
             $collection = $database->getCollection($collectionName);
@@ -1546,6 +1553,19 @@ trait SpatialTests
             $updateResults[] = $doc;
         });
 
+        // should fail due to invalid structure
+        try {
+            $database->updateDocuments($collectionName, new Document([
+                'name' => 'Updated Location',
+                'location' => [15.0, 25.0],
+                'area' => [15.0, 25.0] // invalid polygon
+            ]));
+            $this->fail("fail to throw structure exception for the invalid spatial type");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+
+        }
+
         $this->assertGreaterThan(0, $updateCount);
 
         // Verify updated documents
@@ -1561,7 +1581,7 @@ trait SpatialTests
             ]], $document->getAttribute('area'));
         }
 
-        // Test 3: createOrUpdateDocuments with spatial data
+        // Test 3: upsertDocuments with spatial data
         $upsertDocuments = [
             new Document([
                 '$id' => 'upsert1',
@@ -1602,7 +1622,7 @@ trait SpatialTests
         ];
 
         $upsertResults = [];
-        $upsertCount = $database->createOrUpdateDocuments($collectionName, $upsertDocuments, onNext: function ($doc) use (&$upsertResults) {
+        $upsertCount = $database->upsertDocuments($collectionName, $upsertDocuments, onNext: function ($doc) use (&$upsertResults) {
             $upsertResults[] = $doc;
         });
 
@@ -1769,6 +1789,371 @@ trait SpatialTests
                 $this->assertEquals(1, $database->count($collectionName, $queriesNotContain));
                 $this->assertEquals(30, $database->sum($collectionName, 'score', $queriesNotContain));
             }
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
+    public function testUpdateSpatialAttributes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'spatial_update_attrs_';
+        try {
+            $database->createCollection($collectionName);
+
+            // 0) Disallow creation of spatial attributes with size or array
+            try {
+                $database->createAttribute($collectionName, 'geom_bad_size', Database::VAR_POINT, 10, true);
+                $this->fail('Expected DatabaseException when creating spatial attribute with non-zero size');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+            }
+
+            try {
+                $database->createAttribute($collectionName, 'geom_bad_array', Database::VAR_POINT, 0, true, array: true);
+                $this->fail('Expected DatabaseException when creating spatial attribute with array=true');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+            }
+
+            // Create a single spatial attribute (required=true)
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'geom', Database::VAR_POINT, 0, true));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_geom', Database::INDEX_SPATIAL, ['geom']));
+
+            // 1) Disallow size and array updates on spatial attributes: expect DatabaseException
+            try {
+                $database->updateAttribute($collectionName, 'geom', size: 10);
+                $this->fail('Expected DatabaseException when updating size on spatial attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+            }
+
+            try {
+                $database->updateAttribute($collectionName, 'geom', array: true);
+                $this->fail('Expected DatabaseException when updating array on spatial attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+            }
+
+            // 2) required=true -> create index -> update required=false
+            $nullSupported = $database->getAdapter()->getSupportForSpatialIndexNull();
+            if ($nullSupported) {
+                // Should succeed on adapters that allow nullable spatial indexes
+                $database->updateAttribute($collectionName, 'geom', required: false);
+                $meta = $database->getCollection($collectionName);
+                $this->assertEquals(false, $meta->getAttribute('attributes')[0]['required']);
+            } else {
+                // Should error (index constraint) when making required=false while spatial index exists
+                $threw = false;
+                try {
+                    $database->updateAttribute($collectionName, 'geom', required: false);
+                } catch (\Throwable $e) {
+                    $threw = true;
+                }
+                $this->assertTrue($threw, 'Expected error when setting required=false with existing spatial index and adapter not supporting nullable indexes');
+                // Ensure attribute remains required
+                $meta = $database->getCollection($collectionName);
+                $this->assertEquals(true, $meta->getAttribute('attributes')[0]['required']);
+            }
+
+            // 3) Spatial index order support: providing orders should fail if not supported
+            $orderSupported = $database->getAdapter()->getSupportForSpatialIndexOrder();
+            if ($orderSupported) {
+                $this->assertTrue($database->createIndex($collectionName, 'idx_geom_desc', Database::INDEX_SPATIAL, ['geom'], [], [Database::ORDER_DESC]));
+                // cleanup
+                $this->assertTrue($database->deleteIndex($collectionName, 'idx_geom_desc'));
+            } else {
+                try {
+                    $database->createIndex($collectionName, 'idx_geom_desc', Database::INDEX_SPATIAL, ['geom'], [], ['DESC']);
+                    $this->fail('Expected error when providing orders for spatial index on adapter without order support');
+                } catch (\Throwable $e) {
+                    $this->assertTrue(true);
+                }
+            }
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
+    public function testSpatialAttributeDefaults(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'spatial_defaults_';
+        try {
+            $database->createCollection($collectionName);
+
+            // Create spatial attributes with defaults and no indexes to avoid nullability/index constraints
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'pt', Database::VAR_POINT, 0, false, [1.0, 2.0]));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'ln', Database::VAR_LINESTRING, 0, false, [[0.0, 0.0], [1.0, 1.0]]));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'pg', Database::VAR_POLYGON, 0, false, [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]]));
+
+            // Create non-spatial attributes (mix of defaults and no defaults)
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'title', Database::VAR_STRING, 255, false, 'Untitled'));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'count', Database::VAR_INTEGER, 0, false, 0));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'rating', Database::VAR_FLOAT, 0, false)); // no default
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'active', Database::VAR_BOOLEAN, 0, false, true));
+
+            // Create document without providing spatial values, expect defaults applied
+            $doc = $database->createDocument($collectionName, new Document([
+                '$id' => ID::custom('d1'),
+                '$permissions' => [Permission::read(Role::any())]
+            ]));
+            $this->assertInstanceOf(Document::class, $doc);
+            $this->assertEquals([1.0, 2.0], $doc->getAttribute('pt'));
+            $this->assertEquals([[0.0, 0.0], [1.0, 1.0]], $doc->getAttribute('ln'));
+            $this->assertEquals([[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]], $doc->getAttribute('pg'));
+            // Non-spatial defaults
+            $this->assertEquals('Untitled', $doc->getAttribute('title'));
+            $this->assertEquals(0, $doc->getAttribute('count'));
+            $this->assertNull($doc->getAttribute('rating'));
+            $this->assertTrue($doc->getAttribute('active'));
+
+            // Create document overriding defaults
+            $doc2 = $database->createDocument($collectionName, new Document([
+                '$id' => ID::custom('d2'),
+                '$permissions' => [Permission::read(Role::any())],
+                'pt' => [9.0, 9.0],
+                'ln' => [[2.0, 2.0], [3.0, 3.0]],
+                'pg' => [[[1.0, 1.0], [1.0, 3.0], [3.0, 3.0], [1.0, 1.0]]],
+                'title' => 'Custom',
+                'count' => 5,
+                'rating' => 4.5,
+                'active' => false
+            ]));
+            $this->assertInstanceOf(Document::class, $doc2);
+            $this->assertEquals([9.0, 9.0], $doc2->getAttribute('pt'));
+            $this->assertEquals([[2.0, 2.0], [3.0, 3.0]], $doc2->getAttribute('ln'));
+            $this->assertEquals([[[1.0, 1.0], [1.0, 3.0], [3.0, 3.0], [1.0, 1.0]]], $doc2->getAttribute('pg'));
+            $this->assertEquals('Custom', $doc2->getAttribute('title'));
+            $this->assertEquals(5, $doc2->getAttribute('count'));
+            $this->assertEquals(4.5, $doc2->getAttribute('rating'));
+            $this->assertFalse($doc2->getAttribute('active'));
+
+            // Update defaults and ensure they are applied for new documents
+            $database->updateAttributeDefault($collectionName, 'pt', [5.0, 6.0]);
+            $database->updateAttributeDefault($collectionName, 'ln', [[10.0, 10.0], [20.0, 20.0]]);
+            $database->updateAttributeDefault($collectionName, 'pg', [[[5.0, 5.0], [5.0, 7.0], [7.0, 7.0], [5.0, 5.0]]]);
+            $database->updateAttributeDefault($collectionName, 'title', 'Updated');
+            $database->updateAttributeDefault($collectionName, 'count', 10);
+            $database->updateAttributeDefault($collectionName, 'active', false);
+
+            $doc3 = $database->createDocument($collectionName, new Document([
+                '$id' => ID::custom('d3'),
+                '$permissions' => [Permission::read(Role::any())]
+            ]));
+            $this->assertInstanceOf(Document::class, $doc3);
+            $this->assertEquals([5.0, 6.0], $doc3->getAttribute('pt'));
+            $this->assertEquals([[10.0, 10.0], [20.0, 20.0]], $doc3->getAttribute('ln'));
+            $this->assertEquals([[[5.0, 5.0], [5.0, 7.0], [7.0, 7.0], [5.0, 5.0]]], $doc3->getAttribute('pg'));
+            $this->assertEquals('Updated', $doc3->getAttribute('title'));
+            $this->assertEquals(10, $doc3->getAttribute('count'));
+            $this->assertNull($doc3->getAttribute('rating'));
+            $this->assertFalse($doc3->getAttribute('active'));
+
+            // Invalid defaults should raise errors
+            try {
+                $database->updateAttributeDefault($collectionName, 'pt', [[1.0, 2.0]]); // wrong dimensionality
+                $this->fail('Expected exception for invalid point default shape');
+            } catch (\Throwable $e) {
+                $this->assertTrue(true);
+            }
+            try {
+                $database->updateAttributeDefault($collectionName, 'ln', [1.0, 2.0]); // wrong dimensionality
+                $this->fail('Expected exception for invalid linestring default shape');
+            } catch (\Throwable $e) {
+                $this->assertTrue(true);
+            }
+            try {
+                $database->updateAttributeDefault($collectionName, 'pg', [[1.0, 2.0]]); // wrong dimensionality
+                $this->fail('Expected exception for invalid polygon default shape');
+            } catch (\Throwable $e) {
+                $this->assertTrue(true);
+            }
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
+    public function testInvalidSpatialTypes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'test_invalid_spatial_types';
+
+        $attributes = [
+            new Document([
+                '$id' => ID::custom('pointAttr'),
+                'type' => Database::VAR_POINT,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('lineAttr'),
+                'type' => Database::VAR_LINESTRING,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('polyAttr'),
+                'type' => Database::VAR_POLYGON,
+                'size' => 0,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ])
+        ];
+
+        $database->createCollection($collectionName, $attributes);
+
+        // Invalid Point (must be [x, y])
+        try {
+            $database->createDocument($collectionName, new Document([
+                'pointAttr' => [10.0], // only 1 coordinate
+            ]));
+            $this->fail("Expected StructureException for invalid point");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        // Invalid LineString (must be [[x,y],[x,y],...], at least 2 points)
+        try {
+            $database->createDocument($collectionName, new Document([
+                'lineAttr' => [[10.0, 20.0]], // only one point
+            ]));
+            $this->fail("Expected StructureException for invalid line");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        try {
+            $database->createDocument($collectionName, new Document([
+                'lineAttr' => [10.0, 20.0], // not an array of arrays
+            ]));
+            $this->fail("Expected StructureException for invalid line structure");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        try {
+            $database->createDocument($collectionName, new Document([
+                'polyAttr' => [10.0, 20.0] // not an array of arrays
+            ]));
+            $this->fail("Expected StructureException for invalid polygon structure");
+        } catch (\Throwable $th) {
+            $this->assertInstanceOf(StructureException::class, $th);
+        }
+
+        $invalidPolygons = [
+            [[0,0],[1,1],[0,1]],
+            [[0,0],['a',1],[1,1],[0,0]],
+            [[0,0],[1,0],[1,1],[0,1]],
+            [],
+            [[0,0,5],[1,0,5],[1,1,5],[0,0,5]],
+            [
+                [[0,0],[2,0],[2,2],[0,0]], // valid
+                [[0,0,1],[1,0,1],[1,1,1],[0,0,1]] // invalid 3D
+            ]
+        ];
+        foreach ($invalidPolygons as $invalidPolygon) {
+            try {
+                $database->createDocument($collectionName, new Document([
+                    'polyAttr' => $invalidPolygon
+                ]));
+                $this->fail("Expected StructureException for invalid polygon structure");
+            } catch (\Throwable $th) {
+                $this->assertInstanceOf(StructureException::class, $th);
+            }
+        }
+        // Cleanup
+        $database->deleteCollection($collectionName);
+    }
+
+    public function testSpatialDistanceInMeter(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'spatial_distance_meters_';
+        try {
+            $database->createCollection($collectionName);
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+
+            // Two points roughly ~1000 meters apart by latitude delta (~0.009 deg ≈ 1km)
+            $p0 = $database->createDocument($collectionName, new Document([
+                '$id' => 'p0',
+                'loc' => [0.0000, 0.0000],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+            $p1 = $database->createDocument($collectionName, new Document([
+                '$id' => 'p1',
+                'loc' => [0.0090, 0.0000],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+
+            $this->assertInstanceOf(Document::class, $p0);
+            $this->assertInstanceOf(Document::class, $p1);
+
+            // distanceLessThan with meters=true: within 1500m should include both
+            $within1_5km = $database->find($collectionName, [
+                Query::distanceLessThan('loc', [0.0000, 0.0000], 1500, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($within1_5km);
+            $this->assertCount(2, $within1_5km);
+
+            // Within 500m should include only p0 (exact point)
+            $within500m = $database->find($collectionName, [
+                Query::distanceLessThan('loc', [0.0000, 0.0000], 500, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($within500m);
+            $this->assertCount(1, $within500m);
+            $this->assertEquals('p0', $within500m[0]->getId());
+
+            // distanceGreaterThan 500m should include only p1
+            $greater500m = $database->find($collectionName, [
+                Query::distanceGreaterThan('loc', [0.0000, 0.0000], 500, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($greater500m);
+            $this->assertCount(1, $greater500m);
+            $this->assertEquals('p1', $greater500m[0]->getId());
+
+            // distanceEqual with 0m should return exact match p0
+            $equalZero = $database->find($collectionName, [
+                Query::distanceEqual('loc', [0.0000, 0.0000], 0, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($equalZero);
+            $this->assertEquals('p0', $equalZero[0]->getId());
+
+            // distanceNotEqual with 0m should return p1
+            $notEqualZero = $database->find($collectionName, [
+                Query::distanceNotEqual('loc', [0.0000, 0.0000], 0, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($notEqualZero);
+            $this->assertEquals('p1', $notEqualZero[0]->getId());
         } finally {
             $database->deleteCollection($collectionName);
         }

@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -2382,11 +2383,10 @@ trait SpatialTests
                 ]);
                 $this->fail('Expected Exception not thrown for ' . implode(' vs ', $case['expected']));
             } catch (\Exception $e) {
-                $this->assertInstanceOf(\Exception::class, $e);
+                $this->assertInstanceOf(QueryException::class, $e);
 
                 // Validate exception message contains correct type names
                 $msg = strtolower($e->getMessage());
-                var_dump($msg);
                 $this->assertStringContainsString($case['expected'][0], $msg, 'Attr type missing in exception');
                 $this->assertStringContainsString($case['expected'][1], $msg, 'Geom type missing in exception');
             }

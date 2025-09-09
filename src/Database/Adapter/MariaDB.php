@@ -9,6 +9,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
@@ -1393,7 +1394,7 @@ class MariaDB extends SQL
             $wktType = $this->getSpatialTypeFromWKT($wkt);
             $attrType = strtolower($type);
             if ($wktType != Database::VAR_POINT || $attrType != Database::VAR_POINT) {
-                throw new DatabaseException('Distance in meters is not supported between '.$attrType . ' and '. $wktType);
+                throw new QueryException('Distance in meters is not supported between '.$attrType . ' and '. $wktType);
             }
             return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), 6371000) {$operator} :{$placeholder}_1";
         }

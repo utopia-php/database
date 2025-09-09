@@ -138,6 +138,22 @@ trait SpatialTests
                 'notIntersects' => Query::notIntersects('pointAttr', [[1.0, 1.0]])
             ];
 
+            $result = $database->find($collectionName);
+
+            function decodePoint(string $wkb): array {
+                // WKB format: 1-byte byte order + 4-byte type + 8-byte X + 8-byte Y
+                // Skip first 5 bytes (1 byte byte order + 4 bytes type)
+                $coords = unpack('dX/dY', substr($wkb, 5, 16));
+                return ['lon' => $coords['X'], 'lat' => $coords['Y']];
+            }
+
+// Example usage:
+            $pointBinary = "\000\000\000\000\000\000\000\000\000\000\000\000\000@\000\000\000\000\000\000@";
+            $coords = decodePoint($pointBinary);
+            print_r($coords);
+
+            var_dump($result);
+            $this->assertEquals(999,888);
             foreach ($pointQueries as $queryType => $query) {
                 $result = $database->find($collectionName, [$query], Database::PERMISSION_READ);
                 $this->assertNotEmpty($result, sprintf('Failed spatial query: %s on pointAttr', $queryType));

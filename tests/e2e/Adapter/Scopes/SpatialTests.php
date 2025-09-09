@@ -840,6 +840,53 @@ trait SpatialTests
         } finally {
             $database->deleteCollection($collNullIndex);
         }
+
+        $collUpdateNull = 'spatial_idx_update_null_' . uniqid();
+        try {
+            $database->createCollection($collUpdateNull);
+
+            $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, false);
+            if (!$nullSupported) {
+                try {
+                    $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']);
+                    $this->fail('Expected exception when creating spatial index on NULL-able attribute');
+                } catch (\Throwable $e) {
+                    $this->assertInstanceOf(Exception::class, $e);
+                }
+            } else {
+                $this->assertTrue($database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            }
+
+            $database->updateAttribute($collUpdateNull, 'loc', required: true);
+
+            $this->assertTrue($database->createIndex($collUpdateNull, 'idx_loc_req', Database::INDEX_SPATIAL, ['loc']));
+        } finally {
+            $database->deleteCollection($collUpdateNull);
+        }
+
+
+        $collUpdateNull = 'spatial_idx_index_null_' . uniqid();
+        try {
+            $database->createCollection($collUpdateNull);
+
+            $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, false);
+            if (!$nullSupported) {
+                try {
+                    $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']);
+                    $this->fail('Expected exception when creating spatial index on NULL-able attribute');
+                } catch (\Throwable $e) {
+                    $this->assertInstanceOf(Exception::class, $e);
+                }
+            } else {
+                $this->assertTrue($database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            }
+
+            $database->updateAttribute($collUpdateNull, 'loc', required: true);
+
+            $this->assertTrue($database->createIndex($collUpdateNull, 'idx_loc_req', Database::INDEX_SPATIAL, ['loc']));
+        } finally {
+            $database->deleteCollection($collUpdateNull);
+        }
     }
 
     public function testComplexGeometricShapes(): void

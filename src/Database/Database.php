@@ -2161,6 +2161,10 @@ class Database
                 $default = null;
             }
 
+            if ($required === true && in_array($type, Database::SPATIAL_TYPES)) {
+                $altering = true;
+            }
+
             switch ($type) {
                 case self::VAR_STRING:
                     if (empty($size)) {
@@ -2322,7 +2326,7 @@ class Database
                     }
                 }
 
-                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
+                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey, $required);
 
                 if (!$updated) {
                     throw new DatabaseException('Failed to update attribute');

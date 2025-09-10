@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -839,6 +840,53 @@ trait SpatialTests
             }
         } finally {
             $database->deleteCollection($collNullIndex);
+        }
+
+        $collUpdateNull = 'spatial_idx_req';
+        try {
+            $database->createCollection($collUpdateNull);
+
+            $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, false);
+            if (!$nullSupported) {
+                try {
+                    $database->createIndex($collUpdateNull, 'idx_loc_required', Database::INDEX_SPATIAL, ['loc']);
+                    $this->fail('Expected exception when creating spatial index on NULL-able attribute');
+                } catch (\Throwable $e) {
+                    $this->assertInstanceOf(Exception::class, $e);
+                }
+            } else {
+                $this->assertTrue($database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            }
+
+            $database->updateAttribute($collUpdateNull, 'loc', required: true);
+
+            $this->assertTrue($database->createIndex($collUpdateNull, 'idx_loc_req', Database::INDEX_SPATIAL, ['loc']));
+        } finally {
+            $database->deleteCollection($collUpdateNull);
+        }
+
+
+        $collUpdateNull = 'spatial_idx_index_null_required_true';
+        try {
+            $database->createCollection($collUpdateNull);
+
+            $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, false);
+            if (!$nullSupported) {
+                try {
+                    $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']);
+                    $this->fail('Expected exception when creating spatial index on NULL-able attribute');
+                } catch (\Throwable $e) {
+                    $this->assertInstanceOf(Exception::class, $e);
+                }
+            } else {
+                $this->assertTrue($database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            }
+
+            $database->updateAttribute($collUpdateNull, 'loc', required: true);
+
+            $this->assertTrue($database->createIndex($collUpdateNull, 'new index', Database::INDEX_SPATIAL, ['loc']));
+        } finally {
+            $database->deleteCollection($collUpdateNull);
         }
     }
 
@@ -2335,11 +2383,10 @@ trait SpatialTests
                 ]);
                 $this->fail('Expected Exception not thrown for ' . implode(' vs ', $case['expected']));
             } catch (\Exception $e) {
-                $this->assertInstanceOf(\Exception::class, $e);
+                $this->assertInstanceOf(QueryException::class, $e);
 
                 // Validate exception message contains correct type names
                 $msg = strtolower($e->getMessage());
-                var_dump($msg);
                 $this->assertStringContainsString($case['expected'][0], $msg, 'Attr type missing in exception');
                 $this->assertStringContainsString($case['expected'][1], $msg, 'Geom type missing in exception');
             }

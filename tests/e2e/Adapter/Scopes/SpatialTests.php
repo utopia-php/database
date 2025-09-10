@@ -12,6 +12,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Index;
 
 trait SpatialTests
 {
@@ -2546,4 +2547,65 @@ trait SpatialTests
         }
     }
 
+    public function testSpatialIndexOnNonSpatial(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        try {
+            $collUpdateNull = 'spatial_idx_toggle';
+            $database->createCollection($collUpdateNull);
+
+            $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collUpdateNull, 'name', Database::VAR_STRING, 0, true);
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['name']);
+                $this->fail('Expected exception when creating spatial index on NULL-able attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_KEY, ['loc']);
+                $this->fail('Expected exception when creating non spatial index on spatial attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_KEY, ['loc,name']);
+                $this->fail('Expected exception when creating index');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_KEY, ['name,loc']);
+                $this->fail('Expected exception when creating index');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['name,loc']);
+                $this->fail('Expected exception when creating index');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc,name']);
+                $this->fail('Expected exception when creating index');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+        } finally {
+            $database->deleteCollection($collUpdateNull);
+        }
+    }
 }

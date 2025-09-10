@@ -518,9 +518,6 @@ class Database
                 try {
                     return  self::encodeSpatialData($value, Database::VAR_LINESTRING);
                 } catch (\Throwable) {
-                    if (is_null($value)) {
-                        return $value;
-                    }
                     return $value;
                 }
             },

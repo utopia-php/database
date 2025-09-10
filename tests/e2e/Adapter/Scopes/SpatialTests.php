@@ -74,7 +74,7 @@ trait SpatialTests
         $this->assertIsArray($col->getAttribute('indexes'));
         $this->assertCount(2, $col->getAttribute('indexes'));
 
-        $database->createAttribute($collectionName, 'attribute3', Database::VAR_POINT, 0, true);
+        $database->createAttribute($collectionName, 'attribute3', Database::VAR_POINT, 0, true, filters: ['point']);
         $database->createIndex($collectionName, ID::custom("index3"), Database::INDEX_SPATIAL, ['attribute3']);
 
         $col = $database->getCollection($collectionName);
@@ -102,9 +102,9 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             // Create spatial attributes using createAttribute method
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true, filters: ['point']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true, filters: ['linestring']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true, filters: ['polygon']));
 
             // Create spatial indexes
             $this->assertEquals(true, $database->createIndex($collectionName, 'point_spatial', Database::INDEX_SPATIAL, ['pointAttr']));
@@ -231,7 +231,7 @@ trait SpatialTests
         $database->createCollection('building');
 
         $database->createAttribute('location', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('location', 'coordinates', Database::VAR_POINT, 0, true);
+        $database->createAttribute('location', 'coordinates', Database::VAR_POINT, 0, true, filters: ['point']);
         $database->createAttribute('building', 'name', Database::VAR_STRING, 255, true);
         $database->createAttribute('building', 'area', Database::VAR_STRING, 255, true);
 
@@ -336,9 +336,9 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             $required = $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true;
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $required));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $required));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $required));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $required, filters: ['point']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $required, filters: ['linestring']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $required, filters: ['polygon']));
 
             // Create spatial indexes
             $this->assertEquals(true, $database->createIndex($collectionName, 'idx_point', Database::INDEX_SPATIAL, ['pointAttr']));
@@ -387,7 +387,7 @@ trait SpatialTests
 
             $database->createAttribute($parent, 'name', Database::VAR_STRING, 255, true);
             $database->createAttribute($child, 'name', Database::VAR_STRING, 255, true);
-            $database->createAttribute($child, 'coord', Database::VAR_POINT, 0, true);
+            $database->createAttribute($child, 'coord', Database::VAR_POINT, 0, true, filters: ['point']);
             $database->createIndex($child, 'coord_spatial', Database::INDEX_SPATIAL, ['coord']);
 
             $database->createRelationship(
@@ -499,7 +499,7 @@ trait SpatialTests
 
             $database->createAttribute($parent, 'name', Database::VAR_STRING, 255, true);
             $database->createAttribute($child, 'name', Database::VAR_STRING, 255, true);
-            $database->createAttribute($child, 'coord', Database::VAR_POINT, 0, true);
+            $database->createAttribute($child, 'coord', Database::VAR_POINT, 0, true, filters: ['point']);
             $database->createIndex($child, 'coord_spatial', Database::INDEX_SPATIAL, ['coord']);
 
             $database->createRelationship(
@@ -603,10 +603,10 @@ trait SpatialTests
             $database->createCollection($b);
 
             $database->createAttribute($a, 'name', Database::VAR_STRING, 255, true);
-            $database->createAttribute($a, 'home', Database::VAR_POINT, 0, true);
+            $database->createAttribute($a, 'home', Database::VAR_POINT, 0, true, filters: ['point']);
             $database->createIndex($a, 'home_spatial', Database::INDEX_SPATIAL, ['home']);
             $database->createAttribute($b, 'title', Database::VAR_STRING, 255, true);
-            $database->createAttribute($b, 'area', Database::VAR_POLYGON, 0, true);
+            $database->createAttribute($b, 'area', Database::VAR_POLYGON, 0, true, filters: ['polygon']);
             $database->createIndex($b, 'area_spatial', Database::INDEX_SPATIAL, ['area']);
 
             $database->createRelationship(
@@ -705,7 +705,7 @@ trait SpatialTests
         $collectionName = 'spatial_index_';
         try {
             $database->createCollection($collectionName);
-            $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true, filters: ['point']);
             $this->assertEquals(true, $database->createIndex($collectionName, 'loc_spatial', Database::INDEX_SPATIAL, ['loc']));
 
             $collection = $database->getCollection($collectionName);
@@ -766,7 +766,7 @@ trait SpatialTests
         $collOrderIndex = 'spatial_idx_order_index_' . uniqid();
         try {
             $database->createCollection($collOrderIndex);
-            $database->createAttribute($collOrderIndex, 'loc', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collOrderIndex, 'loc', Database::VAR_POINT, 0, true, filters: ['point']);
             if ($orderSupported) {
                 $this->assertTrue($database->createIndex($collOrderIndex, 'idx_loc', Database::INDEX_SPATIAL, ['loc'], [], [Database::ORDER_DESC]));
             } else {
@@ -826,7 +826,7 @@ trait SpatialTests
         $collNullIndex = 'spatial_idx_null_index_' . uniqid();
         try {
             $database->createCollection($collNullIndex);
-            $database->createAttribute($collNullIndex, 'loc', Database::VAR_POINT, 0, false);
+            $database->createAttribute($collNullIndex, 'loc', Database::VAR_POINT, 0, false, filters: ['point']);
             if ($nullSupported) {
                 $this->assertTrue($database->createIndex($collNullIndex, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
             } else {
@@ -855,12 +855,12 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             // Create spatial attributes for different geometric shapes
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'rectangle', Database::VAR_POLYGON, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'square', Database::VAR_POLYGON, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'triangle', Database::VAR_POLYGON, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'circle_center', Database::VAR_POINT, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'complex_polygon', Database::VAR_POLYGON, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'multi_linestring', Database::VAR_LINESTRING, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'rectangle', Database::VAR_POLYGON, 0, true, filters: ['polygon']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'square', Database::VAR_POLYGON, 0, true, filters: ['polygon']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'triangle', Database::VAR_POLYGON, 0, true, filters: ['polygon']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'circle_center', Database::VAR_POINT, 0, true, filters: ['point']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'complex_polygon', Database::VAR_POLYGON, 0, true, filters: ['polygon']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'multi_linestring', Database::VAR_LINESTRING, 0, true, filters: ['linestring']));
 
             // Create spatial indexes
             $this->assertEquals(true, $database->createIndex($collectionName, 'idx_rectangle', Database::INDEX_SPATIAL, ['rectangle']));
@@ -1285,9 +1285,9 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             // Create spatial attributes
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'location', Database::VAR_POINT, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, true));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'route', Database::VAR_LINESTRING, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'location', Database::VAR_POINT, 0, true, filters: ['point']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, true, filters: ['polygon']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'route', Database::VAR_LINESTRING, 0, true, filters: ['linestring']));
             $this->assertEquals(true, $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 255, true));
 
             // Create spatial indexes
@@ -1719,8 +1719,8 @@ trait SpatialTests
             // Create collection with spatial and numeric attributes
             $database->createCollection($collectionName);
             $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 255, true);
-            $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true);
-            $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, true);
+            $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true, filters: ['point']);
+            $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, true, filters: ['polygon']);
             $database->createAttribute($collectionName, 'score', Database::VAR_INTEGER, 0, true);
 
             // Spatial indexes
@@ -1808,21 +1808,21 @@ trait SpatialTests
 
             // 0) Disallow creation of spatial attributes with size or array
             try {
-                $database->createAttribute($collectionName, 'geom_bad_size', Database::VAR_POINT, 10, true);
+                $database->createAttribute($collectionName, 'geom_bad_size', Database::VAR_POINT, 10, true, filters: ['point']);
                 $this->fail('Expected DatabaseException when creating spatial attribute with non-zero size');
             } catch (\Throwable $e) {
                 $this->assertInstanceOf(Exception::class, $e);
             }
 
             try {
-                $database->createAttribute($collectionName, 'geom_bad_array', Database::VAR_POINT, 0, true, array: true);
+                $database->createAttribute($collectionName, 'geom_bad_array', Database::VAR_POINT, 0, true, array: true, filters: ['point']);
                 $this->fail('Expected DatabaseException when creating spatial attribute with array=true');
             } catch (\Throwable $e) {
                 $this->assertInstanceOf(Exception::class, $e);
             }
 
             // Create a single spatial attribute (required=true)
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'geom', Database::VAR_POINT, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'geom', Database::VAR_POINT, 0, true, filters: ['point']));
             $this->assertEquals(true, $database->createIndex($collectionName, 'idx_geom', Database::INDEX_SPATIAL, ['geom']));
 
             // 1) Disallow size and array updates on spatial attributes: expect DatabaseException
@@ -1893,9 +1893,9 @@ trait SpatialTests
             $database->createCollection($collectionName);
 
             // Create spatial attributes with defaults and no indexes to avoid nullability/index constraints
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'pt', Database::VAR_POINT, 0, false, [1.0, 2.0]));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'ln', Database::VAR_LINESTRING, 0, false, [[0.0, 0.0], [1.0, 1.0]]));
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'pg', Database::VAR_POLYGON, 0, false, [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]]));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'pt', Database::VAR_POINT, 0, false, [1.0, 2.0], filters: ['point']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'ln', Database::VAR_LINESTRING, 0, false, [[0.0, 0.0], [1.0, 1.0]], filters: ['linestring']));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'pg', Database::VAR_POLYGON, 0, false, [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]], filters: ['polygon']));
 
             // Create non-spatial attributes (mix of defaults and no defaults)
             $this->assertEquals(true, $database->createAttribute($collectionName, 'title', Database::VAR_STRING, 255, false, 'Untitled'));
@@ -2100,7 +2100,7 @@ trait SpatialTests
         $collectionName = 'spatial_distance_meters_';
         try {
             $database->createCollection($collectionName);
-            $this->assertEquals(true, $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true, filters: ['point']));
             $this->assertEquals(true, $database->createIndex($collectionName, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
 
             // Two points roughly ~1000 meters apart by latitude delta (~0.009 deg ≈ 1km)

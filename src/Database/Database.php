@@ -477,6 +477,57 @@ class Database
                 return DateTime::formatTz($value);
             }
         );
+
+        self::addFilter(
+            'point',
+            function (mixed $value) {
+                return "POINT({$value[0]} {$value[1]})";
+            },
+            function (?array $value) {
+                return $value;
+            }
+        );
+
+        self::addFilter(
+            'polygon',
+            function (mixed $value) {
+                // Check if this is a single ring (flat array of points) or multiple rings
+                $isSingleRing = count($value) > 0 && is_array($value[0]) &&
+                    count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
+
+                if ($isSingleRing) {
+                    // Convert single ring format [[x1,y1], [x2,y2], ...] to multi-ring format
+                    $value = [$value];
+                }
+
+                $rings = [];
+                foreach ($value as $ring) {
+                    $points = [];
+                    foreach ($ring as $point) {
+                        $points[] = "{$point[0]} {$point[1]}";
+                    }
+                    $rings[] = '(' . implode(', ', $points) . ')';
+                }
+                return 'POLYGON(' . implode(', ', $rings) . ')';
+            },
+            function (?array $value) {
+                return $value;
+            }
+        );
+
+        self::addFilter(
+            'linestring',
+            function (mixed $value) {
+                $points = [];
+                foreach ($value as $point) {
+                    $points[] = "{$point[0]} {$point[1]}";
+                }
+                return 'LINESTRING(' . implode(', ', $points) . ')';
+            },
+            function (?array $value) {
+                return $value;
+            }
+        );
     }
 
     /**
@@ -1889,6 +1940,9 @@ class Database
     {
         return match ($type) {
             self::VAR_DATETIME => ['datetime'],
+            self::VAR_POINT => ['point'],
+            self::VAR_POLYGON => ['polygon'],
+            self::VAR_LINESTRING => ['linestring'],
             default => [],
         };
     }

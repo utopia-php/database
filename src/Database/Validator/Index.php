@@ -340,24 +340,25 @@ class Index extends Validator
     {
         $type = $index->getAttribute('type');
 
-        if (!$this->spatialIndexSupport) {
-            $this->message = 'Spatial indexes are not supported';
-            return false;
-        }
-
         $attributes = $index->getAttribute('attributes', []);
         $orders     = $index->getAttribute('orders', []);
-
-        if (count($attributes) !== 1) {
-            $this->message = 'Spatial index can be created on a single spatial attribute';
-            return false;
-        }
 
         foreach ($attributes as $attributeName) {
             $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
             $attributeType = $attribute->getAttribute('type', '');
+
             if (!\in_array($attributeType, Database::SPATIAL_TYPES, true)) {
                 continue;
+            }
+
+            if (!$this->spatialIndexSupport) {
+                $this->message = 'Spatial indexes are not supported';
+                return false;
+            }
+
+            if (count($attributes) !== 1) {
+                $this->message = 'Spatial index can be created on a single spatial attribute';
+                return false;
             }
 
             if ($type !== Database::INDEX_SPATIAL) {
@@ -369,12 +370,13 @@ class Index extends Validator
                 $this->message = 'Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.';
                 return false;
             }
+
+            if (!empty($orders) && !$this->spatialIndexOrderSupport) {
+                $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
+                return false;
+            }
         }
 
-        if (!empty($orders) && !$this->spatialIndexOrderSupport) {
-            $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
-            return false;
-        }
 
         return true;
     }

@@ -2561,7 +2561,7 @@ trait SpatialTests
             $database->createCollection($collUpdateNull);
 
             $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, true);
-            $database->createAttribute($collUpdateNull, 'name', Database::VAR_STRING, 0, true);
+            $database->createAttribute($collUpdateNull, 'name', Database::VAR_STRING, 4, true);
             try {
                 $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['name']);
                 $this->fail('Expected exception when creating spatial index on NULL-able attribute');

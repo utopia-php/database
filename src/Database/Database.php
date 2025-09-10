@@ -2263,7 +2263,8 @@ class Database
                 $default = null;
             }
 
-            if ($required === true && in_array($type, Database::SPATIAL_TYPES)) {
+            // we need to alter table attribute type to NOT NULL/NULL for change in required
+            if (!$this->adapter->getSupportForSpatialIndexNull() && in_array($type, Database::SPATIAL_TYPES)) {
                 $altering = true;
             }
 
@@ -3323,12 +3324,12 @@ class Database
         if ($type === self::INDEX_SPATIAL) {
             foreach ($attributes as $attr) {
                 if (!isset($indexAttributesWithTypes[$attr])) {
-                    throw new DatabaseException('Attribute "' . $attr . '" not found in collection');
+                    throw new IndexException('Attribute "' . $attr . '" not found in collection');
                 }
 
                 $attributeType = $indexAttributesWithTypes[$attr];
                 if (!in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    throw new DatabaseException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                    throw new IndexException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
                 }
             }
 

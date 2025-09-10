@@ -1641,13 +1641,39 @@ class MariaDB extends SQL
 
 
             case Database::VAR_POINT:
-                return 'POINT' . ($required && !$this->getSupportForSpatialIndexNull() ? ' NOT NULL' : '');
+                $type = 'POINT';
+                if (!$this->getSupportForSpatialIndexNull()) {
+                    if ($required) {
+                        $type .= ' NOT NULL';
+                    } else {
+                        $type .= ' NULL';
+                    }
+                }
+                return $type;
 
             case Database::VAR_LINESTRING:
-                return 'LINESTRING' . ($required && !$this->getSupportForSpatialIndexNull() ? ' NOT NULL' : '');
+                $type = 'LINESTRING';
+                if (!$this->getSupportForSpatialIndexNull()) {
+                    if ($required) {
+                        $type .= ' NOT NULL';
+                    } else {
+                        $type .= ' NULL';
+                    }
+                }
+                return $type;
+
 
             case Database::VAR_POLYGON:
-                return 'POLYGON' . ($required && !$this->getSupportForSpatialIndexNull() ? ' NOT NULL' : '');
+                $type = 'POLYGON';
+                if (!$this->getSupportForSpatialIndexNull()) {
+                    if ($required) {
+                        $type .= ' NOT NULL';
+                    } else {
+                        $type .= ' NULL';
+                    }
+                }
+                return $type;
+
 
             default:
                 throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);

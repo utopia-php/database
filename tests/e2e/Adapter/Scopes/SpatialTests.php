@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
@@ -1469,7 +1470,6 @@ trait SpatialTests
                 'required' => true,
                 'signed' => true,
                 'array' => false,
-                'filters' => [],
             ]),
             new Document([
                 '$id' => ID::custom('location'),
@@ -1478,7 +1478,6 @@ trait SpatialTests
                 'required' => true,
                 'signed' => true,
                 'array' => false,
-                'filters' => [],
             ]),
             new Document([
                 '$id' => ID::custom('area'),
@@ -1487,7 +1486,6 @@ trait SpatialTests
                 'required' => false,
                 'signed' => true,
                 'array' => false,
-                'filters' => [],
             ])
         ];
 
@@ -2460,4 +2458,92 @@ trait SpatialTests
         $this->assertEquals($result->getAttribute('line'), null);
         $this->assertEquals($result->getAttribute('poly'), null);
     }
+
+    public function testSpatialIndexSingleAttributeOnly(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionName = 'spatial_idx_single_attr_' . uniqid();
+        try {
+            $database->createCollection($collectionName);
+
+            // Create a spatial attribute
+            $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collectionName, 'loc2', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collectionName, 'title', Database::VAR_STRING, 255, true);
+
+            // Case 1: Valid spatial index on a single spatial attribute
+            $this->assertTrue(
+                $database->createIndex($collectionName, 'idx_loc', Database::INDEX_SPATIAL, ['loc'])
+            );
+
+            // Case 2: Fail when trying to create spatial index with multiple attributes
+            try {
+                $database->createIndex($collectionName, 'idx_multi', Database::INDEX_SPATIAL, ['loc', 'loc2']);
+                $this->fail('Expected exception when creating spatial index on multiple attributes');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            // Case 3: Fail when trying to create non-spatial index on a spatial attribute
+            try {
+                $database->createIndex($collectionName, 'idx_wrong_type', Database::INDEX_KEY, ['loc']);
+                $this->fail('Expected exception when creating non-spatial index on spatial attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            // Case 4: Fail when trying to mix spatial + non-spatial attributes in a spatial index
+            try {
+                $database->createIndex($collectionName, 'idx_mix', Database::INDEX_SPATIAL, ['loc', 'title']);
+                $this->fail('Expected exception when creating spatial index with mixed attribute types');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
+    public function testSpatialIndexRequiredToggling(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        if ($database->getAdapter()->getSupportForSpatialIndexNull()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        try {
+            $collUpdateNull = 'spatial_idx_toggle';
+            $database->createCollection($collUpdateNull);
+
+            $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, false);
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']);
+                $this->fail('Expected exception when creating spatial index on NULL-able attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+            }
+            $database->updateAttribute($collUpdateNull, 'loc', required: true);
+            $this->assertTrue($database->createIndex($collUpdateNull, 'new index', Database::INDEX_SPATIAL, ['loc']));
+            $this->assertTrue($database->deleteIndex($collUpdateNull, 'new index'));
+            $database->updateAttribute($collUpdateNull, 'loc', required: false);
+
+            $database->createDocument($collUpdateNull, new Document(['loc' => null]));
+        } finally {
+            $database->deleteCollection($collUpdateNull);
+        }
+    }
+
 }

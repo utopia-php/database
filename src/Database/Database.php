@@ -485,8 +485,8 @@ class Database
              * @return mixed
              */
             function (mixed $value) {
-                if (is_null($value)) {
-                    return;
+                if (!is_array($value)) {
+                    return $value;
                 }
                 try {
                     return  self::encodeSpatialData($value, Database::VAR_POINT);
@@ -499,7 +499,7 @@ class Database
              * @return string|null
              */
             function (?string $value) {
-                if (is_null($value)) {
+                if (!is_string($value)) {
                     return $value;
                 }
                 return self::decodeSpatialData($value);
@@ -4742,7 +4742,6 @@ class Database
                     if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
-
                     $batch[$index] = $this->encode($collection, $document);
                 }
 

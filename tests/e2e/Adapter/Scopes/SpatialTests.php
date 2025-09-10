@@ -2392,4 +2392,72 @@ trait SpatialTests
             }
         }
     }
+    public function testSpatialEncodeDecode(): void
+    {
+        $collection = new Document([
+            '$collection' => ID::custom(Database::METADATA),
+            '$id' => ID::custom('users'),
+            'name' => 'Users',
+            'attributes' => [
+                [
+                    '$id' => ID::custom('point'),
+                    'type' => Database::VAR_POINT,
+                    'required' => false,
+                    'filters' => [Database::VAR_POINT],
+                ],
+                [
+                    '$id' => ID::custom('line'),
+                    'type' => Database::VAR_LINESTRING,
+                    'format' => '',
+                    'required' => false,
+                    'filters' => [Database::VAR_LINESTRING],
+                ],
+                [
+                    '$id' => ID::custom('poly'),
+                    'type' => Database::VAR_POLYGON,
+                    'format' => '',
+                    'required' => false,
+                    'filters' => [Database::VAR_POLYGON],
+                ]
+            ]
+        ]);
+
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+        $point = "POINT(1 2)";
+        $line = "LINESTRING(1 2, 1 2)";
+        $poly = "POLYGON((0 0, 0 10, 10 10, 0 0))";
+
+        $pointArr = [1,2];
+        $lineArr = [[1,2],[1,2]];
+        $polyArr = [[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]];
+        $doc = new Document(['point' => $pointArr ,'line' => $lineArr, 'poly' => $polyArr]);
+
+        $result = $database->encode($collection, $doc);
+
+        $this->assertEquals($result->getAttribute('point'), $point);
+        $this->assertEquals($result->getAttribute('line'), $line);
+        $this->assertEquals($result->getAttribute('poly'), $poly);
+
+
+        $result = $database->decode($collection, $doc);
+        $this->assertEquals($result->getAttribute('point'), $pointArr);
+        $this->assertEquals($result->getAttribute('line'), $lineArr);
+        $this->assertEquals($result->getAttribute('poly'), $polyArr);
+
+        $stringDoc = new Document(['point' => $point,'line' => $line, 'poly' => $poly]);
+        $result = $database->decode($collection, $stringDoc);
+        $this->assertEquals($result->getAttribute('point'), $pointArr);
+        $this->assertEquals($result->getAttribute('line'), $lineArr);
+        $this->assertEquals($result->getAttribute('poly'), $polyArr);
+
+        $nullDoc = new Document(['point' => null,'line' => null, 'poly' => null]);
+        $result = $database->decode($collection, $nullDoc);
+        $this->assertEquals($result->getAttribute('point'), null);
+        $this->assertEquals($result->getAttribute('line'), null);
+        $this->assertEquals($result->getAttribute('poly'), null);
+    }
 }

@@ -477,6 +477,91 @@ class Database
                 return DateTime::formatTz($value);
             }
         );
+
+        self::addFilter(
+            Database::VAR_POINT,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_POINT);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return $value;
+                }
+                return self::decodeSpatialData($value);
+            }
+        );
+        self::addFilter(
+            Database::VAR_LINESTRING,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_LINESTRING);
+                } catch (\Throwable) {
+                    if (is_null($value)) {
+                        return $value;
+                    }
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return $value;
+                }
+                return self::decodeSpatialData($value);
+            }
+        );
+        self::addFilter(
+            Database::VAR_POLYGON,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_POLYGON);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return $value;
+                }
+                return self::decodeSpatialData($value);
+            }
+        );
     }
 
     /**
@@ -1242,6 +1327,19 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
+        foreach ($attributes as &$attribute) {
+            if (in_array($attribute['type'], Database::SPATIAL_TYPES)) {
+                $existingFilters = $attribute['filters'] ?? [];
+                if (!is_array($existingFilters)) {
+                    $existingFilters = [$existingFilters];
+                }
+                $attribute['filters'] = array_values(
+                    array_unique(array_merge($existingFilters, [$attribute['type']]))
+                );
+            }
+        }
+        unset($attribute);
+
         $permissions ??= [
             Permission::create(Role::any()),
         ];
@@ -1597,6 +1695,10 @@ class Database
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
+        }
+        if (in_array($type, Database::SPATIAL_TYPES)) {
+            $filters[] = $type;
+            $filters = array_unique($filters);
         }
 
         $attribute = $this->validateAttribute(
@@ -6561,14 +6663,6 @@ class Database
 
             foreach ($value as $index => $node) {
                 if ($node !== null) {
-                    // Handle spatial data encoding
-                    $attributeType = $attribute['type'] ?? '';
-                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                        if (is_array($node)) {
-                            $node = $this->encodeSpatialData($node, $attributeType);
-                        }
-                    }
-
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
@@ -6647,9 +6741,6 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
-                if (is_string($node) && in_array($type, Database::SPATIAL_TYPES)) {
-                    $node = $this->decodeSpatialData($node);
-                }
 
                 foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);

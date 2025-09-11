@@ -263,7 +263,7 @@ class Filter extends Base
             case Query::TYPE_DISTANCE_NOT_EQUAL:
             case Query::TYPE_DISTANCE_GREATER_THAN:
             case Query::TYPE_DISTANCE_LESS_THAN:
-                if (count($value->getValues()) !== 1 || !is_array($value->getValues()[0]) || count($value->getValues()[0]) !== 2) {
+                if (count($value->getValues()) !== 1 || !is_array($value->getValues()[0]) || count($value->getValues()[0]) !== 3) {
                     $this->message = 'Distance query requires [[geometry, distance]] parameters';
                     return false;
                 }

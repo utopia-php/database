@@ -3,7 +3,6 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
-use PDO;
 use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -14,7 +13,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 class MariaDB extends SQL
 {
@@ -1355,343 +1353,44 @@ class MariaDB extends SQL
     }
 
     /**
-     * Find Documents
+     * Handle distance spatial queries
      *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $limit
-     * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
-     * @param array<string, mixed> $cursor
-     * @param string $cursorDirection
-     * @param string $forPermission
-     * @return array<Document>
-     * @throws DatabaseException
-     * @throws TimeoutException
-     * @throws Exception
-     */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
-    {
-        $spatialAttributes = $this->getSpatialAttributes($collection);
-        $attributes = $collection->getAttribute('attributes', []);
-
-        $collection = $collection->getId();
-        $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
-        $where = [];
-        $orders = [];
-        $alias = Query::DEFAULT_ALIAS;
-        $binds = [];
-
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
-        $cursorWhere = [];
-
-        foreach ($orderAttributes as $i => $originalAttribute) {
-            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
-            $attribute = $this->filter($attribute);
-
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
-            $direction = $orderType;
-
-            if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $direction = ($direction === Database::ORDER_ASC)
-                    ? Database::ORDER_DESC
-                    : Database::ORDER_ASC;
-            }
-
-            $orders[] = "{$this->quote($attribute)} {$direction}";
-
-            // Build pagination WHERE clause only if we have a cursor
-            if (!empty($cursor)) {
-                // Special case: No tie breaks. only 1 attribute and it's a unique primary key
-                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
-                    $operator = ($direction === Database::ORDER_DESC)
-                        ? Query::TYPE_LESSER
-                        : Query::TYPE_GREATER;
-
-                    $bindName = ":cursor_pk";
-                    $binds[$bindName] = $cursor[$originalAttribute];
-
-                    $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
-                    break;
-                }
-
-                $conditions = [];
-
-                // Add equality conditions for previous attributes
-                for ($j = 0; $j < $i; $j++) {
-                    $prevOriginal = $orderAttributes[$j];
-                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
-
-                    $bindName = ":cursor_{$j}";
-                    $binds[$bindName] = $cursor[$prevOriginal];
-
-                    $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
-                }
-
-                // Add comparison for current attribute
-                $operator = ($direction === Database::ORDER_DESC)
-                    ? Query::TYPE_LESSER
-                    : Query::TYPE_GREATER;
-
-                $bindName = ":cursor_{$i}";
-                $binds[$bindName] = $cursor[$originalAttribute];
-
-                $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
-
-                $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
-            }
-        }
-
-        if (!empty($cursorWhere)) {
-            $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
-        }
-
-        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
-        if (!empty($conditions)) {
-            $where[] = $conditions;
-        }
-
-        if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
-        }
-
-        if ($this->sharedTables) {
-            $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
-        }
-
-        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
-
-        $sqlLimit = '';
-        if (! \is_null($limit)) {
-            $binds[':limit'] = $limit;
-            $sqlLimit = 'LIMIT :limit';
-        }
-
-        if (! \is_null($offset)) {
-            $binds[':offset'] = $offset;
-            $sqlLimit .= ' OFFSET :offset';
-        }
-
-        $selections = $this->getAttributeSelections($queries);
-
-
-        $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
-            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
-            {$sqlWhere}
-            {$sqlOrder}
-            {$sqlLimit};
-        ";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
-
-        try {
-            $stmt = $this->getPDO()->prepare($sql);
-
-            foreach ($binds as $key => $value) {
-                if (gettype($value) === 'double') {
-                    $stmt->bindValue($key, $this->getFloatPrecision($value), PDO::PARAM_STR);
-                } else {
-                    $stmt->bindValue($key, $value, $this->getPDOType($value));
-                }
-            }
-
-            $stmt->execute();
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
-
-        foreach ($results as $index => $document) {
-            if (\array_key_exists('_uid', $document)) {
-                $results[$index]['$id'] = $document['_uid'];
-                unset($results[$index]['_uid']);
-            }
-            if (\array_key_exists('_id', $document)) {
-                $results[$index]['$sequence'] = $document['_id'];
-                unset($results[$index]['_id']);
-            }
-            if (\array_key_exists('_tenant', $document)) {
-                $results[$index]['$tenant'] = $document['_tenant'];
-                unset($results[$index]['_tenant']);
-            }
-            if (\array_key_exists('_createdAt', $document)) {
-                $results[$index]['$createdAt'] = $document['_createdAt'];
-                unset($results[$index]['_createdAt']);
-            }
-            if (\array_key_exists('_updatedAt', $document)) {
-                $results[$index]['$updatedAt'] = $document['_updatedAt'];
-                unset($results[$index]['_updatedAt']);
-            }
-            if (\array_key_exists('_permissions', $document)) {
-                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
-                unset($results[$index]['_permissions']);
-            }
-
-            $results[$index] = new Document($results[$index]);
-        }
-
-        if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $results = \array_reverse($results);
-        }
-
-        return $results;
-    }
-
-    /**
-     * Count Documents
-     *
-     * @param Document $collection
-     * @param array<Query> $queries
-     * @param int|null $max
-     * @return int
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
-    {
-        $attributes = $collection->getAttribute("attributes", []);
-        $collection = $collection->getId();
-        $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
-        $binds = [];
-        $where = [];
-        $alias = Query::DEFAULT_ALIAS;
-
-        $limit = '';
-        if (! \is_null($max)) {
-            $binds[':limit'] = $max;
-            $limit = 'LIMIT :limit';
-        }
-
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
-        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
-        if (!empty($conditions)) {
-            $where[] = $conditions;
-        }
-
-        if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
-        }
-
-        if ($this->sharedTables) {
-            $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
-        }
-
-        $sqlWhere = !empty($where)
-            ? 'WHERE ' . \implode(' AND ', $where)
-            : '';
-
-        $sql = "
-			SELECT COUNT(1) as sum FROM (
-				SELECT 1
-				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
-				{$sqlWhere}
-				{$limit}
-			) table_count
-        ";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($binds as $key => $value) {
-            $stmt->bindValue($key, $value, $this->getPDOType($value));
-        }
-
-        $stmt->execute();
-
-        $result = $stmt->fetchAll();
-        $stmt->closeCursor();
-        if (!empty($result)) {
-            $result = $result[0];
-        }
-
-        return $result['sum'] ?? 0;
-    }
-
-    /**
-     * Sum an Attribute
-     *
-     * @param Document $collection
+     * @param Query $query
+     * @param array<string, mixed> $binds
      * @param string $attribute
-     * @param array<Query> $queries
-     * @param int|null $max
-     * @return int|float
-     * @throws Exception
-     * @throws PDOException
-     */
-    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): int|float
+     * @param string $alias
+     * @param string $placeholder
+     * @return string
+    */
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
     {
-        $collectionAttributes = $collection->getAttribute("attributes", []);
-        $collection = $collection->getId();
-        $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
-        $where = [];
-        $alias = Query::DEFAULT_ALIAS;
-        $binds = [];
+        $distanceParams = $query->getValues()[0];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+        $binds[":{$placeholder}_1"] = $distanceParams[1];
 
-        $limit = '';
-        if (! \is_null($max)) {
-            $binds[':limit'] = $max;
-            $limit = 'LIMIT :limit';
+        $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
+
+        switch ($query->getMethod()) {
+            case Query::TYPE_DISTANCE_EQUAL:
+                $operator = '=';
+                break;
+            case Query::TYPE_DISTANCE_NOT_EQUAL:
+                $operator = '!=';
+                break;
+            case Query::TYPE_DISTANCE_GREATER_THAN:
+                $operator = '>';
+                break;
+            case Query::TYPE_DISTANCE_LESS_THAN:
+                $operator = '<';
+                break;
+            default:
+                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
         }
 
-        $queries = array_map(fn ($query) => clone $query, $queries);
-
-        $conditions = $this->getSQLConditions($queries, $binds, attributes:$collectionAttributes);
-        if (!empty($conditions)) {
-            $where[] = $conditions;
+        if ($useMeters) {
+            return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), 6371000) {$operator} :{$placeholder}_1";
         }
-
-        if (Authorization::$status) {
-            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
-        }
-
-        if ($this->sharedTables) {
-            $binds[':_tenant'] = $this->tenant;
-            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
-        }
-
-        $sqlWhere = !empty($where)
-            ? 'WHERE ' . \implode(' AND ', $where)
-            : '';
-
-        $sql = "
-			SELECT SUM({$this->quote($attribute)}) as sum FROM (
-				SELECT {$this->quote($attribute)}
-				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
-				{$sqlWhere}
-				{$limit}
-			) table_count
-        ";
-
-        $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
-
-        $stmt = $this->getPDO()->prepare($sql);
-
-        foreach ($binds as $key => $value) {
-            $stmt->bindValue($key, $value, $this->getPDOType($value));
-        }
-
-        $stmt->execute();
-
-        $result = $stmt->fetchAll();
-        $stmt->closeCursor();
-        if (!empty($result)) {
-            $result = $result[0];
-        }
-
-        return $result['sum'] ?? 0;
+        return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) {$operator} :{$placeholder}_1";
     }
 
     /**
@@ -1716,28 +1415,10 @@ class MariaDB extends SQL
                 return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
 
             case Query::TYPE_DISTANCE_EQUAL:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) = :{$placeholder}_1";
-
             case Query::TYPE_DISTANCE_NOT_EQUAL:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) != :{$placeholder}_1";
-
             case Query::TYPE_DISTANCE_GREATER_THAN:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) > :{$placeholder}_1";
-
             case Query::TYPE_DISTANCE_LESS_THAN:
-                $distanceParams = $query->getValues()[0];
-                $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
-                $binds[":{$placeholder}_1"] = $distanceParams[1];
-                return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) < :{$placeholder}_1";
+                return $this->handleDistanceSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
 
             case Query::TYPE_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
@@ -1974,9 +1655,9 @@ class MariaDB extends SQL
     protected function getPDOType(mixed $value): int
     {
         return match (gettype($value)) {
-            'string','double' => PDO::PARAM_STR,
-            'integer', 'boolean' => PDO::PARAM_INT,
-            'NULL' => PDO::PARAM_NULL,
+            'string','double' => \PDO::PARAM_STR,
+            'integer', 'boolean' => \PDO::PARAM_INT,
+            'NULL' => \PDO::PARAM_NULL,
             default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
     }

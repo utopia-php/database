@@ -731,6 +731,30 @@ class Query
     }
 
     /**
+     * Helper method to create Query for documents created between two dates
+     *
+     * @param string $start
+     * @param string $end
+     * @return Query
+     */
+    public static function createdBetween(string $start, string $end): self
+    {
+        return self::between('$createdAt', $start, $end);
+    }
+
+    /**
+     * Helper method to create Query for documents updated between two dates
+     *
+     * @param string $start
+     * @param string $end
+     * @return Query
+     */
+    public static function updatedBetween(string $start, string $end): self
+    {
+        return self::between('$updatedAt', $start, $end);
+    }
+
+    /**
      * @param array<Query> $queries
      * @return Query
      */
@@ -903,11 +927,12 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      * @param int|float $distance
+     * @param bool $meters
      * @return Query
      */
-    public static function distanceEqual(string $attribute, array $values, int|float $distance): self
+    public static function distanceEqual(string $attribute, array $values, int|float $distance, bool $meters = false): self
     {
-        return new self(self::TYPE_DISTANCE_EQUAL, $attribute, [[$values,$distance]]);
+        return new self(self::TYPE_DISTANCE_EQUAL, $attribute, [[$values,$distance,$meters]]);
     }
 
     /**
@@ -916,11 +941,12 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      * @param int|float $distance
+     * @param bool $meters
      * @return Query
      */
-    public static function distanceNotEqual(string $attribute, array $values, int|float $distance): self
+    public static function distanceNotEqual(string $attribute, array $values, int|float $distance, bool $meters = false): self
     {
-        return new self(self::TYPE_DISTANCE_NOT_EQUAL, $attribute, [[$values,$distance]]);
+        return new self(self::TYPE_DISTANCE_NOT_EQUAL, $attribute, [[$values,$distance,$meters]]);
     }
 
     /**
@@ -929,11 +955,12 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      * @param int|float $distance
+     * @param bool $meters
      * @return Query
      */
-    public static function distanceGreaterThan(string $attribute, array $values, int|float $distance): self
+    public static function distanceGreaterThan(string $attribute, array $values, int|float $distance, bool $meters = false): self
     {
-        return new self(self::TYPE_DISTANCE_GREATER_THAN, $attribute, [[$values,$distance]]);
+        return new self(self::TYPE_DISTANCE_GREATER_THAN, $attribute, [[$values,$distance, $meters]]);
     }
 
     /**
@@ -942,11 +969,12 @@ class Query
      * @param string $attribute
      * @param array<mixed> $values
      * @param int|float $distance
+     * @param bool $meters
      * @return Query
      */
-    public static function distanceLessThan(string $attribute, array $values, int|float $distance): self
+    public static function distanceLessThan(string $attribute, array $values, int|float $distance, bool $meters = false): self
     {
-        return new self(self::TYPE_DISTANCE_LESS_THAN, $attribute, [[$values,$distance]]);
+        return new self(self::TYPE_DISTANCE_LESS_THAN, $attribute, [[$values,$distance,$meters]]);
     }
 
     /**

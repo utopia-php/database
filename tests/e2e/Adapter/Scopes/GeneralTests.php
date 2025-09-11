@@ -512,7 +512,7 @@ trait GeneralTests
             $database
                 ->setTenant(null)
                 ->setTenantPerDocument(true)
-                ->createOrUpdateDocuments(__FUNCTION__, [new Document([
+                ->upsertDocuments(__FUNCTION__, [new Document([
                     '$id' => $doc3Id,
                     '$tenant' => 3,
                     'name' => 'Superman3',
@@ -550,7 +550,7 @@ trait GeneralTests
             $database
                 ->setTenant(null)
                 ->setTenantPerDocument(true)
-                ->createOrUpdateDocuments(__FUNCTION__, [new Document([
+                ->upsertDocuments(__FUNCTION__, [new Document([
                     '$id' => $doc4Id,
                     '$tenant' => 4,
                     'name' => 'Superman4',
@@ -582,7 +582,7 @@ trait GeneralTests
             $database
                 ->setTenant(null)
                 ->setTenantPerDocument(true)
-                ->createOrUpdateDocuments(__FUNCTION__, [new Document([
+                ->upsertDocuments(__FUNCTION__, [new Document([
                     '$id' => $doc4Id,
                     '$tenant' => 4,
                     'name' => 'Superman4 updated',

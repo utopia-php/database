@@ -339,14 +339,6 @@ class Index extends Validator
     public function checkSpatialIndex(Document $index): bool
     {
         $type = $index->getAttribute('type');
-        if ($type !== Database::INDEX_SPATIAL) {
-            return true;
-        }
-
-        if (!$this->spatialIndexSupport) {
-            $this->message = 'Spatial indexes are not supported';
-            return false;
-        }
 
         $attributes = $index->getAttribute('attributes', []);
         $orders     = $index->getAttribute('orders', []);
@@ -356,21 +348,35 @@ class Index extends Validator
             $attributeType = $attribute->getAttribute('type', '');
 
             if (!\in_array($attributeType, Database::SPATIAL_TYPES, true)) {
-                $this->message = 'Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
+                continue;
+            }
+
+            if (!$this->spatialIndexSupport) {
+                $this->message = 'Spatial indexes are not supported';
                 return false;
             }
 
+            if (count($attributes) !== 1) {
+                $this->message = 'Spatial index can be created on a single spatial attribute';
+                return false;
+            }
+
+            if ($type !== Database::INDEX_SPATIAL) {
+                $this->message = 'Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
+                return false;
+            }
             $required = (bool) $attribute->getAttribute('required', false);
             if (!$required && !$this->spatialIndexNullSupport) {
                 $this->message = 'Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.';
                 return false;
             }
+
+            if (!empty($orders) && !$this->spatialIndexOrderSupport) {
+                $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
+                return false;
+            }
         }
 
-        if (!empty($orders) && !$this->spatialIndexOrderSupport) {
-            $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
-            return false;
-        }
 
         return true;
     }

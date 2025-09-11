@@ -5,11 +5,14 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
+use Utopia\Database\Exception\Index as IndexException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Index;
 
 trait SpatialTests
 {
@@ -135,8 +138,8 @@ trait SpatialTests
                 'notEquals' => Query::notEqual('pointAttr', [[1.0, 1.0]]),
                 'distanceEqual' => Query::distanceEqual('pointAttr', [5.0, 5.0], 1.4142135623730951),
                 'distanceNotEqual' => Query::distanceNotEqual('pointAttr', [1.0, 1.0], 0.0),
-                'intersects' => Query::intersects('pointAttr', [[6.0, 6.0]]),
-                'notIntersects' => Query::notIntersects('pointAttr', [[1.0, 1.0]])
+                'intersects' => Query::intersects('pointAttr', [6.0, 6.0]),
+                'notIntersects' => Query::notIntersects('pointAttr', [1.0, 1.0])
             ];
 
             foreach ($pointQueries as $queryType => $query) {
@@ -151,8 +154,8 @@ trait SpatialTests
                 'notContains' => Query::notContains('lineAttr', [[5.0, 6.0]]), // Point not on the line
                 'equals' => query::equal('lineAttr', [[[1.0, 2.0], [3.0, 4.0]]]), // Exact same linestring
                 'notEquals' => query::notEqual('lineAttr', [[[5.0, 6.0], [7.0, 8.0]]]), // Different linestring
-                'intersects' => Query::intersects('lineAttr', [[1.0, 2.0]]), // Point on the line should intersect
-                'notIntersects' => Query::notIntersects('lineAttr', [[5.0, 6.0]]) // Point not on the line should not intersect
+                'intersects' => Query::intersects('lineAttr', [1.0, 2.0]), // Point on the line should intersect
+                'notIntersects' => Query::notIntersects('lineAttr', [5.0, 6.0]) // Point not on the line should not intersect
             ];
 
             foreach ($lineQueries as $queryType => $query) {
@@ -182,12 +185,12 @@ trait SpatialTests
             $polyQueries = [
                 'contains' => Query::contains('polyAttr', [[5.0, 5.0]]), // Point inside polygon
                 'notContains' => Query::notContains('polyAttr', [[15.0, 15.0]]), // Point outside polygon
-                'intersects' => Query::intersects('polyAttr', [[5.0, 5.0]]), // Point inside polygon should intersect
-                'notIntersects' => Query::notIntersects('polyAttr', [[15.0, 15.0]]), // Point outside polygon should not intersect
+                'intersects' => Query::intersects('polyAttr', [5.0, 5.0]), // Point inside polygon should intersect
+                'notIntersects' => Query::notIntersects('polyAttr', [15.0, 15.0]), // Point outside polygon should not intersect
                 'equals' => query::equal('polyAttr', [[[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]]]), // Exact same polygon
                 'notEquals' => query::notEqual('polyAttr', [[[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [20.0, 20.0]]]]), // Different polygon
-                'overlaps' => Query::overlaps('polyAttr', [[[[5.0, 5.0], [5.0, 15.0], [15.0, 15.0], [15.0, 5.0], [5.0, 5.0]]]]), // Overlapping polygon
-                'notOverlaps' => Query::notOverlaps('polyAttr', [[[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [30.0, 20.0], [20.0, 20.0]]]]) // Non-overlapping polygon
+                'overlaps' => Query::overlaps('polyAttr', [[[5.0, 5.0], [5.0, 15.0], [15.0, 15.0], [15.0, 5.0], [5.0, 5.0]]]), // Overlapping polygon
+                'notOverlaps' => Query::notOverlaps('polyAttr', [[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [30.0, 20.0], [20.0, 20.0]]]) // Non-overlapping polygon
             ];
 
             foreach ($polyQueries as $queryType => $query) {
@@ -840,6 +843,53 @@ trait SpatialTests
         } finally {
             $database->deleteCollection($collNullIndex);
         }
+
+        $collUpdateNull = 'spatial_idx_req';
+        try {
+            $database->createCollection($collUpdateNull);
+
+            $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, false);
+            if (!$nullSupported) {
+                try {
+                    $database->createIndex($collUpdateNull, 'idx_loc_required', Database::INDEX_SPATIAL, ['loc']);
+                    $this->fail('Expected exception when creating spatial index on NULL-able attribute');
+                } catch (\Throwable $e) {
+                    $this->assertInstanceOf(Exception::class, $e);
+                }
+            } else {
+                $this->assertTrue($database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            }
+
+            $database->updateAttribute($collUpdateNull, 'loc', required: true);
+
+            $this->assertTrue($database->createIndex($collUpdateNull, 'idx_loc_req', Database::INDEX_SPATIAL, ['loc']));
+        } finally {
+            $database->deleteCollection($collUpdateNull);
+        }
+
+
+        $collUpdateNull = 'spatial_idx_index_null_required_true';
+        try {
+            $database->createCollection($collUpdateNull);
+
+            $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, false);
+            if (!$nullSupported) {
+                try {
+                    $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']);
+                    $this->fail('Expected exception when creating spatial index on NULL-able attribute');
+                } catch (\Throwable $e) {
+                    $this->assertInstanceOf(Exception::class, $e);
+                }
+            } else {
+                $this->assertTrue($database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            }
+
+            $database->updateAttribute($collUpdateNull, 'loc', required: true);
+
+            $this->assertTrue($database->createIndex($collUpdateNull, 'new index', Database::INDEX_SPATIAL, ['loc']));
+        } finally {
+            $database->deleteCollection($collUpdateNull);
+        }
     }
 
     public function testComplexGeometricShapes(): void
@@ -935,8 +985,8 @@ trait SpatialTests
             // Test rectangle intersects with another rectangle
             $overlappingRect = $database->find($collectionName, [
                 Query::and([
-                    Query::intersects('rectangle', [[[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]]),
-                    Query::notTouches('rectangle', [[[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]])
+                    Query::intersects('rectangle', [[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]]),
+                    Query::notTouches('rectangle', [[15, 5], [15, 15], [25, 15], [25, 5], [15, 5]])
                 ]),
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($overlappingRect);
@@ -1042,7 +1092,7 @@ trait SpatialTests
                 ], Database::PERMISSION_READ);
             } else {
                 $exactSquare = $database->find($collectionName, [
-                    Query::intersects('square', [[[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]]])
+                    Query::intersects('square', [[5, 5], [5, 15], [15, 15], [15, 5], [5, 5]])
                 ], Database::PERMISSION_READ);
             }
             $this->assertNotEmpty($exactSquare);
@@ -1089,13 +1139,13 @@ trait SpatialTests
 
             // Test triangle intersects with point
             $intersectingTriangle = $database->find($collectionName, [
-                Query::intersects('triangle', [[25, 10]]) // Point inside triangle should intersect
+                Query::intersects('triangle', [25, 10]) // Point inside triangle should intersect
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($intersectingTriangle);
 
             // Test triangle doesn't intersect with distant point
             $nonIntersectingTriangle = $database->find($collectionName, [
-                Query::notIntersects('triangle', [[100, 100]]) // Distant point should not intersect
+                Query::notIntersects('triangle', [100, 100]) // Distant point should not intersect
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($nonIntersectingTriangle);
 
@@ -1159,7 +1209,7 @@ trait SpatialTests
 
             // Test complex polygon intersects with line
             $intersectingLine = $database->find($collectionName, [
-                Query::intersects('complex_polygon', [[[0, 10], [20, 10]]]) // Horizontal line through L-shape
+                Query::intersects('complex_polygon', [[0, 10], [20, 10]]) // Horizontal line through L-shape
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($intersectingLine);
 
@@ -1181,13 +1231,13 @@ trait SpatialTests
 
             // Test linestring intersects with point
             $intersectingPoint = $database->find($collectionName, [
-                Query::intersects('multi_linestring', [[10, 10]]) // Point on diagonal line
+                Query::intersects('multi_linestring', [10, 10]) // Point on diagonal line
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($intersectingPoint);
 
             // Test linestring intersects with a horizontal line coincident at y=20
             $touchingLine = $database->find($collectionName, [
-                Query::intersects('multi_linestring', [[[0, 20], [20, 20]]])
+                Query::intersects('multi_linestring', [[0, 20], [20, 20]])
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($touchingLine);
 
@@ -1421,7 +1471,6 @@ trait SpatialTests
                 'required' => true,
                 'signed' => true,
                 'array' => false,
-                'filters' => [],
             ]),
             new Document([
                 '$id' => ID::custom('location'),
@@ -1430,7 +1479,6 @@ trait SpatialTests
                 'required' => true,
                 'signed' => true,
                 'array' => false,
-                'filters' => [],
             ]),
             new Document([
                 '$id' => ID::custom('area'),
@@ -1439,7 +1487,6 @@ trait SpatialTests
                 'required' => false,
                 'signed' => true,
                 'array' => false,
-                'filters' => [],
             ])
         ];
 
@@ -2156,6 +2203,409 @@ trait SpatialTests
             $this->assertEquals('p1', $notEqualZero[0]->getId());
         } finally {
             $database->deleteCollection($collectionName);
+        }
+    }
+
+    public function testSpatialDistanceInMeterForMultiDimensionGeometry(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        if (!$database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
+            $this->markTestSkipped('Adapter does not support spatial distance(in meter) for multidimension');
+        }
+
+        $multiCollection = 'spatial_distance_meters_multi_';
+        try {
+            $database->createCollection($multiCollection);
+
+            // Create spatial attributes
+            $this->assertEquals(true, $database->createAttribute($multiCollection, 'loc', Database::VAR_POINT, 0, true));
+            $this->assertEquals(true, $database->createAttribute($multiCollection, 'line', Database::VAR_LINESTRING, 0, true));
+            $this->assertEquals(true, $database->createAttribute($multiCollection, 'poly', Database::VAR_POLYGON, 0, true));
+
+            // Create indexes
+            $this->assertEquals(true, $database->createIndex($multiCollection, 'idx_loc', Database::INDEX_SPATIAL, ['loc']));
+            $this->assertEquals(true, $database->createIndex($multiCollection, 'idx_line', Database::INDEX_SPATIAL, ['line']));
+            $this->assertEquals(true, $database->createIndex($multiCollection, 'idx_poly', Database::INDEX_SPATIAL, ['poly']));
+
+            // Geometry sets: near origin and far east
+            $docNear = $database->createDocument($multiCollection, new Document([
+                '$id' => 'near',
+                'loc' => [0.0000, 0.0000],
+                'line' => [[0.0000, 0.0000], [0.0010, 0.0000]], // ~111m
+                'poly' => [[
+                    [-0.0010, -0.0010],
+                    [-0.0010,  0.0010],
+                    [ 0.0010,  0.0010],
+                    [ 0.0010, -0.0010],
+                    [-0.0010, -0.0010] // closed
+                ]],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+
+            $docFar = $database->createDocument($multiCollection, new Document([
+                '$id' => 'far',
+                'loc' => [0.2000, 0.0000], // ~22 km east
+                'line' => [[0.2000, 0.0000], [0.2020, 0.0000]],
+                'poly' => [[
+                    [0.1980, -0.0020],
+                    [0.1980,  0.0020],
+                    [0.2020,  0.0020],
+                    [0.2020, -0.0020],
+                    [0.1980, -0.0020] // closed
+                ]],
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]
+            ]));
+
+            $this->assertInstanceOf(Document::class, $docNear);
+            $this->assertInstanceOf(Document::class, $docFar);
+
+            // polygon vs polygon (~1 km from near, ~22 km from far)
+            $polyPolyWithin3km = $database->find($multiCollection, [
+                Query::distanceLessThan('poly', [[
+                    [0.0080, -0.0010],
+                    [0.0080,  0.0010],
+                    [0.0110,  0.0010],
+                    [0.0110, -0.0010],
+                    [0.0080, -0.0010] // closed
+                ]], 3000, true)
+            ], Database::PERMISSION_READ);
+            $this->assertCount(1, $polyPolyWithin3km);
+            $this->assertEquals('near', $polyPolyWithin3km[0]->getId());
+
+            $polyPolyGreater3km = $database->find($multiCollection, [
+                Query::distanceGreaterThan('poly', [[
+                    [0.0080, -0.0010],
+                    [0.0080,  0.0010],
+                    [0.0110,  0.0010],
+                    [0.0110, -0.0010],
+                    [0.0080, -0.0010] // closed
+                ]], 3000, true)
+            ], Database::PERMISSION_READ);
+            $this->assertCount(1, $polyPolyGreater3km);
+            $this->assertEquals('far', $polyPolyGreater3km[0]->getId());
+
+            // point vs polygon (~0 km near, ~22 km far)
+            $ptPolyWithin500 = $database->find($multiCollection, [
+                Query::distanceLessThan('loc', [[
+                    [-0.0010, -0.0010],
+                    [-0.0010,  0.0020],
+                    [ 0.0020,  0.0020],
+                    [-0.0010, -0.0010]
+                ]], 500, true)
+            ], Database::PERMISSION_READ);
+            $this->assertCount(1, $ptPolyWithin500);
+            $this->assertEquals('near', $ptPolyWithin500[0]->getId());
+
+            $ptPolyGreater500 = $database->find($multiCollection, [
+                Query::distanceGreaterThan('loc', [[
+                    [-0.0010, -0.0010],
+                    [-0.0010,  0.0020],
+                    [ 0.0020,  0.0020],
+                    [-0.0010, -0.0010]
+                ]], 500, true)
+            ], Database::PERMISSION_READ);
+            $this->assertCount(1, $ptPolyGreater500);
+            $this->assertEquals('far', $ptPolyGreater500[0]->getId());
+
+            // Zero-distance checks
+            $lineEqualZero = $database->find($multiCollection, [
+                Query::distanceEqual('line', [[0.0000, 0.0000], [0.0010, 0.0000]], 0, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($lineEqualZero);
+            $this->assertEquals('near', $lineEqualZero[0]->getId());
+
+            $polyEqualZero = $database->find($multiCollection, [
+                Query::distanceEqual('poly', [[
+                    [-0.0010, -0.0010],
+                    [-0.0010,  0.0010],
+                    [ 0.0010,  0.0010],
+                    [ 0.0010, -0.0010],
+                    [-0.0010, -0.0010]
+                ]], 0, true)
+            ], Database::PERMISSION_READ);
+            $this->assertNotEmpty($polyEqualZero);
+            $this->assertEquals('near', $polyEqualZero[0]->getId());
+
+        } finally {
+            $database->deleteCollection($multiCollection);
+        }
+    }
+
+    public function testSpatialDistanceInMeterError(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        if ($database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
+            $this->markTestSkipped('Adapter supports spatial distance (in meter) for multidimension geometries');
+        }
+
+        $collection = 'spatial_distance_error_test';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'loc', Database::VAR_POINT, 0, true));
+        $this->assertEquals(true, $database->createAttribute($collection, 'line', Database::VAR_LINESTRING, 0, true));
+        $this->assertEquals(true, $database->createAttribute($collection, 'poly', Database::VAR_POLYGON, 0, true));
+
+        $doc = $database->createDocument($collection, new Document([
+            '$id' => 'doc1',
+            'loc' => [0.0, 0.0],
+            'line' => [[0.0, 0.0], [0.001, 0.0]],
+            'poly' => [[[ -0.001, -0.001 ], [ -0.001, 0.001 ], [ 0.001, 0.001 ], [ -0.001, -0.001 ]]],
+            '$permissions' => []
+        ]));
+        $this->assertInstanceOf(Document::class, $doc);
+
+        // Invalid geometry pairs
+        $cases = [
+            ['attr' => 'line', 'geom' => [0.002, 0.0], 'expected' => ['linestring', 'point']],
+            ['attr' => 'poly', 'geom' => [0.002, 0.0], 'expected' => ['polygon', 'point']],
+            ['attr' => 'loc', 'geom' => [[0.0, 0.0], [0.001, 0.001]], 'expected' => ['point', 'linestring']],
+            ['attr' => 'poly', 'geom' => [[0.0, 0.0], [0.001, 0.001]], 'expected' => ['polygon', 'linestring']],
+            ['attr' => 'loc', 'geom' => [[[0.0, 0.0], [0.001, 0.0], [0.001, 0.001], [0.0, 0.0]]], 'expected' => ['point', 'polygon']],
+            ['attr' => 'line', 'geom' => [[[0.0, 0.0], [0.001, 0.0], [0.001, 0.001], [0.0, 0.0]]], 'expected' => ['linestring', 'polygon']],
+            ['attr' => 'poly', 'geom' => [[[0.002, -0.001], [0.002, 0.001], [0.004, 0.001], [0.002, -0.001]]], 'expected' => ['polygon', 'polygon']],
+            ['attr' => 'line', 'geom' => [[0.002, 0.0], [0.003, 0.0]], 'expected' => ['linestring', 'linestring']],
+        ];
+
+        foreach ($cases as $case) {
+            try {
+                $database->find($collection, [
+                    Query::distanceLessThan($case['attr'], $case['geom'], 1000, true)
+                ]);
+                $this->fail('Expected Exception not thrown for ' . implode(' vs ', $case['expected']));
+            } catch (\Exception $e) {
+                $this->assertInstanceOf(QueryException::class, $e);
+
+                // Validate exception message contains correct type names
+                $msg = strtolower($e->getMessage());
+                $this->assertStringContainsString($case['expected'][0], $msg, 'Attr type missing in exception');
+                $this->assertStringContainsString($case['expected'][1], $msg, 'Geom type missing in exception');
+            }
+        }
+    }
+    public function testSpatialEncodeDecode(): void
+    {
+        $collection = new Document([
+            '$collection' => ID::custom(Database::METADATA),
+            '$id' => ID::custom('users'),
+            'name' => 'Users',
+            'attributes' => [
+                [
+                    '$id' => ID::custom('point'),
+                    'type' => Database::VAR_POINT,
+                    'required' => false,
+                    'filters' => [Database::VAR_POINT],
+                ],
+                [
+                    '$id' => ID::custom('line'),
+                    'type' => Database::VAR_LINESTRING,
+                    'format' => '',
+                    'required' => false,
+                    'filters' => [Database::VAR_LINESTRING],
+                ],
+                [
+                    '$id' => ID::custom('poly'),
+                    'type' => Database::VAR_POLYGON,
+                    'format' => '',
+                    'required' => false,
+                    'filters' => [Database::VAR_POLYGON],
+                ]
+            ]
+        ]);
+
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+        $point = "POINT(1 2)";
+        $line = "LINESTRING(1 2, 1 2)";
+        $poly = "POLYGON((0 0, 0 10, 10 10, 0 0))";
+
+        $pointArr = [1,2];
+        $lineArr = [[1,2],[1,2]];
+        $polyArr = [[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]];
+        $doc = new Document(['point' => $pointArr ,'line' => $lineArr, 'poly' => $polyArr]);
+
+        $result = $database->encode($collection, $doc);
+
+        $this->assertEquals($result->getAttribute('point'), $point);
+        $this->assertEquals($result->getAttribute('line'), $line);
+        $this->assertEquals($result->getAttribute('poly'), $poly);
+
+
+        $result = $database->decode($collection, $doc);
+        $this->assertEquals($result->getAttribute('point'), $pointArr);
+        $this->assertEquals($result->getAttribute('line'), $lineArr);
+        $this->assertEquals($result->getAttribute('poly'), $polyArr);
+
+        $stringDoc = new Document(['point' => $point,'line' => $line, 'poly' => $poly]);
+        $result = $database->decode($collection, $stringDoc);
+        $this->assertEquals($result->getAttribute('point'), $pointArr);
+        $this->assertEquals($result->getAttribute('line'), $lineArr);
+        $this->assertEquals($result->getAttribute('poly'), $polyArr);
+
+        $nullDoc = new Document(['point' => null,'line' => null, 'poly' => null]);
+        $result = $database->decode($collection, $nullDoc);
+        $this->assertEquals($result->getAttribute('point'), null);
+        $this->assertEquals($result->getAttribute('line'), null);
+        $this->assertEquals($result->getAttribute('poly'), null);
+    }
+
+    public function testSpatialIndexSingleAttributeOnly(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionName = 'spatial_idx_single_attr_' . uniqid();
+        try {
+            $database->createCollection($collectionName);
+
+            // Create a spatial attribute
+            $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collectionName, 'loc2', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collectionName, 'title', Database::VAR_STRING, 255, true);
+
+            // Case 1: Valid spatial index on a single spatial attribute
+            $this->assertTrue(
+                $database->createIndex($collectionName, 'idx_loc', Database::INDEX_SPATIAL, ['loc'])
+            );
+
+            // Case 2: Fail when trying to create spatial index with multiple attributes
+            try {
+                $database->createIndex($collectionName, 'idx_multi', Database::INDEX_SPATIAL, ['loc', 'loc2']);
+                $this->fail('Expected exception when creating spatial index on multiple attributes');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            // Case 3: Fail when trying to create non-spatial index on a spatial attribute
+            try {
+                $database->createIndex($collectionName, 'idx_wrong_type', Database::INDEX_KEY, ['loc']);
+                $this->fail('Expected exception when creating non-spatial index on spatial attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            // Case 4: Fail when trying to mix spatial + non-spatial attributes in a spatial index
+            try {
+                $database->createIndex($collectionName, 'idx_mix', Database::INDEX_SPATIAL, ['loc', 'title']);
+                $this->fail('Expected exception when creating spatial index with mixed attribute types');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
+    public function testSpatialIndexRequiredToggling(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        if ($database->getAdapter()->getSupportForSpatialIndexNull()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        try {
+            $collUpdateNull = 'spatial_idx_toggle';
+            $database->createCollection($collUpdateNull);
+
+            $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, false);
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc']);
+                $this->fail('Expected exception when creating spatial index on NULL-able attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(Exception::class, $e);
+            }
+            $database->updateAttribute($collUpdateNull, 'loc', required: true);
+            $this->assertTrue($database->createIndex($collUpdateNull, 'new index', Database::INDEX_SPATIAL, ['loc']));
+            $this->assertTrue($database->deleteIndex($collUpdateNull, 'new index'));
+            $database->updateAttribute($collUpdateNull, 'loc', required: false);
+
+            $database->createDocument($collUpdateNull, new Document(['loc' => null]));
+        } finally {
+            $database->deleteCollection($collUpdateNull);
+        }
+    }
+
+    public function testSpatialIndexOnNonSpatial(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        try {
+            $collUpdateNull = 'spatial_idx_toggle';
+            $database->createCollection($collUpdateNull);
+
+            $database->createAttribute($collUpdateNull, 'loc', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collUpdateNull, 'name', Database::VAR_STRING, 4, true);
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['name']);
+                $this->fail('Expected exception when creating spatial index on NULL-able attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_KEY, ['loc']);
+                $this->fail('Expected exception when creating non spatial index on spatial attribute');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_KEY, ['loc,name']);
+                $this->fail('Expected exception when creating index');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_KEY, ['name,loc']);
+                $this->fail('Expected exception when creating index');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['name,loc']);
+                $this->fail('Expected exception when creating index');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+            try {
+                $database->createIndex($collUpdateNull, 'idx_loc', Database::INDEX_SPATIAL, ['loc,name']);
+                $this->fail('Expected exception when creating index');
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(IndexException::class, $e);
+            }
+
+        } finally {
+            $database->deleteCollection($collUpdateNull);
         }
     }
 }

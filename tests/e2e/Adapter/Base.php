@@ -18,13 +18,13 @@ use Utopia\Database\Validator\Authorization;
 
 abstract class Base extends TestCase
 {
-    // use CollectionTests;
-    // use DocumentTests;
-    // use AttributeTests;
-    // use IndexTests;
-    // use PermissionTests;
-    // use RelationshipTests;
-    // use GeneralTests;
+    use CollectionTests;
+    use DocumentTests;
+    use AttributeTests;
+    use IndexTests;
+    use PermissionTests;
+    use RelationshipTests;
+    use GeneralTests;
     use SpatialTests;
 
     protected static string $namespace;

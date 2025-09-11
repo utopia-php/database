@@ -33,7 +33,7 @@ class Spatial extends Validator
             return false;
         }
 
-        return $this->isValidCoordinate($value[0], $value[1]);
+        return $this->isValidCoordinate((float)$value[0], (float) $value[1]);
     }
 
     /**

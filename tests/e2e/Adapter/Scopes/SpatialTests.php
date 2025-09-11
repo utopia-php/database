@@ -234,7 +234,7 @@ trait SpatialTests
                 $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document for distance %s on polyAttr', $queryType));
             }
         } finally {
-            // $database->deleteCollection($collectionName);
+            $database->deleteCollection($collectionName);
         }
     }
 

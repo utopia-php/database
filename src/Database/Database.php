@@ -459,7 +459,7 @@ class Database
              */
             function (mixed $value) {
                 if (is_null($value)) {
-                    return;
+                    return null;
                 }
                 try {
                     $value = new \DateTime($value);
@@ -496,7 +496,7 @@ class Database
             },
             /**
              * @param string|null $value
-             * @return string|null
+             * @return mixed[]
              */
             function (?string $value) {
                 if (!is_string($value)) {
@@ -7289,7 +7289,23 @@ class Database
 
         switch ($type) {
             case self::VAR_POINT:
-                return "POINT({$value[0]} {$value[1]})";
+                [$x, $y] = $value;
+                $srid = 4326;
+
+                // Little-endian indicator
+                $byteOrder = pack('C', 1); // 1 = little endian
+
+                // WKB Type: POINT (1) with SRID flag (0x20000000)
+                $wkbType = 1 | 0x20000000;
+                $typeBin = pack('V', $wkbType);
+
+                // SRID
+                $sridBin = pack('V', $srid);
+
+                // Coordinates
+                $coordBin = pack('d', $x) . pack('d', $y);
+
+                return $byteOrder . $typeBin . $sridBin . $coordBin;
 
             case self::VAR_LINESTRING:
                 $points = [];

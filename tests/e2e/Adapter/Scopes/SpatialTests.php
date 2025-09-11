@@ -12,7 +12,6 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Index;
 
 trait SpatialTests
 {
@@ -2656,5 +2655,96 @@ trait SpatialTests
         $this->assertEquals($result->getAttribute('pointAttr')[0], 5.0);
         $this->assertEquals($result->getAttribute('pointAttr')[1], 5.5);
         $database->deleteCollection($collectionName);
+    }
+
+    public function testInvalidCoordinateDocuments(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'test_invalid_coord_';
+        try {
+            $database->createCollection($collectionName);
+
+            $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, true);
+            $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, true);
+
+            $invalidDocs = [
+                // Invalid POINT (longitude > 180)
+                [
+                    '$id' => 'invalidDoc1',
+                    'pointAttr' => [200.0, 20.0],
+                    'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
+                    'polyAttr' => [
+                        [
+                            [0.0, 0.0],
+                            [0.0, 10.0],
+                            [10.0, 10.0],
+                            [10.0, 0.0],
+                            [0.0, 0.0]
+                        ]
+                    ]
+                ],
+                // Invalid POINT (latitude < -90)
+                [
+                    '$id' => 'invalidDoc2',
+                    'pointAttr' => [50.0, -100.0],
+                    'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
+                    'polyAttr' => [
+                        [
+                            [0.0, 0.0],
+                            [0.0, 10.0],
+                            [10.0, 10.0],
+                            [10.0, 0.0],
+                            [0.0, 0.0]
+                        ]
+                    ]
+                ],
+                // Invalid LINESTRING (point outside valid range)
+                [
+                    '$id' => 'invalidDoc3',
+                    'pointAttr' => [50.0, 20.0],
+                    'lineAttr' => [[1.0, 2.0], [300.0, 4.0]], // invalid longitude in line
+                    'polyAttr' => [
+                        [
+                            [0.0, 0.0],
+                            [0.0, 10.0],
+                            [10.0, 10.0],
+                            [10.0, 0.0],
+                            [0.0, 0.0]
+                        ]
+                    ]
+                ],
+                // Invalid POLYGON (point outside valid range)
+                [
+                    '$id' => 'invalidDoc4',
+                    'pointAttr' => [50.0, 20.0],
+                    'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
+                    'polyAttr' => [
+                        [
+                            [0.0, 0.0],
+                            [0.0, 10.0],
+                            [190.0, 10.0], // invalid longitude
+                            [10.0, 0.0],
+                            [0.0, 0.0]
+                        ]
+                    ]
+                ],
+            ];
+            foreach ($invalidDocs as $docData) {
+                $this->expectException(StructureException::class);
+                $docData['$permissions'] = [Permission::update(Role::any()), Permission::read(Role::any())];
+                $doc = new Document($docData);
+                $database->createDocument($collectionName, $doc);
+            }
+
+
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
     }
 }

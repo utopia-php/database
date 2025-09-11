@@ -512,8 +512,8 @@ class Database
              * @return mixed
              */
             function (mixed $value) {
-                if (is_null($value)) {
-                    return;
+                if (!is_array($value)) {
+                    return $value;
                 }
                 try {
                     return  self::encodeSpatialData($value, Database::VAR_LINESTRING);
@@ -539,8 +539,8 @@ class Database
              * @return mixed
              */
             function (mixed $value) {
-                if (is_null($value)) {
-                    return;
+                if (!is_array($value)) {
+                    return $value;
                 }
                 try {
                     return  self::encodeSpatialData($value, Database::VAR_POLYGON);

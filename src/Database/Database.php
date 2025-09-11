@@ -6347,11 +6347,13 @@ class Database
         }
 
         if (!empty($cursor)) {
+            $cursor = $this->encode($collection, $cursor);
             $cursor = $this->adapter->castingBefore($collection, $cursor);
+            $cursor = $cursor->getArrayCopy();
+        } else {
+            $cursor =  [];
         }
-
-        $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
-
+      
         /**  @var array<Query> $queries */
         $queries = \array_merge(
             $selects,

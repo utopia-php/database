@@ -51,6 +51,7 @@ class Database
 
     // Global SRID for geographic coordinates (WGS84)
     public const SRID = 4326;
+    public const EARTH_RADIUS = 6371000;
 
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';

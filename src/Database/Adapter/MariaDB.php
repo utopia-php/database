@@ -1396,7 +1396,7 @@ class MariaDB extends SQL
             if ($wktType != Database::VAR_POINT || $attrType != Database::VAR_POINT) {
                 throw new QueryException('Distance in meters is not supported between '.$attrType . ' and '. $wktType);
             }
-            return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ", 6371000) {$operator} :{$placeholder}_1";
+            return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ", " . Database::EARTH_RADIUS . ") {$operator} :{$placeholder}_1";
         }
         return "ST_Distance({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ") {$operator} :{$placeholder}_1";
     }

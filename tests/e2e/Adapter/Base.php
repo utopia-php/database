@@ -24,8 +24,8 @@ abstract class Base extends TestCase
     use IndexTests;
     use PermissionTests;
     use RelationshipTests;
-    use GeneralTests;
     use SpatialTests;
+    use GeneralTests;
 
     protected static string $namespace;
 

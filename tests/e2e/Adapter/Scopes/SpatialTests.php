@@ -119,7 +119,15 @@ trait SpatialTests
                 '$id' => 'doc1',
                 'pointAttr' => [5.0, 5.0],
                 'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
-                'polyAttr' => [[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]],
+                'polyAttr' => [
+                    [
+                        [0.0, 0.0],
+                        [0.0, 10.0],
+                        [10.0, 10.0],
+                        [10.0, 0.0],
+                        [0.0, 0.0]
+                    ]
+                ],
                 '$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())]
             ]);
             $createdDoc = $database->createDocument($collectionName, $doc1);
@@ -187,9 +195,17 @@ trait SpatialTests
             $polyQueries = [
                 'contains' => Query::contains('polyAttr', [[5.0, 5.0]]), // Point inside polygon
                 'notContains' => Query::notContains('polyAttr', [[15.0, 15.0]]), // Point outside polygon
-                'intersects' => Query::intersects('polyAttr', [5.0, 5.0]), // Point inside polygon should intersect
+                'intersects' => Query::intersects('polyAttr', [0.0, 0.0]), // Point inside polygon should intersect
                 'notIntersects' => Query::notIntersects('polyAttr', [15.0, 15.0]), // Point outside polygon should not intersect
-                'equals' => query::equal('polyAttr', [[[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]]]), // Exact same polygon
+                'equals' => query::equal('polyAttr', [[
+                    [
+                        [0.0, 0.0],
+                        [0.0, 10.0],
+                        [10.0, 10.0],
+                        [10.0, 0.0],
+                        [0.0, 0.0]
+                    ]
+                ]]), // Exact same polygon
                 'notEquals' => query::notEqual('polyAttr', [[[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [20.0, 20.0]]]]), // Different polygon
                 'overlaps' => Query::overlaps('polyAttr', [[[5.0, 5.0], [5.0, 15.0], [15.0, 15.0], [15.0, 5.0], [5.0, 5.0]]]), // Overlapping polygon
                 'notOverlaps' => Query::notOverlaps('polyAttr', [[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [30.0, 20.0], [20.0, 20.0]]]) // Non-overlapping polygon

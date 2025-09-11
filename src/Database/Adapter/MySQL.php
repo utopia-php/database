@@ -117,14 +117,13 @@ class MySQL extends MariaDB
 
         if ($useMeters) {
             $attr = "ST_SRID({$alias}.{$attribute}, " . Database::SRID . ")";
-            $geom = $this->getSpatialGeomFromText(":{$placeholder}_0");
+            $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", null);
             return "ST_Distance({$attr}, {$geom}, 'metre') {$operator} :{$placeholder}_1";
         }
-        $attr = "ST_GeomFromText(ST_AsText({$alias}.{$attribute}), 0)";
+        // need to use srid 0 because of geometric distance
+        $attr = "ST_SRID({$alias}.{$attribute}, " . 0 . ")";
         $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", 0);
         return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
-        // Without meters, use default behavior
-        // return "ST_Distance(ST_GeomFromText({$alias}.{$attribute}, 0, 'axis-order=lat-long')), ST_GeomFromText(:{$placeholder}_0, 0, 'axis-order=lat-long')) {$operator} :{$placeholder}_1";
     }
 
     public function getSupportForIndexArray(): bool
@@ -237,6 +236,17 @@ class MySQL extends MariaDB
      */
     public function getSupportForSpatialAxisOrder(): bool
     {
-        return false; // Temporarily disable to test
+        return true;
+    }
+
+    /**
+     * Get the spatial axis order specification string for MySQL
+     * MySQL with SRID 4326 expects lat-long by default, but our data is in long-lat format
+     *
+     * @return string
+     */
+    protected function getSpatialAxisOrderSpec(): string
+    {
+        return "'axis-order=long-lat'";
     }
 }

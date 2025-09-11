@@ -483,7 +483,7 @@ abstract class SQL extends Adapter
             $column = $this->filter($attribute);
 
             if (in_array($attribute, $spatialAttributes)) {
-                $columns .= "{$this->quote($column)} = ST_GeomFromText(:key_{$bindIndex})";
+                $columns .= "{$this->quote($column)} = ST_GeomFromText(:key_{$bindIndex} , 4326, 'axis-order=lat-long')";
             } else {
                 $columns .= "{$this->quote($column)} = :key_{$bindIndex}";
             }
@@ -2019,7 +2019,7 @@ abstract class SQL extends Adapter
                     }
                     if (in_array($key, $spatialAttributes)) {
                         $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
+                        $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ", 4326 , 'axis-order=lat-long')";
                     } else {
                         $value = (\is_bool($value)) ? (int)$value : $value;
                         $bindKey = 'key_' . $bindIndex;
@@ -2145,7 +2145,7 @@ abstract class SQL extends Adapter
 
                     if (in_array($attributeKey, $spatialAttributes)) {
                         $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
+                        $bindKeys[] = "ST_GeomFromText(:" . $bindKey . " , 4326, 'axis-order=lat-long')";
                     } else {
                         $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
                         $bindKey = 'key_' . $bindIndex;
@@ -2667,4 +2667,33 @@ abstract class SQL extends Adapter
         }
         return strtolower(trim(substr($wkt, 0, $pos)));
     }
+
+    /**
+ * Interpolate SQL with its bound parameters.
+ * 
+ * @param string $query   The SQL query with placeholders.
+ * @param array  $params  The key => value bindings.
+ * @return string The interpolated SQL query (for debugging/logging only).
+ */
+function interpolateQuery(string $query, array $params): string {
+    $keys = [];
+    $values = [];
+
+    foreach ($params as $key => $value) {
+        // Handle named or positional placeholders
+        $keys[] = is_string($key) ? '/:' . preg_quote($key, '/') . '/' : '/[?]/';
+
+        // Quote values properly
+        if (is_null($value)) {
+            $values[] = 'NULL';
+        } elseif (is_numeric($value)) {
+            $values[] = $value;
+        } else {
+            // Escape single quotes inside the string
+            $values[] = "'" . str_replace("'", "''", $value) . "'";
+        }
+    }
+
+    return preg_replace($keys, $values, $query, 1);
+}
 }

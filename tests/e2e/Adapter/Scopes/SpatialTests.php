@@ -129,7 +129,9 @@ trait SpatialTests
             // Update spatial data
             $doc1->setAttribute('pointAttr', [6.0, 6.0]);
             $updatedDoc = $database->updateDocument($collectionName, 'doc1', $doc1);
+
             $this->assertEquals([6.0, 6.0], $updatedDoc->getAttribute('pointAttr'));
+
 
             // Test spatial queries with appropriate operations for each geometry type
             // Point attribute tests - use operations valid for points

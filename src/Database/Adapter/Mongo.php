@@ -3,7 +3,6 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
-use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;
@@ -410,7 +409,7 @@ class Mongo extends Adapter
     }
 
     /**
-     * Create Attribute
+   * Create Attribute
      *
      * @param string $collection
      * @param string $id
@@ -418,10 +417,9 @@ class Mongo extends Adapter
      * @param int $size
      * @param bool $signed
      * @param bool $array
-     *
      * @return bool
      */
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false): bool
+    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
         return true;
     }
@@ -557,8 +555,9 @@ class Mongo extends Adapter
                 }
                 break;
             case Database::RELATION_MANY_TO_MANY:
-                $collection = $this->getDocument(Database::METADATA, $collection);
-                $relatedCollection = $this->getDocument(Database::METADATA, $relatedCollection);
+                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $collection = $this->getDocument($metadataCollection, $collection);
+                $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
                 $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
 
@@ -641,6 +640,7 @@ class Mongo extends Adapter
      * @param array<string> $attributes
      * @param array<int> $lengths
      * @param array<string> $orders
+     * @param array<string, string> $indexAttributeTypes
      * @param array<string, mixed> $collation
      * @return bool
      * @throws Exception
@@ -649,7 +649,6 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection);
         $id = $this->filter($id);
-
         $indexes = [];
         $options = [];
         $indexes['name'] = $id;
@@ -660,9 +659,11 @@ class Mongo extends Adapter
         }
 
         foreach ($attributes as $i => $attribute) {
-            $attributes[$i]  = $this->filter($this->getInternalKeyForAttribute($attribute));
+
+            $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
+
             $orderType = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
-            $indexes['key'][$attributes[$i] ] = $orderType;
+            $indexes['key'][$attributes[$i]] = $orderType;
 
             switch ($type) {
                 case Database::INDEX_KEY:
@@ -697,7 +698,7 @@ class Mongo extends Adapter
         if (in_array($type, [Database::INDEX_UNIQUE, Database::INDEX_KEY])) {
             $partialFilter = [];
             foreach ($attributes as $i => $attr) {
-                $attrType = $indexAttributeTypes[$i] ?? 'string'; // Default to string if type not provided
+                $attrType = $indexAttributeTypes[$i] ?? Database::VAR_STRING; // Default to string if type not provided
                 $attrType = $this->getMongoTypeCode($attrType);
                 $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
             }
@@ -722,7 +723,8 @@ class Mongo extends Adapter
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
-        $collectionDocument = $this->getDocument(Database::METADATA, $collection);
+        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $collectionDocument = $this->getDocument($metadataCollection, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
         $indexes = json_decode($collectionDocument['indexes'], true);
@@ -744,7 +746,7 @@ class Mongo extends Adapter
                 foreach ($index['attributes'] as $attrName) {
                     foreach ($attributes as $attr) {
                         if ($attr['key'] === $attrName) {
-                            $indexAttributeTypes[] = $attr['type'];
+                            $indexAttributeTypes[$attrName] = $attr['type'];
                             break;
                         }
                     }
@@ -791,20 +793,20 @@ class Mongo extends Adapter
     /**
      * Get Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param Query[] $queries
      * @return Document
      * @throws MongoException
      */
-    public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+    public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $filters = ['_uid' => $id];
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection);
+            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
         $options = [];
@@ -815,7 +817,11 @@ class Mongo extends Adapter
             $options['projection'] = $this->getAttributeProjection($selections);
         }
 
-        $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
+        try {
+            $result = $this->client->find($name, $filters, $options)->cursor->firstBatch;
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
 
         if (empty($result)) {
             return new Document([]);
@@ -829,16 +835,16 @@ class Mongo extends Adapter
     /**
      * Create Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $document
      *
      * @return Document
      * @throws Exception
      */
-    public function createDocument(string $collection, Document $document): Document
+    public function createDocument(Document $collection, Document $document): Document
     {
 
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $sequence = $document->getSequence();
 
@@ -984,16 +990,16 @@ class Mongo extends Adapter
     /**
      * Create Documents in batches
      *
-     * @param string $collection
+     * @param Document $collection
      * @param array<Document> $documents
      *
      * @return array<Document>
      *
      * @throws Duplicate
      */
-    public function createDocuments(string $collection, array $documents): array
+    public function createDocuments(Document $collection, array $documents): array
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $records = [];
         $hasSequence = null;
@@ -1049,11 +1055,15 @@ class Mongo extends Adapter
                 $filters['_tenant'] = $this->getTenantFilters($name);
             }
 
-            $result = $this->client->find(
-                $name,
-                $filters,
-                ['limit' => 1]
-            )->cursor->firstBatch[0];
+            try {
+                $result = $this->client->find(
+                    $name,
+                    $filters,
+                    ['limit' => 1]
+                )->cursor->firstBatch[0];
+            } catch (MongoException $e) {
+                throw $this->processException($e);
+            }
 
             return $this->client->toArray($result);
         } catch (MongoException $e) {
@@ -1064,7 +1074,7 @@ class Mongo extends Adapter
     /**
      * Update Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $id
      * @param Document $document
      * @param bool $skipPermissions
@@ -1072,9 +1082,9 @@ class Mongo extends Adapter
      * @throws DatabaseException
      * @throws Duplicate
      */
-    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
@@ -1083,7 +1093,7 @@ class Mongo extends Adapter
         $filters['_uid'] = $id;
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection);
+            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
         try {
@@ -1102,7 +1112,7 @@ class Mongo extends Adapter
      *
      * Updates all documents which match the given query.
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $updates
      * @param array<Document> $documents
      *
@@ -1110,10 +1120,10 @@ class Mongo extends Adapter
      *
      * @throws DatabaseException
      */
-    public function updateDocuments(string $collection, Document $updates, array $documents): int
+    public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
         ;
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $queries = [
             Query::equal('$sequence', \array_map(fn ($document) => $document->getSequence(), $documents))
@@ -1122,7 +1132,7 @@ class Mongo extends Adapter
         $filters = $this->buildFilters($queries);
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection);
+            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
         $record = $updates->getArrayCopy();
@@ -1142,19 +1152,19 @@ class Mongo extends Adapter
     }
 
     /**
-     * @param string $collection
+     * @param Document $collection
      * @param string $attribute
      * @param array<Change> $changes
      * @return array<Document>
      */
-    public function createOrUpdateDocuments(string $collection, string $attribute, array $changes): array
+    public function createOrUpdateDocuments(Document $collection, string $attribute, array $changes): array
     {
         if (empty($changes)) {
             return $changes;
         }
 
         try {
-            $name = $this->getNamespace() . '_' . $this->filter($collection);
+            $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
             $attribute = $this->filter($attribute);
 
             $operations = [];
@@ -1180,7 +1190,7 @@ class Mongo extends Adapter
                 $filters = ['_uid' => $document->getId()];
 
                 if ($this->sharedTables) {
-                    $filters['_tenant'] = $this->getTenantFilters($collection);
+                    $filters['_tenant'] = $this->getTenantFilters($collection->getId());
                 }
 
                 unset($record['_id']); // Don't update _id
@@ -1266,8 +1276,11 @@ class Mongo extends Adapter
         if ($this->sharedTables) {
             $filters['_tenant'] = $this->getTenantFilters($collection, $documentTenants);
         }
-
-        $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
+        try {
+            $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
 
         foreach ($results->cursor->firstBatch as $result) {
             $sequences[$result->_uid] = (string)$result->_id;
@@ -1432,33 +1445,33 @@ class Mongo extends Adapter
 
 
     /**
-     * Find Documents
-     *
-     * Find data sets using chosen queries
-     *
-     * @param string $collection
-     * @param array<Query> $queries
-     * @param int|null $limit
-     * @param int|null $offset
-     * @param array<string> $orderAttributes
-     * @param array<string> $orderTypes
-     * @param array<string, mixed> $cursor
-     * @param string $cursorDirection
-     * @param string $forPermission
-     *
-     * @return array<Document>
-     * @throws Exception
-     * @throws Timeout
-     */
-    public function find(string $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    * Find Documents
+    *
+    * Find data sets using chosen queries
+    *
+    * @param Document $collection
+    * @param array<Query> $queries
+    * @param int|null $limit
+    * @param int|null $offset
+    * @param array<string> $orderAttributes
+    * @param array<string> $orderTypes
+    * @param array<string, mixed> $cursor
+    * @param string $cursorDirection
+    * @param string $forPermission
+    *
+    * @return array<Document>
+    * @throws Exception
+    * @throws Timeout
+    */
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $filters = $this->buildFilters($queries);
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection);
+            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
         // permissions
@@ -1468,6 +1481,7 @@ class Mongo extends Adapter
         }
 
         $options = [];
+
         if (!\is_null($limit)) {
             $options['limit'] = $limit;
         }
@@ -1560,19 +1574,51 @@ class Mongo extends Adapter
         $found = [];
 
         try {
-            $results = $this->client->find($name, $filters, $options)->cursor->firstBatch ?? [];
+            // Use proper cursor iteration with reasonable batch size
+            $batchSize = 1000;
+            $options['batchSize'] = $batchSize;
+
+            $response = $this->client->find($name, $filters, $options);
+            $results = $response->cursor->firstBatch ?? [];
+
+            // Process first batch
+            foreach ($results as $result) {
+                $record = $this->replaceChars('_', '$', (array)$result);
+                $found[] = new Document($record);
+            }
+
+            // Get cursor ID for subsequent batches
+            $cursorId = $response->cursor->id ?? null;
+
+            // Continue fetching with getMore
+            while ($cursorId && $cursorId !== 0) {
+                // Check if limit is reached
+                if (!\is_null($limit) && count($found) >= $limit) {
+                    break;
+                }
+
+                $moreResponse = $this->client->getMore($cursorId, $name, $batchSize);
+                $moreResults = $moreResponse->cursor->nextBatch ?? [];
+
+                if (empty($moreResults)) {
+                    break;
+                }
+
+                foreach ($moreResults as $result) {
+                    $record = $this->replaceChars('_', '$', (array)$result);
+                    $found[] = new Document($record);
+
+                    // Check limit again after each document
+                    if (!\is_null($limit) && count($found) >= $limit) {
+                        break 2; // Break both inner and outer loops
+                    }
+                }
+
+                $cursorId = $moreResponse->cursor->id ?? 0;
+            }
+
         } catch (MongoException $e) {
             throw $this->processException($e);
-        }
-
-        if (empty($results)) {
-            return $found;
-        }
-
-        foreach ($this->client->toArray($results) as $result) {
-            $record = $this->replaceChars('_', '$', (array)$result);
-
-            $found[] = new Document($record);
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1644,26 +1690,24 @@ class Mongo extends Adapter
 
 
     /**
-     * Count Documents
-     *
-     * @param string $collection
-     * @param array<Query> $queries
-     * @param int|null $max
-     *
-     * @return int
-     * @throws Exception
-     */
-    public function count(string $collection, array $queries = [], ?int $max = null): int
+         * Count Documents
+         *
+         * @param Document $collection
+         * @param array<Query> $queries
+         * @param int|null $max
+         * @return int
+         * @throws Exception
+         */
+    public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
         $filters = [];
         $options = [];
 
-        // set max limit
-        if ($max > 0) {
+        if (!\is_null($max) && $max > 0) {
             $options['limit'] = $max;
         }
 
@@ -1671,26 +1715,85 @@ class Mongo extends Adapter
             $options['maxTimeMS'] = $this->timeout;
         }
 
-        // queries
+        // Build filters from queries
         $filters = $this->buildFilters($queries);
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection);
+            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
-        // permissions
-        if (Authorization::$status) { // skip if authorization is disabled
+        // Add permissions filter if authorization is enabled
+        if (Authorization::$status) {
             $roles = \implode('|', Authorization::getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
         }
 
-        return $this->client->count($name, $filters, $options);
+        /**
+         * Use MongoDB aggregation pipeline for accurate counting
+         * Accuracy and Sharded Clusters
+         * "On a sharded cluster, the count command when run without a query predicate can result in an inaccurate
+         * count if orphaned documents exist or if a chunk migration is in progress.
+         * To avoid these situations, on a sharded cluster, use the db.collection.aggregate() method"
+         * https://www.mongodb.com/docs/manual/reference/command/count/#response
+         **/
+
+        // Original count command (commented for reference and fallback)
+        // Use this for single-instance MongoDB when performance is critical and accuracy is not a concern
+        // return $this->client->count($name, $filters, $options);
+
+        $pipeline = [];
+
+        // Add match stage if filters are provided
+        if (!empty($filters)) {
+            $pipeline[] = ['$match' => $this->client->toObject($filters)];
+        }
+
+        // Add limit stage if specified
+        if (!\is_null($max) && $max > 0) {
+            $pipeline[] = ['$limit' => $max];
+        }
+
+        // Use $group and $sum when limit is specified, $count when no limit
+        // Note: $count stage doesn't works well with $limit in the same pipeline
+        // When limit is specified, we need to use $group + $sum to count the limited documents
+        if (!\is_null($max) && $max > 0) {
+            // When limit is specified, use $group and $sum to count limited documents
+            $pipeline[] = [
+                '$group' => [
+                    '_id' => null,
+                    'total' => ['$sum' => 1]]
+            ];
+        } else {
+            // When no limit is passed, use $count for better performance
+            $pipeline[] = [
+                '$count' => 'total'
+            ];
+        }
+
+        try {
+            $result = $this->client->aggregate($name, $pipeline);
+
+            // Aggregation returns stdClass with cursor property containing firstBatch
+            if (isset($result->cursor) && !empty($result->cursor->firstBatch)) {
+                $firstResult = $result->cursor->firstBatch[0];
+
+                // Handle both $count and $group response formats
+                if (isset($firstResult->total)) {
+                    return (int)$firstResult->total;
+                }
+            }
+
+            return 0;
+        } catch (MongoException $e) {
+            return 0;
+        }
     }
+
 
     /**
      * Sum an attribute
      *
-     * @param string $collection
+     * @param Document $collection
      * @param string $attribute
      * @param array<Query> $queries
      * @param int|null $max
@@ -1698,16 +1801,17 @@ class Mongo extends Adapter
      * @return int|float
      * @throws Exception
      */
-    public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
-        $name = $this->getNamespace() . '_' . $this->filter($collection);
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         // queries
         $queries = array_map(fn ($query) => clone $query, $queries);
         $filters = $this->buildFilters($queries);
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection);
+            $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
         // permissions
@@ -2128,7 +2232,7 @@ class Mongo extends Adapter
      */
     public function getSupportForQueryContains(): bool
     {
-        return true;
+        return false;
     }
 
     /**
@@ -2306,6 +2410,45 @@ class Mongo extends Adapter
     {
         return true;
     }
+    /**
+     * Is spatial attributes supported?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAttributes(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Get Support for Null Values in Spatial Indexes
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialIndexNull(): bool
+    {
+        return false;
+    }
+    /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+     */
+
+    public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return false;
+    }
+    /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
+    }
+
 
     /**
      * Flattens the array.
@@ -2357,6 +2500,7 @@ class Mongo extends Adapter
 
     protected function processException(Exception $e): \Exception
     {
+
         // Timeout
         if ($e->getCode() === 50) {
             return new Timeout('Query timed out', $e->getCode(), $e);

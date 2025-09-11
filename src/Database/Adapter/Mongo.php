@@ -1157,7 +1157,7 @@ class Mongo extends Adapter
      * @param array<Change> $changes
      * @return array<Document>
      */
-    public function createOrUpdateDocuments(Document $collection, string $attribute, array $changes): array
+    public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
         if (empty($changes)) {
             return $changes;

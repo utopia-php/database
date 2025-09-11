@@ -85,11 +85,12 @@ class MySQL extends MariaDB
      * @param Query $query
      * @param array<string, mixed> $binds
      * @param string $attribute
+     * @param string $type
      * @param string $alias
      * @param string $placeholder
      * @return string
     */
-    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
         $distanceParams = $query->getValues()[0];
         $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
@@ -116,7 +117,7 @@ class MySQL extends MariaDB
 
         if ($useMeters) {
             $attr = "ST_SRID({$alias}.{$attribute}, " . Database::SRID . ")";
-            $geom = "ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . ")";
+            $geom = "ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . ",'axis-order=long-lat')";
             return "ST_Distance({$attr}, {$geom}, 'metre') {$operator} :{$placeholder}_1";
         }
 
@@ -172,5 +173,15 @@ class MySQL extends MariaDB
     public function getSupportForSpatialIndexOrder(): bool
     {
         return false;
+    }
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return true;
     }
 }

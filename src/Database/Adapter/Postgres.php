@@ -535,16 +535,17 @@ class Postgres extends SQL
      * @param bool $signed
      * @param bool $array
      * @param string|null $newKey
+     * @param bool $required
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $type = $this->getSQLType($type, $size, $signed, $array, false);
+        $type = $this->getSQLType($type, $size, $signed, $array, $required);
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
@@ -1488,9 +1489,8 @@ class Postgres extends SQL
         }
 
         if ($meters) {
-            // Transform both attribute and input geometry to 3857 (meters) for distance calculation
-            $attr = "ST_Transform({$alias}.{$attribute}, 3857)";
-            $geom = "ST_Transform(ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "), 3857)";
+            $attr = "({$alias}.{$attribute}::geography)";
+            $geom = "ST_SetSRID(ST_GeomFromText(:{$placeholder}_0), " . Database::SRID . ")::geography";
             return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
         }
 
@@ -1981,5 +1981,15 @@ class Postgres extends SQL
     public function getSupportForSpatialIndexOrder(): bool
     {
         return false;
+    }
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return true;
     }
 }

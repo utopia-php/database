@@ -479,53 +479,84 @@ class Database
         );
 
         self::addFilter(
-            'point',
+            Database::VAR_POINT,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
             function (mixed $value) {
-                return "POINT({$value[0]} {$value[1]})";
+                if (!is_array($value)) {
+                    return $value;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_POINT);
+                } catch (\Throwable) {
+                    return $value;
+                }
             },
-            function (?array $value) {
-                return $value;
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
+            function (?string $value) {
+                if (!is_string($value)) {
+                    return $value;
+                }
+                return self::decodeSpatialData($value);
             }
         );
-
         self::addFilter(
-            'polygon',
+            Database::VAR_LINESTRING,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
             function (mixed $value) {
-                // Check if this is a single ring (flat array of points) or multiple rings
-                $isSingleRing = count($value) > 0 && is_array($value[0]) &&
-                    count($value[0]) === 2 && is_numeric($value[0][0]) && is_numeric($value[0][1]);
-
-                if ($isSingleRing) {
-                    // Convert single ring format [[x1,y1], [x2,y2], ...] to multi-ring format
-                    $value = [$value];
+                if (!is_array($value)) {
+                    return $value;
                 }
-
-                $rings = [];
-                foreach ($value as $ring) {
-                    $points = [];
-                    foreach ($ring as $point) {
-                        $points[] = "{$point[0]} {$point[1]}";
-                    }
-                    $rings[] = '(' . implode(', ', $points) . ')';
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_LINESTRING);
+                } catch (\Throwable) {
+                    return $value;
                 }
-                return 'POLYGON(' . implode(', ', $rings) . ')';
             },
-            function (?array $value) {
-                return $value;
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return $value;
+                }
+                return self::decodeSpatialData($value);
             }
         );
-
         self::addFilter(
-            'linestring',
+            Database::VAR_POLYGON,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
             function (mixed $value) {
-                $points = [];
-                foreach ($value as $point) {
-                    $points[] = "{$point[0]} {$point[1]}";
+                if (!is_array($value)) {
+                    return $value;
                 }
-                return 'LINESTRING(' . implode(', ', $points) . ')';
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_POLYGON);
+                } catch (\Throwable) {
+                    return $value;
+                }
             },
-            function (?array $value) {
-                return $value;
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return $value;
+                }
+                return self::decodeSpatialData($value);
             }
         );
     }
@@ -2215,6 +2246,11 @@ class Database
                 $default = null;
             }
 
+            // we need to alter table attribute type to NOT NULL/NULL for change in required
+            if (!$this->adapter->getSupportForSpatialIndexNull() && in_array($type, Database::SPATIAL_TYPES)) {
+                $altering = true;
+            }
+
             switch ($type) {
                 case self::VAR_STRING:
                     if (empty($size)) {
@@ -2376,7 +2412,7 @@ class Database
                     }
                 }
 
-                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
+                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey, $required);
 
                 if (!$updated) {
                     throw new DatabaseException('Failed to update attribute');
@@ -3271,12 +3307,12 @@ class Database
         if ($type === self::INDEX_SPATIAL) {
             foreach ($attributes as $attr) {
                 if (!isset($indexAttributesWithTypes[$attr])) {
-                    throw new DatabaseException('Attribute "' . $attr . '" not found in collection');
+                    throw new IndexException('Attribute "' . $attr . '" not found in collection');
                 }
 
                 $attributeType = $indexAttributesWithTypes[$attr];
                 if (!in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    throw new DatabaseException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                    throw new IndexException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
                 }
             }
 
@@ -4698,7 +4734,6 @@ class Database
                     if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
-
                     $batch[$index] = $this->encode($collection, $document);
                 }
 
@@ -6661,14 +6696,6 @@ class Database
 
             foreach ($value as $index => $node) {
                 if ($node !== null) {
-                    // Handle spatial data encoding
-                    $attributeType = $attribute['type'] ?? '';
-                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                        if (is_array($node)) {
-                            $node = $this->encodeSpatialData($node, $attributeType);
-                        }
-                    }
-
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
@@ -6747,9 +6774,6 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
-                if (is_string($node) && in_array($type, Database::SPATIAL_TYPES)) {
-                    $node = $this->decodeSpatialData($node);
-                }
 
                 foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);

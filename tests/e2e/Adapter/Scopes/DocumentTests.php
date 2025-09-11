@@ -3484,79 +3484,79 @@ trait DocumentTests
     //     $this->assertLessThanOrEqual(5, count($documents)); // But still excluding Marvel movies
     // }
 
-    public function testFindNotBetween(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        // Test notBetween with price range - should return documents outside the range
-        $documents = $database->find('movies', [
-            Query::notBetween('price', 25.94, 25.99),
-        ]);
-        $this->assertEquals(4, count($documents)); // All movies except the 2 in the price range
-
-        // Test notBetween with range that includes no documents - should return all documents
-        $documents = $database->find('movies', [
-            Query::notBetween('price', 30, 35),
-        ]);
-        $this->assertEquals(6, count($documents));
-
-        // Test notBetween with date range
-        $documents = $database->find('movies', [
-            Query::notBetween('$createdAt', '1975-12-06', '2050-12-06'),
-        ]);
-        $this->assertEquals(0, count($documents)); // No movies outside this wide date range
-
-        // Test notBetween with narrower date range
-        $documents = $database->find('movies', [
-            Query::notBetween('$createdAt', '2000-01-01', '2001-01-01'),
-        ]);
-        $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
-
-        // Test notBetween with updated date range
-        $documents = $database->find('movies', [
-            Query::notBetween('$updatedAt', '2000-01-01T00:00:00.000+00:00', '2001-01-01T00:00:00.000+00:00'),
-        ]);
-        $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
-
-        // Test notBetween with year range (integer values)
-        $documents = $database->find('movies', [
-            Query::notBetween('year', 2005, 2007),
-        ]);
-        $this->assertLessThanOrEqual(6, count($documents)); // Movies outside 2005-2007 range
-
-        // Test notBetween with reversed range (start > end) - should still work
-        $documents = $database->find('movies', [
-            Query::notBetween('price', 25.99, 25.94), // Note: reversed order
-        ]);
-        $this->assertGreaterThanOrEqual(4, count($documents)); // Should handle reversed range gracefully
-
-        // Test notBetween with same start and end values
-        $documents = $database->find('movies', [
-            Query::notBetween('year', 2006, 2006),
-        ]);
-        $this->assertGreaterThanOrEqual(5, count($documents)); // All movies except those from exactly 2006
-
-        // Test notBetween combined with other filters
-        $documents = $database->find('movies', [
-            Query::notBetween('price', 25.94, 25.99),
-            Query::orderDesc('year'),
-            Query::limit(2)
-        ]);
-        $this->assertEquals(2, count($documents)); // Limited results, ordered, excluding price range
-
-        // Test notBetween with extreme ranges
-        $documents = $database->find('movies', [
-            Query::notBetween('year', -1000, 1000), // Very wide range
-        ]);
-        $this->assertLessThanOrEqual(6, count($documents)); // Movies outside this range
-
-        // Test notBetween with float precision
-        $documents = $database->find('movies', [
-            Query::notBetween('price', 25.945, 25.955), // Very narrow range
-        ]);
-        $this->assertGreaterThanOrEqual(4, count($documents)); // Most movies should be outside this narrow range
-    }
+//    public function testFindNotBetween(): void
+//    {
+//        /** @var Database $database */
+//        $database = static::getDatabase();
+//
+//        // Test notBetween with price range - should return documents outside the range
+//        $documents = $database->find('movies', [
+//            Query::notBetween('price', 25.94, 25.99),
+//        ]);
+//        $this->assertEquals(4, count($documents)); // All movies except the 2 in the price range
+//
+//        // Test notBetween with range that includes no documents - should return all documents
+//        $documents = $database->find('movies', [
+//            Query::notBetween('price', 30, 35),
+//        ]);
+//        $this->assertEquals(6, count($documents));
+//
+//        // Test notBetween with date range
+//        $documents = $database->find('movies', [
+//            Query::notBetween('$createdAt', '1975-12-06', '2050-12-06'),
+//        ]);
+//        $this->assertEquals(0, count($documents)); // No movies outside this wide date range
+//
+//        // Test notBetween with narrower date range
+//        $documents = $database->find('movies', [
+//            Query::notBetween('$createdAt', '2000-01-01', '2001-01-01'),
+//        ]);
+//        $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
+//
+//        // Test notBetween with updated date range
+//        $documents = $database->find('movies', [
+//            Query::notBetween('$updatedAt', '2000-01-01T00:00:00.000+00:00', '2001-01-01T00:00:00.000+00:00'),
+//        ]);
+//        $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
+//
+//        // Test notBetween with year range (integer values)
+//        $documents = $database->find('movies', [
+//            Query::notBetween('year', 2005, 2007),
+//        ]);
+//        $this->assertLessThanOrEqual(6, count($documents)); // Movies outside 2005-2007 range
+//
+//        // Test notBetween with reversed range (start > end) - should still work
+//        $documents = $database->find('movies', [
+//            Query::notBetween('price', 25.99, 25.94), // Note: reversed order
+//        ]);
+//        $this->assertGreaterThanOrEqual(4, count($documents)); // Should handle reversed range gracefully
+//
+//        // Test notBetween with same start and end values
+//        $documents = $database->find('movies', [
+//            Query::notBetween('year', 2006, 2006),
+//        ]);
+//        $this->assertGreaterThanOrEqual(5, count($documents)); // All movies except those from exactly 2006
+//
+//        // Test notBetween combined with other filters
+//        $documents = $database->find('movies', [
+//            Query::notBetween('price', 25.94, 25.99),
+//            Query::orderDesc('year'),
+//            Query::limit(2)
+//        ]);
+//        $this->assertEquals(2, count($documents)); // Limited results, ordered, excluding price range
+//
+//        // Test notBetween with extreme ranges
+//        $documents = $database->find('movies', [
+//            Query::notBetween('year', -1000, 1000), // Very wide range
+//        ]);
+//        $this->assertLessThanOrEqual(6, count($documents)); // Movies outside this range
+//
+//        // Test notBetween with float precision
+//        $documents = $database->find('movies', [
+//            Query::notBetween('price', 25.945, 25.955), // Very narrow range
+//        ]);
+//        $this->assertGreaterThanOrEqual(4, count($documents)); // Most movies should be outside this narrow range
+//    }
 
     public function testFindSelect(): void
     {

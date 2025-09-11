@@ -6353,7 +6353,7 @@ class Database
         } else {
             $cursor =  [];
         }
-      
+
         /**  @var array<Query> $queries */
         $queries = \array_merge(
             $selects,

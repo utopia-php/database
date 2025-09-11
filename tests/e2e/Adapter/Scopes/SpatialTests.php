@@ -119,7 +119,15 @@ trait SpatialTests
                 '$id' => 'doc1',
                 'pointAttr' => [5.0, 5.0],
                 'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
-                'polyAttr' => [[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]],
+                'polyAttr' => [
+                    [
+                        [0.0, 0.0],
+                        [0.0, 10.0],
+                        [10.0, 10.0],
+                        [10.0, 0.0],
+                        [0.0, 0.0]
+                    ]
+                ],
                 '$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())]
             ]);
             $createdDoc = $database->createDocument($collectionName, $doc1);
@@ -129,7 +137,9 @@ trait SpatialTests
             // Update spatial data
             $doc1->setAttribute('pointAttr', [6.0, 6.0]);
             $updatedDoc = $database->updateDocument($collectionName, 'doc1', $doc1);
+
             $this->assertEquals([6.0, 6.0], $updatedDoc->getAttribute('pointAttr'));
+
 
             // Test spatial queries with appropriate operations for each geometry type
             // Point attribute tests - use operations valid for points
@@ -185,9 +195,17 @@ trait SpatialTests
             $polyQueries = [
                 'contains' => Query::contains('polyAttr', [[5.0, 5.0]]), // Point inside polygon
                 'notContains' => Query::notContains('polyAttr', [[15.0, 15.0]]), // Point outside polygon
-                'intersects' => Query::intersects('polyAttr', [5.0, 5.0]), // Point inside polygon should intersect
+                'intersects' => Query::intersects('polyAttr', [0.0, 0.0]), // Point inside polygon should intersect
                 'notIntersects' => Query::notIntersects('polyAttr', [15.0, 15.0]), // Point outside polygon should not intersect
-                'equals' => query::equal('polyAttr', [[[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]]]), // Exact same polygon
+                'equals' => query::equal('polyAttr', [[
+                    [
+                        [0.0, 0.0],
+                        [0.0, 10.0],
+                        [10.0, 10.0],
+                        [10.0, 0.0],
+                        [0.0, 0.0]
+                    ]
+                ]]), // Exact same polygon
                 'notEquals' => query::notEqual('polyAttr', [[[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [20.0, 20.0]]]]), // Different polygon
                 'overlaps' => Query::overlaps('polyAttr', [[[5.0, 5.0], [5.0, 15.0], [15.0, 15.0], [15.0, 5.0], [5.0, 5.0]]]), // Overlapping polygon
                 'notOverlaps' => Query::notOverlaps('polyAttr', [[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [30.0, 20.0], [20.0, 20.0]]]) // Non-overlapping polygon
@@ -216,7 +234,7 @@ trait SpatialTests
                 $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document for distance %s on polyAttr', $queryType));
             }
         } finally {
-            // $database->deleteCollection($collectionName);
+            $database->deleteCollection($collectionName);
         }
     }
 
@@ -1145,7 +1163,7 @@ trait SpatialTests
 
             // Test triangle doesn't intersect with distant point
             $nonIntersectingTriangle = $database->find($collectionName, [
-                Query::notIntersects('triangle', [100, 100]) // Distant point should not intersect
+                Query::notIntersects('triangle', [10, 10]) // Distant point should not intersect
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($nonIntersectingTriangle);
 

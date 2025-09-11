@@ -1274,4 +1274,14 @@ class SQLite extends MariaDB
     {
         return false;
     }
+
+    /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return false;
+    }
 }

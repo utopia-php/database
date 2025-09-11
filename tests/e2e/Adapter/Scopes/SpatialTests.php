@@ -2626,4 +2626,35 @@ trait SpatialTests
             $database->deleteCollection($collUpdateNull);
         }
     }
+
+    public function testSpatialDocOrder(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'test_spatial_order_axis';
+        // Create collection first
+        $database->createCollection($collectionName);
+
+        // Create spatial attributes using createAttribute method
+        $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
+
+        // Create test document
+        $doc1 = new Document(
+            [
+                '$id' => 'doc1',
+                'pointAttr' => [5.0, 5.5],
+                '$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())]
+            ]
+        );
+        $database->createDocument($collectionName, $doc1);
+
+        $result = $database->getDocument($collectionName, 'doc1');
+        $this->assertEquals($result->getAttribute('pointAttr')[0], 5.0);
+        $this->assertEquals($result->getAttribute('pointAttr')[1], 5.5);
+        $database->deleteCollection($collectionName);
+    }
 }

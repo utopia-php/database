@@ -1147,7 +1147,7 @@ trait SpatialTests
 
             // Test triangle doesn't intersect with distant point
             $nonIntersectingTriangle = $database->find($collectionName, [
-                Query::notIntersects('triangle', [100, 100]) // Distant point should not intersect
+                Query::notIntersects('triangle', [10, 10]) // Distant point should not intersect
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($nonIntersectingTriangle);
 

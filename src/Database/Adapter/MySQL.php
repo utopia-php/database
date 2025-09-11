@@ -117,11 +117,11 @@ class MySQL extends MariaDB
 
         if ($useMeters) {
             $attr = "ST_SRID({$alias}.{$attribute}, " . Database::SRID . ")";
-            $geom = "ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . ", 'axis-order=lat-long' )";
+            $geom = $this->getSpatialGeomFromText(":{$placeholder}_0");
             return "ST_Distance({$attr}, {$geom}, 'metre') {$operator} :{$placeholder}_1";
         }
-        $attr = "ST_GeomFromText(ST_AsText({$alias}.{$attribute}), 0, 'axis-order=lat-long')";
-        $geom = "ST_GeomFromText(:{$placeholder}_0, 0, 'axis-order=lat-long')";
+        $attr = "ST_GeomFromText(ST_AsText({$alias}.{$attribute}), 0)";
+        $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", 0);
         return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
         // Without meters, use default behavior
         // return "ST_Distance(ST_GeomFromText({$alias}.{$attribute}, 0, 'axis-order=lat-long')), ST_GeomFromText(:{$placeholder}_0, 0, 'axis-order=lat-long')) {$operator} :{$placeholder}_1";
@@ -190,42 +190,53 @@ class MySQL extends MariaDB
     /**
      * Spatial type attribute
     */
-    public function getSpatialSQLType(string $type, bool $required): string{
+    public function getSpatialSQLType(string $type, bool $required): string
+    {
         switch ($type) {
-        case Database::VAR_POINT:
-            $type = 'POINT SRID 4326';
-            if (!$this->getSupportForSpatialIndexNull()) {
-                if ($required) {
-                    $type .= ' NOT NULL';
-                } else {
-                    $type .= ' NULL';
+            case Database::VAR_POINT:
+                $type = 'POINT SRID 4326';
+                if (!$this->getSupportForSpatialIndexNull()) {
+                    if ($required) {
+                        $type .= ' NOT NULL';
+                    } else {
+                        $type .= ' NULL';
+                    }
                 }
-            }
-            return $type;
+                return $type;
 
-        case Database::VAR_LINESTRING:
-            $type = 'LINESTRING SRID 4326';
-            if (!$this->getSupportForSpatialIndexNull()) {
-                if ($required) {
-                    $type .= ' NOT NULL';
-                } else {
-                    $type .= ' NULL';
+            case Database::VAR_LINESTRING:
+                $type = 'LINESTRING SRID 4326';
+                if (!$this->getSupportForSpatialIndexNull()) {
+                    if ($required) {
+                        $type .= ' NOT NULL';
+                    } else {
+                        $type .= ' NULL';
+                    }
                 }
-            }
-            return $type;
+                return $type;
 
 
-        case Database::VAR_POLYGON:
-            $type = 'POLYGON SRID 4326';
-            if (!$this->getSupportForSpatialIndexNull()) {
-                if ($required) {
-                    $type .= ' NOT NULL';
-                } else {
-                    $type .= ' NULL';
+            case Database::VAR_POLYGON:
+                $type = 'POLYGON SRID 4326';
+                if (!$this->getSupportForSpatialIndexNull()) {
+                    if ($required) {
+                        $type .= ' NOT NULL';
+                    } else {
+                        $type .= ' NULL';
+                    }
                 }
-            }
-            return $type;
+                return $type;
+        }
+        return '';
     }
-    return '';
+
+    /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return false; // Temporarily disable to test
     }
-    }
+}

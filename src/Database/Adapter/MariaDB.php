@@ -846,7 +846,7 @@ class MariaDB extends SQL
                 $bindKey = 'key_' . $bindIndex;
                 $columns .= "`{$column}`, ";
                 if (in_array($attribute, $spatialAttributes)) {
-                    $columnNames .= 'ST_GeomFromText(:' . $bindKey . ', ' . Database::SRID . ", 'axis-order=lat-long'), ";
+                    $columnNames .= $this->getSpatialGeomFromText(':' . $bindKey) . ", ";
                 } else {
                     $columnNames .= ':' . $bindKey . ', ';
                 }
@@ -1116,7 +1116,7 @@ class MariaDB extends SQL
                 $bindKey = 'key_' . $bindIndex;
 
                 if (in_array($attribute, $spatialAttributes)) {
-                    $columns .= "`{$column}`" . '=ST_GeomFromText(:' . $bindKey . ' , ' . Database::SRID . ' ),';
+                    $columns .= "`{$column}`" . '=' . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
                 } else {
                     $columns .= "`{$column}`" . '=:' . $bindKey . ',';
                 }
@@ -1396,9 +1396,9 @@ class MariaDB extends SQL
             if ($wktType != Database::VAR_POINT || $attrType != Database::VAR_POINT) {
                 throw new QueryException('Distance in meters is not supported between '.$attrType . ' and '. $wktType);
             }
-            return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0), 6371000) {$operator} :{$placeholder}_1";
+            return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ", 6371000) {$operator} :{$placeholder}_1";
         }
-        return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0)) {$operator} :{$placeholder}_1";
+        return "ST_Distance({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ") {$operator} :{$placeholder}_1";
     }
 
     /**
@@ -1417,11 +1417,11 @@ class MariaDB extends SQL
         switch ($query->getMethod()) {
             case Query::TYPE_CROSSES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326,  'axis-order=lat-long'))";
+                return "ST_Crosses({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_CROSSES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326,  'axis-order=lat-long'))";
+                return "NOT ST_Crosses({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_DISTANCE_EQUAL:
             case Query::TYPE_DISTANCE_NOT_EQUAL:
@@ -1431,43 +1431,43 @@ class MariaDB extends SQL
 
             case Query::TYPE_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326,  'axis-order=lat-long'))";
+                return "ST_Intersects({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326,  'axis-order=lat-long'))";
+                return "NOT ST_Intersects({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_OVERLAPS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326,  'axis-order=lat-long'))";
+                return "ST_Overlaps({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_OVERLAPS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326,  'axis-order=lat-long'))";
+                return "NOT ST_Overlaps({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_TOUCHES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326,  'axis-order=lat-long'))";
+                return "ST_Touches({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_TOUCHES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326,  'axis-order=lat-long'))";
+                return "NOT ST_Touches({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_EQUAL:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326))";
+                return "ST_Equals({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_EQUAL:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326,  'axis-order=lat-long'))";
+                return "NOT ST_Equals({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_CONTAINS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, 4326,  'axis-order=lat-long'))";
+                return "ST_Contains({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_CONTAINS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Contains({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0,  4326, 'axis-order=lat-long'))";
+                return "NOT ST_Contains({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             default:
                 throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
@@ -1593,6 +1593,9 @@ class MariaDB extends SQL
      */
     protected function getSQLType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
+        if (in_array($type, Database::SPATIAL_TYPES)) {
+            return $this->getSpatialSQLType($type, $required);
+        }
         if ($array === true) {
             return 'JSON';
         }
@@ -1638,42 +1641,6 @@ class MariaDB extends SQL
 
             case Database::VAR_DATETIME:
                 return 'DATETIME(3)';
-
-
-            case Database::VAR_POINT:
-                $type = 'POINT SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
-                    if ($required) {
-                        $type .= ' NOT NULL';
-                    } else {
-                        $type .= ' NULL';
-                    }
-                }
-                return $type;
-
-            case Database::VAR_LINESTRING:
-                $type = 'LINESTRING SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
-                    if ($required) {
-                        $type .= ' NOT NULL';
-                    } else {
-                        $type .= ' NULL';
-                    }
-                }
-                return $type;
-
-
-            case Database::VAR_POLYGON:
-                $type = 'POLYGON SRID 4326';
-                if (!$this->getSupportForSpatialIndexNull()) {
-                    if ($required) {
-                        $type .= ' NOT NULL';
-                    } else {
-                        $type .= ' NULL';
-                    }
-                }
-                return $type;
-
 
             default:
                 throw new DatabaseException('Unknown type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
@@ -1914,42 +1881,40 @@ class MariaDB extends SQL
         return false;
     }
 
-    public function getSpatialSQLType(string $type, bool $required): string{
+    public function getSpatialSQLType(string $type, bool $required): string
+    {
+        $srid = Database::SRID;
+        $nullability = '';
+
+        if (!$this->getSupportForSpatialIndexNull()) {
+            if ($required) {
+                $nullability = ' NOT NULL';
+            } else {
+                $nullability = ' NULL';
+            }
+        }
+
         switch ($type) {
-        case Database::VAR_POINT:
-            $type = 'POINT SRID 4326';
-            if (!$this->getSupportForSpatialIndexNull()) {
-                if ($required) {
-                    $type .= ' NOT NULL';
-                } else {
-                    $type .= ' NULL';
-                }
-            }
-            return $type;
+            case Database::VAR_POINT:
+                return "POINT($srid)$nullability";
 
-        case Database::VAR_LINESTRING:
-            $type = 'LINESTRING SRID 4326';
-            if (!$this->getSupportForSpatialIndexNull()) {
-                if ($required) {
-                    $type .= ' NOT NULL';
-                } else {
-                    $type .= ' NULL';
-                }
-            }
-            return $type;
+            case Database::VAR_LINESTRING:
+                return "LINESTRING($srid)$nullability";
 
+            case Database::VAR_POLYGON:
+                return "POLYGON($srid)$nullability";
+        }
 
-        case Database::VAR_POLYGON:
-            $type = 'POLYGON SRID 4326';
-            if (!$this->getSupportForSpatialIndexNull()) {
-                if ($required) {
-                    $type .= ' NOT NULL';
-                } else {
-                    $type .= ' NULL';
-                }
-            }
-            return $type;
+        return '';
     }
-    return '';
+
+    /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return false;
     }
 }

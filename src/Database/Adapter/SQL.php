@@ -1902,7 +1902,8 @@ abstract class SQL extends Adapter
             foreach ($spatialAttributes as $spatialAttr) {
                 $filteredAttr = $this->filter($spatialAttr);
                 $quotedAttr = $this->quote($filteredAttr);
-                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedAttr}) AS {$quotedAttr}";
+                $axisOrder = $this->getSupportForSpatialAxisOrder() ? ', ' . $this->getSpatialAxisOrderSpec() : '';
+                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedAttr} {$axisOrder} ) AS {$quotedAttr}";
             }
 
 
@@ -1930,7 +1931,8 @@ abstract class SQL extends Adapter
             $quotedSelection = $this->quote($filteredSelection);
 
             if (in_array($selection, $spatialAttributes)) {
-                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedSelection}) AS {$quotedSelection}";
+                $axisOrder = $this->getSupportForSpatialAxisOrder() ? ', ' . $this->getSpatialAxisOrderSpec() : '';
+                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedSelection} {$axisOrder}) AS {$quotedSelection}";
             } else {
                 $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
             }

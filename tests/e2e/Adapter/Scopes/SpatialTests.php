@@ -12,7 +12,6 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Index;
 
 trait SpatialTests
 {
@@ -119,7 +118,15 @@ trait SpatialTests
                 '$id' => 'doc1',
                 'pointAttr' => [5.0, 5.0],
                 'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
-                'polyAttr' => [[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]],
+                'polyAttr' => [
+                    [
+                        [0.0, 0.0],
+                        [0.0, 10.0],
+                        [10.0, 10.0],
+                        [10.0, 0.0],
+                        [0.0, 0.0]
+                    ]
+                ],
                 '$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())]
             ]);
             $createdDoc = $database->createDocument($collectionName, $doc1);
@@ -129,7 +136,9 @@ trait SpatialTests
             // Update spatial data
             $doc1->setAttribute('pointAttr', [6.0, 6.0]);
             $updatedDoc = $database->updateDocument($collectionName, 'doc1', $doc1);
+
             $this->assertEquals([6.0, 6.0], $updatedDoc->getAttribute('pointAttr'));
+
 
             // Test spatial queries with appropriate operations for each geometry type
             // Point attribute tests - use operations valid for points
@@ -185,9 +194,17 @@ trait SpatialTests
             $polyQueries = [
                 'contains' => Query::contains('polyAttr', [[5.0, 5.0]]), // Point inside polygon
                 'notContains' => Query::notContains('polyAttr', [[15.0, 15.0]]), // Point outside polygon
-                'intersects' => Query::intersects('polyAttr', [5.0, 5.0]), // Point inside polygon should intersect
+                'intersects' => Query::intersects('polyAttr', [0.0, 0.0]), // Point inside polygon should intersect
                 'notIntersects' => Query::notIntersects('polyAttr', [15.0, 15.0]), // Point outside polygon should not intersect
-                'equals' => query::equal('polyAttr', [[[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [0.0, 0.0]]]]), // Exact same polygon
+                'equals' => query::equal('polyAttr', [[
+                    [
+                        [0.0, 0.0],
+                        [0.0, 10.0],
+                        [10.0, 10.0],
+                        [10.0, 0.0],
+                        [0.0, 0.0]
+                    ]
+                ]]), // Exact same polygon
                 'notEquals' => query::notEqual('polyAttr', [[[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [20.0, 20.0]]]]), // Different polygon
                 'overlaps' => Query::overlaps('polyAttr', [[[5.0, 5.0], [5.0, 15.0], [15.0, 15.0], [15.0, 5.0], [5.0, 5.0]]]), // Overlapping polygon
                 'notOverlaps' => Query::notOverlaps('polyAttr', [[[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [30.0, 20.0], [20.0, 20.0]]]) // Non-overlapping polygon
@@ -216,7 +233,7 @@ trait SpatialTests
                 $this->assertEquals('doc1', $result[0]->getId(), sprintf('Incorrect document for distance %s on polyAttr', $queryType));
             }
         } finally {
-            // $database->deleteCollection($collectionName);
+            $database->deleteCollection($collectionName);
         }
     }
 
@@ -1145,7 +1162,7 @@ trait SpatialTests
 
             // Test triangle doesn't intersect with distant point
             $nonIntersectingTriangle = $database->find($collectionName, [
-                Query::notIntersects('triangle', [100, 100]) // Distant point should not intersect
+                Query::notIntersects('triangle', [10, 10]) // Distant point should not intersect
             ], Database::PERMISSION_READ);
             $this->assertNotEmpty($nonIntersectingTriangle);
 
@@ -2606,6 +2623,128 @@ trait SpatialTests
 
         } finally {
             $database->deleteCollection($collUpdateNull);
+        }
+    }
+
+    public function testSpatialDocOrder(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'test_spatial_order_axis';
+        // Create collection first
+        $database->createCollection($collectionName);
+
+        // Create spatial attributes using createAttribute method
+        $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
+
+        // Create test document
+        $doc1 = new Document(
+            [
+                '$id' => 'doc1',
+                'pointAttr' => [5.0, 5.5],
+                '$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())]
+            ]
+        );
+        $database->createDocument($collectionName, $doc1);
+
+        $result = $database->getDocument($collectionName, 'doc1');
+        $this->assertEquals($result->getAttribute('pointAttr')[0], 5.0);
+        $this->assertEquals($result->getAttribute('pointAttr')[1], 5.5);
+        $database->deleteCollection($collectionName);
+    }
+
+    public function testInvalidCoordinateDocuments(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->markTestSkipped('Adapter does not support spatial attributes');
+        }
+
+        $collectionName = 'test_invalid_coord_';
+        try {
+            $database->createCollection($collectionName);
+
+            $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, true);
+            $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, true);
+
+            $invalidDocs = [
+                // Invalid POINT (longitude > 180)
+                [
+                    '$id' => 'invalidDoc1',
+                    'pointAttr' => [200.0, 20.0],
+                    'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
+                    'polyAttr' => [
+                        [
+                            [0.0, 0.0],
+                            [0.0, 10.0],
+                            [10.0, 10.0],
+                            [10.0, 0.0],
+                            [0.0, 0.0]
+                        ]
+                    ]
+                ],
+                // Invalid POINT (latitude < -90)
+                [
+                    '$id' => 'invalidDoc2',
+                    'pointAttr' => [50.0, -100.0],
+                    'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
+                    'polyAttr' => [
+                        [
+                            [0.0, 0.0],
+                            [0.0, 10.0],
+                            [10.0, 10.0],
+                            [10.0, 0.0],
+                            [0.0, 0.0]
+                        ]
+                    ]
+                ],
+                // Invalid LINESTRING (point outside valid range)
+                [
+                    '$id' => 'invalidDoc3',
+                    'pointAttr' => [50.0, 20.0],
+                    'lineAttr' => [[1.0, 2.0], [300.0, 4.0]], // invalid longitude in line
+                    'polyAttr' => [
+                        [
+                            [0.0, 0.0],
+                            [0.0, 10.0],
+                            [10.0, 10.0],
+                            [10.0, 0.0],
+                            [0.0, 0.0]
+                        ]
+                    ]
+                ],
+                // Invalid POLYGON (point outside valid range)
+                [
+                    '$id' => 'invalidDoc4',
+                    'pointAttr' => [50.0, 20.0],
+                    'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
+                    'polyAttr' => [
+                        [
+                            [0.0, 0.0],
+                            [0.0, 10.0],
+                            [190.0, 10.0], // invalid longitude
+                            [10.0, 0.0],
+                            [0.0, 0.0]
+                        ]
+                    ]
+                ],
+            ];
+            foreach ($invalidDocs as $docData) {
+                $this->expectException(StructureException::class);
+                $docData['$permissions'] = [Permission::update(Role::any()), Permission::read(Role::any())];
+                $doc = new Document($docData);
+                $database->createDocument($collectionName, $doc);
+            }
+
+
+        } finally {
+            $database->deleteCollection($collectionName);
         }
     }
 }

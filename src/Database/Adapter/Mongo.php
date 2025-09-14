@@ -221,6 +221,9 @@ class Mongo extends Adapter
 
     /**
      * Helper to add transaction/session context to command options if in transaction
+     * 
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
      */
     private function addTransactionContext(array $options = []): array
     {
@@ -1190,6 +1193,7 @@ class Mongo extends Adapter
      *
      * @param string $name
      * @param array<string, mixed> $document
+     * @param array<string, mixed> $options
      *
      * @return array<string, mixed>
      * @throws Duplicate

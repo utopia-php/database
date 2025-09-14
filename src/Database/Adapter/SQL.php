@@ -2711,20 +2711,12 @@ var_dump($sql);
         return strtolower(trim(substr($wkt, 0, $pos)));
     }
 
-    public function encodePoint(array $point): string
-    {
-        return "POINT({$point[0]} {$point[1]})";
-    }
-
     public function decodePoint(mixed $wkb): array
     {
-        var_dump($wkb);
-
         if (str_starts_with(strtoupper($wkb), 'POINT(')) {
             $start = strpos($wkb, '(') + 1;
             $end = strrpos($wkb, ')');
             $inside = substr($wkb, $start, $end - $start);
-
             $coords = explode(' ', trim($inside));
             return [(float)$coords[0], (float)$coords[1]];
         }
@@ -2799,8 +2791,6 @@ var_dump($sql);
                 }, $points);
             }, $rings);
         }
-
-        var_dump($wkb);
 
         // Convert HEX string to binary if needed
         if (str_starts_with($wkb, '0x') || ctype_xdigit($wkb)) {

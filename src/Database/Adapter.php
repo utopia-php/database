@@ -1286,7 +1286,6 @@ abstract class Adapter
      */
     abstract protected function execute(mixed $stmt): bool;
 
-    abstract public function encodePoint(array $point): mixed;
     abstract public function decodePoint(string $wkb): array;
     abstract public function decodeLinestring(string $wkb): array;
     abstract public function decodePolygon(string $wkb): array;

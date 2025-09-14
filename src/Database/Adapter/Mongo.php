@@ -1313,7 +1313,7 @@ class Mongo extends Adapter
      * @param array<Change> $changes
      * @return array<Document>
      */
-    public function createOrUpdateDocuments(Document $collection, string $attribute, array $changes): array
+    public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
         if (empty($changes)) {
             return $changes;
@@ -1578,7 +1578,7 @@ class Mongo extends Adapter
      *
      * @return bool
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
         if (!empty($newKey) && $newKey !== $id) {
             return $this->renameAttribute($collection, $id, $newKey);
@@ -2607,6 +2607,27 @@ class Mongo extends Adapter
      * @return bool
      */
     public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
+    }
+
+
+    /**
+    * Does the adapter support spatial axis order specification?
+    *
+    * @return bool
+    */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return false;
+    }
+
+    /**
+         * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+         *
+         * @return bool
+        */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
     {
         return false;
     }

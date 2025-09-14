@@ -2005,18 +2005,29 @@ var_dump($sql);
 
     public function encodePoint(array $point): string
     {
-        return "SRID=4326;POINT({$point[0]} {$point[1]})";// EWKT
+        return "POINT({$point[0]} {$point[1]})";// EWKT
+        //return "SRID=4326;POINT({$point[0]} {$point[1]})";// EWKT
     }
 
-    public function decodePoint(mixed $data): array
+    public function decodePoint(mixed $wkb): array
     {
-        $ewkt = str_replace('SRID=4326;', '', $data);
+        //$wkb = str_replace('SRID=4326;', '', $wkb); // Remove if was added in encode
 
         // Expect format "POINT(x y)"
-        if (preg_match('/POINT\(([-\d\.]+) ([-\d\.]+)\)/', $ewkt, $matches)) {
+        if (preg_match('/POINT\(([-\d\.]+) ([-\d\.]+)\)/', $wkb, $matches)) {
             return [(float)$matches[1], (float)$matches[2]];
         }
 
-        throw new Exception("Invalid EWKT format: $ewkt");
+        $bin = hex2bin($wkb);
+
+        $isLE = ord($bin[0]) === 1;
+        $type  = unpack($isLE ? 'V' : 'N', substr($bin, 1, 4))[1];
+        $offset = 5 + (($type & 0x20000000) ? 4 : 0);
+
+        $fmt = $isLE ? 'e' : 'E'; // little vs big endian double
+        $x = unpack($fmt, substr($bin, $offset, 8))[1];
+        $y = unpack($fmt, substr($bin, $offset + 8, 8))[1];
+
+        return [(float)$x, (float)$y];
     }
 }

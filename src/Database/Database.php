@@ -486,8 +486,8 @@ class Database
                     return null;
                 }
                 try {
-                    //return self::encodeSpatialData($value, Database::VAR_POINT);
-                    return $this->adapter->encodePoint($value);
+                    return self::encodeSpatialData($value, Database::VAR_POINT);
+                    //return $this->adapter->encodePoint($value);
                 } catch (\Throwable) {
                     throw new StructureException('Invalid point');
                 }
@@ -496,11 +496,18 @@ class Database
                 if ($value === null) {
                     return null;
                 }
+                var_dump('shmuel');
+                var_dump($value);
+
+                /**
+                 * Validate array point
+                 */
+
                 try {
                     //return self::decodeSpatialData($value);
                     return $this->adapter->decodePoint($value);
-                } catch (\Throwable) {
-                    throw new StructureException('Invalid point');
+                } catch (\Throwable $th) {
+                    throw new StructureException($th->getMessage());
                 }
             }
         );
@@ -1323,6 +1330,19 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
+        foreach ($attributes as &$attribute) {
+            if (in_array($attribute['type'], Database::SPATIAL_TYPES)) {
+                $existingFilters = $attribute['filters'] ?? [];
+                if (!is_array($existingFilters)) {
+                    $existingFilters = [$existingFilters];
+                }
+                $attribute['filters'] = array_values(
+                    array_unique(array_merge($existingFilters, [$attribute['type']]))
+                );
+            }
+        }
+        unset($attribute);
+
         $permissions ??= [
             Permission::create(Role::any()),
         ];
@@ -1678,6 +1698,10 @@ class Database
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
+        }
+        if (in_array($type, Database::SPATIAL_TYPES)) {
+            $filters[] = $type;
+            $filters = array_unique($filters);
         }
 
         $attribute = $this->validateAttribute(

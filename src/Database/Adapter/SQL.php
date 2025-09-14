@@ -359,14 +359,14 @@ abstract class SQL extends Adapter
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
         $alias = Query::DEFAULT_ALIAS;
-
+        $spatialAttributes=[];
         $sql = "
 		    SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
             {$this->getTenantQuery($collection, $alias)}
 		";
-
+var_dump($sql);
         if ($this->getSupportForUpdateLock()) {
             $sql .= " {$forUpdate}";
         }
@@ -2716,8 +2716,35 @@ abstract class SQL extends Adapter
         return "POINT({$point[0]} {$point[1]})";
     }
 
-    public function decodePoint(mixed $data): array
+    public function decodePoint(mixed $wkb): array
     {
-        return $data;
+        var_dump($wkb);
+
+        if (str_starts_with(strtoupper($wkb), 'POINT(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $coords = explode(' ', trim($inside));
+            return [(float)$coords[0], (float)$coords[1]];
+        }
+
+        // MySQL SRID-aware WKB layout:
+        // 1 byte  = endian (1 = little endian)
+        // 4 bytes = type + SRID flag
+        // 4 bytes = SRID
+        // 16 bytes = X,Y coordinates (double each, little endian)
+
+        $byteOrder = ord($wkb[0]);
+        $littleEndian = ($byteOrder === 1);
+
+        // Skip 1 + 4 + 4 = 9 bytes to get coordinates
+        $coordsBin = substr($wkb, 9, 16);
+
+        // Unpack doubles
+        $format = $littleEndian ? 'd2' : 'd2'; // little-endian doubles
+        $coords = unpack($format, $coordsBin);
+
+        return [$coords[1], $coords[2]];
     }
 }

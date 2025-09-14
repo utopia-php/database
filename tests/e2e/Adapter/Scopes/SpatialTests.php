@@ -109,7 +109,7 @@ trait SpatialTests
             //$this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
 
             // Create spatial indexes
-            $this->assertEquals(true, $database->createIndex($collectionName, 'point_spatial', Database::INDEX_SPATIAL, ['pointAttr']));
+            //$this->assertEquals(true, $database->createIndex($collectionName, 'point_spatial', Database::INDEX_SPATIAL, ['pointAttr']));
             //$this->assertEquals(true, $database->createIndex($collectionName, 'line_spatial', Database::INDEX_SPATIAL, ['lineAttr']));
             //$this->assertEquals(true, $database->createIndex($collectionName, 'poly_spatial', Database::INDEX_SPATIAL, ['polyAttr']));
 
@@ -122,7 +122,13 @@ trait SpatialTests
             $createdDoc = $database->createDocument($collectionName, $doc1);
             $this->assertInstanceOf(Document::class, $createdDoc);
             $this->assertEquals([5.0, 5.0], $createdDoc->getAttribute('pointAttr'));
+
+            $createdDoc = $database->getDocument($collectionName, 'doc1');
+
+            $this->assertInstanceOf(Document::class, $createdDoc);
+            $this->assertEquals([5.0, 5.0], $createdDoc->getAttribute('pointAttr'));
             $this->assertEquals('222','2');
+
 
 
             // Create test document

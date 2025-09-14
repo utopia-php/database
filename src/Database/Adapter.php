@@ -1287,6 +1287,6 @@ abstract class Adapter
     abstract protected function execute(mixed $stmt): bool;
 
     abstract protected function encodePoint(array $point): mixed;
-    abstract protected function decodePoint(mixed $data): array;
+    abstract protected function decodePoint(mixed $wkb): array;
 
 }

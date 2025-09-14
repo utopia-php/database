@@ -2747,4 +2747,50 @@ var_dump($sql);
 
         return [$coords[1], $coords[2]];
     }
+
+    public function decodeLinestring(string $wkb): array
+    {
+        if (str_starts_with(strtoupper($wkb), 'LINESTRING(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $points = explode(',', $inside);
+            return array_map(function ($point) {
+                $coords = explode(' ', trim($point));
+                return [(float)$coords[0], (float)$coords[1]];
+            }, $points);
+        }
+
+        var_dump($wkb);
+
+        $isLE = ord($wkb[0]) === 1; // little-endian?
+        $type  = unpack($isLE ? 'V' : 'N', substr($wkb, 1, 4))[1];
+
+        // Check for SRID flag (0x20000000)
+        $hasSRID = ($type & 0x20000000) !== 0;
+        $geomType = $type & 0xFFFF; // Mask lower 16 bits to get actual type
+
+        if ($geomType !== 2) { // 2 = LINESTRING
+            throw new \RuntimeException("Not a LINESTRING geometry type, got {$geomType}");
+        }
+
+        $offset = 5 + ($hasSRID ? 4 : 0); // skip endian + type + optional SRID
+
+        // Number of points (4 bytes)
+        $numPoints = unpack($isLE ? 'V' : 'N', substr($wkb, $offset, 4))[1];
+        $offset += 4;
+
+        $points = [];
+        $fmt = $isLE ? 'e' : 'E'; // little/big endian double
+
+        for ($i = 0; $i < $numPoints; $i++) {
+            $x = unpack($fmt, substr($wkb, $offset, 8))[1];
+            $y = unpack($fmt, substr($wkb, $offset + 8, 8))[1];
+            $points[] = [(float)$x, (float)$y];
+            $offset += 16;
+        }
+
+        return $points;
+    }
 }

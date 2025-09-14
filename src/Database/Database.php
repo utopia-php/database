@@ -496,27 +496,21 @@ class Database
                 if ($value === null) {
                     return null;
                 }
-                var_dump('shmuel');
-                var_dump($value);
 
                 /**
-                 * Validate array point
+                 * todo:validate array point
                  */
 
                 try {
-                    //return self::decodeSpatialData($value);
                     return $this->adapter->decodePoint($value);
                 } catch (\Throwable $th) {
                     throw new StructureException($th->getMessage());
                 }
             }
         );
+
         self::addFilter(
             Database::VAR_LINESTRING,
-            /**
-             * @param mixed $value
-             * @return mixed
-             */
             function (mixed $value) {
                 if (!is_array($value)) {
                     return $value;
@@ -527,17 +521,22 @@ class Database
                     return $value;
                 }
             },
-            /**
-             * @param string|null $value
-             * @return string|null
-             */
+
             function (?string $value) {
                 if (is_null($value)) {
-                    return $value;
+                    return null;
                 }
-                return self::decodeSpatialData($value);
+
+                try {
+                    //return self::decodeSpatialData($value);
+                    return $this->adapter->decodeLinestring($value);
+                } catch (\Throwable $th) {
+                    var_dump($th);
+                    throw new StructureException($th->getMessage());
+                }
             }
         );
+
         self::addFilter(
             Database::VAR_POLYGON,
             /**

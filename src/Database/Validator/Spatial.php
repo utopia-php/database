@@ -135,6 +135,7 @@ class Spatial extends Validator
     public static function isWKTString(string $value): bool
     {
         $value = trim($value);
+        $value = str_replace('SRID=4326;', '', $value);
         return (bool) preg_match('/^(POINT|LINESTRING|POLYGON)\s*\(/i', $value);
     }
 

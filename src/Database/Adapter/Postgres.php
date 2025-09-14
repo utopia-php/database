@@ -993,7 +993,7 @@ class Postgres extends SQL
 			INSERT INTO {$this->getSQLTable($name)} ({$columns} \"_uid\")
 			VALUES ({$columnNames} :_uid)
 		";
-
+var_dump($sql);
         $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -2001,5 +2001,22 @@ class Postgres extends SQL
     public function getSupportForSpatialAxisOrder(): bool
     {
         return false;
+    }
+
+    public function encodePoint(array $point): string
+    {
+        return "SRID=4326;POINT({$point[0]} {$point[1]})";// EWKT
+    }
+
+    public function decodePoint(mixed $data): array
+    {
+        $ewkt = str_replace('SRID=4326;', '', $data);
+
+        // Expect format "POINT(x y)"
+        if (preg_match('/POINT\(([-\d\.]+) ([-\d\.]+)\)/', $ewkt, $matches)) {
+            return [(float)$matches[1], (float)$matches[2]];
+        }
+
+        throw new Exception("Invalid EWKT format: $ewkt");
     }
 }

@@ -2710,4 +2710,14 @@ abstract class SQL extends Adapter
         }
         return strtolower(trim(substr($wkt, 0, $pos)));
     }
+
+    public function encodePoint(array $point): string
+    {
+        return "POINT({$point[0]} {$point[1]})";
+    }
+
+    public function decodePoint(mixed $data): array
+    {
+        return $data;
+    }
 }

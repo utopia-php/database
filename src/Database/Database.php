@@ -481,29 +481,27 @@ class Database
 
         self::addFilter(
             Database::VAR_POINT,
-            /**
-             * @param mixed $value
-             * @return mixed
-             */
             function (mixed $value) {
-                if (!is_array($value)) {
-                    return $value;
+                if ($value === null) {
+                    return null;
                 }
                 try {
-                    return  self::encodeSpatialData($value, Database::VAR_POINT);
+                    //return self::encodeSpatialData($value, Database::VAR_POINT);
+                    return $this->adapter->encodePoint($value);
                 } catch (\Throwable) {
-                    return $value;
+                    throw new StructureException('Invalid point');
                 }
             },
-            /**
-             * @param string|null $value
-             * @return string|null
-             */
             function (?string $value) {
-                if (!is_string($value)) {
-                    return $value;
+                if ($value === null) {
+                    return null;
                 }
-                return self::decodeSpatialData($value);
+                try {
+                    //return self::decodeSpatialData($value);
+                    return $this->adapter->decodePoint($value);
+                } catch (\Throwable) {
+                    throw new StructureException('Invalid point');
+                }
             }
         );
         self::addFilter(
@@ -1972,9 +1970,6 @@ class Database
     {
         return match ($type) {
             self::VAR_DATETIME => ['datetime'],
-            self::VAR_POINT => ['point'],
-            self::VAR_POLYGON => ['polygon'],
-            self::VAR_LINESTRING => ['linestring'],
             default => [],
         };
     }

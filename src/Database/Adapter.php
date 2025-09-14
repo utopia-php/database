@@ -1285,4 +1285,8 @@ abstract class Adapter
      * @return bool
      */
     abstract protected function execute(mixed $stmt): bool;
+
+    abstract protected function encodePoint(array $point): mixed;
+    abstract protected function decodePoint(mixed $data): array;
+
 }

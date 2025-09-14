@@ -986,7 +986,7 @@ class Query
      */
     public static function intersects(string $attribute, array $values): self
     {
-        return new self(self::TYPE_INTERSECTS, $attribute, $values);
+        return new self(self::TYPE_INTERSECTS, $attribute, [$values]);
     }
 
     /**
@@ -998,7 +998,7 @@ class Query
      */
     public static function notIntersects(string $attribute, array $values): self
     {
-        return new self(self::TYPE_NOT_INTERSECTS, $attribute, $values);
+        return new self(self::TYPE_NOT_INTERSECTS, $attribute, [$values]);
     }
 
     /**
@@ -1010,7 +1010,7 @@ class Query
      */
     public static function crosses(string $attribute, array $values): self
     {
-        return new self(self::TYPE_CROSSES, $attribute, $values);
+        return new self(self::TYPE_CROSSES, $attribute, [$values]);
     }
 
     /**
@@ -1022,7 +1022,7 @@ class Query
      */
     public static function notCrosses(string $attribute, array $values): self
     {
-        return new self(self::TYPE_NOT_CROSSES, $attribute, $values);
+        return new self(self::TYPE_NOT_CROSSES, $attribute, [$values]);
     }
 
     /**
@@ -1034,7 +1034,7 @@ class Query
      */
     public static function overlaps(string $attribute, array $values): self
     {
-        return new self(self::TYPE_OVERLAPS, $attribute, $values);
+        return new self(self::TYPE_OVERLAPS, $attribute, [$values]);
     }
 
     /**
@@ -1046,7 +1046,7 @@ class Query
      */
     public static function notOverlaps(string $attribute, array $values): self
     {
-        return new self(self::TYPE_NOT_OVERLAPS, $attribute, $values);
+        return new self(self::TYPE_NOT_OVERLAPS, $attribute, [$values]);
     }
 
     /**
@@ -1058,7 +1058,7 @@ class Query
      */
     public static function touches(string $attribute, array $values): self
     {
-        return new self(self::TYPE_TOUCHES, $attribute, $values);
+        return new self(self::TYPE_TOUCHES, $attribute, [$values]);
     }
 
     /**
@@ -1070,6 +1070,6 @@ class Query
      */
     public static function notTouches(string $attribute, array $values): self
     {
-        return new self(self::TYPE_NOT_TOUCHES, $attribute, $values);
+        return new self(self::TYPE_NOT_TOUCHES, $attribute, [$values]);
     }
 }

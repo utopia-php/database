@@ -81,4 +81,32 @@ class SpatialTest extends TestCase
         $this->assertFalse(Spatial::isWKTString('CIRCLE(0 0,1)'));
         $this->assertFalse(Spatial::isWKTString('POINT1(1 2)'));
     }
+
+    public function testInvalidCoordinate(): void
+    {
+        // Point with invalid longitude
+        $validator = new Spatial(Database::VAR_POINT);
+        $this->assertFalse($validator->isValid([200, 10])); // longitude > 180
+        $this->assertStringContainsString('Longitude', $validator->getDescription());
+
+        // Point with invalid latitude
+        $validator = new Spatial(Database::VAR_POINT);
+        $this->assertFalse($validator->isValid([10, -100])); // latitude < -90
+        $this->assertStringContainsString('Latitude', $validator->getDescription());
+
+        // LineString with invalid coordinates
+        $validator = new Spatial(Database::VAR_LINESTRING);
+        $this->assertFalse($validator->isValid([
+            [0, 0],
+            [181, 45] // invalid longitude
+        ]));
+        $this->assertStringContainsString('Invalid coordinates', $validator->getDescription());
+
+        // Polygon with invalid coordinates
+        $validator = new Spatial(Database::VAR_POLYGON);
+        $this->assertFalse($validator->isValid([
+            [[0, 0], [1, 1], [190, 5], [0, 0]] // invalid longitude in ring
+        ]));
+        $this->assertStringContainsString('Invalid coordinates', $validator->getDescription());
+    }
 }

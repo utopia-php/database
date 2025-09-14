@@ -51,6 +51,7 @@ class Database
 
     // Global SRID for geographic coordinates (WGS84)
     public const SRID = 4326;
+    public const EARTH_RADIUS = 6371000;
 
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
@@ -475,6 +476,88 @@ class Database
              */
             function (?string $value) {
                 return DateTime::formatTz($value);
+            }
+        );
+
+        self::addFilter(
+            Database::VAR_POINT,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!is_array($value)) {
+                    return $value;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_POINT);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
+            function (?string $value) {
+                if (!is_string($value)) {
+                    return $value;
+                }
+                return self::decodeSpatialData($value);
+            }
+        );
+        self::addFilter(
+            Database::VAR_LINESTRING,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!is_array($value)) {
+                    return $value;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_LINESTRING);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return $value;
+                }
+                return self::decodeSpatialData($value);
+            }
+        );
+        self::addFilter(
+            Database::VAR_POLYGON,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!is_array($value)) {
+                    return $value;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_POLYGON);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return $value;
+                }
+                return self::decodeSpatialData($value);
             }
         );
     }
@@ -1242,6 +1325,19 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
+        foreach ($attributes as &$attribute) {
+            if (in_array($attribute['type'], Database::SPATIAL_TYPES)) {
+                $existingFilters = $attribute['filters'] ?? [];
+                if (!is_array($existingFilters)) {
+                    $existingFilters = [$existingFilters];
+                }
+                $attribute['filters'] = array_values(
+                    array_unique(array_merge($existingFilters, [$attribute['type']]))
+                );
+            }
+        }
+        unset($attribute);
+
         $permissions ??= [
             Permission::create(Role::any()),
         ];
@@ -1597,6 +1693,10 @@ class Database
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
+        }
+        if (in_array($type, Database::SPATIAL_TYPES)) {
+            $filters[] = $type;
+            $filters = array_unique($filters);
         }
 
         $attribute = $this->validateAttribute(
@@ -2161,6 +2261,11 @@ class Database
                 $default = null;
             }
 
+            // we need to alter table attribute type to NOT NULL/NULL for change in required
+            if (!$this->adapter->getSupportForSpatialIndexNull() && in_array($type, Database::SPATIAL_TYPES)) {
+                $altering = true;
+            }
+
             switch ($type) {
                 case self::VAR_STRING:
                     if (empty($size)) {
@@ -2322,7 +2427,7 @@ class Database
                     }
                 }
 
-                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
+                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey, $required);
 
                 if (!$updated) {
                     throw new DatabaseException('Failed to update attribute');
@@ -3217,12 +3322,12 @@ class Database
         if ($type === self::INDEX_SPATIAL) {
             foreach ($attributes as $attr) {
                 if (!isset($indexAttributesWithTypes[$attr])) {
-                    throw new DatabaseException('Attribute "' . $attr . '" not found in collection');
+                    throw new IndexException('Attribute "' . $attr . '" not found in collection');
                 }
 
                 $attributeType = $indexAttributesWithTypes[$attr];
                 if (!in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    throw new DatabaseException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                    throw new IndexException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
                 }
             }
 
@@ -4660,7 +4765,6 @@ class Database
                     if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
-
                     $batch[$index] = $this->encode($collection, $document);
                     $batch[$index] = $this->adapter->castingBefore($collection, $document);
                 }
@@ -6641,14 +6745,6 @@ class Database
 
             foreach ($value as $index => $node) {
                 if ($node !== null) {
-                    // Handle spatial data encoding
-                    $attributeType = $attribute['type'] ?? '';
-                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                        if (is_array($node)) {
-                            $node = $this->encodeSpatialData($node, $attributeType);
-                        }
-                    }
-
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
@@ -6727,9 +6823,6 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
-                if (is_string($node) && in_array($type, Database::SPATIAL_TYPES)) {
-                    $node = $this->decodeSpatialData($node);
-                }
 
                 foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);

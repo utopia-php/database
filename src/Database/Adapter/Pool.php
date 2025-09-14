@@ -539,4 +539,14 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
+
+    /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
 }

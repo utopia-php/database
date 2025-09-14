@@ -483,7 +483,7 @@ abstract class SQL extends Adapter
             $column = $this->filter($attribute);
 
             if (in_array($attribute, $spatialAttributes)) {
-                $columns .= "{$this->quote($column)} = ST_GeomFromText(:key_{$bindIndex})";
+                $columns .= "{$this->quote($column)} = " . $this->getSpatialGeomFromText(":key_{$bindIndex}");
             } else {
                 $columns .= "{$this->quote($column)} = :key_{$bindIndex}";
             }
@@ -1514,6 +1514,47 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Generate ST_GeomFromText call with proper SRID and axis order support
+     *
+     * @param string $wktPlaceholder
+     * @param int|null $srid
+     * @return string
+     */
+    protected function getSpatialGeomFromText(string $wktPlaceholder, ?int $srid = null): string
+    {
+        $srid = $srid ?? Database::SRID;
+        $geomFromText = "ST_GeomFromText({$wktPlaceholder}, {$srid}";
+
+        if ($this->getSupportForSpatialAxisOrder()) {
+            $geomFromText .= ", " . $this->getSpatialAxisOrderSpec();
+        }
+
+        $geomFromText .= ")";
+
+        return $geomFromText;
+    }
+
+    /**
+     * Get the spatial axis order specification string
+     *
+     * @return string
+     */
+    protected function getSpatialAxisOrderSpec(): string
+    {
+        return "'axis-order=long-lat'";
+    }
+
+    /**
      * @param string $tableName
      * @param string $columns
      * @param array<string> $batchKeys
@@ -1861,7 +1902,8 @@ abstract class SQL extends Adapter
             foreach ($spatialAttributes as $spatialAttr) {
                 $filteredAttr = $this->filter($spatialAttr);
                 $quotedAttr = $this->quote($filteredAttr);
-                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedAttr}) AS {$quotedAttr}";
+                $axisOrder = $this->getSupportForSpatialAxisOrder() ? ', ' . $this->getSpatialAxisOrderSpec() : '';
+                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedAttr} {$axisOrder} ) AS {$quotedAttr}";
             }
 
 
@@ -1889,7 +1931,8 @@ abstract class SQL extends Adapter
             $quotedSelection = $this->quote($filteredSelection);
 
             if (in_array($selection, $spatialAttributes)) {
-                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedSelection}) AS {$quotedSelection}";
+                $axisOrder = $this->getSupportForSpatialAxisOrder() ? ', ' . $this->getSpatialAxisOrderSpec() : '';
+                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedSelection} {$axisOrder}) AS {$quotedSelection}";
             } else {
                 $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
             }
@@ -2019,7 +2062,7 @@ abstract class SQL extends Adapter
                     }
                     if (in_array($key, $spatialAttributes)) {
                         $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
+                        $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
                     } else {
                         $value = (\is_bool($value)) ? (int)$value : $value;
                         $bindKey = 'key_' . $bindIndex;
@@ -2145,7 +2188,7 @@ abstract class SQL extends Adapter
 
                     if (in_array($attributeKey, $spatialAttributes)) {
                         $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
+                        $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
                     } else {
                         $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
                         $bindKey = 'key_' . $bindIndex;

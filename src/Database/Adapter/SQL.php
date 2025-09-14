@@ -2802,54 +2802,59 @@ var_dump($sql);
 
         var_dump($wkb);
 
-        // Convert HEX to binary if needed
-        if (ctype_xdigit($wkb) && strlen($wkb) % 2 === 0) {
-            $wkb = hex2bin($wkb);
+        // Convert HEX string to binary if needed
+        if (str_starts_with($wkb, '0x') || ctype_xdigit($wkb)) {
+            $wkb = hex2bin(str_starts_with($wkb, '0x') ? substr($wkb, 2) : $wkb);
             if ($wkb === false) {
-                throw new \RuntimeException("Invalid HEX WKB");
+                throw new DatabaseException('Invalid hex WKB');
             }
         }
 
-        if (strlen($wkb) < 9) {
-            throw new \RuntimeException("WKB too short");
+        if (strlen($wkb) < 21) {
+            throw new DatabaseException('WKB too short to be a POLYGON');
         }
 
-        $byteOrder = ord($wkb[0]);
+        // MySQL SRID-aware WKB layout: 4 bytes SRID prefix
+        $offset = 4;
+
+        $byteOrder = ord($wkb[$offset]);
         if ($byteOrder !== 1) {
-            throw new \RuntimeException("Only little-endian WKB supported");
+            throw new DatabaseException('Only little-endian WKB supported');
         }
+        $offset += 1;
 
-        // Type + SRID flag
-        $typeInt = unpack('V', substr($wkb, 1, 4))[1];
-        $hasSrid = ($typeInt & 0x20000000) !== 0;
-        $geomType = $typeInt & 0xFF;
+        $type = unpack('V', substr($wkb, $offset, 4))[1];
+        $hasSRID = ($type & 0x20000000) === 0x20000000;
+        $geomType = $type & 0xFF;
+        $offset += 4;
 
         if ($geomType !== 3) { // 3 = POLYGON
-            throw new \RuntimeException("Not a POLYGON geometry type, got {$geomType}");
+            throw new DatabaseException("Not a POLYGON geometry type, got {$geomType}");
         }
 
-        $offset = 5 + ($hasSrid ? 4 : 0);
+        // Skip SRID in type flag if present
+        if ($hasSRID) {
+            $offset += 4;
+        }
 
-        // Number of rings
         $numRings = unpack('V', substr($wkb, $offset, 4))[1];
         $offset += 4;
 
         $rings = [];
 
         for ($r = 0; $r < $numRings; $r++) {
-            // Number of points in this ring
             $numPoints = unpack('V', substr($wkb, $offset, 4))[1];
             $offset += 4;
+            $ring = [];
 
-            $points = [];
             for ($p = 0; $p < $numPoints; $p++) {
                 $x = unpack('d', substr($wkb, $offset, 8))[1];
                 $y = unpack('d', substr($wkb, $offset + 8, 8))[1];
-                $points[] = [(float)$x, (float)$y];
+                $ring[] = [(float)$x, (float)$y];
                 $offset += 16;
             }
 
-            $rings[] = $points;
+            $rings[] = $ring;
         }
 
         return $rings;

@@ -589,17 +589,14 @@ class Mirror extends Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
-        $modified = 0;
-
-        $this->source->createDocuments(
+        $modified = $this->source->createDocuments(
             $collection,
             $documents,
             $batchSize,
-            function ($doc) use ($onNext, &$modified) {
-                $onNext && $onNext($doc);
-                $modified++;
-            },
+            $onNext,
+            $onError,
         );
 
         if (
@@ -638,7 +635,6 @@ class Mirror extends Database
                     $collection,
                     $clones,
                     $batchSize,
-                    null,
                 )
             );
 
@@ -715,18 +711,13 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
-        $modified = 0;
-
-        $this->source->updateDocuments(
+        $modified = $this->source->updateDocuments(
             $collection,
             $updates,
             $queries,
             $batchSize,
-            function ($doc) use ($onNext, &$modified) {
-                $onNext && $onNext($doc);
-                $modified++;
-            },
-            $onError
+            $onNext,
+            $onError,
         );
 
         if (
@@ -754,14 +745,13 @@ class Mirror extends Database
                 );
             }
 
-            $modified = $this->destination->withPreserveDates(
+            $this->destination->withPreserveDates(
                 fn () =>
                 $this->destination->updateDocuments(
                     $collection,
                     $clone,
                     $queries,
                     $batchSize,
-                    null,
                 )
             );
 
@@ -781,17 +771,19 @@ class Mirror extends Database
         return $modified;
     }
 
-    public function createOrUpdateDocuments(string $collection, array $documents, int $batchSize = Database::INSERT_BATCH_SIZE, callable|null $onNext = null): int
-    {
-        $modified = 0;
-        $this->source->createOrUpdateDocuments(
+    public function upsertDocuments(
+        string $collection,
+        array $documents,
+        int $batchSize = Database::INSERT_BATCH_SIZE,
+        ?callable $onNext = null,
+        ?callable $onError = null,
+    ): int {
+        $modified = $this->source->upsertDocuments(
             $collection,
             $documents,
             $batchSize,
-            function ($doc) use ($onNext, &$modified) {
-                $onNext && $onNext($doc);
-                $modified++;
-            }
+            $onNext,
+            $onError,
         );
 
         if (
@@ -824,13 +816,12 @@ class Mirror extends Database
                 $clones[] = $clone;
             }
 
-            $modified = $this->destination->withPreserveDates(
+            $this->destination->withPreserveDates(
                 fn () =>
-                $this->destination->createOrUpdateDocuments(
+                $this->destination->upsertDocuments(
                     $collection,
                     $clones,
                     $batchSize,
-                    null,
                 )
             );
 
@@ -845,8 +836,9 @@ class Mirror extends Database
                 }
             }
         } catch (\Throwable $err) {
-            $this->logError('createDocuments', $err);
+            $this->logError('upsertDocuments', $err);
         }
+
         return $modified;
     }
 
@@ -900,17 +892,12 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
-        $modified = 0;
-
-        $this->source->deleteDocuments(
+        $modified = $this->source->deleteDocuments(
             $collection,
             $queries,
             $batchSize,
-            function ($doc) use (&$modified, $onNext) {
-                $onNext && $onNext($doc);
-                $modified++;
-            },
-            $onError
+            $onNext,
+            $onError,
         );
 
         if (
@@ -935,11 +922,10 @@ class Mirror extends Database
                 );
             }
 
-            $modified = $this->destination->deleteDocuments(
+            $this->destination->deleteDocuments(
                 $collection,
                 $queries,
                 $batchSize,
-                null,
             );
 
             foreach ($this->writeFilters as $filter) {

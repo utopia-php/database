@@ -106,27 +106,19 @@ trait SpatialTests
             // Create spatial attributes using createAttribute method
             $this->assertEquals(true, $database->createAttribute($collectionName, 'pointAttr', Database::VAR_POINT, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
             $this->assertEquals(true, $database->createAttribute($collectionName, 'lineAttr', Database::VAR_LINESTRING, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
-          //  $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'polyAttr', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true));
 
             // Create spatial indexes
             $this->assertEquals(true, $database->createIndex($collectionName, 'point_spatial', Database::INDEX_SPATIAL, ['pointAttr']));
             $this->assertEquals(true, $database->createIndex($collectionName, 'line_spatial', Database::INDEX_SPATIAL, ['lineAttr']));
-           // $this->assertEquals(true, $database->createIndex($collectionName, 'poly_spatial', Database::INDEX_SPATIAL, ['polyAttr']));
+            $this->assertEquals(true, $database->createIndex($collectionName, 'poly_spatial', Database::INDEX_SPATIAL, ['polyAttr']));
 
             // Create test document
             $doc1 = new Document([
                 '$id' => 'doc1',
                 'pointAttr' => [5.0, 5.0],
                 'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
-//                'polyAttr' => [
-//                    [
-//                        [0.0, 0.0],
-//                        [0.0, 10.0],
-//                        [10.0, 10.0],
-//                        [10.0, 0.0],
-//                        [0.0, 0.0]
-//                    ]
-//                ],
+                'polyAttr' => [[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [10.0, 0.0], [0.0, 0.0]]],
                 '$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())]
             ]);
 
@@ -134,11 +126,14 @@ trait SpatialTests
             $this->assertInstanceOf(Document::class, $createdDoc);
             $this->assertEquals([5.0, 5.0], $createdDoc->getAttribute('pointAttr'));
             $this->assertEquals([[1.0, 2.0], [3.0, 4.0]], $createdDoc->getAttribute('lineAttr'));
+            $this->assertEquals([[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [10.0, 0.0], [0.0, 0.0]]], $createdDoc->getAttribute('polyAttr'));
 
             $createdDoc = $database->getDocument($collectionName, 'doc1');
             $this->assertInstanceOf(Document::class, $createdDoc);
             $this->assertEquals([5.0, 5.0], $createdDoc->getAttribute('pointAttr'));
             $this->assertEquals([[1.0, 2.0], [3.0, 4.0]], $createdDoc->getAttribute('lineAttr'));
+            $this->assertEquals([[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [10.0, 0.0], [0.0, 0.0]]], $createdDoc->getAttribute('polyAttr'));
+
             $this->assertEquals('222','2');
 
 

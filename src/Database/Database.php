@@ -557,7 +557,6 @@ class Database
                     //return self::decodeSpatialData($value);
                     return $this->adapter->decodePolygon($value);
                 } catch (\Throwable $th) {
-                    var_dump($th);
                     throw new StructureException($th->getMessage());
                 }
             }

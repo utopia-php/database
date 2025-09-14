@@ -2093,4 +2093,75 @@ var_dump($sql);
         return $points;
     }
 
+    public function decodePolygon(string $wkb): array
+    {
+        // POLYGON((x1,y1),(x2,y2))
+        if (str_starts_with($wkb, 'POLYGON((')) {
+            $start = strpos($wkb, '((') + 2;
+            $end = strrpos($wkb, '))');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $rings = explode('),(', $inside);
+            return array_map(function ($ring) {
+                $points = explode(',', $ring);
+                return array_map(function ($point) {
+                    $coords = explode(' ', trim($point));
+                    return [(float)$coords[0], (float)$coords[1]];
+                }, $points);
+            }, $rings);
+        }
+
+        var_dump($wkb);
+
+        // Convert hex string to binary if needed
+        if (preg_match('/^[0-9a-fA-F]+$/', $wkb)) {
+            $wkb = hex2bin($wkb);
+            if ($wkb === false) {
+                throw new \RuntimeException("Invalid hex WKB");
+            }
+        }
+
+        if (strlen($wkb) < 9) {
+            throw new \RuntimeException("WKB too short");
+        }
+
+        $byteOrder = ord($wkb[0]);
+        $isLE = $byteOrder === 1; // assume little-endian
+        $uInt32 = 'V'; // little-endian 32-bit unsigned
+        $uDouble = 'd'; // little-endian double
+
+        $typeInt = unpack($uInt32, substr($wkb, 1, 4))[1];
+        $hasSrid = ($typeInt & 0x20000000) !== 0;
+        $geomType = $typeInt & 0xFF;
+
+        if ($geomType !== 3) { // 3 = POLYGON
+            throw new \RuntimeException("Not a POLYGON geometry type, got {$geomType}");
+        }
+
+        $offset = 5;
+        if ($hasSrid) {
+            $offset += 4;
+        }
+
+        // Number of rings
+        $numRings = unpack($uInt32, substr($wkb, $offset, 4))[1];
+        $offset += 4;
+
+        $rings = [];
+        for ($r = 0; $r < $numRings; $r++) {
+            $numPoints = unpack($uInt32, substr($wkb, $offset, 4))[1];
+            $offset += 4;
+            $points = [];
+            for ($i = 0; $i < $numPoints; $i++) {
+                $x = unpack($uDouble, substr($wkb, $offset, 8))[1];
+                $y = unpack($uDouble, substr($wkb, $offset + 8, 8))[1];
+                $points[] = [(float)$x, (float)$y];
+                $offset += 16;
+            }
+            $rings[] = $points;
+        }
+
+        return $rings; // array of rings, each ring is array of [x,y]
+    }
+
 }

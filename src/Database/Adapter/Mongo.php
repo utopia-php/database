@@ -37,6 +37,8 @@ class Mongo extends Adapter
         '$and',
         '$match',
         '$regex',
+        '$not',
+        '$nor',
     ];
 
     protected Client $client;
@@ -1580,7 +1582,6 @@ class Mongo extends Adapter
 
             $response = $this->client->find($name, $filters, $options);
             $results = $response->cursor->firstBatch ?? [];
-
             // Process first batch
             foreach ($results as $result) {
                 $record = $this->replaceChars('_', '$', (array)$result);
@@ -1972,7 +1973,7 @@ class Mongo extends Adapter
                     : $query->getValues()[0]
             ),
         };
-
+        
         $filter = [];
 
         if ($operator == '$eq' && \is_array($value)) {
@@ -1982,14 +1983,36 @@ class Mongo extends Adapter
         } elseif ($operator == '$in') {
             if ($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
                 $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
+            } elseif ($query->getMethod() === Query::TYPE_NOT_CONTAINS && !$query->onArray()) {
+                $filter[$attribute] = ['$not' => new Regex(".*{$this->escapeWildcards($value)}.*", 'i')];
             } else {
                 $filter[$attribute]['$in'] = $query->getValues();
             }
         } elseif ($operator == '$search') {
-            $filter['$text'][$operator] = $value;
+            if ($query->getMethod() === Query::TYPE_NOT_SEARCH) {
+                // MongoDB doesn't support negating $text expressions directly
+                // Use regex as fallback for NOT search while keeping fulltext for positive search
+                if (empty($value)) {
+                    // Empty search term should return all documents (no documents contain empty string)
+                    // Don't add any filter - this will match all documents
+                } else {
+                    // Escape special regex characters and create a pattern that matches the search term as substring
+                    $escapedValue = preg_quote($value, '/');
+                    $filter[$attribute] = ['$not' => new Regex(".*{$escapedValue}.*", 'i')];
+                }
+            } else {
+                $filter['$text'][$operator] = $value;
+            }
         } elseif ($operator === Query::TYPE_BETWEEN) {
             $filter[$attribute]['$lte'] = $value[1];
             $filter[$attribute]['$gte'] = $value[0];
+        } elseif ($operator === Query::TYPE_NOT_BETWEEN) {
+            $filter['$or'] = [
+                [$attribute => ['$lt' => $value[0]]],
+                [$attribute => ['$gt' => $value[1]]]
+            ];
+        } elseif ($operator === '$regex' && in_array($query->getMethod(), [Query::TYPE_NOT_STARTS_WITH, Query::TYPE_NOT_ENDS_WITH])) {
+            $filter[$attribute] = ['$not' => new Regex($value, 'i')];
         } else {
             $filter[$attribute][$operator] = $value;
         }
@@ -2017,13 +2040,18 @@ class Mongo extends Adapter
             Query::TYPE_GREATER => '$gt',
             Query::TYPE_GREATER_EQUAL => '$gte',
             Query::TYPE_CONTAINS => '$in',
+            Query::TYPE_NOT_CONTAINS => '$in',
             Query::TYPE_SEARCH => '$search',
+            Query::TYPE_NOT_SEARCH => '$search',
             Query::TYPE_BETWEEN => 'between',
+            Query::TYPE_NOT_BETWEEN => 'notBetween',
             Query::TYPE_STARTS_WITH,
-            Query::TYPE_ENDS_WITH => '$regex',
+            Query::TYPE_NOT_STARTS_WITH,
+            Query::TYPE_ENDS_WITH,
+            Query::TYPE_NOT_ENDS_WITH => '$regex',
             Query::TYPE_OR => '$or',
             Query::TYPE_AND => '$and',
-            default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_SELECT),
+            default => throw new DatabaseException('Unknown operator:' . $operator . '. Must be one of ' . Query::TYPE_EQUAL . ', ' . Query::TYPE_NOT_EQUAL . ', ' . Query::TYPE_LESSER . ', ' . Query::TYPE_LESSER_EQUAL . ', ' . Query::TYPE_GREATER . ', ' . Query::TYPE_GREATER_EQUAL . ', ' . Query::TYPE_IS_NULL . ', ' . Query::TYPE_IS_NOT_NULL . ', ' . Query::TYPE_BETWEEN . ', ' . Query::TYPE_NOT_BETWEEN . ', ' . Query::TYPE_STARTS_WITH . ', ' . Query::TYPE_NOT_STARTS_WITH . ', ' . Query::TYPE_ENDS_WITH . ', ' . Query::TYPE_NOT_ENDS_WITH . ', ' . Query::TYPE_CONTAINS . ', ' . Query::TYPE_NOT_CONTAINS . ', ' . Query::TYPE_SEARCH . ', ' . Query::TYPE_NOT_SEARCH . ', ' . Query::TYPE_SELECT),
         };
     }
 
@@ -2033,7 +2061,13 @@ class Mongo extends Adapter
             case Query::TYPE_STARTS_WITH:
                 $value = $this->escapeWildcards($value);
                 return $value . '.*';
+            case Query::TYPE_NOT_STARTS_WITH:
+                $value = $this->escapeWildcards($value);
+                return $value . '.*';
             case Query::TYPE_ENDS_WITH:
+                $value = $this->escapeWildcards($value);
+                return '.*' . $value;
+            case Query::TYPE_NOT_ENDS_WITH:
                 $value = $this->escapeWildcards($value);
                 return '.*' . $value;
             default:

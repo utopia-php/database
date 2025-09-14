@@ -221,7 +221,7 @@ class Mongo extends Adapter
 
     /**
      * Helper to add transaction/session context to command options if in transaction
-     * 
+     *
      * @param array<string, mixed> $options
      * @return array<string, mixed>
      */

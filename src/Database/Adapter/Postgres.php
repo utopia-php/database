@@ -2013,9 +2013,13 @@ var_dump($sql);
     {
         //$wkb = str_replace('SRID=4326;', '', $wkb); // Remove if was added in encode
 
-        // Expect format "POINT(x y)"
-        if (preg_match('/POINT\(([-\d\.]+) ([-\d\.]+)\)/', $wkb, $matches)) {
-            return [(float)$matches[1], (float)$matches[2]];
+        if (str_starts_with(strtoupper($wkb), 'POINT(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $coords = explode(' ', trim($inside));
+            return [(float)$coords[0], (float)$coords[1]];
         }
 
         $bin = hex2bin($wkb);

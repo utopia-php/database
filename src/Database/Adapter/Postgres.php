@@ -2034,4 +2034,63 @@ var_dump($sql);
 
         return [(float)$x, (float)$y];
     }
+
+    public function decodeLinestring(mixed $wkb): array
+    {
+        if (str_starts_with(strtoupper($wkb), 'LINESTRING(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $points = explode(',', $inside);
+            return array_map(function ($point) {
+                $coords = explode(' ', trim($point));
+                return [(float)$coords[0], (float)$coords[1]];
+            }, $points);
+        }
+
+        var_dump($wkb);
+
+        if (ctype_xdigit($wkb)) {
+            $wkb = hex2bin($wkb);
+        }
+
+        if (strlen($wkb) < 9) {
+            throw new DatabaseException("WKB too short to be a valid geometry");
+        }
+
+        $byteOrder = ord($wkb[0]);
+        if ($byteOrder === 0) {
+            throw new DatabaseException("Big-endian WKB not supported");
+        } elseif ($byteOrder !== 1) {
+            throw new DatabaseException("Invalid byte order in WKB");
+        }
+
+        // Type + SRID flag
+        $typeField = unpack('V', substr($wkb, 1, 4))[1];
+        $geomType = $typeField & 0xFF;
+        $hasSRID = ($typeField & 0x20000000) !== 0;
+
+        if ($geomType !== 2) { // 2 = LINESTRING
+            throw new DatabaseException("Not a LINESTRING geometry type, got {$geomType}");
+        }
+
+        $offset = 5;
+        if ($hasSRID) {
+            $offset += 4;
+        }
+
+        $numPoints = unpack('V', substr($wkb, $offset, 4))[1];
+        $offset += 4;
+
+        $points = [];
+        for ($i = 0; $i < $numPoints; $i++) {
+            $x = unpack('e', substr($wkb, $offset, 8))[1]; $offset += 8;
+            $y = unpack('e', substr($wkb, $offset, 8))[1]; $offset += 8;
+            $points[] = [(float)$x, (float)$y];
+        }
+
+        return $points;
+    }
+
 }

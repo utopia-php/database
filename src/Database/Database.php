@@ -531,7 +531,6 @@ class Database
                     //return self::decodeSpatialData($value);
                     return $this->adapter->decodeLinestring($value);
                 } catch (\Throwable $th) {
-                    var_dump($th);
                     throw new StructureException($th->getMessage());
                 }
             }

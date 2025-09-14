@@ -2802,44 +2802,57 @@ var_dump($sql);
 
         var_dump($wkb);
 
+        // Convert HEX to binary if needed
+        if (ctype_xdigit($wkb) && strlen($wkb) % 2 === 0) {
+            $wkb = hex2bin($wkb);
+            if ($wkb === false) {
+                throw new \RuntimeException("Invalid HEX WKB");
+            }
+        }
+
         if (strlen($wkb) < 9) {
-            throw new \RuntimeException('WKB too short to be a POLYGON');
+            throw new \RuntimeException("WKB too short");
         }
 
         $byteOrder = ord($wkb[0]);
         if ($byteOrder !== 1) {
-            throw new \RuntimeException('Only little-endian WKB supported');
+            throw new \RuntimeException("Only little-endian WKB supported");
         }
 
         // Type + SRID flag
         $typeInt = unpack('V', substr($wkb, 1, 4))[1];
-        $hasSRID = ($typeInt & 0x20000000) === 0x20000000;
-        $geomType = $typeInt & 0x0FFFFFFF;
+        $hasSrid = ($typeInt & 0x20000000) !== 0;
+        $geomType = $typeInt & 0xFF;
 
         if ($geomType !== 3) { // 3 = POLYGON
             throw new \RuntimeException("Not a POLYGON geometry type, got {$geomType}");
         }
 
-        $offset = 5 + ($hasSRID ? 4 : 0); // Skip endian + type + optional SRID
-        $format = 'd'; // little-endian double
+        $offset = 5 + ($hasSrid ? 4 : 0);
 
+        // Number of rings
         $numRings = unpack('V', substr($wkb, $offset, 4))[1];
         $offset += 4;
 
-        $polygon = [];
+        $rings = [];
+
         for ($r = 0; $r < $numRings; $r++) {
+            // Number of points in this ring
             $numPoints = unpack('V', substr($wkb, $offset, 4))[1];
             $offset += 4;
 
-            $ring = [];
-            for ($i = 0; $i < $numPoints; $i++) {
-                $pt = unpack($format . '2', substr($wkb, $offset, 16));
-                $ring[] = [(float)$pt[1], (float)$pt[2]];
+            $points = [];
+            for ($p = 0; $p < $numPoints; $p++) {
+                $x = unpack('d', substr($wkb, $offset, 8))[1];
+                $y = unpack('d', substr($wkb, $offset + 8, 8))[1];
+                $points[] = [(float)$x, (float)$y];
                 $offset += 16;
             }
-            $polygon[] = $ring;
+
+            $rings[] = $points;
         }
 
-        return $polygon;
+        return $rings;
+
     }
 }

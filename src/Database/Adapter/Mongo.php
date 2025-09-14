@@ -2450,21 +2450,21 @@ class Mongo extends Adapter
     }
 
 
-     /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
+    /**
+    * Does the adapter support spatial axis order specification?
+    *
+    * @return bool
+    */
     public function getSupportForSpatialAxisOrder(): bool
     {
         return false;
     }
 
-/**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-    */
+    /**
+         * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+         *
+         * @return bool
+        */
     public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
     {
         return false;

@@ -1213,7 +1213,7 @@ class Mongo extends Adapter
                 $result = $this->client->find(
                     $name,
                     $filters,
-                    ['limit' => 1]
+                    array_merge(['limit' => 1], $options)
                 )->cursor->firstBatch[0];
             } catch (MongoException $e) {
                 throw $this->processException($e);
@@ -1435,7 +1435,8 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenantFilters($collection, $documentTenants);
         }
         try {
-            $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
+            $options = $this->addTransactionContext(['projection' => ['_uid' => 1, '_id' => 1]]);
+            $results = $this->client->find($name, $filters, $options);
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
@@ -1549,7 +1550,7 @@ class Mongo extends Adapter
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
-        $options = [];
+        $options = $this->addTransactionContext([]);
 
         try {
             $count = $this->client->delete(
@@ -1659,6 +1660,9 @@ class Mongo extends Adapter
         if (!empty($selections) && !\in_array('*', $selections)) {
             $options['projection'] = $this->getAttributeProjection($selections);
         }
+
+        // Add transaction context to options
+        $options = $this->addTransactionContext($options);
 
         $orFilters = [];
 
@@ -1901,6 +1905,10 @@ class Mongo extends Adapter
 
         // Original count command (commented for reference and fallback)
         // Use this for single-instance MongoDB when performance is critical and accuracy is not a concern
+
+        
+
+        $options = $this->addTransactionContext([]);
         // return $this->client->count($name, $filters, $options);
 
         $pipeline = [];
@@ -1933,7 +1941,8 @@ class Mongo extends Adapter
         }
 
         try {
-            $result = $this->client->aggregate($name, $pipeline);
+
+            $result = $this->client->aggregate($name, $pipeline, $options);
 
             // Aggregation returns stdClass with cursor property containing firstBatch
             if (isset($result->cursor) && !empty($result->cursor->firstBatch)) {
@@ -2004,7 +2013,8 @@ class Mongo extends Adapter
             ],
         ];
 
-        return $this->client->aggregate($name, $pipeline)->cursor->firstBatch[0]->total ?? 0;
+        $options = $this->addTransactionContext([]);
+        return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
     }
 
     /**

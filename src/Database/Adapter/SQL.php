@@ -2764,33 +2764,82 @@ var_dump($sql);
 
         var_dump($wkb);
 
-        $isLE = ord($wkb[0]) === 1; // little-endian?
-        $type  = unpack($isLE ? 'V' : 'N', substr($wkb, 1, 4))[1];
+        // Skip 1 byte (endianness) + 4 bytes (type) + 4 bytes (SRID)
+        $offset = 9;
 
-        // Check for SRID flag (0x20000000)
-        $hasSRID = ($type & 0x20000000) !== 0;
-        $geomType = $type & 0xFFFF; // Mask lower 16 bits to get actual type
-
-        if ($geomType !== 2) { // 2 = LINESTRING
-            throw new \RuntimeException("Not a LINESTRING geometry type, got {$geomType}");
-        }
-
-        $offset = 5 + ($hasSRID ? 4 : 0); // skip endian + type + optional SRID
-
-        // Number of points (4 bytes)
-        $numPoints = unpack($isLE ? 'V' : 'N', substr($wkb, $offset, 4))[1];
+        // Number of points (4 bytes little-endian)
+        $numPoints = unpack('V', substr($wkb, $offset, 4))[1];
         $offset += 4;
 
         $points = [];
-        $fmt = $isLE ? 'e' : 'E'; // little/big endian double
-
         for ($i = 0; $i < $numPoints; $i++) {
-            $x = unpack($fmt, substr($wkb, $offset, 8))[1];
-            $y = unpack($fmt, substr($wkb, $offset + 8, 8))[1];
+            $x = unpack('d', substr($wkb, $offset, 8))[1];
+            $y = unpack('d', substr($wkb, $offset + 8, 8))[1];
             $points[] = [(float)$x, (float)$y];
             $offset += 16;
         }
 
         return $points;
+    }
+
+    public function decodePolygon(string $wkb): array
+    {
+        // POLYGON((x1,y1),(x2,y2))
+        if (str_starts_with($wkb, 'POLYGON((')) {
+            $start = strpos($wkb, '((') + 2;
+            $end = strrpos($wkb, '))');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $rings = explode('),(', $inside);
+            return array_map(function ($ring) {
+                $points = explode(',', $ring);
+                return array_map(function ($point) {
+                    $coords = explode(' ', trim($point));
+                    return [(float)$coords[0], (float)$coords[1]];
+                }, $points);
+            }, $rings);
+        }
+
+        var_dump($wkb);
+
+        if (strlen($wkb) < 9) {
+            throw new \RuntimeException('WKB too short to be a POLYGON');
+        }
+
+        $byteOrder = ord($wkb[0]);
+        if ($byteOrder !== 1) {
+            throw new \RuntimeException('Only little-endian WKB supported');
+        }
+
+        // Type + SRID flag
+        $typeInt = unpack('V', substr($wkb, 1, 4))[1];
+        $hasSRID = ($typeInt & 0x20000000) === 0x20000000;
+        $geomType = $typeInt & 0x0FFFFFFF;
+
+        if ($geomType !== 3) { // 3 = POLYGON
+            throw new \RuntimeException("Not a POLYGON geometry type, got {$geomType}");
+        }
+
+        $offset = 5 + ($hasSRID ? 4 : 0); // Skip endian + type + optional SRID
+        $format = 'd'; // little-endian double
+
+        $numRings = unpack('V', substr($wkb, $offset, 4))[1];
+        $offset += 4;
+
+        $polygon = [];
+        for ($r = 0; $r < $numRings; $r++) {
+            $numPoints = unpack('V', substr($wkb, $offset, 4))[1];
+            $offset += 4;
+
+            $ring = [];
+            for ($i = 0; $i < $numPoints; $i++) {
+                $pt = unpack($format . '2', substr($wkb, $offset, 16));
+                $ring[] = [(float)$pt[1], (float)$pt[2]];
+                $offset += 16;
+            }
+            $polygon[] = $ring;
+        }
+
+        return $polygon;
     }
 }

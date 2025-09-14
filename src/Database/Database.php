@@ -539,10 +539,6 @@ class Database
 
         self::addFilter(
             Database::VAR_POLYGON,
-            /**
-             * @param mixed $value
-             * @return mixed
-             */
             function (mixed $value) {
                 if (!is_array($value)) {
                     return $value;
@@ -553,15 +549,18 @@ class Database
                     return $value;
                 }
             },
-            /**
-             * @param string|null $value
-             * @return string|null
-             */
             function (?string $value) {
                 if (is_null($value)) {
-                    return $value;
+                    return null;
                 }
-                return self::decodeSpatialData($value);
+
+                try {
+                    //return self::decodeSpatialData($value);
+                    return $this->adapter->decodePolygon($value);
+                } catch (\Throwable $th) {
+                    var_dump($th);
+                    throw new StructureException($th->getMessage());
+                }
             }
         );
     }

@@ -4410,7 +4410,8 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
+        $newUpdatedBy = $document->getUpdatedBy();
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, $newUpdatedBy) {
             $time = DateTime::now();
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -4561,7 +4562,7 @@ class Database
 
             if ($shouldUpdate) {
                 $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
-                $document->setAttribute('$updatedBy', Authorization::getUser());
+                $document->setAttribute('$updatedBy', $newUpdatedBy === null ? Authorization::getUser() : $newUpdatedBy);
             }
 
             // Check if document was updated after the request timestamp

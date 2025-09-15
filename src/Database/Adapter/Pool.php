@@ -549,4 +549,19 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
+
+    public function decodePoint(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodeLinestring(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodePolygon(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
 }

@@ -366,7 +366,7 @@ abstract class SQL extends Adapter
             WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
             {$this->getTenantQuery($collection, $alias)}
 		";
-var_dump($sql);
+
         if ($this->getSupportForUpdateLock()) {
             $sql .= " {$forUpdate}";
         }
@@ -2753,8 +2753,6 @@ var_dump($sql);
                 return [(float)$coords[0], (float)$coords[1]];
             }, $points);
         }
-
-        var_dump($wkb);
 
         // Skip 1 byte (endianness) + 4 bytes (type) + 4 bytes (SRID)
         $offset = 9;

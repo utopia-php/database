@@ -993,7 +993,7 @@ class Postgres extends SQL
 			INSERT INTO {$this->getSQLTable($name)} ({$columns} \"_uid\")
 			VALUES ({$columnNames} :_uid)
 		";
-var_dump($sql);
+
         $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
 
         $stmt = $this->getPDO()->prepare($sql);
@@ -2043,8 +2043,6 @@ var_dump($sql);
             }, $points);
         }
 
-        var_dump($wkb);
-
         if (ctype_xdigit($wkb)) {
             $wkb = hex2bin($wkb);
         }
@@ -2104,8 +2102,6 @@ var_dump($sql);
                 }, $points);
             }, $rings);
         }
-
-        var_dump($wkb);
 
         // Convert hex string to binary if needed
         if (preg_match('/^[0-9a-fA-F]+$/', $wkb)) {

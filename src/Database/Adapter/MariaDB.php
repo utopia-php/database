@@ -864,7 +864,7 @@ class MariaDB extends SQL
 			    INSERT INTO {$this->getSQLTable($name)} ({$columns} _uid)
 			    VALUES ({$columnNames} :_uid)
 			";
-var_dump($sql);
+
             $sql = $this->trigger(Database::EVENT_DOCUMENT_CREATE, $sql);
 
             $stmt = $this->getPDO()->prepare($sql);

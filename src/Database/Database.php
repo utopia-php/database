@@ -497,7 +497,7 @@ class Database
             },
             /**
              * @param string|null $value
-             * @return string|null
+             * @return array|null
              */
             function (?string $value) {
                 if ($value === null) {
@@ -525,7 +525,7 @@ class Database
             },
             /**
              * @param string|null $value
-             * @return string|null
+             * @return array|null
              */
             function (?string $value) {
                 if (is_null($value)) {
@@ -553,7 +553,7 @@ class Database
             },
             /**
              * @param string|null $value
-             * @return string|null
+             * @return array|null
              */
             function (?string $value) {
                 if (is_null($value)) {

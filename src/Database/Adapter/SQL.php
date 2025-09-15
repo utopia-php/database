@@ -350,7 +350,6 @@ abstract class SQL extends Adapter
      */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
 
         $name = $this->filter($collection);
@@ -359,9 +358,9 @@ abstract class SQL extends Adapter
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
         $alias = Query::DEFAULT_ALIAS;
-        $spatialAttributes = [];
+
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
+		    SELECT {$this->getAttributeProjection($selections, $alias)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
             {$this->getTenantQuery($collection, $alias)}
@@ -1877,37 +1876,13 @@ abstract class SQL extends Adapter
      *
      * @param array<string> $selections
      * @param string $prefix
-     * @param array<string> $spatialAttributes
-     * @return mixed
+     * @return string
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix, array $spatialAttributes = []): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): string
     {
         if (empty($selections) || \in_array('*', $selections)) {
-            if (empty($spatialAttributes)) {
-                return "{$this->quote($prefix)}.*";
-            }
-
-            $projections = [];
-            $projections[] = "{$this->quote($prefix)}.*";
-
-            $internalColumns = ['_id', '_uid', '_createdAt', '_updatedAt', '_permissions'];
-            if ($this->sharedTables) {
-                $internalColumns[] = '_tenant';
-            }
-            foreach ($internalColumns as $col) {
-                $projections[] = "{$this->quote($prefix)}.{$this->quote($col)}";
-            }
-
-            foreach ($spatialAttributes as $spatialAttr) {
-                $filteredAttr = $this->filter($spatialAttr);
-                $quotedAttr = $this->quote($filteredAttr);
-                $axisOrder = $this->getSupportForSpatialAxisOrder() ? ', ' . $this->getSpatialAxisOrderSpec() : '';
-                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedAttr} {$axisOrder} ) AS {$quotedAttr}";
-            }
-
-
-            return implode(', ', $projections);
+            return "{$this->quote($prefix)}.*";
         }
 
         // Handle specific selections with spatial conversion where needed
@@ -1929,13 +1904,7 @@ abstract class SQL extends Adapter
         foreach ($selections as $selection) {
             $filteredSelection = $this->filter($selection);
             $quotedSelection = $this->quote($filteredSelection);
-
-            if (in_array($selection, $spatialAttributes)) {
-                $axisOrder = $this->getSupportForSpatialAxisOrder() ? ', ' . $this->getSpatialAxisOrderSpec() : '';
-                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedSelection} {$axisOrder}) AS {$quotedSelection}";
-            } else {
-                $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
-            }
+            $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
         }
 
         return \implode(',', $projections);

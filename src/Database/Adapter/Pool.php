@@ -470,13 +470,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * @param array<string,mixed> $selections
-     * @param string $prefix
-     * @param array<string,mixed> $spatialAttributes
-     * @return mixed
-     */
-    protected function getAttributeProjection(array $selections, string $prefix, array $spatialAttributes = []): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): string
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

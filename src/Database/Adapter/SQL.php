@@ -2837,13 +2837,20 @@ abstract class SQL extends Adapter
 
             for ($p = 0; $p < $numPoints; $p++) {
                 $xArr = unpack('d', substr($wkb, $offset, 8));
-                $yArr = unpack('d', substr($wkb, $offset + 8, 8));
-
-                if ($xArr === false || $yArr === false || !isset($xArr[1], $yArr[1])) {
-                    throw new DatabaseException('Invalid WKB: cannot unpack point coordinates');
+                if ($xArr === false) {
+                    throw new \RuntimeException('Failed to unpack X coordinate from WKB.');
                 }
 
-                $ring[] = [(float)$xArr[1], (float)$yArr[1]];
+                $x = (float) $xArr[1];
+
+                $yArr = unpack('d', substr($wkb, $offset + 8, 8));
+                if ($yArr === false) {
+                    throw new \RuntimeException('Failed to unpack Y coordinate from WKB.');
+                }
+
+                $y = (float) $yArr[1];
+
+                $ring[] = [$x, $y];
                 $offset += 16;
             }
 

@@ -374,9 +374,9 @@ trait DocumentTests
     public function testCreateDocumentsWithAutoIncrement(): void
     {
         $collectionName = 'tesstAutoIncr';
+        /** @var Database $database */
+        $database = static::getDatabase();
         try {
-            /** @var Database $database */
-            $database = static::getDatabase();
 
             $database->createCollection($collectionName);
 
@@ -840,22 +840,23 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+        $collectionName = uniqid("test_attr_");
 
         if (!$database->getAdapter()->getSupportForUpserts()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $database->createCollection(__FUNCTION__, permissions: [
+        $database->createCollection($collectionName, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ], documentSecurity: false);
-        $database->createAttribute(__FUNCTION__, 'first', Database::VAR_STRING, 128, true);
-        $database->createAttribute(__FUNCTION__, 'last', Database::VAR_STRING, 128, false);
+        $database->createAttribute($collectionName, 'first', Database::VAR_STRING, 128, true);
+        $database->createAttribute($collectionName, 'last', Database::VAR_STRING, 128, false);
 
-        $existingDocument = $database->createDocument(__FUNCTION__, new Document([
+        $existingDocument = $database->createDocument($collectionName, new Document([
             '$id' => 'first',
             'first' => 'first',
             'last' => 'last',
@@ -867,7 +868,7 @@ trait DocumentTests
         ]);
 
         // Ensure missing optionals on new document is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->createOrUpdateDocuments($collectionName, [
             $existingDocument->setAttribute('first', 'updated'),
             $newDocument,
         ]);
@@ -879,7 +880,7 @@ trait DocumentTests
         $this->assertEquals('', $newDocument->getAttribute('last'));
 
         try {
-            $database->createOrUpdateDocuments(__FUNCTION__, [
+            $database->createOrUpdateDocuments($collectionName, [
                 $existingDocument->removeAttribute('first'),
                 $newDocument
             ]);
@@ -889,7 +890,7 @@ trait DocumentTests
         }
 
         // Ensure missing optionals on existing document is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->createOrUpdateDocuments($collectionName, [
             $existingDocument
                 ->setAttribute('first', 'first')
                 ->removeAttribute('last'),
@@ -904,7 +905,7 @@ trait DocumentTests
         $this->assertEquals('last', $newDocument->getAttribute('last'));
 
         // Ensure set null on existing document is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->createOrUpdateDocuments($collectionName, [
             $existingDocument
                 ->setAttribute('first', 'first')
                 ->setAttribute('last', null),
@@ -931,7 +932,7 @@ trait DocumentTests
         ]);
 
         // Ensure mismatch of attribute orders is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->createOrUpdateDocuments($collectionName, [
             $doc3,
             $doc4
         ]);
@@ -942,8 +943,8 @@ trait DocumentTests
         $this->assertEquals('fourth', $doc4->getAttribute('first'));
         $this->assertEquals('last', $doc4->getAttribute('last'));
 
-        $doc3 = $database->getDocument(__FUNCTION__, 'third');
-        $doc4 = $database->getDocument(__FUNCTION__, 'fourth');
+        $doc3 = $database->getDocument($collectionName, 'third');
+        $doc4 = $database->getDocument($collectionName, 'fourth');
 
         $this->assertEquals('third', $doc3->getAttribute('first'));
         $this->assertEquals('last', $doc3->getAttribute('last'));

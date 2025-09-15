@@ -1816,13 +1816,13 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-
+        $collectionName = uniqid('test_attr_missing');
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $database->createCollection(__FUNCTION__);
+        $database->createCollection($collectionName);
 
         $attributes = [[
             '$id' => 'foo',
@@ -1830,7 +1830,7 @@ trait AttributeTests
             'size' => 10
         ]];
         try {
-            $database->createAttributes(__FUNCTION__, $attributes);
+            $database->createAttributes($collectionName, $attributes);
             $this->fail('Expected DatabaseException not thrown');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -1841,14 +1841,15 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+        $collecitonName = uniqid('test_attr_dup');
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'dup', Database::VAR_STRING, 10, false);
+        $database->createCollection($collecitonName);
+        $database->createAttribute($collecitonName, 'dup', Database::VAR_STRING, 10, false);
 
         $attributes = [[
             '$id' => 'dup',
@@ -1858,7 +1859,7 @@ trait AttributeTests
         ]];
 
         try {
-            $database->createAttributes(__FUNCTION__, $attributes);
+            $database->createAttributes($collecitonName, $attributes);
             $this->fail('Expected DuplicateException not thrown');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
@@ -1924,13 +1925,14 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+        $collectionName = uniqid('test_attr_def_req');
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $database->createCollection(__FUNCTION__);
+        $database->createCollection($collectionName);
 
         $attributes = [[
             '$id' => 'foo',
@@ -1941,7 +1943,7 @@ trait AttributeTests
         ]];
 
         try {
-            $database->createAttributes(__FUNCTION__, $attributes);
+            $database->createAttributes($collectionName, $attributes);
             $this->fail('Expected DatabaseException not thrown');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -1979,13 +1981,13 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-
+        $collectionName = uniqid('test_str_size');
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $database->createCollection(__FUNCTION__);
+        $database->createCollection($collectionName);
 
         $max = $database->getAdapter()->getLimitForString();
 
@@ -1997,7 +1999,7 @@ trait AttributeTests
         ]];
 
         try {
-            $database->createAttributes(__FUNCTION__, $attributes);
+            $database->createAttributes($collectionName, $attributes);
             $this->fail('Expected DatabaseException not thrown');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -2008,13 +2010,14 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+        $collectionName = uniqid('test_int_size');
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $database->createCollection(__FUNCTION__);
+        $database->createCollection($collectionName);
 
         $limit = $database->getAdapter()->getLimitForInt() / 2;
 
@@ -2026,7 +2029,7 @@ trait AttributeTests
         ]];
 
         try {
-            $database->createAttributes(__FUNCTION__, $attributes);
+            $database->createAttributes($collectionName, $attributes);
             $this->fail('Expected DatabaseException not thrown');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
@@ -2037,13 +2040,14 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+        $collectionName = uniqid('test_attr_success');
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $database->createCollection(__FUNCTION__);
+        $database->createCollection($collectionName);
 
         $attributes = [
             [
@@ -2060,16 +2064,16 @@ trait AttributeTests
             ],
         ];
 
-        $result = $database->createAttributes(__FUNCTION__, $attributes);
+        $result = $database->createAttributes($collectionName, $attributes);
         $this->assertTrue($result);
 
-        $collection = $database->getCollection(__FUNCTION__);
+        $collection = $database->getCollection($collectionName);
         $attrs = $collection->getAttribute('attributes');
         $this->assertCount(2, $attrs);
         $this->assertEquals('a', $attrs[0]['$id']);
         $this->assertEquals('b', $attrs[1]['$id']);
 
-        $doc = $database->createDocument(__FUNCTION__, new Document([
+        $doc = $database->createDocument($collectionName, new Document([
             'a' => 'foo',
             'b' => 123,
         ]));

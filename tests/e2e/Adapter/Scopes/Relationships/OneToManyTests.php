@@ -2165,8 +2165,8 @@ trait OneToManyTests
             return;
         }
 
-        $parentCollection = 'parent_relationship_error_one_to_many';
-        $childCollection = 'child_relationship_error_one_to_many';
+        $parentCollection = uniqid('parent_rel');
+        $childCollection = uniqid('child_rel');
 
         $database->createCollection($parentCollection);
         $database->createCollection($childCollection);

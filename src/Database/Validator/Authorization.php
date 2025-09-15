@@ -88,8 +88,9 @@ class Authorization extends Validator
      */
     public static function setRole(string $role): void
     {
-        $userIdetifier = Role::parse($role)->getIdentifier();
-        if ($userIdetifier) {
+        $parsedRole = Role::parse($role);
+        if ($parsedRole->getRole() === 'user') {
+            $userIdetifier = $parsedRole->getIdentifier();
             self::$user = $userIdetifier;
         }
         self::$roles[$role] = true;
@@ -102,8 +103,8 @@ class Authorization extends Validator
      */
     public static function unsetRole(string $role): void
     {
-        $userIdetifier = Role::parse($role)->getIdentifier();
-        if ($userIdetifier && self::$user == $userIdetifier) {
+        $parsedRole = Role::parse($role);
+        if ($parsedRole->getRole() === 'user' && self::$user === $parsedRole->getIdentifier()) {
             self::$user = null;
         }
         unset(self::$roles[$role]);

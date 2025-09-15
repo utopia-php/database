@@ -250,6 +250,8 @@ class Postgres extends SQL
 				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\", \"_tenant\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_updated\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
+                CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created_by\" ON {$this->getSQLTable($id)} (_tenant, \"_createdBy\");
+                CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_updated_by\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedBy\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_tenant_id\" ON {$this->getSQLTable($id)} (_tenant, _id);
 			";
         } else {
@@ -257,6 +259,8 @@ class Postgres extends SQL
 				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\");
             	CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
+                CREATE INDEX \"{$namespace}_{$id}_created_by\" ON {$this->getSQLTable($id)} (\"_createdBy\");
+                CREATE INDEX \"{$namespace}_{$id}_updated_by\" ON {$this->getSQLTable($id)} (\"_updatedBy\");
 			";
         }
 

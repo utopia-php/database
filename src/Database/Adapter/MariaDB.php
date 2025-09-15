@@ -173,13 +173,17 @@ class MariaDB extends SQL
 				UNIQUE KEY _uid (_uid, _tenant),
 				KEY _created_at (_tenant, _createdAt),
 				KEY _updated_at (_tenant, _updatedAt),
+                KEY _created_by (_tenant, _createdBy),
+                KEY _updated_by (_tenant, _updatedBy),
 				KEY _tenant_id (_tenant, _id)
 			";
         } else {
             $collection .= "
 				UNIQUE KEY _uid (_uid),
 				KEY _created_at (_createdAt),
-				KEY _updated_at (_updatedAt)
+				KEY _updated_at (_updatedAt),
+                KEY _created_by (_createdBy),
+                KEY _updated_by (_updatedBy)
 			";
         }
 

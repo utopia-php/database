@@ -234,7 +234,7 @@ class Database
             '$id' => '$createdBy',
             'type' => self::VAR_STRING,
             'format' => '',
-            'size' => 0,
+            'size' => Database::LENGTH_KEY,
             'signed' => false,
             'required' => false,
             'default' => null,
@@ -245,7 +245,7 @@ class Database
             '$id' => '$updatedBy',
             'type' => self::VAR_STRING,
             'format' => '',
-            'size' => 0,
+            'size' => Database::LENGTH_KEY,
             'signed' => false,
             'required' => false,
             'default' => null,
@@ -3897,7 +3897,7 @@ class Database
             ->setAttribute('$collection', $collection->getId())
             ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
             ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt)
-            ->setAttribute('$createdBy', value: $createdBy === null ? Authorization::getUser() : $createdBy)
+            ->setAttribute('$createdBy', $createdBy === null ? Authorization::getUser() : $createdBy)
             ->setAttribute('$updatedBy', $updatedBy === null ? Authorization::getUser() : $updatedBy);
 
         if (empty($document->getPermissions())) {
@@ -5550,7 +5550,7 @@ class Database
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
-            $updatedBy = $document->getUpdatedBy();
+            $updatedBy = Authorization::getUser();
             $max = $max ? $max - $value : null;
 
             $this->adapter->increaseDocumentAttribute(
@@ -5651,7 +5651,7 @@ class Database
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
-            $updatedBy = $document->getUpdatedBy() == null ? Authorization::getUser() : $document->getUpdatedBy();
+            $updatedBy = Authorization::getUser();
             $min = $min ? $min + $value : null;
 
             $this->adapter->increaseDocumentAttribute(

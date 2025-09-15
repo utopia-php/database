@@ -130,6 +130,11 @@ class AuthorizationTest extends TestCase
         $roles[] = Role::user("123");
         $roles[] = Role::user("123", 'verififed');
         $roles[] = Role::user("126", 'unverififed');
+        $roles[] = Role::member("member123");
+        $roles[] = Role::team("team1", );
+        $roles[] = Role::team("team2", 'verified');
+        $roles[] = Role::label("label");
+        $roles[] = Role::guests();
         $roles[] = Role::any();
         $roles[] = Role::users();
 
@@ -138,5 +143,14 @@ class AuthorizationTest extends TestCase
         }
         $expectedRole = Role::user("126", 'unverififed');
         $this->assertEquals($expectedRole->getIdentifier(), Authorization::getUser());
+
+        // unsetting non set user
+        Authorization::unsetRole(Role::user("123")->toString());
+        $expectedRole = Role::user("126", 'unverififed');
+        $this->assertEquals($expectedRole->getIdentifier(), Authorization::getUser());
+
+        // unsetting set user
+        Authorization::unsetRole(Role::user("126")->toString());
+        $this->assertEquals(null, Authorization::getUser());
     }
 }

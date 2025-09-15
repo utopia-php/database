@@ -6024,7 +6024,6 @@ trait DocumentTests
         $this->assertEquals('test_user_1', $retrievedDoc1->getCreatedBy());
         $this->assertEquals('test_user_1', $retrievedDoc1->getUpdatedBy());
 
-
         $doc2 = $database->createDocument($collection, new Document([
             '$id' => 'test2',
             'string' => 'test2',
@@ -6037,11 +6036,9 @@ trait DocumentTests
         $this->assertEquals('explicit_creator', $doc2->getCreatedBy());
         $this->assertEquals('test_user_1', $doc2->getUpdatedBy());
 
-
         $retrievedDoc2 = $database->getDocument($collection, 'test2');
         $this->assertEquals('explicit_creator', $retrievedDoc2->getCreatedBy());
         $this->assertEquals('test_user_1', $retrievedDoc2->getUpdatedBy());
-
 
         $doc3 = $database->createDocument($collection, new Document([
             '$id' => 'test3',
@@ -6051,15 +6048,12 @@ trait DocumentTests
             '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
         ]));
 
-
         $this->assertEquals('test_user_1', $doc3->getCreatedBy());
         $this->assertEquals('explicit_updater', $doc3->getUpdatedBy());
-
 
         $retrievedDoc3 = $database->getDocument($collection, 'test3');
         $this->assertEquals('test_user_1', $retrievedDoc3->getCreatedBy());
         $this->assertEquals('explicit_updater', $retrievedDoc3->getUpdatedBy());
-
 
         $doc4 = $database->createDocument($collection, new Document([
             '$id' => 'test4',
@@ -6070,19 +6064,15 @@ trait DocumentTests
             '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
         ]));
 
-
         $this->assertEquals('explicit_creator_2', $doc4->getCreatedBy());
         $this->assertEquals('explicit_updater_2', $doc4->getUpdatedBy());
-
 
         $retrievedDoc4 = $database->getDocument($collection, 'test4');
         $this->assertEquals('explicit_creator_2', $retrievedDoc4->getCreatedBy());
         $this->assertEquals('explicit_updater_2', $retrievedDoc4->getUpdatedBy());
 
-
         $allDocs = $database->find($collection);
         $this->assertCount(4, $allDocs);
-
 
         Authorization::setRole('user:test_user_2');
         $updateDoc = new Document([
@@ -6126,7 +6116,6 @@ trait DocumentTests
             $newUpsertedDoc = $database->getDocument($collection, 'test5');
             $this->assertEquals('new_creator', $newUpsertedDoc->getCreatedBy()); // Should use explicit creator
             $this->assertEquals('test_user_2', $newUpsertedDoc->getUpdatedBy()); // Should use current user
-
 
             $bulkDocs = [
                 new Document([

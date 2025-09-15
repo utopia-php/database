@@ -41,6 +41,11 @@ class Mongo extends Adapter
 
     protected Client $client;
 
+    /**
+     * Default batch size for cursor operations
+     */
+    private const DEFAULT_BATCH_SIZE = 1000;
+
     //protected ?int $timeout = null;
 
     /**
@@ -1277,13 +1282,41 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenantFilters($collection, $documentTenants);
         }
         try {
-            $results = $this->client->find($name, $filters, ['projection' => ['_uid' => 1, '_id' => 1]]);
+            // Use cursor paging for large result sets
+            $options = [
+                'projection' => ['_uid' => 1, '_id' => 1],
+                'batchSize' => self::DEFAULT_BATCH_SIZE
+            ];
+
+            $response = $this->client->find($name, $filters, $options);
+            $results = $response->cursor->firstBatch ?? [];
+
+            // Process first batch
+            foreach ($results as $result) {
+                $sequences[$result->_uid] = (string)$result->_id;
+            }
+
+            // Get cursor ID for subsequent batches
+            $cursorId = $response->cursor->id ?? null;
+
+            // Continue fetching with getMore
+            while ($cursorId && $cursorId !== 0) {
+                $moreResponse = $this->client->getMore($cursorId, $name, self::DEFAULT_BATCH_SIZE);
+                $moreResults = $moreResponse->cursor->nextBatch ?? [];
+
+                if (empty($moreResults)) {
+                    break;
+                }
+
+                foreach ($moreResults as $result) {
+                    $sequences[$result->_uid] = (string)$result->_id;
+                }
+
+                // Update cursor ID for next iteration
+                $cursorId = $moreResponse->cursor->id ?? null;
+            }
         } catch (MongoException $e) {
             throw $this->processException($e);
-        }
-
-        foreach ($results->cursor->firstBatch as $result) {
-            $sequences[$result->_uid] = (string)$result->_id;
         }
 
         foreach ($documents as $document) {
@@ -1575,8 +1608,7 @@ class Mongo extends Adapter
 
         try {
             // Use proper cursor iteration with reasonable batch size
-            $batchSize = 1000;
-            $options['batchSize'] = $batchSize;
+            $options['batchSize'] = self::DEFAULT_BATCH_SIZE;
 
             $response = $this->client->find($name, $filters, $options);
             $results = $response->cursor->firstBatch ?? [];
@@ -1597,7 +1629,7 @@ class Mongo extends Adapter
                     break;
                 }
 
-                $moreResponse = $this->client->getMore($cursorId, $name, $batchSize);
+                $moreResponse = $this->client->getMore($cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 $moreResults = $moreResponse->cursor->nextBatch ?? [];
 
                 if (empty($moreResults)) {

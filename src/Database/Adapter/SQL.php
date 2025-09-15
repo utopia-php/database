@@ -359,7 +359,7 @@ abstract class SQL extends Adapter
         $forUpdate = $forUpdate ? 'FOR UPDATE' : '';
 
         $alias = Query::DEFAULT_ALIAS;
-        $spatialAttributes=[];
+        $spatialAttributes = [];
         $sql = "
 		    SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}

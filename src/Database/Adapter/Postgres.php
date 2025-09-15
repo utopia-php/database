@@ -2077,8 +2077,10 @@ class Postgres extends SQL
 
         $points = [];
         for ($i = 0; $i < $numPoints; $i++) {
-            $x = unpack('e', substr($wkb, $offset, 8))[1]; $offset += 8;
-            $y = unpack('e', substr($wkb, $offset, 8))[1]; $offset += 8;
+            $x = unpack('e', substr($wkb, $offset, 8))[1];
+            $offset += 8;
+            $y = unpack('e', substr($wkb, $offset, 8))[1];
+            $offset += 8;
             $points[] = [(float)$x, (float)$y];
         }
 

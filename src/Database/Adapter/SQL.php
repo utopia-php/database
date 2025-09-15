@@ -2348,7 +2348,6 @@ abstract class SQL extends Adapter
      */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-        $spatialAttributes = $this->getSpatialAttributes($collection);
         $attributes = $collection->getAttribute('attributes', []);
 
         $collection = $collection->getId();
@@ -2456,7 +2455,7 @@ abstract class SQL extends Adapter
 
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
+            SELECT {$this->getAttributeProjection($selections, $alias)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlWhere}
             {$sqlOrder}

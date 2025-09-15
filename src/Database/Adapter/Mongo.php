@@ -1998,8 +1998,7 @@ class Mongo extends Adapter
                 // MongoDB doesn't support negating $text expressions directly
                 // Use regex as fallback for NOT search while keeping fulltext for positive search
                 if (empty($value)) {
-                    // Empty search term should return all documents (no documents contain empty string)
-                    // Don't add any filter - this will match all documents
+                    // If value is not passed, don't add any filter - this will match all documents
                 } else {
                     // Escape special regex characters and create a pattern that matches the search term as substring
                     $escapedValue = preg_quote($value, '/');

@@ -2020,34 +2020,29 @@ class Postgres extends SQL
         }
 
         $isLE = ord($bin[0]) === 1;
-        $bytes = substr($bin, 1, 4);
-        if (strlen($bytes) < 4) {
-            throw new \RuntimeException('WKB too short to read type');
-        }
-
-        $unpacked = unpack($isLE ? 'V' : 'N', $bytes);
-        if ($unpacked === false) {
+        $type = unpack($isLE ? 'V' : 'N', substr($bin, 1, 4));
+        if ($type === false) {
             throw new \RuntimeException('Failed to unpack type from WKB');
         }
 
-        $type = $unpacked[1];
+        $type = $type[1];
         $offset = 5 + (($type & 0x20000000) ? 4 : 0);
 
         $fmt = $isLE ? 'e' : 'E'; // little vs big endian double
 
-        $unpacked = unpack($fmt, substr($bin, $offset, 8));
-        if ($unpacked === false) {
+        $x = unpack($fmt, substr($bin, $offset, 8));
+        if ($x === false) {
             throw new \RuntimeException('Failed to unpack double from WKB');
         }
 
-        $x = (float)$unpacked[1];
+        $x = (float)$x[1];
 
-        $unpackedY = unpack($fmt, substr($bin, $offset + 8, 8));
-        if ($unpackedY === false) {
+        $y = unpack($fmt, substr($bin, $offset + 8, 8));
+        if ($y === false) {
             throw new \RuntimeException('Failed to unpack Y coordinate from WKB');
         }
 
-        $y = (float)$unpackedY[1];
+        $y = (float)$y[1];
 
         return [$x, $y];
     }
@@ -2085,9 +2080,7 @@ class Postgres extends SQL
         }
 
         // Type + SRID flag
-        $typeFieldBytes = substr($wkb, 1, 4);
-        $typeField = unpack('V', $typeFieldBytes);
-
+        $typeField = unpack('V', substr($wkb, 1, 4));
         if ($typeField === false) {
             throw new \RuntimeException('Failed to unpack the type field from WKB.');
         }
@@ -2105,36 +2098,31 @@ class Postgres extends SQL
             $offset += 4;
         }
 
-        $numPointsBytes = substr($wkb, $offset, 4);
-        $numPointsUnpacked = unpack('V', $numPointsBytes);
-
-        if ($numPointsUnpacked === false || !isset($numPointsUnpacked[1])) {
+        $numPoints = unpack('V', substr($wkb, $offset, 4));
+        if ($numPoints === false) {
             throw new \RuntimeException("Failed to unpack number of points at offset {$offset}.");
         }
 
-        $numPoints = $numPointsUnpacked[1];
+        $numPoints = $numPoints[1];
         $offset += 4;
 
         $points = [];
         for ($i = 0; $i < $numPoints; $i++) {
-            $xBytes = substr($wkb, $offset, 8);
-            $xUnpacked = unpack('e', $xBytes);
-
-            if ($xUnpacked === false) {
+            $x = unpack('e', substr($wkb, $offset, 8));
+            if ($x === false) {
                 throw new \RuntimeException("Failed to unpack X coordinate at offset {$offset}.");
             }
 
-            $x = (float) $xUnpacked[1];
+            $x = (float) $x[1];
 
             $offset += 8;
-            $yBytes = substr($wkb, $offset, 8);
-            $yUnpacked = unpack('e', $yBytes);
 
-            if ($yUnpacked === false || !isset($yUnpacked[1])) {
+            $y = unpack('e', substr($wkb, $offset, 8));
+            if ($y === false) {
                 throw new \RuntimeException("Failed to unpack Y coordinate at offset {$offset}.");
             }
 
-            $y = (float) $yUnpacked[1];
+            $y = (float) $y[1];
 
             $offset += 8;
             $points[] = [$x, $y];
@@ -2176,14 +2164,12 @@ class Postgres extends SQL
         $uInt32 = 'V'; // little-endian 32-bit unsigned
         $uDouble = 'd'; // little-endian double
 
-        $bytes = substr($wkb, 1, 4);
-        $unpacked = unpack($uInt32, $bytes);
-
-        if ($unpacked === false || !isset($unpacked[1])) {
+        $typeInt = unpack($uInt32, substr($wkb, 1, 4));
+        if ($typeInt === false) {
             throw new \RuntimeException('Failed to unpack type field from WKB.');
         }
 
-        $typeInt = (int) $unpacked[1];
+        $typeInt = (int) $typeInt[1];
         $hasSrid = ($typeInt & 0x20000000) !== 0;
         $geomType = $typeInt & 0xFF;
 
@@ -2197,46 +2183,38 @@ class Postgres extends SQL
         }
 
         // Number of rings
-        $bytes = substr($wkb, $offset, 4);
-        $unpacked = unpack($uInt32, $bytes);
-
-        if ($unpacked === false || !isset($unpacked[1])) {
+        $numRings = unpack($uInt32, substr($wkb, $offset, 4));
+        if ($numRings === false) {
             throw new \RuntimeException('Failed to unpack number of rings from WKB.');
         }
 
-        $numRings = (int) $unpacked[1];
+        $numRings = (int) $numRings[1];
         $offset += 4;
 
         $rings = [];
         for ($r = 0; $r < $numRings; $r++) {
-            $bytes = substr($wkb, $offset, 4);
-            $unpacked = unpack($uInt32, $bytes);
-
-            if ($unpacked === false || !isset($unpacked[1])) {
+            $numPoints = unpack($uInt32, substr($wkb, $offset, 4));
+            if ($numPoints === false) {
                 throw new \RuntimeException('Failed to unpack number of points from WKB.');
             }
 
-            $numPoints = (int) $unpacked[1];
+            $numPoints = (int) $numPoints[1];
             $offset += 4;
             $points = [];
             for ($i = 0; $i < $numPoints; $i++) {
-                $bytes = substr($wkb, $offset, 8);
-                $unpacked = unpack($uDouble, $bytes);
-
-                if ($unpacked === false) {
+                $x = unpack($uDouble, substr($wkb, $offset, 8));
+                if ($x === false) {
                     throw new \RuntimeException('Failed to unpack X coordinate from WKB.');
                 }
 
-                $x = (float) $unpacked[1];
+                $x = (float) $x[1];
 
-                $bytes = substr($wkb, $offset + 8, 8);
-                $unpacked = unpack($uDouble, $bytes);
-
-                if ($unpacked === false || !isset($unpacked[1])) {
+                $y = unpack($uDouble, substr($wkb, $offset + 8, 8));
+                if ($y === false) {
                     throw new \RuntimeException('Failed to unpack Y coordinate from WKB.');
                 }
 
-                $y = (float) $unpacked[1];
+                $y = (float) $y[1];
 
                 $points[] = [$x, $y];
                 $offset += 16;

@@ -481,16 +481,24 @@ class Database
 
         self::addFilter(
             Database::VAR_POINT,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
             function (mixed $value) {
-                if ($value === null) {
-                    return null;
+                if (!is_array($value)) {
+                    return $value;
                 }
                 try {
-                    return self::encodeSpatialData($value, Database::VAR_POINT);
+                    return  self::encodeSpatialData($value, Database::VAR_POINT);
                 } catch (\Throwable) {
-                    throw new StructureException('Invalid point');
+                    return $value;
                 }
             },
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
             function (?string $value) {
                 if ($value === null) {
                     return null;
@@ -501,6 +509,10 @@ class Database
 
         self::addFilter(
             Database::VAR_LINESTRING,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
             function (mixed $value) {
                 if (!is_array($value)) {
                     return $value;
@@ -511,7 +523,10 @@ class Database
                     return $value;
                 }
             },
-
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
             function (?string $value) {
                 if (is_null($value)) {
                     return null;
@@ -522,6 +537,10 @@ class Database
 
         self::addFilter(
             Database::VAR_POLYGON,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
             function (mixed $value) {
                 if (!is_array($value)) {
                     return $value;
@@ -532,6 +551,10 @@ class Database
                     return $value;
                 }
             },
+            /**
+             * @param string|null $value
+             * @return string|null
+             */
             function (?string $value) {
                 if (is_null($value)) {
                     return null;

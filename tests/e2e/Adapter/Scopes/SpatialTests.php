@@ -2101,6 +2101,7 @@ trait SpatialTests
             ]));
             $this->fail("Expected StructureException for invalid point");
         } catch (\Throwable $th) {
+            var_dump($th);
             $this->assertInstanceOf(StructureException::class, $th);
         }
 

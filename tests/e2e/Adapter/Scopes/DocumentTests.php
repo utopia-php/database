@@ -373,41 +373,46 @@ trait DocumentTests
 
     public function testCreateDocumentsWithAutoIncrement(): void
     {
-        /** @var Database $database */
-        $database = static::getDatabase();
+        $collectionName = 'tesstAutoIncr';
+        try {
+            /** @var Database $database */
+            $database = static::getDatabase();
 
-        $database->createCollection(__FUNCTION__);
+            $database->createCollection($collectionName);
 
-        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'string', Database::VAR_STRING, 128, true));
 
-        /** @var array<Document> $documents */
-        $documents = [];
-        $count = 10;
-        $sequence = 1_000_000;
+            /** @var array<Document> $documents */
+            $documents = [];
+            $count = 10;
+            $sequence = 1_000_000;
 
-        for ($i = $sequence; $i <= ($sequence + $count); $i++) {
-            $documents[] = new Document([
-                '$sequence' => (string)$i,
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-                'string' => 'text',
+            for ($i = $sequence; $i <= ($sequence + $count); $i++) {
+                $documents[] = new Document([
+                    '$sequence' => (string)$i,
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    'string' => 'text',
+                ]);
+            }
+
+            $count = $database->createDocuments($collectionName, $documents, 6);
+            $this->assertEquals($count, \count($documents));
+
+            $documents = $database->find($collectionName, [
+                Query::orderAsc()
             ]);
-        }
-
-        $count = $database->createDocuments(__FUNCTION__, $documents, 6);
-        $this->assertEquals($count, \count($documents));
-
-        $documents = $database->find(__FUNCTION__, [
-            Query::orderAsc()
-        ]);
-        foreach ($documents as $index => $document) {
-            $this->assertEquals($sequence + $index, $document->getSequence());
-            $this->assertNotEmpty(true, $document->getId());
-            $this->assertEquals('text', $document->getAttribute('string'));
+            foreach ($documents as $index => $document) {
+                $this->assertEquals($sequence + $index, $document->getSequence());
+                $this->assertNotEmpty(true, $document->getId());
+                $this->assertEquals('text', $document->getAttribute('string'));
+            }
+        } finally {
+            $database->deleteCollection($collectionName);
         }
     }
 

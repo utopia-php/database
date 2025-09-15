@@ -535,16 +535,17 @@ class Postgres extends SQL
      * @param bool $signed
      * @param bool $array
      * @param string|null $newKey
+     * @param bool $required
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $type = $this->getSQLType($type, $size, $signed, $array, false);
+        $type = $this->getSQLType($type, $size, $signed, $array, $required);
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
@@ -1488,14 +1489,13 @@ class Postgres extends SQL
         }
 
         if ($meters) {
-            // Transform both attribute and input geometry to 3857 (meters) for distance calculation
-            $attr = "ST_Transform({$alias}.{$attribute}, 3857)";
-            $geom = "ST_Transform(ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "), 3857)";
+            $attr = "({$alias}.{$attribute}::geography)";
+            $geom = "ST_SetSRID(" . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ", " . Database::SRID . ")::geography";
             return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
         }
 
         // Without meters, use the original SRID (e.g., 4326)
-        return "ST_Distance({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . ")) {$operator} :{$placeholder}_1";
+        return "ST_Distance({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ") {$operator} :{$placeholder}_1";
     }
 
 
@@ -1514,11 +1514,11 @@ class Postgres extends SQL
         switch ($query->getMethod()) {
             case Query::TYPE_CROSSES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "ST_Crosses({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_CROSSES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Crosses({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0))";
+                return "NOT ST_Crosses({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_DISTANCE_EQUAL:
             case Query::TYPE_DISTANCE_NOT_EQUAL:
@@ -1527,35 +1527,35 @@ class Postgres extends SQL
                 return $this->handleDistanceSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
             case Query::TYPE_EQUAL:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
+                return "ST_Equals({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_EQUAL:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Equals({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
+                return "NOT ST_Equals({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
+                return "ST_Intersects({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_INTERSECTS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Intersects({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
+                return "NOT ST_Intersects({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_OVERLAPS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
+                return "ST_Overlaps({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_OVERLAPS:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Overlaps({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
+                return "NOT ST_Overlaps({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_TOUCHES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
+                return "ST_Touches({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_NOT_TOUCHES:
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
-                return "NOT ST_Touches({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
+                return "NOT ST_Touches({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             case Query::TYPE_CONTAINS:
             case Query::TYPE_NOT_CONTAINS:
@@ -1564,8 +1564,8 @@ class Postgres extends SQL
                 $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return $isNot
-                    ? "NOT ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))"
-                    : "ST_Covers({$alias}.{$attribute}, ST_GeomFromText(:{$placeholder}_0, " . Database::SRID . "))";
+                    ? "NOT ST_Covers({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")"
+                    : "ST_Covers({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
             default:
                 throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
@@ -1979,6 +1979,26 @@ class Postgres extends SQL
      * @return bool
     */
     public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
     {
         return false;
     }

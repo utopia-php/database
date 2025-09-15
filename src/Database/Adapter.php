@@ -578,10 +578,11 @@ abstract class Adapter
      * @param bool $signed
      * @param bool $array
      * @param string|null $newKey
+     * @param bool $required
      *
      * @return bool
      */
-    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool;
+    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool;
 
     /**
      * Delete Attribute
@@ -1071,11 +1072,25 @@ abstract class Adapter
     abstract public function getSupportForSpatialIndexOrder(): bool;
 
     /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialAxisOrder(): bool;
+
+    /**
      * Does the adapter includes boundary during spatial contains?
      *
      * @return bool
      */
     abstract public function getSupportForBoundaryInclusiveContains(): bool;
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool;
 
     /**
      * Get current attribute count from collection document

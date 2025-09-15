@@ -2737,7 +2737,11 @@ abstract class SQL extends Adapter
         $format = $littleEndian ? 'd2' : 'd2'; // little-endian doubles
         $coords = unpack($format, $coordsBin);
 
-        return [$coords[1], $coords[2]];
+        if ($coords === false || !isset($coords[1], $coords[2])) {
+            throw new DatabaseException('Invalid WKB for POINT: cannot unpack coordinates');
+        }
+
+        return [(float)$coords[1], (float)$coords[2]];
     }
 
     public function decodeLinestring(string $wkb): array
@@ -2758,14 +2762,24 @@ abstract class SQL extends Adapter
         $offset = 9;
 
         // Number of points (4 bytes little-endian)
-        $numPoints = unpack('V', substr($wkb, $offset, 4))[1];
+        $numPointsArr = unpack('V', substr($wkb, $offset, 4));
+        if ($numPointsArr === false || !isset($numPointsArr[1])) {
+            throw new DatabaseException('Invalid WKB: cannot unpack number of points');
+        }
+
+        $numPoints = $numPointsArr[1];
         $offset += 4;
 
         $points = [];
         for ($i = 0; $i < $numPoints; $i++) {
-            $x = unpack('d', substr($wkb, $offset, 8))[1];
-            $y = unpack('d', substr($wkb, $offset + 8, 8))[1];
-            $points[] = [(float)$x, (float)$y];
+            $xArr = unpack('d', substr($wkb, $offset, 8));
+            $yArr = unpack('d', substr($wkb, $offset + 8, 8));
+
+            if ($xArr === false || !isset($xArr[1]) || $yArr === false || !isset($yArr[1])) {
+                throw new DatabaseException('Invalid WKB: cannot unpack point coordinates');
+            }
+
+            $points[] = [(float)$xArr[1], (float)$yArr[1]];
             $offset += 16;
         }
 
@@ -2811,7 +2825,12 @@ abstract class SQL extends Adapter
         }
         $offset += 1;
 
-        $type = unpack('V', substr($wkb, $offset, 4))[1];
+        $typeArr = unpack('V', substr($wkb, $offset, 4));
+        if ($typeArr === false || !isset($typeArr[1])) {
+            throw new DatabaseException('Invalid WKB: cannot unpack geometry type');
+        }
+
+        $type = $typeArr[1];
         $hasSRID = ($type & 0x20000000) === 0x20000000;
         $geomType = $type & 0xFF;
         $offset += 4;
@@ -2825,20 +2844,37 @@ abstract class SQL extends Adapter
             $offset += 4;
         }
 
-        $numRings = unpack('V', substr($wkb, $offset, 4))[1];
+        $numRingsArr = unpack('V', substr($wkb, $offset, 4));
+
+        if ($numRingsArr === false || !isset($numRingsArr[1])) {
+            throw new DatabaseException('Invalid WKB: cannot unpack number of rings');
+        }
+
+        $numRings = $numRingsArr[1];
         $offset += 4;
 
         $rings = [];
 
         for ($r = 0; $r < $numRings; $r++) {
-            $numPoints = unpack('V', substr($wkb, $offset, 4))[1];
+            $numPointsArr = unpack('V', substr($wkb, $offset, 4));
+
+            if ($numPointsArr === false || !isset($numPointsArr[1])) {
+                throw new DatabaseException('Invalid WKB: cannot unpack number of points');
+            }
+
+            $numPoints = $numPointsArr[1];
             $offset += 4;
             $ring = [];
 
             for ($p = 0; $p < $numPoints; $p++) {
-                $x = unpack('d', substr($wkb, $offset, 8))[1];
-                $y = unpack('d', substr($wkb, $offset + 8, 8))[1];
-                $ring[] = [(float)$x, (float)$y];
+                $xArr = unpack('d', substr($wkb, $offset, 8));
+                $yArr = unpack('d', substr($wkb, $offset + 8, 8));
+
+                if ($xArr === false || $yArr === false || !isset($xArr[1], $yArr[1])) {
+                    throw new DatabaseException('Invalid WKB: cannot unpack point coordinates');
+                }
+
+                $ring[] = [(float)$xArr[1], (float)$yArr[1]];
                 $offset += 16;
             }
 
@@ -2846,6 +2882,5 @@ abstract class SQL extends Adapter
         }
 
         return $rings;
-
     }
 }

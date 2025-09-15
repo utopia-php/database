@@ -31,6 +31,7 @@ class Mongo extends Adapter
         '$gt',
         '$gte',
         '$in',
+        '$nin',
         '$text',
         '$search',
         '$or',
@@ -1973,7 +1974,7 @@ class Mongo extends Adapter
                     : $query->getValues()[0]
             ),
         };
-        
+
         $filter = [];
 
         if ($operator == '$eq' && \is_array($value)) {
@@ -1983,10 +1984,14 @@ class Mongo extends Adapter
         } elseif ($operator == '$in') {
             if ($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
                 $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
-            } elseif ($query->getMethod() === Query::TYPE_NOT_CONTAINS && !$query->onArray()) {
-                $filter[$attribute] = ['$not' => new Regex(".*{$this->escapeWildcards($value)}.*", 'i')];
             } else {
                 $filter[$attribute]['$in'] = $query->getValues();
+            }
+        } elseif ($operator === 'notContains') {
+            if (!$query->onArray()) {
+                $filter[$attribute] = ['$not' => new Regex(".*{$this->escapeWildcards($value)}.*", 'i')];
+            } else {
+                $filter[$attribute]['$nin'] = $query->getValues();
             }
         } elseif ($operator == '$search') {
             if ($query->getMethod() === Query::TYPE_NOT_SEARCH) {
@@ -2040,7 +2045,7 @@ class Mongo extends Adapter
             Query::TYPE_GREATER => '$gt',
             Query::TYPE_GREATER_EQUAL => '$gte',
             Query::TYPE_CONTAINS => '$in',
-            Query::TYPE_NOT_CONTAINS => '$in',
+            Query::TYPE_NOT_CONTAINS => 'notContains',
             Query::TYPE_SEARCH => '$search',
             Query::TYPE_NOT_SEARCH => '$search',
             Query::TYPE_BETWEEN => 'between',
@@ -2266,7 +2271,7 @@ class Mongo extends Adapter
      */
     public function getSupportForQueryContains(): bool
     {
-        return false;
+        return true;
     }
 
     /**

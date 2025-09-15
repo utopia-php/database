@@ -2711,7 +2711,7 @@ abstract class SQL extends Adapter
         return strtolower(trim(substr($wkt, 0, $pos)));
     }
 
-    public function decodePoint(mixed $wkb): array
+    public function decodePoint(string $wkb): array
     {
         if (str_starts_with(strtoupper($wkb), 'POINT(')) {
             $start = strpos($wkb, '(') + 1;

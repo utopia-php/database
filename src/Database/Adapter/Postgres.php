@@ -2003,10 +2003,8 @@ class Postgres extends SQL
         return false;
     }
 
-    public function decodePoint(mixed $wkb): array
+    public function decodePoint(string $wkb): array
     {
-        //$wkb = str_replace('SRID=4326;', '', $wkb); // Remove if was added in encode
-
         if (str_starts_with(strtoupper($wkb), 'POINT(')) {
             $start = strpos($wkb, '(') + 1;
             $end = strrpos($wkb, ')');

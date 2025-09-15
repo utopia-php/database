@@ -6007,11 +6007,9 @@ trait DocumentTests
         $collection = 'test_created_updated_by';
         $database = static::getDatabase();
 
-
         $database->createCollection($collection);
         $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false);
         $database->createAttribute($collection, 'number', Database::VAR_INTEGER, 0, false);
-
 
         Authorization::setRole('user:test_user_1');
         $doc1 = $database->createDocument($collection, new Document([
@@ -6021,10 +6019,8 @@ trait DocumentTests
             '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
         ]));
 
-
         $this->assertEquals('test_user_1', $doc1->getCreatedBy());
         $this->assertEquals('test_user_1', $doc1->getUpdatedBy());
-
 
         $retrievedDoc1 = $database->getDocument($collection, 'test1');
         $this->assertEquals('test_user_1', $retrievedDoc1->getCreatedBy());
@@ -6037,7 +6033,6 @@ trait DocumentTests
             '$createdBy' => 'explicit_creator',
             '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
         ]));
-
 
         $this->assertEquals('explicit_creator', $doc2->getCreatedBy());
         $this->assertEquals('test_user_1', $doc2->getUpdatedBy());

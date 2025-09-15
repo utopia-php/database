@@ -2003,12 +2003,6 @@ var_dump($sql);
         return false;
     }
 
-    public function encodePoint(array $point): string
-    {
-        return "POINT({$point[0]} {$point[1]})";// EWKT
-        //return "SRID=4326;POINT({$point[0]} {$point[1]})";// EWKT
-    }
-
     public function decodePoint(mixed $wkb): array
     {
         //$wkb = str_replace('SRID=4326;', '', $wkb); // Remove if was added in encode

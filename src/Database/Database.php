@@ -460,7 +460,7 @@ class Database
              */
             function (mixed $value) {
                 if (is_null($value)) {
-                    return;
+                    return null;
                 }
                 try {
                     $value = new \DateTime($value);
@@ -487,7 +487,6 @@ class Database
                 }
                 try {
                     return self::encodeSpatialData($value, Database::VAR_POINT);
-                    //return $this->adapter->encodePoint($value);
                 } catch (\Throwable) {
                     throw new StructureException('Invalid point');
                 }
@@ -496,16 +495,7 @@ class Database
                 if ($value === null) {
                     return null;
                 }
-
-                /**
-                 * todo:validate array point
-                 */
-
-                try {
-                    return $this->adapter->decodePoint($value);
-                } catch (\Throwable $th) {
-                    throw new StructureException($th->getMessage());
-                }
+                return $this->adapter->decodePoint($value);
             }
         );
 
@@ -526,13 +516,7 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-
-                try {
-                    //return self::decodeSpatialData($value);
-                    return $this->adapter->decodeLinestring($value);
-                } catch (\Throwable $th) {
-                    throw new StructureException($th->getMessage());
-                }
+                return $this->adapter->decodeLinestring($value);
             }
         );
 
@@ -552,12 +536,7 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-
-                try {
-                    return $this->adapter->decodePolygon($value);
-                } catch (\Throwable $th) {
-                    throw new StructureException($th->getMessage());
-                }
+                return $this->adapter->decodePolygon($value);
             }
         );
     }

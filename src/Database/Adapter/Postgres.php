@@ -2017,30 +2017,46 @@ class Postgres extends SQL
             throw new DatabaseException('Invalid hex WKB string');
         }
 
-        $isLE = ord($bin[0]) === 1;
-        $type = unpack($isLE ? 'V' : 'N', substr($bin, 1, 4));
-        if ($type === false) {
-            throw new DatabaseException('Failed to unpack type from WKB');
+        if (strlen($bin) < 13) { // 1 byte endian + 4 bytes type + 8 bytes for X
+            throw new DatabaseException('WKB too short');
         }
 
-        $type = $type[1];
+        $isLE = ord($bin[0]) === 1;
+
+// Type (4 bytes)
+        $typeBytes = substr($bin, 1, 4);
+        if (strlen($typeBytes) !== 4) {
+            throw new DatabaseException('Failed to extract type bytes from WKB');
+        }
+
+        $typeArr = unpack($isLE ? 'V' : 'N', $typeBytes);
+        if ($typeArr === false || !isset($typeArr[1])) {
+            throw new DatabaseException('Failed to unpack type from WKB');
+        }
+        $type = $typeArr[1];
+
+        // Offset to coordinates (skip SRID if present)
         $offset = 5 + (($type & 0x20000000) ? 4 : 0);
+
+        if (strlen($bin) < $offset + 16) { // 16 bytes for X,Y
+            throw new DatabaseException('WKB too short for coordinates');
+        }
 
         $fmt = $isLE ? 'e' : 'E'; // little vs big endian double
 
-        $x = unpack($fmt, substr($bin, $offset, 8));
-        if ($x === false) {
-            throw new DatabaseException('Failed to unpack double from WKB');
+        // X coordinate
+        $xArr = unpack($fmt, substr($bin, $offset, 8));
+        if ($xArr === false || !isset($xArr[1])) {
+            throw new DatabaseException('Failed to unpack X coordinate');
         }
+        $x = (float)$xArr[1];
 
-        $x = (float)$x[1];
-
-        $y = unpack($fmt, substr($bin, $offset + 8, 8));
-        if ($y === false) {
-            throw new DatabaseException('Failed to unpack Y coordinate from WKB');
+        // Y coordinate
+        $yArr = unpack($fmt, substr($bin, $offset + 8, 8));
+        if ($yArr === false || !isset($yArr[1])) {
+            throw new DatabaseException('Failed to unpack Y coordinate');
         }
-
-        $y = (float)$y[1];
+        $y = (float)$yArr[1];
 
         return [$x, $y];
     }

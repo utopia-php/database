@@ -2689,24 +2689,35 @@ abstract class SQL extends Adapter
             return [(float)$coords[0], (float)$coords[1]];
         }
 
-        // MySQL SRID-aware WKB layout:
-        // 1 byte  = endian (1 = little endian)
-        // 4 bytes = type + SRID flag
-        // 4 bytes = SRID
-        // 16 bytes = X,Y coordinates (double each, little endian)
+        /**
+         * [0..3]   SRID (4 bytes, little-endian)
+         * [4]      Byte order (1 = little-endian, 0 = big-endian)
+         * [5..8]   Geometry type (with SRID flag bit)
+         * [9..]    Geometry payload (coordinates, etc.)
+         */
 
-        $byteOrder = ord($wkb[0]);
+        if (strlen($wkb) < 25) {
+            throw new DatabaseException('Invalid WKB: too short for POINT');
+        }
+
+        // 4 bytes SRID first → skip to byteOrder at offset 4
+        $byteOrder = ord($wkb[4]);
         $littleEndian = ($byteOrder === 1);
 
-        // Skip 1 + 4 + 4 = 9 bytes to get coordinates
+        if (!$littleEndian) {
+            throw new DatabaseException('Only little-endian WKB supported');
+        }
+
+        // After SRID (4) + byteOrder (1) + type (4) = 9 bytes
         $coordsBin = substr($wkb, 9, 16);
+        if (strlen($coordsBin) !== 16) {
+            throw new DatabaseException('Invalid WKB: missing coordinate bytes');
+        }
 
-        // Unpack doubles
-        $format = $littleEndian ? 'd2' : 'd2'; // little-endian doubles
-        $coords = unpack($format, $coordsBin);
-
+        // Unpack two doubles
+        $coords = unpack('d2', $coordsBin);
         if ($coords === false || !isset($coords[1], $coords[2])) {
-            throw new DatabaseException('Invalid WKB for POINT: cannot unpack coordinates');
+            throw new DatabaseException('Invalid WKB: failed to unpack coordinates');
         }
 
         return [(float)$coords[1], (float)$coords[2]];

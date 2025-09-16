@@ -1214,6 +1214,7 @@ trait DocumentTests
         $document = $database->getDocument($collection, $document->getId());
         $this->assertEquals(104.4, $document->getAttribute('increase_float'));
 
+        $database->deleteCollection($collection);
         return $document;
     }
 
@@ -6239,6 +6240,8 @@ trait DocumentTests
             $doc = $database->getDocument($collection, $document->getId());
             $this->assertEquals('test_user_3', $doc->getCreatedBy());
             $this->assertEquals('test_user_5', $doc->getUpdatedBy());
+
+            $database->deleteCollection($collection);
         }
     }
 }

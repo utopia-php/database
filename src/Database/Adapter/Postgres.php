@@ -239,7 +239,6 @@ class Postgres extends SQL
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_createdBy\" VARCHAR(255) DEFAULT NULL,
                 \"_updatedBy\" VARCHAR(255) DEFAULT NULL,
-                _permissions TEXT DEFAULT NULL,
                 " . \implode(' ', $attributeStrings) . "
                 _permissions TEXT DEFAULT NULL
             );

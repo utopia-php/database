@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use InvalidArgumentException;
+use Utopia\CLI\Console;
 
 /**
  * A PDO wrapper that forwards method calls to the internal PDO instance.
@@ -41,7 +42,27 @@ class PDO
      */
     public function __call(string $method, array $args): mixed
     {
-        return $this->pdo->{$method}(...$args);
+        try {
+            return $this->pdo->{$method}(...$args);
+        } catch (\Throwable $e) {
+            if (Connection::hasError($e)) {
+                Console::warning('[Database] ' . $e->getMessage());
+                Console::warning('[Database] Lost connection detected. Reconnecting...');
+
+                $inTransaction = $this->pdo->inTransaction();
+
+                // Attempt to reconnect
+                $this->reconnect();
+
+                // If we weren't in a transaction, also retry the query
+                // In a transaction we can't retry as the state is attached to the previous connection
+                if (!$inTransaction) {
+                    return $this->pdo->{$method}(...$args);
+                }
+            }
+
+            throw $e;
+        }
     }
 
     /**

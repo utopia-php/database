@@ -1770,8 +1770,8 @@ trait ManyToOneTests
             return;
         }
 
-        $parentCollection = 'parent_relationship_error_many_to_one';
-        $childCollection = 'child_relationship_error_many_to_one';
+        $parentCollection = uniqid('parent_rel');
+        $childCollection = uniqid('child_rel');
 
         $database->createCollection($parentCollection);
         $database->createCollection($childCollection);

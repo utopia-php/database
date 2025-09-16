@@ -408,6 +408,14 @@ abstract class SQL extends Adapter
             $document['$updatedAt'] = $document['_updatedAt'];
             unset($document['_updatedAt']);
         }
+        if (\array_key_exists('_createdBy', $document)) {
+            $document['$createdBy'] = $document['_createdBy'];
+            unset($document['_createdBy']);
+        }
+        if (\array_key_exists('_updatedBy', $document)) {
+            $document['$updatedBy'] = $document['_updatedBy'];
+            unset($document['_updatedBy']);
+        }
         if (\array_key_exists('_permissions', $document)) {
             $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
             unset($document['_permissions']);
@@ -466,6 +474,14 @@ abstract class SQL extends Adapter
 
         if (!empty($updates->getCreatedAt())) {
             $attributes['_createdAt'] = $updates->getCreatedAt();
+        }
+
+        if (!empty($updates->getCreatedBy())) {
+            $attributes['_createdBy'] = $updates->getCreatedBy();
+        }
+
+        if (!empty($updates->getUpdatedBy())) {
+            $attributes['_updatedBy'] = $updates->getUpdatedBy();
         }
 
         if ($updates->offsetExists('$permissions')) {
@@ -1053,10 +1069,12 @@ abstract class SQL extends Adapter
          * `_tenant` int => 4 bytes
          * `_createdAt` datetime(3) => 7 bytes
          * `_updatedAt` datetime(3) => 7 bytes
+         * `_createdBy` varchar(255) => 1021 (4 * 255 + 1) bytes
+         * `_updatedBy` varchar(255) => 1021 (4 * 255 + 1) bytes
          * `_permissions` mediumtext => 20
          */
 
-        $total = 1067;
+        $total = 3109;
 
         $attributes = $collection->getAttributes()['attributes'];
 
@@ -1892,6 +1910,8 @@ abstract class SQL extends Adapter
             '$permissions',
             '$createdAt',
             '$updatedAt',
+            '$createdBy',
+            '$updatedBy'
         ];
 
         $selections = \array_diff($selections, [...$internalKeys, '$collection']);
@@ -1919,6 +1939,8 @@ abstract class SQL extends Adapter
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$createdBy' => '_createdBy',
+            '$updatedBy' => '_updatedBy',
             '$permissions' => '_permissions',
             default => $attribute
         };
@@ -2013,6 +2035,8 @@ abstract class SQL extends Adapter
                 $attributes['_createdAt'] = $document->getCreatedAt();
                 $attributes['_updatedAt'] = $document->getUpdatedAt();
                 $attributes['_permissions'] = \json_encode($document->getPermissions());
+                $attributes['_createdBy'] = $document->getCreatedBy();
+                $attributes['_updatedBy'] = $document->getUpdatedBy();
 
                 if (!empty($document->getSequence())) {
                     $attributes['_id'] = $document->getSequence();
@@ -2127,6 +2151,8 @@ abstract class SQL extends Adapter
                 $attributes['_uid'] = $document->getId();
                 $attributes['_createdAt'] = $document->getCreatedAt();
                 $attributes['_updatedAt'] = $document->getUpdatedAt();
+                $attributes['_createdBy'] = $document->getCreatedBy();
+                $attributes['_updatedBy'] = $document->getUpdatedBy();
                 $attributes['_permissions'] = \json_encode($document->getPermissions());
 
                 if (!empty($document->getSequence())) {
@@ -2503,6 +2529,14 @@ abstract class SQL extends Adapter
             if (\array_key_exists('_updatedAt', $document)) {
                 $results[$index]['$updatedAt'] = $document['_updatedAt'];
                 unset($results[$index]['_updatedAt']);
+            }
+            if (\array_key_exists('_createdBy', $document)) {
+                $results[$index]['$createdBy'] = $document['_createdBy'];
+                unset($results[$index]['_createdBy']);
+            }
+            if (\array_key_exists('_updatedBy', $document)) {
+                $results[$index]['$updatedBy'] = $document['_updatedBy'];
+                unset($results[$index]['_updatedBy']);
             }
             if (\array_key_exists('_permissions', $document)) {
                 $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);

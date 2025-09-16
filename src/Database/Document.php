@@ -167,9 +167,25 @@ class Document extends ArrayObject
     /**
      * @return string|null
      */
+    public function getCreatedBy(): ?string
+    {
+        return $this->getAttribute('$createdBy');
+    }
+
+    /**
+     * @return string|null
+     */
     public function getUpdatedAt(): ?string
     {
         return $this->getAttribute('$updatedAt');
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getUpdatedBy(): ?string
+    {
+        return $this->getAttribute('$updatedBy');
     }
 
     /**

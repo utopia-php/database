@@ -398,41 +398,46 @@ trait DocumentTests
 
     public function testCreateDocumentsWithAutoIncrement(): void
     {
+        $collectionName = 'tesstAutoIncr';
         /** @var Database $database */
         $database = static::getDatabase();
+        try {
 
-        $database->createCollection(__FUNCTION__);
+            $database->createCollection($collectionName);
 
-        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'string', Database::VAR_STRING, 128, true));
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'string', Database::VAR_STRING, 128, true));
 
-        /** @var array<Document> $documents */
-        $documents = [];
-        $count = 10;
-        $sequence = 1_000_000;
+            /** @var array<Document> $documents */
+            $documents = [];
+            $count = 10;
+            $sequence = 1_000_000;
 
-        for ($i = $sequence; $i <= ($sequence + $count); $i++) {
-            $documents[] = new Document([
-                '$sequence' => (string)$i,
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::create(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any()),
-                ],
-                'string' => 'text',
+            for ($i = $sequence; $i <= ($sequence + $count); $i++) {
+                $documents[] = new Document([
+                    '$sequence' => (string)$i,
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                    'string' => 'text',
+                ]);
+            }
+
+            $count = $database->createDocuments($collectionName, $documents, 6);
+            $this->assertEquals($count, \count($documents));
+
+            $documents = $database->find($collectionName, [
+                Query::orderAsc()
             ]);
-        }
-
-        $count = $database->createDocuments(__FUNCTION__, $documents, 6);
-        $this->assertEquals($count, \count($documents));
-
-        $documents = $database->find(__FUNCTION__, [
-            Query::orderAsc()
-        ]);
-        foreach ($documents as $index => $document) {
-            $this->assertEquals($sequence + $index, $document->getSequence());
-            $this->assertNotEmpty(true, $document->getId());
-            $this->assertEquals('text', $document->getAttribute('string'));
+            foreach ($documents as $index => $document) {
+                $this->assertEquals($sequence + $index, $document->getSequence());
+                $this->assertNotEmpty(true, $document->getId());
+                $this->assertEquals('text', $document->getAttribute('string'));
+            }
+        } finally {
+            $database->deleteCollection($collectionName);
         }
     }
 
@@ -860,22 +865,23 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+        $collectionName = uniqid("test_attr_");
 
         if (!$database->getAdapter()->getSupportForUpserts()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $database->createCollection(__FUNCTION__, permissions: [
+        $database->createCollection($collectionName, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ], documentSecurity: false);
-        $database->createAttribute(__FUNCTION__, 'first', Database::VAR_STRING, 128, true);
-        $database->createAttribute(__FUNCTION__, 'last', Database::VAR_STRING, 128, false);
+        $database->createAttribute($collectionName, 'first', Database::VAR_STRING, 128, true);
+        $database->createAttribute($collectionName, 'last', Database::VAR_STRING, 128, false);
 
-        $existingDocument = $database->createDocument(__FUNCTION__, new Document([
+        $existingDocument = $database->createDocument($collectionName, new Document([
             '$id' => 'first',
             'first' => 'first',
             'last' => 'last',
@@ -887,7 +893,7 @@ trait DocumentTests
         ]);
 
         // Ensure missing optionals on new document is allowed
-        $docs = $database->upsertDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments($collectionName, [
             $existingDocument->setAttribute('first', 'updated'),
             $newDocument,
         ]);
@@ -899,7 +905,7 @@ trait DocumentTests
         $this->assertEquals('', $newDocument->getAttribute('last'));
 
         try {
-            $database->upsertDocuments(__FUNCTION__, [
+            $database->upsertDocuments($collectionName, [
                 $existingDocument->removeAttribute('first'),
                 $newDocument
             ]);
@@ -909,7 +915,7 @@ trait DocumentTests
         }
 
         // Ensure missing optionals on existing document is allowed
-        $docs = $database->upsertDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments($collectionName, [
             $existingDocument
                 ->setAttribute('first', 'first')
                 ->removeAttribute('last'),
@@ -924,7 +930,7 @@ trait DocumentTests
         $this->assertEquals('last', $newDocument->getAttribute('last'));
 
         // Ensure set null on existing document is allowed
-        $docs = $database->upsertDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments($collectionName, [
             $existingDocument
                 ->setAttribute('first', 'first')
                 ->setAttribute('last', null),
@@ -951,7 +957,7 @@ trait DocumentTests
         ]);
 
         // Ensure mismatch of attribute orders is allowed
-        $docs = $database->upsertDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments($collectionName, [
             $doc3,
             $doc4
         ]);
@@ -962,8 +968,8 @@ trait DocumentTests
         $this->assertEquals('fourth', $doc4->getAttribute('first'));
         $this->assertEquals('last', $doc4->getAttribute('last'));
 
-        $doc3 = $database->getDocument(__FUNCTION__, 'third');
-        $doc4 = $database->getDocument(__FUNCTION__, 'fourth');
+        $doc3 = $database->getDocument($collectionName, 'third');
+        $doc4 = $database->getDocument($collectionName, 'fourth');
 
         $this->assertEquals('third', $doc3->getAttribute('first'));
         $this->assertEquals('last', $doc3->getAttribute('last'));
@@ -1208,6 +1214,7 @@ trait DocumentTests
         $document = $database->getDocument($collection, $document->getId());
         $this->assertEquals(104.4, $document->getAttribute('increase_float'));
 
+        $database->deleteCollection($collection);
         return $document;
     }
 
@@ -6019,5 +6026,222 @@ trait DocumentTests
             $this->assertEquals('value', $doc->getAttribute('value'));
         }
         $database->deleteCollection($colName);
+    }
+
+    public function testCreatedByUpdatedBy(): void
+    {
+        $collection = 'test_created_updated_by';
+        $database = static::getDatabase();
+
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false);
+        $database->createAttribute($collection, 'number', Database::VAR_INTEGER, 0, false);
+
+        Authorization::setRole('user:test_user_1');
+        $doc1 = $database->createDocument($collection, new Document([
+            '$id' => 'test1',
+            'string' => 'test1',
+            'number' => 100,
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+        ]));
+
+        $this->assertEquals('test_user_1', $doc1->getCreatedBy());
+        $this->assertEquals('test_user_1', $doc1->getUpdatedBy());
+
+        $retrievedDoc1 = $database->getDocument($collection, 'test1');
+        $this->assertEquals('test_user_1', $retrievedDoc1->getCreatedBy());
+        $this->assertEquals('test_user_1', $retrievedDoc1->getUpdatedBy());
+
+        $doc2 = $database->createDocument($collection, new Document([
+            '$id' => 'test2',
+            'string' => 'test2',
+            'number' => 200,
+            '$createdBy' => 'explicit_creator',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+        ]));
+
+        $this->assertEquals('explicit_creator', $doc2->getCreatedBy());
+        $this->assertEquals('test_user_1', $doc2->getUpdatedBy());
+
+        $retrievedDoc2 = $database->getDocument($collection, 'test2');
+        $this->assertEquals('explicit_creator', $retrievedDoc2->getCreatedBy());
+        $this->assertEquals('test_user_1', $retrievedDoc2->getUpdatedBy());
+
+        $doc3 = $database->createDocument($collection, new Document([
+            '$id' => 'test3',
+            'string' => 'test3',
+            'number' => 300,
+            '$updatedBy' => 'explicit_updater',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+        ]));
+
+        $this->assertEquals('test_user_1', $doc3->getCreatedBy());
+        $this->assertEquals('explicit_updater', $doc3->getUpdatedBy());
+
+        $retrievedDoc3 = $database->getDocument($collection, 'test3');
+        $this->assertEquals('test_user_1', $retrievedDoc3->getCreatedBy());
+        $this->assertEquals('explicit_updater', $retrievedDoc3->getUpdatedBy());
+
+        $doc4 = $database->createDocument($collection, new Document([
+            '$id' => 'test4',
+            'string' => 'test4',
+            'number' => 400,
+            '$createdBy' => 'explicit_creator_2',
+            '$updatedBy' => 'explicit_updater_2',
+            '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+        ]));
+
+        $this->assertEquals('explicit_creator_2', $doc4->getCreatedBy());
+        $this->assertEquals('explicit_updater_2', $doc4->getUpdatedBy());
+
+        $retrievedDoc4 = $database->getDocument($collection, 'test4');
+        $this->assertEquals('explicit_creator_2', $retrievedDoc4->getCreatedBy());
+        $this->assertEquals('explicit_updater_2', $retrievedDoc4->getUpdatedBy());
+
+        $allDocs = $database->find($collection);
+        $this->assertCount(4, $allDocs);
+
+        Authorization::setRole('user:test_user_2');
+        $updateDoc = new Document([
+            'string' => 'updated_test1',
+            'number' => 150
+        ]);
+        $updatedDoc = $database->updateDocument($collection, 'test1', $updateDoc);
+
+        // Verify createdBy is preserved, updatedBy changes to current user
+        $this->assertEquals('test_user_1', $updatedDoc->getCreatedBy()); // Should preserve original creator
+        $this->assertEquals('test_user_2', $updatedDoc->getUpdatedBy()); // Should update to current user
+
+        $retrievedUpdatedDoc = $database->getDocument($collection, 'test1');
+        $this->assertEquals('test_user_1', $retrievedUpdatedDoc->getCreatedBy());
+        $this->assertEquals('test_user_2', $retrievedUpdatedDoc->getUpdatedBy());
+
+        $upsertDoc = new Document([
+            '$id' => 'test2',
+            'string' => 'upserted_test2',
+            'number' => 250
+        ]);
+        if ($database->getAdapter()->getSupportForUpserts()) {
+            $upsertCount = $database->upsertDocuments($collection, [$upsertDoc]);
+            $this->assertEquals(1, $upsertCount);
+
+            $upsertedDoc = $database->getDocument($collection, 'test2');
+            $this->assertEquals('explicit_creator', $upsertedDoc->getCreatedBy()); // Should preserve original creator
+            $this->assertEquals('test_user_2', $upsertedDoc->getUpdatedBy()); // Should update to current user
+
+            $upsertNewDoc = new Document([
+                '$id' => 'test5',
+                'string' => 'new_test5',
+                'number' => 500,
+                '$createdBy' => 'new_creator',
+                '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+            ]);
+
+            $upsertNewCount = $database->upsertDocuments($collection, [$upsertNewDoc]);
+            $this->assertEquals(1, $upsertNewCount);
+
+            $newUpsertedDoc = $database->getDocument($collection, 'test5');
+            $this->assertEquals('new_creator', $newUpsertedDoc->getCreatedBy()); // Should use explicit creator
+            $this->assertEquals('test_user_2', $newUpsertedDoc->getUpdatedBy()); // Should use current user
+
+            $bulkDocs = [
+                new Document([
+                    '$id' => 'bulk1',
+                    'string' => 'bulk1',
+                    'number' => 600,
+                    '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+                ]),
+                new Document([
+                    '$id' => 'bulk2',
+                    'string' => 'bulk2',
+                    'number' => 700,
+                    '$createdBy' => 'bulk_creator',
+                    '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+                ]),
+                new Document([
+                    '$id' => 'bulk3',
+                    'string' => 'bulk3',
+                    'number' => 800,
+                    '$updatedBy' => 'bulk_updater',
+                    '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
+                ])
+            ];
+            $bulkCount = $database->createDocuments($collection, $bulkDocs);
+            $this->assertEquals(3, $bulkCount);
+
+            $bulkDoc1 = $database->getDocument($collection, 'bulk1');
+            $bulkDoc2 = $database->getDocument($collection, 'bulk2');
+            $bulkDoc3 = $database->getDocument($collection, 'bulk3');
+
+            $this->assertEquals('test_user_2', $bulkDoc1->getCreatedBy());
+            $this->assertEquals('test_user_2', $bulkDoc1->getUpdatedBy());
+
+            $this->assertEquals('bulk_creator', $bulkDoc2->getCreatedBy());
+            $this->assertEquals('test_user_2', $bulkDoc2->getUpdatedBy());
+
+            $this->assertEquals('test_user_2', $bulkDoc3->getCreatedBy());
+            $this->assertEquals('bulk_updater', $bulkDoc3->getUpdatedBy());
+
+            $finalAllDocs = $database->find($collection);
+            $this->assertCount(8, $finalAllDocs);
+
+            $database->deleteCollection($collection);
+
+            // testing with increment decrement
+            Authorization::setRole('user:test_user_3');
+            $collection = 'increase_decrease';
+            $database->createCollection($collection);
+
+            $this->assertEquals(true, $database->createAttribute($collection, 'increase', Database::VAR_INTEGER, 0, true));
+
+            $document = $database->createDocument($collection, new Document([
+                'increase' => 100,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ]
+            ]));
+
+            $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 301);
+            $this->assertEquals(101, $doc->getAttribute('increase'));
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_3', $doc->getUpdatedBy());
+
+            $document = $database->getDocument($collection, $document->getId());
+            $this->assertEquals(101, $document->getAttribute('increase'));
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_3', $doc->getUpdatedBy());
+
+            Authorization::setRole('user:test_user_4');
+            $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 301);
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_4', $doc->getUpdatedBy());
+
+            $doc = $database->getDocument($collection, $document->getId());
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_4', $doc->getUpdatedBy());
+
+            $doc = $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase', 1, -100);
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_4', $doc->getUpdatedBy());
+
+            $doc = $database->getDocument($collection, $document->getId());
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_4', $doc->getUpdatedBy());
+
+            Authorization::setRole('user:test_user_5');
+
+            $doc = $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase', 1, -100);
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_5', $doc->getUpdatedBy());
+
+            $doc = $database->getDocument($collection, $document->getId());
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_5', $doc->getUpdatedBy());
+
+            $database->deleteCollection($collection);
+        }
     }
 }

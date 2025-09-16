@@ -237,6 +237,8 @@ class Postgres extends SQL
                 " . $sqlTenant . "
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
+                \"_createdBy\" VARCHAR(255) DEFAULT NULL,
+                \"_updatedBy\" VARCHAR(255) DEFAULT NULL,
                 " . \implode(' ', $attributeStrings) . "
                 _permissions TEXT DEFAULT NULL
             );
@@ -247,6 +249,8 @@ class Postgres extends SQL
 				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\", \"_tenant\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_updated\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
+                CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created_by\" ON {$this->getSQLTable($id)} (_tenant, \"_createdBy\");
+                CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_updated_by\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedBy\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_tenant_id\" ON {$this->getSQLTable($id)} (_tenant, _id);
 			";
         } else {
@@ -254,6 +258,8 @@ class Postgres extends SQL
 				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\");
             	CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
+                CREATE INDEX \"{$namespace}_{$id}_created_by\" ON {$this->getSQLTable($id)} (\"_createdBy\");
+                CREATE INDEX \"{$namespace}_{$id}_updated_by\" ON {$this->getSQLTable($id)} (\"_updatedBy\");
 			";
         }
 
@@ -961,6 +967,8 @@ class Postgres extends SQL
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_createdBy'] = $document->getCreatedBy();
+        $attributes['_updatedBy'] = $document->getUpdatedBy();
         $attributes['_permissions'] = \json_encode($document->getPermissions());
 
         if ($this->sharedTables) {
@@ -1075,6 +1083,8 @@ class Postgres extends SQL
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_createdBy'] = $document->getCreatedBy();
+        $attributes['_updatedBy'] = $document->getUpdatedBy();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
         $name = $this->filter($collection);
@@ -1343,12 +1353,13 @@ class Postgres extends SQL
      * @param string $attribute
      * @param int|float $value
      * @param string $updatedAt
+     * @param string|null $updatedBy
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
      * @throws DatabaseException
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, ?string $updatedBy, int|float|null $min = null, int|float|null $max = null): bool
     {
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
@@ -1360,7 +1371,8 @@ class Postgres extends SQL
 			UPDATE {$this->getSQLTable($name)} 
 			SET 
 			    \"{$attribute}\" = \"{$attribute}\" + :val,
-                \"_updatedAt\" = :updatedAt
+                \"_updatedAt\" = :updatedAt,
+                \"_updatedBy\" = :updatedBy
 			WHERE _uid = :_uid
 			{$this->getTenantQuery($collection)}
 		";
@@ -1373,6 +1385,7 @@ class Postgres extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
         $stmt->bindValue(':updatedAt', $updatedAt);
+        $stmt->bindValue(':updatedBy', $updatedBy);
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);

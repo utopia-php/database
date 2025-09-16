@@ -168,6 +168,8 @@ class SQLite extends MariaDB
 				{$tenantQuery}
 				`_createdAt` DATETIME(3) DEFAULT NULL,
 				`_updatedAt` DATETIME(3) DEFAULT NULL,
+                `_createdBy` VARCHAR(255) DEFAULT NULL,
+				`_updatedBy` VARCHAR(255) DEFAULT NULL,
 				`_permissions` MEDIUMTEXT DEFAULT NULL".(!empty($attributes) ? ',' : '')."
 				" . \substr(\implode(' ', $attributeStrings), 0, -2) . "
 			)
@@ -525,6 +527,8 @@ class SQLite extends MariaDB
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_createdBy'] = $document->getCreatedBy();
+        $attributes['_updatedBy'] = $document->getUpdatedBy();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
         if ($this->sharedTables) {
@@ -647,6 +651,8 @@ class SQLite extends MariaDB
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
+        $attributes['_createdBy'] = $document->getCreatedBy();
+        $attributes['_updatedBy'] = $document->getUpdatedBy();
         $attributes['_permissions'] = json_encode($document->getPermissions());
 
         if ($this->sharedTables) {
@@ -1032,6 +1038,8 @@ class SQLite extends MariaDB
             '$id' => ID::custom('_uid'),
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$createdBy' => '_createdBy',
+            '$updatedBy' => '_updatedBy',
             default => $attribute
         }, $attributes);
 

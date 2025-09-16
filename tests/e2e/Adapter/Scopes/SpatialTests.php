@@ -726,7 +726,7 @@ trait SpatialTests
         }
 
         // Basic spatial index create/delete
-        $collectionName = 'spatial_index_';
+        $collectionName = uniqid('sp_idx');
         try {
             $database->createCollection($collectionName);
             $database->createAttribute($collectionName, 'loc', Database::VAR_POINT, 0, true);
@@ -749,7 +749,7 @@ trait SpatialTests
         $orderSupported = $database->getAdapter()->getSupportForSpatialIndexOrder();
 
         // createCollection with orders
-        $collOrderCreate = 'spatial_idx_order_create';
+        $collOrderCreate = uniqid('sp_idx_');
         try {
             $attributes = [new Document([
                 '$id' => ID::custom('loc'),
@@ -787,7 +787,7 @@ trait SpatialTests
         }
 
         // createIndex with orders
-        $collOrderIndex = 'spatial_idx_order_index_' . uniqid();
+        $collOrderIndex = uniqid('sp_idx_');
         try {
             $database->createCollection($collOrderIndex);
             $database->createAttribute($collOrderIndex, 'loc', Database::VAR_POINT, 0, true);
@@ -809,7 +809,7 @@ trait SpatialTests
         $nullSupported = $database->getAdapter()->getSupportForSpatialIndexNull();
 
         // createCollection with required=false
-        $collNullCreate = 'spatial_idx_null_create_' . uniqid();
+        $collNullCreate = uniqid('sp_idx');
         try {
             $attributes = [new Document([
                 '$id' => ID::custom('loc'),
@@ -847,7 +847,7 @@ trait SpatialTests
         }
 
         // createIndex with required=false
-        $collNullIndex = 'spatial_idx_null_index_' . uniqid();
+        $collNullIndex = uniqid('sp_idx_');
         try {
             $database->createCollection($collNullIndex);
             $database->createAttribute($collNullIndex, 'loc', Database::VAR_POINT, 0, false);
@@ -865,7 +865,7 @@ trait SpatialTests
             $database->deleteCollection($collNullIndex);
         }
 
-        $collUpdateNull = 'spatial_idx_req';
+        $collUpdateNull = uniqid('sp_idx');
         try {
             $database->createCollection($collUpdateNull);
 
@@ -889,7 +889,7 @@ trait SpatialTests
         }
 
 
-        $collUpdateNull = 'spatial_idx_index_null_required_true';
+        $collUpdateNull = uniqid('sp_idx');
         try {
             $database->createCollection($collUpdateNull);
 
@@ -2490,7 +2490,7 @@ trait SpatialTests
             return;
         }
 
-        $collectionName = 'spatial_idx_single_attr_' . uniqid();
+        $collectionName = uniqid("sp_idx");
         try {
             $database->createCollection($collectionName);
 

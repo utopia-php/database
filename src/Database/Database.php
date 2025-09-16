@@ -231,6 +231,28 @@ class Database
             'filters' => ['datetime']
         ],
         [
+            '$id' => '$createdBy',
+            'type' => self::VAR_STRING,
+            'format' => '',
+            'size' => Database::LENGTH_KEY,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => []
+        ],
+        [
+            '$id' => '$updatedBy',
+            'type' => self::VAR_STRING,
+            'format' => '',
+            'size' => Database::LENGTH_KEY,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => []
+        ],
+        [
             '$id' => '$permissions',
             'type' => Database::VAR_STRING,
             'size' => 1_000_000,
@@ -246,6 +268,8 @@ class Database
         '_uid',
         '_createdAt',
         '_updatedAt',
+        '_createdBy',
+        '_updatedBy',
         '_permissions',
     ];
 
@@ -254,6 +278,8 @@ class Database
         '_uid',
         '_createdAt',
         '_updatedAt',
+        '_createdBy',
+        '_updatedBy',
         '_permissions_id',
         '_permissions',
     ];
@@ -3865,12 +3891,16 @@ class Database
 
         $createdAt = $document->getCreatedAt();
         $updatedAt = $document->getUpdatedAt();
+        $createdBy = $document->getCreatedBy();
+        $updatedBy = $document->getUpdatedBy();
 
         $document
             ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
             ->setAttribute('$collection', $collection->getId())
             ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
-            ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+            ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt)
+            ->setAttribute('$createdBy', $createdBy === null ? Authorization::getUser() : $createdBy)
+            ->setAttribute('$updatedBy', $updatedBy === null ? Authorization::getUser() : $updatedBy);
 
         if (empty($document->getPermissions())) {
             $document->setAttribute('$permissions', []);
@@ -3971,12 +4001,17 @@ class Database
         foreach ($documents as $document) {
             $createdAt = $document->getCreatedAt();
             $updatedAt = $document->getUpdatedAt();
+            $createdBy = $document->getCreatedBy();
+            $updatedBy = $document->getUpdatedBy();
 
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$createdAt', ($createdAt === null || !$this->preserveDates) ? $time : $createdAt)
-                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt);
+                ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt)
+                ->setAttribute('$createdBy', $createdBy === null ? Authorization::getUser() : $createdBy)
+                ->setAttribute('$updatedBy', $updatedBy === null ? Authorization::getUser() : $updatedBy);
+
 
             if (empty($document->getPermissions())) {
                 $document->setAttribute('$permissions', []);
@@ -4385,7 +4420,8 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
+        $newUpdatedBy = $document->getUpdatedBy();
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, $newUpdatedBy) {
             $time = DateTime::now();
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -4406,10 +4442,12 @@ class Database
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
             $createdAt = $document->getCreatedAt();
+            $createdBy = $document->getCreatedBy();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
+            $document['$createdBy'] = $createdBy === null ? $old->getCreatedBy() : $createdBy;
 
             if ($this->adapter->getSharedTables()) {
                 $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
@@ -4534,6 +4572,7 @@ class Database
 
             if ($shouldUpdate) {
                 $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
+                $document->setAttribute('$updatedBy', $newUpdatedBy === null ? Authorization::getUser() : $newUpdatedBy);
             }
 
             // Check if document was updated after the request timestamp
@@ -4663,12 +4702,20 @@ class Database
             $updates['$createdAt'] = $updates->getCreatedAt();
         }
 
+        if ($updates->getCreatedBy() === null) {
+            unset($updates['$createdBy']);
+        } else {
+            $updates['$createdBy'] = $updates->getCreatedBy();
+        }
+
         if ($this->adapter->getSharedTables()) {
             $updates['$tenant'] = $this->adapter->getTenant();
         }
 
         $updatedAt = $updates->getUpdatedAt();
+        $updatedBy = $updates->getUpdatedBy();
         $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
+        $updates['$updatedBy'] = $updatedBy === null ? Authorization::getUser() : $updatedBy;
 
         $updates = $this->encode($collection, $updates);
         // Check new document structure
@@ -5334,11 +5381,12 @@ class Database
             }
 
             $updatedAt = $document->getUpdatedAt();
-
+            $updatedBy = $document->getUpdatedBy();
             $document
                 ->setAttribute('$id', empty($document->getId()) ? ID::unique() : $document->getId())
                 ->setAttribute('$collection', $collection->getId())
                 ->setAttribute('$updatedAt', ($updatedAt === null || !$this->preserveDates) ? $time : $updatedAt)
+                ->setAttribute('$updatedBy', $updatedBy === null ? Authorization::getUser() : $updatedBy)
                 ->removeAttribute('$sequence');
 
             $createdAt = $document->getCreatedAt();
@@ -5348,6 +5396,12 @@ class Database
                 $document->setAttribute('$createdAt', $createdAt);
             }
 
+            $createdBy = $document->getCreatedBy();
+            if ($createdBy === null) {
+                $document->setAttribute('$createdBy', $old->isEmpty() ? Authorization::getUser() : $old->getCreatedBy());
+            } else {
+                $document->setAttribute('$createdBy', $createdBy);
+            }
             // Force matching optional parameter sets
             // Doesn't use decode as that intentionally skips null defaults to reduce payload size
             foreach ($collectionAttributes as $attr) {
@@ -5548,6 +5602,7 @@ class Database
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $updatedBy = Authorization::getUser();
             $max = $max ? $max - $value : null;
 
             $this->adapter->increaseDocumentAttribute(
@@ -5556,12 +5611,12 @@ class Database
                 $attribute,
                 $value,
                 $updatedAt,
+                $updatedBy,
                 max: $max
             );
 
-            return $document->setAttribute(
-                $attribute,
-                $document->getAttribute($attribute) + $value
+            return $document->setAttributes(
+                [$attribute => $document->getAttribute($attribute) + $value, '$updatedAt' => $updatedAt, '$updatedBy' => $updatedBy]
             );
         });
 
@@ -5647,6 +5702,7 @@ class Database
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $updatedBy = Authorization::getUser();
             $min = $min ? $min + $value : null;
 
             $this->adapter->increaseDocumentAttribute(
@@ -5655,12 +5711,12 @@ class Database
                 $attribute,
                 $value * -1,
                 $updatedAt,
+                $updatedBy,
                 min: $min
             );
 
-            return $document->setAttribute(
-                $attribute,
-                $document->getAttribute($attribute) - $value
+            return $document->setAttributes(
+                [$attribute => $document->getAttribute($attribute) - $value, '$updatedAt' => $updatedAt, '$updatedBy' => $updatedBy]
             );
         });
 

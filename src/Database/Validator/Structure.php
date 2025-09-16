@@ -84,7 +84,29 @@ class Structure extends Validator
             'signed' => false,
             'array' => false,
             'filters' => [],
-        ]
+        ],
+        [
+            '$id' => '$createdBy',
+            'type' => Database::VAR_STRING,
+            'format' => '',
+            'size' => Database::LENGTH_KEY,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => []
+        ],
+        [
+            '$id' => '$updatedBy',
+            'type' => Database::VAR_STRING,
+            'format' => '',
+            'size' => Database::LENGTH_KEY,
+            'signed' => false,
+            'required' => false,
+            'default' => null,
+            'array' => false,
+            'filters' => []
+        ],
     ];
 
     /**

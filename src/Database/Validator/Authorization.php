@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Helpers\Role;
 use Utopia\Validator;
 
 class Authorization extends Validator
@@ -22,6 +23,11 @@ class Authorization extends Validator
      * @var string
      */
     protected string $message = 'Authorization Error';
+
+    /**
+     * @var string|null
+     */
+    protected static ?string $user = null;
 
     /**
      * @param string $action
@@ -82,6 +88,11 @@ class Authorization extends Validator
      */
     public static function setRole(string $role): void
     {
+        $parsedRole = Role::parse($role);
+        if ($parsedRole->getRole() === 'user') {
+            $userIdetifier = $parsedRole->getIdentifier();
+            self::$user = $userIdetifier;
+        }
         self::$roles[$role] = true;
     }
 
@@ -92,7 +103,21 @@ class Authorization extends Validator
      */
     public static function unsetRole(string $role): void
     {
+        $parsedRole = Role::parse($role);
+        if ($parsedRole->getRole() === 'user' && self::$user === $parsedRole->getIdentifier()) {
+            self::$user = null;
+        }
         unset(self::$roles[$role]);
+    }
+
+    /**
+     * Get current user
+     *
+     * @return string|null
+     */
+    public static function getUser(): string|null
+    {
+        return self::$user;
     }
 
     /**

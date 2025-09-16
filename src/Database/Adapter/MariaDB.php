@@ -159,6 +159,8 @@ class MariaDB extends SQL
 				_uid VARCHAR(255) NOT NULL,
 				_createdAt DATETIME(3) DEFAULT NULL,
 				_updatedAt DATETIME(3) DEFAULT NULL,
+                _createdBy VARCHAR(255) DEFAULT NULL,
+				_updatedBy VARCHAR(255) DEFAULT NULL,
 				_permissions MEDIUMTEXT DEFAULT NULL,
 				PRIMARY KEY (_id),
 				" . \implode(' ', $attributeStrings) . "
@@ -171,13 +173,17 @@ class MariaDB extends SQL
 				UNIQUE KEY _uid (_uid, _tenant),
 				KEY _created_at (_tenant, _createdAt),
 				KEY _updated_at (_tenant, _updatedAt),
+                KEY _created_by (_tenant, _createdBy),
+                KEY _updated_by (_tenant, _updatedBy),
 				KEY _tenant_id (_tenant, _id)
 			";
         } else {
             $collection .= "
 				UNIQUE KEY _uid (_uid),
 				KEY _created_at (_createdAt),
-				KEY _updated_at (_updatedAt)
+				KEY _updated_at (_updatedAt),
+                KEY _created_by (_createdBy),
+                KEY _updated_by (_updatedBy)
 			";
         }
 
@@ -827,6 +833,8 @@ class MariaDB extends SQL
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
+            $attributes['_createdBy'] = $document->getCreatedBy();
+            $attributes['_updatedBy'] = $document->getUpdatedBy();
             $attributes['_permissions'] = \json_encode($document->getPermissions());
 
             if ($this->sharedTables) {
@@ -953,6 +961,7 @@ class MariaDB extends SQL
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
+            $attributes['_updatedBy'] = $document->getUpdatedBy();
             $attributes['_permissions'] = json_encode($document->getPermissions());
 
             $name = $this->filter($collection);
@@ -1241,6 +1250,7 @@ class MariaDB extends SQL
      * @param string $attribute
      * @param int|float $value
      * @param string $updatedAt
+     * @param string|null $updatedBy
      * @param int|float|null $min
      * @param int|float|null $max
      * @return bool
@@ -1252,6 +1262,7 @@ class MariaDB extends SQL
         string $attribute,
         int|float $value,
         string $updatedAt,
+        ?string $updatedBy,
         int|float|null $min = null,
         int|float|null $max = null
     ): bool {
@@ -1265,7 +1276,8 @@ class MariaDB extends SQL
 			UPDATE {$this->getSQLTable($name)} 
 			SET 
 			    `{$attribute}` = `{$attribute}` + :val,
-			    `_updatedAt` = :updatedAt
+			    `_updatedAt` = :updatedAt,
+                `_updatedBy` = :updatedBy
 			WHERE _uid = :_uid
 			{$this->getTenantQuery($collection)}
 		";
@@ -1278,6 +1290,7 @@ class MariaDB extends SQL
         $stmt->bindValue(':_uid', $id);
         $stmt->bindValue(':val', $value);
         $stmt->bindValue(':updatedAt', $updatedAt);
+        $stmt->bindValue(':updatedBy', $updatedBy);
 
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);

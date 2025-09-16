@@ -475,7 +475,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, float|int $value, string $updatedAt, float|int|null $min = null, float|int|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, float|int $value, string $updatedAt, ?string $updatedBy, float|int|null $min = null, float|int|null $max = null): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

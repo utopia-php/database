@@ -1910,6 +1910,8 @@ abstract class SQL extends Adapter
             '$permissions',
             '$createdAt',
             '$updatedAt',
+            '$createdBy',
+            '$updatedBy'
         ];
 
         $selections = \array_diff($selections, [...$internalKeys, '$collection']);

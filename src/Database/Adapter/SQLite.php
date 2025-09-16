@@ -1038,6 +1038,8 @@ class SQLite extends MariaDB
             '$id' => ID::custom('_uid'),
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$createdBy' => '_createdBy',
+            '$updatedBy' => '_updatedBy',
             default => $attribute
         }, $attributes);
 

@@ -48,12 +48,14 @@ class PDO
             if (Connection::hasError($e)) {
                 Console::warning('[Database] Lost connection detected. Reconnecting...');
 
+                $inTransaction = $this->pdo->inTransaction();
+
                 // Attempt to reconnect
                 $this->reconnect();
 
-                // If we're not in a transaction, also retry the query
-                // In a transaction we can't retry as it would lead to data integrity issues
-                if (!$this->pdo->inTransaction()) {
+                // If we weren't in a transaction, also retry the query
+                // In a transaction we can't retry as the state is attached to the previous connection
+                if (!$inTransaction) {
                     return $this->pdo->{$method}(...$args);
                 }
             }

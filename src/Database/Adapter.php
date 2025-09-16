@@ -750,7 +750,7 @@ abstract class Adapter
      * @param array<Change> $changes
      * @return array<Document>
      */
-    abstract public function createOrUpdateDocuments(
+    abstract public function upsertDocuments(
         Document $collection,
         string $attribute,
         array $changes
@@ -1153,9 +1153,9 @@ abstract class Adapter
      *
      * @param array<string> $selections
      * @param string $prefix
-     * @return mixed
+     * @return string
      */
-    abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
+    abstract protected function getAttributeProjection(array $selections, string $prefix): string;
 
     /**
      * Get all selected attributes from queries
@@ -1287,4 +1287,28 @@ abstract class Adapter
      * @return bool
      */
     abstract protected function execute(mixed $stmt): bool;
+
+    /**
+     * Decode a WKB or textual POINT into [x, y]
+     *
+     * @param string $wkb
+     * @return float[] Array with two elements: [x, y]
+     */
+    abstract public function decodePoint(string $wkb): array;
+
+    /**
+     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
+     *
+     * @param string $wkb
+     * @return float[][] Array of points, each as [x, y]
+     */
+    abstract public function decodeLinestring(string $wkb): array;
+
+    /**
+     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
+     *
+     * @param string $wkb
+     * @return float[][][] Array of rings, each ring is an array of points [x, y]
+     */
+    abstract public function decodePolygon(string $wkb): array;
 }

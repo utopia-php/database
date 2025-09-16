@@ -155,7 +155,7 @@ class MariaDB extends SQL
 
         $collection = "
 			CREATE TABLE {$this->getSQLTable($id)} (
-				_id INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+				_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				_uid VARCHAR(255) NOT NULL,
 				_createdAt DATETIME(3) DEFAULT NULL,
 				_updatedAt DATETIME(3) DEFAULT NULL,
@@ -192,7 +192,7 @@ class MariaDB extends SQL
 
         $permissions = "
             CREATE TABLE {$this->getSQLTable($id . '_perms')} (
-                _id int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+                _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
                 _document VARCHAR(255) NOT NULL,

@@ -350,7 +350,6 @@ abstract class SQL extends Adapter
      */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
 
         $name = $this->filter($collection);
@@ -361,7 +360,7 @@ abstract class SQL extends Adapter
         $alias = Query::DEFAULT_ALIAS;
 
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
+		    SELECT {$this->getAttributeProjection($selections, $alias)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
             {$this->getTenantQuery($collection, $alias)}
@@ -1895,37 +1894,13 @@ abstract class SQL extends Adapter
      *
      * @param array<string> $selections
      * @param string $prefix
-     * @param array<string> $spatialAttributes
-     * @return mixed
+     * @return string
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix, array $spatialAttributes = []): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): string
     {
         if (empty($selections) || \in_array('*', $selections)) {
-            if (empty($spatialAttributes)) {
-                return "{$this->quote($prefix)}.*";
-            }
-
-            $projections = [];
-            $projections[] = "{$this->quote($prefix)}.*";
-
-            $internalColumns = ['_id', '_uid', '_createdAt', '_updatedAt', '_permissions', '_createdBy', '_updatedBy'];
-            if ($this->sharedTables) {
-                $internalColumns[] = '_tenant';
-            }
-            foreach ($internalColumns as $col) {
-                $projections[] = "{$this->quote($prefix)}.{$this->quote($col)}";
-            }
-
-            foreach ($spatialAttributes as $spatialAttr) {
-                $filteredAttr = $this->filter($spatialAttr);
-                $quotedAttr = $this->quote($filteredAttr);
-                $axisOrder = $this->getSupportForSpatialAxisOrder() ? ', ' . $this->getSpatialAxisOrderSpec() : '';
-                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedAttr} {$axisOrder} ) AS {$quotedAttr}";
-            }
-
-
-            return implode(', ', $projections);
+            return "{$this->quote($prefix)}.*";
         }
 
         // Handle specific selections with spatial conversion where needed
@@ -1947,13 +1922,7 @@ abstract class SQL extends Adapter
         foreach ($selections as $selection) {
             $filteredSelection = $this->filter($selection);
             $quotedSelection = $this->quote($filteredSelection);
-
-            if (in_array($selection, $spatialAttributes)) {
-                $axisOrder = $this->getSupportForSpatialAxisOrder() ? ', ' . $this->getSpatialAxisOrderSpec() : '';
-                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedSelection} {$axisOrder}) AS {$quotedSelection}";
-            } else {
-                $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
-            }
+            $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
         }
 
         return \implode(',', $projections);
@@ -2155,7 +2124,7 @@ abstract class SQL extends Adapter
      * @return array<Document>
      * @throws DatabaseException
      */
-    public function createOrUpdateDocuments(
+    public function upsertDocuments(
         Document $collection,
         string $attribute,
         array $changes
@@ -2403,7 +2372,6 @@ abstract class SQL extends Adapter
      */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
-        $spatialAttributes = $this->getSpatialAttributes($collection);
         $attributes = $collection->getAttribute('attributes', []);
 
         $collection = $collection->getId();
@@ -2511,7 +2479,7 @@ abstract class SQL extends Adapter
 
 
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
+            SELECT {$this->getAttributeProjection($selections, $alias)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlWhere}
             {$sqlOrder}
@@ -2741,5 +2709,196 @@ abstract class SQL extends Adapter
             throw new DatabaseException("Invalid spatial type");
         }
         return strtolower(trim(substr($wkt, 0, $pos)));
+    }
+
+    public function decodePoint(string $wkb): array
+    {
+        if (str_starts_with(strtoupper($wkb), 'POINT(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, $end - $start);
+            $coords = explode(' ', trim($inside));
+            return [(float)$coords[0], (float)$coords[1]];
+        }
+
+        /**
+         * [0..3]   SRID (4 bytes, little-endian)
+         * [4]      Byte order (1 = little-endian, 0 = big-endian)
+         * [5..8]   Geometry type (with SRID flag bit)
+         * [9..]    Geometry payload (coordinates, etc.)
+         */
+
+        if (strlen($wkb) < 25) {
+            throw new DatabaseException('Invalid WKB: too short for POINT');
+        }
+
+        // 4 bytes SRID first → skip to byteOrder at offset 4
+        $byteOrder = ord($wkb[4]);
+        $littleEndian = ($byteOrder === 1);
+
+        if (!$littleEndian) {
+            throw new DatabaseException('Only little-endian WKB supported');
+        }
+
+        // After SRID (4) + byteOrder (1) + type (4) = 9 bytes
+        $coordsBin = substr($wkb, 9, 16);
+        if (strlen($coordsBin) !== 16) {
+            throw new DatabaseException('Invalid WKB: missing coordinate bytes');
+        }
+
+        // Unpack two doubles
+        $coords = unpack('d2', $coordsBin);
+        if ($coords === false || !isset($coords[1], $coords[2])) {
+            throw new DatabaseException('Invalid WKB: failed to unpack coordinates');
+        }
+
+        return [(float)$coords[1], (float)$coords[2]];
+    }
+
+    public function decodeLinestring(string $wkb): array
+    {
+        if (str_starts_with(strtoupper($wkb), 'LINESTRING(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $points = explode(',', $inside);
+            return array_map(function ($point) {
+                $coords = explode(' ', trim($point));
+                return [(float)$coords[0], (float)$coords[1]];
+            }, $points);
+        }
+
+        // Skip 1 byte (endianness) + 4 bytes (type) + 4 bytes (SRID)
+        $offset = 9;
+
+        // Number of points (4 bytes little-endian)
+        $numPointsArr = unpack('V', substr($wkb, $offset, 4));
+        if ($numPointsArr === false || !isset($numPointsArr[1])) {
+            throw new DatabaseException('Invalid WKB: cannot unpack number of points');
+        }
+
+        $numPoints = $numPointsArr[1];
+        $offset += 4;
+
+        $points = [];
+        for ($i = 0; $i < $numPoints; $i++) {
+            $xArr = unpack('d', substr($wkb, $offset, 8));
+            $yArr = unpack('d', substr($wkb, $offset + 8, 8));
+
+            if ($xArr === false || !isset($xArr[1]) || $yArr === false || !isset($yArr[1])) {
+                throw new DatabaseException('Invalid WKB: cannot unpack point coordinates');
+            }
+
+            $points[] = [(float)$xArr[1], (float)$yArr[1]];
+            $offset += 16;
+        }
+
+        return $points;
+    }
+
+    public function decodePolygon(string $wkb): array
+    {
+        // POLYGON((x1,y1),(x2,y2))
+        if (str_starts_with($wkb, 'POLYGON((')) {
+            $start = strpos($wkb, '((') + 2;
+            $end = strrpos($wkb, '))');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $rings = explode('),(', $inside);
+            return array_map(function ($ring) {
+                $points = explode(',', $ring);
+                return array_map(function ($point) {
+                    $coords = explode(' ', trim($point));
+                    return [(float)$coords[0], (float)$coords[1]];
+                }, $points);
+            }, $rings);
+        }
+
+        // Convert HEX string to binary if needed
+        if (str_starts_with($wkb, '0x') || ctype_xdigit($wkb)) {
+            $wkb = hex2bin(str_starts_with($wkb, '0x') ? substr($wkb, 2) : $wkb);
+            if ($wkb === false) {
+                throw new DatabaseException('Invalid hex WKB');
+            }
+        }
+
+        if (strlen($wkb) < 21) {
+            throw new DatabaseException('WKB too short to be a POLYGON');
+        }
+
+        // MySQL SRID-aware WKB layout: 4 bytes SRID prefix
+        $offset = 4;
+
+        $byteOrder = ord($wkb[$offset]);
+        if ($byteOrder !== 1) {
+            throw new DatabaseException('Only little-endian WKB supported');
+        }
+        $offset += 1;
+
+        $typeArr = unpack('V', substr($wkb, $offset, 4));
+        if ($typeArr === false || !isset($typeArr[1])) {
+            throw new DatabaseException('Invalid WKB: cannot unpack geometry type');
+        }
+
+        $type = $typeArr[1];
+        $hasSRID = ($type & 0x20000000) === 0x20000000;
+        $geomType = $type & 0xFF;
+        $offset += 4;
+
+        if ($geomType !== 3) { // 3 = POLYGON
+            throw new DatabaseException("Not a POLYGON geometry type, got {$geomType}");
+        }
+
+        // Skip SRID in type flag if present
+        if ($hasSRID) {
+            $offset += 4;
+        }
+
+        $numRingsArr = unpack('V', substr($wkb, $offset, 4));
+
+        if ($numRingsArr === false || !isset($numRingsArr[1])) {
+            throw new DatabaseException('Invalid WKB: cannot unpack number of rings');
+        }
+
+        $numRings = $numRingsArr[1];
+        $offset += 4;
+
+        $rings = [];
+
+        for ($r = 0; $r < $numRings; $r++) {
+            $numPointsArr = unpack('V', substr($wkb, $offset, 4));
+
+            if ($numPointsArr === false || !isset($numPointsArr[1])) {
+                throw new DatabaseException('Invalid WKB: cannot unpack number of points');
+            }
+
+            $numPoints = $numPointsArr[1];
+            $offset += 4;
+            $ring = [];
+
+            for ($p = 0; $p < $numPoints; $p++) {
+                $xArr = unpack('d', substr($wkb, $offset, 8));
+                if ($xArr === false) {
+                    throw new DatabaseException('Failed to unpack X coordinate from WKB.');
+                }
+
+                $x = (float) $xArr[1];
+
+                $yArr = unpack('d', substr($wkb, $offset + 8, 8));
+                if ($yArr === false) {
+                    throw new DatabaseException('Failed to unpack Y coordinate from WKB.');
+                }
+
+                $y = (float) $yArr[1];
+
+                $ring[] = [$x, $y];
+                $offset += 16;
+            }
+
+            $rings[] = $ring;
+        }
+
+        return $rings;
     }
 }

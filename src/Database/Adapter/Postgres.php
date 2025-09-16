@@ -2023,7 +2023,7 @@ class Postgres extends SQL
 
         $isLE = ord($bin[0]) === 1;
 
-// Type (4 bytes)
+        // Type (4 bytes)
         $typeBytes = substr($bin, 1, 4);
         if (strlen($typeBytes) !== 4) {
             throw new DatabaseException('Failed to extract type bytes from WKB');

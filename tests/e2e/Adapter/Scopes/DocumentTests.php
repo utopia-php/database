@@ -41,16 +41,10 @@ trait DocumentTests
         $this->assertEquals((string)$sequence, $document->getSequence());
 
         $document = $database->getDocument(__FUNCTION__, $document->getId());
-
         $this->assertEquals((string)$sequence, $document->getSequence());
 
-        $document = $database->createDocument(__FUNCTION__, new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-            ],
-        ]));
-
-        $this->assertEquals((string)($sequence + 1), $document->getSequence());
+        $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string)$sequence])]);
+        $this->assertEquals((string)$sequence, $document->getSequence());
     }
 
     public function testCreateDocument(): Document

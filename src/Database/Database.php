@@ -497,15 +497,16 @@ class Database
             },
             /**
              * @param string|null $value
-             * @return string|null
+             * @return array|null
              */
             function (?string $value) {
-                if (!is_string($value)) {
-                    return $value;
+                if ($value === null) {
+                    return null;
                 }
-                return self::decodeSpatialData($value);
+                return $this->adapter->decodePoint($value);
             }
         );
+
         self::addFilter(
             Database::VAR_LINESTRING,
             /**
@@ -524,15 +525,16 @@ class Database
             },
             /**
              * @param string|null $value
-             * @return string|null
+             * @return array|null
              */
             function (?string $value) {
                 if (is_null($value)) {
-                    return $value;
+                    return null;
                 }
-                return self::decodeSpatialData($value);
+                return $this->adapter->decodeLinestring($value);
             }
         );
+
         self::addFilter(
             Database::VAR_POLYGON,
             /**
@@ -551,13 +553,13 @@ class Database
             },
             /**
              * @param string|null $value
-             * @return string|null
+             * @return array|null
              */
             function (?string $value) {
                 if (is_null($value)) {
-                    return $value;
+                    return null;
                 }
-                return self::decodeSpatialData($value);
+                return $this->adapter->decodePolygon($value);
             }
         );
     }
@@ -7322,58 +7324,5 @@ class Database
             default:
                 throw new DatabaseException('Unknown spatial type: ' . $type);
         }
-    }
-
-    /**
-     * Decode spatial data from WKT (Well-Known Text) format to array format
-     *
-     * @param string $wkt
-     * @return array<mixed>
-     * @throws DatabaseException
-     */
-    public function decodeSpatialData(string $wkt): array
-    {
-        $upper = strtoupper($wkt);
-
-        // POINT(x y)
-        if (str_starts_with($upper, 'POINT(')) {
-            $start = strpos($wkt, '(') + 1;
-            $end = strrpos($wkt, ')');
-            $inside = substr($wkt, $start, $end - $start);
-
-            $coords = explode(' ', trim($inside));
-            return [(float)$coords[0], (float)$coords[1]];
-        }
-
-        // LINESTRING(x1 y1, x2 y2, ...)
-        if (str_starts_with($upper, 'LINESTRING(')) {
-            $start = strpos($wkt, '(') + 1;
-            $end = strrpos($wkt, ')');
-            $inside = substr($wkt, $start, $end - $start);
-
-            $points = explode(',', $inside);
-            return array_map(function ($point) {
-                $coords = explode(' ', trim($point));
-                return [(float)$coords[0], (float)$coords[1]];
-            }, $points);
-        }
-
-        // POLYGON((x1,y1),(x2,y2))
-        if (str_starts_with($upper, 'POLYGON((')) {
-            $start = strpos($wkt, '((') + 2;
-            $end = strrpos($wkt, '))');
-            $inside = substr($wkt, $start, $end - $start);
-
-            $rings = explode('),(', $inside);
-            return array_map(function ($ring) {
-                $points = explode(',', $ring);
-                return array_map(function ($point) {
-                    $coords = explode(' ', trim($point));
-                    return [(float)$coords[0], (float)$coords[1]];
-                }, $points);
-            }, $rings);
-        }
-
-        return [$wkt];
     }
 }

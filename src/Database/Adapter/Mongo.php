@@ -1304,7 +1304,7 @@ class Mongo extends Adapter
 
             // Continue fetching with getMore
             while ($cursorId && $cursorId !== 0) {
-                $moreResponse = $this->client->getMore($cursorId, $name, self::DEFAULT_BATCH_SIZE);
+                $moreResponse = $this->client->getMore((int)$cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 $moreResults = $moreResponse->cursor->nextBatch ?? [];
 
                 if (empty($moreResults)) {
@@ -1316,7 +1316,7 @@ class Mongo extends Adapter
                 }
 
                 // Update cursor ID for next iteration
-                $cursorId = $moreResponse->cursor->id ?? null;
+                $cursorId = (int)($moreResponse->cursor->id ?? 0);
             }
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -1630,8 +1630,8 @@ class Mongo extends Adapter
                 if (!\is_null($limit) && count($found) >= $limit) {
                     break;
                 }
-
-                $moreResponse = $this->client->getMore($cursorId, $name, self::DEFAULT_BATCH_SIZE);
+     
+                $moreResponse = $this->client->getMore((int)$cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 $moreResults = $moreResponse->cursor->nextBatch ?? [];
 
                 if (empty($moreResults)) {
@@ -1648,7 +1648,7 @@ class Mongo extends Adapter
                     }
                 }
 
-                $cursorId = $moreResponse->cursor->id ?? 0;
+                $cursorId = (int)($moreResponse->cursor->id ?? 0);
             }
 
         } catch (MongoException $e) {
@@ -2047,8 +2047,10 @@ class Mongo extends Adapter
                 [$attribute => ['$lt' => $value[0]]],
                 [$attribute => ['$gt' => $value[1]]]
             ];
-        } elseif ($operator === '$regex' && in_array($query->getMethod(), [Query::TYPE_NOT_STARTS_WITH, Query::TYPE_NOT_ENDS_WITH])) {
-            $filter[$attribute] = ['$not' => new Regex($value, 'i')];
+        } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_STARTS_WITH) {
+            $filter[$attribute] = ['$not' => new Regex('^' . $value, 'i')];
+        } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_ENDS_WITH) {
+            $filter[$attribute] = ['$not' => new Regex($value . '$', 'i')];
         } else {
             $filter[$attribute][$operator] = $value;
         }

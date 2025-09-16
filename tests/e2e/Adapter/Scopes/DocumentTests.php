@@ -893,7 +893,7 @@ trait DocumentTests
         ]);
 
         // Ensure missing optionals on new document is allowed
-        $docs = $database->createOrUpdateDocuments($collectionName, [
+        $docs = $database->upsertDocuments($collectionName, [
             $existingDocument->setAttribute('first', 'updated'),
             $newDocument,
         ]);
@@ -905,7 +905,7 @@ trait DocumentTests
         $this->assertEquals('', $newDocument->getAttribute('last'));
 
         try {
-            $database->createOrUpdateDocuments($collectionName, [
+            $database->upsertDocuments($collectionName, [
                 $existingDocument->removeAttribute('first'),
                 $newDocument
             ]);
@@ -915,7 +915,7 @@ trait DocumentTests
         }
 
         // Ensure missing optionals on existing document is allowed
-        $docs = $database->createOrUpdateDocuments($collectionName, [
+        $docs = $database->upsertDocuments($collectionName, [
             $existingDocument
                 ->setAttribute('first', 'first')
                 ->removeAttribute('last'),
@@ -930,7 +930,7 @@ trait DocumentTests
         $this->assertEquals('last', $newDocument->getAttribute('last'));
 
         // Ensure set null on existing document is allowed
-        $docs = $database->createOrUpdateDocuments($collectionName, [
+        $docs = $database->upsertDocuments($collectionName, [
             $existingDocument
                 ->setAttribute('first', 'first')
                 ->setAttribute('last', null),
@@ -957,7 +957,7 @@ trait DocumentTests
         ]);
 
         // Ensure mismatch of attribute orders is allowed
-        $docs = $database->createOrUpdateDocuments($collectionName, [
+        $docs = $database->upsertDocuments($collectionName, [
             $doc3,
             $doc4
         ]);
@@ -6121,7 +6121,7 @@ trait DocumentTests
             'number' => 250
         ]);
         if ($database->getAdapter()->getSupportForUpserts()) {
-            $upsertCount = $database->createOrUpdateDocuments($collection, [$upsertDoc]);
+            $upsertCount = $database->upsertDocuments($collection, [$upsertDoc]);
             $this->assertEquals(1, $upsertCount);
 
             $upsertedDoc = $database->getDocument($collection, 'test2');
@@ -6136,7 +6136,7 @@ trait DocumentTests
                 '$permissions' => [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())]
             ]);
 
-            $upsertNewCount = $database->createOrUpdateDocuments($collection, [$upsertNewDoc]);
+            $upsertNewCount = $database->upsertDocuments($collection, [$upsertNewDoc]);
             $this->assertEquals(1, $upsertNewCount);
 
             $newUpsertedDoc = $database->getDocument($collection, 'test5');

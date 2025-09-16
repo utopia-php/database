@@ -119,7 +119,38 @@ trait GeneralTests
             '$permissions' => [],
             'attr1' => 'value3',
         ]));
+        // updating with empty dates
+        try {
+            $doc1->setAttribute('$updatedAt', '');
+            $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
+            $this->fail('Failed to throw structure exception');
 
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+        }
+
+        try {
+            $this->getDatabase()->updateDocuments(
+                'preserve_update_dates',
+                new Document([
+                    '$updatedAt' => ''
+                ]),
+                [
+                    Query::equal('$id', [
+                        $doc2->getId(),
+                        $doc3->getId()
+                    ])
+                ]
+            );
+            $this->fail('Failed to throw structure exception');
+
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+        }
+
+        // non empty dates
         $newDate = '2000-01-01T10:00:00.000+00:00';
 
         $doc1->setAttribute('$updatedAt', $newDate);
@@ -166,6 +197,43 @@ trait GeneralTests
 
         $database->createAttribute('preserve_create_dates', 'attr1', Database::VAR_STRING, 10, false);
 
+        // empty string for $createdAt should throw Structure exception
+        try {
+            $date = '';
+            $database->createDocument('preserve_create_dates', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'attr1' => 'value1',
+                '$createdAt' => $date
+            ]));
+            $this->fail('Failed to throw structure exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
+        }
+
+        try {
+            $database->createDocuments('preserve_create_dates', [
+                new Document([
+                    '$id' => 'doc2',
+                    '$permissions' => [],
+                    'attr1' => 'value2',
+                    '$createdAt' => $date
+                ]),
+                new Document([
+                    '$id' => 'doc3',
+                    '$permissions' => [],
+                    'attr1' => 'value3',
+                    '$createdAt' => $date
+                ]),
+            ], batchSize: 2);
+            $this->fail('Failed to throw structure exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+            $this->assertEquals('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
+        }
+
+        // non empty date
         $date = '2000-01-01T10:00:00.000+00:00';
 
         $database->createDocument('preserve_create_dates', new Document([
@@ -186,16 +254,33 @@ trait GeneralTests
                 '$id' => 'doc3',
                 '$permissions' => [],
                 'attr1' => 'value3',
-                '$createdAt' => $date
+                '$createdAt' => $date,
+            ]),
+            new Document([
+                '$id' => 'doc4',
+                '$permissions' => [],
+                'attr1' => 'value3',
+                '$createdAt' => null,
+            ]),
+            new Document([
+                '$id' => 'doc5',
+                '$permissions' => [],
+                'attr1' => 'value3',
             ]),
         ], batchSize: 2);
 
         $doc1 = $database->getDocument('preserve_create_dates', 'doc1');
         $doc2 = $database->getDocument('preserve_create_dates', 'doc2');
         $doc3 = $database->getDocument('preserve_create_dates', 'doc3');
+        $doc4 = $database->getDocument('preserve_create_dates', 'doc4');
+        $doc5 = $database->getDocument('preserve_create_dates', 'doc5');
         $this->assertEquals($date, $doc1->getAttribute('$createdAt'));
         $this->assertEquals($date, $doc2->getAttribute('$createdAt'));
         $this->assertEquals($date, $doc3->getAttribute('$createdAt'));
+        $this->assertNotEmpty($date, $doc4->getAttribute('$createdAt'));
+        $this->assertNotEquals($date, $doc4->getAttribute('$createdAt'));
+        $this->assertNotEmpty($date, $doc5->getAttribute('$createdAt'));
+        $this->assertNotEquals($date, $doc5->getAttribute('$createdAt'));
 
         $database->deleteCollection('preserve_create_dates');
 
@@ -427,7 +512,7 @@ trait GeneralTests
             $database
                 ->setTenant(null)
                 ->setTenantPerDocument(true)
-                ->createOrUpdateDocuments(__FUNCTION__, [new Document([
+                ->upsertDocuments(__FUNCTION__, [new Document([
                     '$id' => $doc3Id,
                     '$tenant' => 3,
                     'name' => 'Superman3',
@@ -465,7 +550,7 @@ trait GeneralTests
             $database
                 ->setTenant(null)
                 ->setTenantPerDocument(true)
-                ->createOrUpdateDocuments(__FUNCTION__, [new Document([
+                ->upsertDocuments(__FUNCTION__, [new Document([
                     '$id' => $doc4Id,
                     '$tenant' => 4,
                     'name' => 'Superman4',
@@ -497,7 +582,7 @@ trait GeneralTests
             $database
                 ->setTenant(null)
                 ->setTenantPerDocument(true)
-                ->createOrUpdateDocuments(__FUNCTION__, [new Document([
+                ->upsertDocuments(__FUNCTION__, [new Document([
                     '$id' => $doc4Id,
                     '$tenant' => 4,
                     'name' => 'Superman4 updated',

@@ -17,6 +17,8 @@ services:
       - ./dev/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
+    environment:
+      PHP_IDE_CONFIG: serverName=tests
 
   adminer:
     image: adminer
@@ -28,7 +30,11 @@ services:
       - database
 
   postgres:
-    image: postgres:17.5
+    build:
+      context: .
+      dockerfile: postgres.dockerfile
+      args:
+        POSTGRES_VERSION: 16
     container_name: utopia-postgres
     networks:
       - database
@@ -37,9 +43,14 @@ services:
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
+      POSTGRES_DB: root
 
   postgres-mirror:
-    image: postgres:17.5
+    build:
+      context: .
+      dockerfile: postgres.dockerfile
+      args:
+        POSTGRES_VERSION: 16
     container_name: utopia-postgres-mirror
     networks:
       - database
@@ -48,6 +59,7 @@ services:
     environment:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: password
+      POSTGRES_DB: root
 
   mariadb:
     image: mariadb:10.11

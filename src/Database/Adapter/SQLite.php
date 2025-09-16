@@ -152,7 +152,8 @@ class SQLite extends MariaDB
                 $attribute->getAttribute('type'),
                 $attribute->getAttribute('size', 0),
                 $attribute->getAttribute('signed', true),
-                $attribute->getAttribute('array', false)
+                $attribute->getAttribute('array', false),
+                $attribute->getAttribute('required', false)
             );
 
             $attributeStrings[$key] = "`{$attrId}` {$attrType}, ";
@@ -326,11 +327,12 @@ class SQLite extends MariaDB
      * @param bool $signed
      * @param bool $array
      * @param string|null $newKey
+     * @param bool $required
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
         if (!empty($newKey) && $newKey !== $id) {
             return $this->renameAttribute($collection, $id, $newKey);
@@ -353,8 +355,8 @@ class SQLite extends MariaDB
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-
-        $collection = $this->getDocument(Database::METADATA, $name);
+        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $collection = $this->getDocument($metadataCollection, $name);
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
@@ -401,7 +403,8 @@ class SQLite extends MariaDB
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        $collection = $this->getDocument(Database::METADATA, $collection);
+        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $collection = $this->getDocument($metadataCollection, $collection);
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
@@ -509,15 +512,16 @@ class SQLite extends MariaDB
     /**
      * Create Document
      *
-     * @param string $collection
+     * @param Document $collection
      * @param Document $document
      * @return Document
      * @throws Exception
      * @throws PDOException
      * @throws Duplicate
      */
-    public function createDocument(string $collection, Document $document): Document
+    public function createDocument(Document $collection, Document $document): Document
     {
+        $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
@@ -626,16 +630,20 @@ class SQLite extends MariaDB
     }
 
     /**
-     * @param string $collection
+     * Update Document
+     *
+     * @param Document $collection
      * @param string $id
      * @param Document $document
      * @param bool $skipPermissions
      * @return Document
-     * @throws DatabaseException
-     * @throws DuplicateException
+     * @throws Exception
+     * @throws PDOException
+     * @throws Duplicate
      */
-    public function updateDocument(string $collection, string $id, Document $document, bool $skipPermissions): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
+        $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
         $attributes['_updatedAt'] = $document->getUpdatedAt();
@@ -960,6 +968,16 @@ class SQLite extends MariaDB
         return false;
     }
 
+    public function getSupportForSpatialAttributes(): bool
+    {
+        return false; // SQLite doesn't have native spatial support
+    }
+
+    public function getSupportForSpatialIndexNull(): bool
+    {
+        return false; // SQLite doesn't have native spatial support
+    }
+
     /**
      * Get SQL Index Type
      *
@@ -1236,5 +1254,34 @@ class SQLite extends MariaDB
         }
 
         return $e;
+    }
+
+    public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
+    }
+    public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return false;
     }
 }

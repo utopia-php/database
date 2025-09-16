@@ -32,8 +32,8 @@ class Structure extends Validator
         ],
         [
             '$id' => '$sequence',
-            'type' => Database::VAR_STRING,
-            'size' => 255,
+            'type' => Database::VAR_ID,
+            'size' => 0,
             'required' => false,
             'signed' => true,
             'array' => false,
@@ -50,7 +50,7 @@ class Structure extends Validator
         ],
         [
             '$id' => '$tenant',
-            'type' => Database::VAR_INTEGER,
+            'type' => Database::VAR_INTEGER, // ? VAR_ID
             'size' => 8,
             'required' => false,
             'default' => null,
@@ -71,7 +71,7 @@ class Structure extends Validator
             '$id' => '$createdAt',
             'type' => Database::VAR_DATETIME,
             'size' => 0,
-            'required' => false,
+            'required' => true,
             'signed' => false,
             'array' => false,
             'filters' => [],
@@ -80,7 +80,7 @@ class Structure extends Validator
             '$id' => '$updatedAt',
             'type' => Database::VAR_DATETIME,
             'size' => 0,
-            'required' => false,
+            'required' => true,
             'signed' => false,
             'array' => false,
             'filters' => [],
@@ -103,6 +103,7 @@ class Structure extends Validator
      */
     public function __construct(
         protected readonly Document $collection,
+        private readonly string $idAttributeType,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
     ) {
@@ -315,6 +316,10 @@ class Structure extends Validator
             $validators = [];
 
             switch ($type) {
+                case Database::VAR_ID:
+                    $validators[] = new Sequence($this->idAttributeType, $attribute['$id'] === '$sequence');
+                    break;
+
                 case Database::VAR_STRING:
                     $validators[] = new Text($size, min: 0);
                     break;
@@ -343,6 +348,12 @@ class Structure extends Validator
                         min: $this->minAllowedDate,
                         max: $this->maxAllowedDate
                     );
+                    break;
+
+                case Database::VAR_POINT:
+                case Database::VAR_LINESTRING:
+                case Database::VAR_POLYGON:
+                    $validators[] = new Spatial($type);
                     break;
 
                 default:

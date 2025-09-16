@@ -7,6 +7,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Query;
 
 class MySQL extends MariaDB
 {
@@ -78,13 +79,59 @@ class MySQL extends MariaDB
         return $size;
     }
 
+    /**
+     * Handle distance spatial queries
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $attribute
+     * @param string $type
+     * @param string $alias
+     * @param string $placeholder
+     * @return string
+    */
+    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
+    {
+        $distanceParams = $query->getValues()[0];
+        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($distanceParams[0]);
+        $binds[":{$placeholder}_1"] = $distanceParams[1];
+
+        $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
+
+        switch ($query->getMethod()) {
+            case Query::TYPE_DISTANCE_EQUAL:
+                $operator = '=';
+                break;
+            case Query::TYPE_DISTANCE_NOT_EQUAL:
+                $operator = '!=';
+                break;
+            case Query::TYPE_DISTANCE_GREATER_THAN:
+                $operator = '>';
+                break;
+            case Query::TYPE_DISTANCE_LESS_THAN:
+                $operator = '<';
+                break;
+            default:
+                throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
+        }
+
+        if ($useMeters) {
+            $attr = "ST_SRID({$alias}.{$attribute}, " . Database::SRID . ")";
+            $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", null);
+            return "ST_Distance({$attr}, {$geom}, 'metre') {$operator} :{$placeholder}_1";
+        }
+        // need to use srid 0 because of geometric distance
+        $attr = "ST_SRID({$alias}.{$attribute}, " . 0 . ")";
+        $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", 0);
+        return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
+    }
+
     public function getSupportForIndexArray(): bool
     {
         /**
-         * Disabling index creation due to Mysql bug
          * @link https://bugs.mysql.com/bug.php?id=111037
          */
-        return false;
+        return true;
     }
 
     public function getSupportForCastIndexArray(): bool
@@ -109,5 +156,97 @@ class MySQL extends MariaDB
         }
 
         return parent::processException($e);
+    }
+    /**
+     * Does the adapter includes boundary during spatial contains?
+     *
+     * @return bool
+     */
+    public function getSupportForBoundaryInclusiveContains(): bool
+    {
+        return false;
+    }
+    /**
+     * Does the adapter support order attribute in spatial indexes?
+     *
+     * @return bool
+    */
+    public function getSupportForSpatialIndexOrder(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Spatial type attribute
+    */
+    public function getSpatialSQLType(string $type, bool $required): string
+    {
+        switch ($type) {
+            case Database::VAR_POINT:
+                $type = 'POINT SRID 4326';
+                if (!$this->getSupportForSpatialIndexNull()) {
+                    if ($required) {
+                        $type .= ' NOT NULL';
+                    } else {
+                        $type .= ' NULL';
+                    }
+                }
+                return $type;
+
+            case Database::VAR_LINESTRING:
+                $type = 'LINESTRING SRID 4326';
+                if (!$this->getSupportForSpatialIndexNull()) {
+                    if ($required) {
+                        $type .= ' NOT NULL';
+                    } else {
+                        $type .= ' NULL';
+                    }
+                }
+                return $type;
+
+
+            case Database::VAR_POLYGON:
+                $type = 'POLYGON SRID 4326';
+                if (!$this->getSupportForSpatialIndexNull()) {
+                    if ($required) {
+                        $type .= ' NOT NULL';
+                    } else {
+                        $type .= ' NULL';
+                    }
+                }
+                return $type;
+        }
+        return '';
+    }
+
+    /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the spatial axis order specification string for MySQL
+     * MySQL with SRID 4326 expects lat-long by default, but our data is in long-lat format
+     *
+     * @return string
+     */
+    protected function getSpatialAxisOrderSpec(): string
+    {
+        return "'axis-order=long-lat'";
     }
 }

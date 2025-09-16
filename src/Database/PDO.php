@@ -46,6 +46,7 @@ class PDO
             return $this->pdo->{$method}(...$args);
         } catch (\Throwable $e) {
             if (Connection::hasError($e)) {
+                Console::warning('[Database] ' . $e->getMessage());
                 Console::warning('[Database] Lost connection detected. Reconnecting...');
 
                 $inTransaction = $this->pdo->inTransaction();

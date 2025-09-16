@@ -5564,9 +5564,8 @@ class Database
                 max: $max
             );
 
-            return $document->setAttribute(
-                $attribute,
-                $document->getAttribute($attribute) + $value
+            return $document->setAttributes(
+                [$attribute => $document->getAttribute($attribute) + $value, '$updatedAt' => $updatedAt, '$updatedBy' => $updatedBy]
             );
         });
 
@@ -5665,9 +5664,8 @@ class Database
                 min: $min
             );
 
-            return $document->setAttribute(
-                $attribute,
-                $document->getAttribute($attribute) - $value
+            return $document->setAttributes(
+                [$attribute => $document->getAttribute($attribute) - $value, '$updatedAt' => $updatedAt, '$updatedBy' => $updatedBy]
             );
         });
 

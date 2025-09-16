@@ -6160,6 +6160,60 @@ trait DocumentTests
             $this->assertCount(8, $finalAllDocs);
 
             $database->deleteCollection($collection);
+
+            // testing with increment decrement
+            Authorization::setRole('user:test_user_3');
+            $collection = 'increase_decrease';
+            $database->createCollection($collection);
+
+            $this->assertEquals(true, $database->createAttribute($collection, 'increase', Database::VAR_INTEGER, 0, true));
+
+            $document = $database->createDocument($collection, new Document([
+                'increase' => 100,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ]
+            ]));
+
+            $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 301);
+            $this->assertEquals(101, $doc->getAttribute('increase'));
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_3', $doc->getUpdatedBy());
+
+            $document = $database->getDocument($collection, $document->getId());
+            $this->assertEquals(101, $document->getAttribute('increase'));
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_3', $doc->getUpdatedBy());
+
+            Authorization::setRole('user:test_user_4');
+            $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 301);
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_4', $doc->getUpdatedBy());
+
+            $doc = $database->getDocument($collection, $document->getId());
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_4', $doc->getUpdatedBy());
+
+            $doc = $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase', 1, -100);
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_4', $doc->getUpdatedBy());
+
+            $doc = $database->getDocument($collection, $document->getId());
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_4', $doc->getUpdatedBy());
+
+            Authorization::setRole('user:test_user_5');
+
+            $doc = $database->decreaseDocumentAttribute($collection, $document->getId(), 'increase', 1, -100);
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_5', $doc->getUpdatedBy());
+
+            $doc = $database->getDocument($collection, $document->getId());
+            $this->assertEquals('test_user_3', $doc->getCreatedBy());
+            $this->assertEquals('test_user_5', $doc->getUpdatedBy());
         }
     }
 }

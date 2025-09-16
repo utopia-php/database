@@ -1043,17 +1043,6 @@ class Postgres extends SQL
 
         try {
             $this->execute($stmt);
-
-            if (!empty($document->getSequence())) {
-                $this->getPDO()->exec("
-                    SELECT setval(
-                        pg_get_serial_sequence('{$this->getSQLTable($name)}', '_id'),
-                        (SELECT MAX(_id) FROM {$this->getSQLTable($name)}),
-                        true
-                    );
-                ");
-            }
-
             $lastInsertedId = $this->getPDO()->lastInsertId();
             // Sequence can be manually set as well
             $document['$sequence'] ??= $lastInsertedId;

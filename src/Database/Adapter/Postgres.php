@@ -2014,13 +2014,13 @@ class Postgres extends SQL
 
         $bin = hex2bin($wkb);
         if ($bin === false) {
-            throw new \RuntimeException('Invalid hex WKB string');
+            throw new DatabaseException('Invalid hex WKB string');
         }
 
         $isLE = ord($bin[0]) === 1;
         $type = unpack($isLE ? 'V' : 'N', substr($bin, 1, 4));
         if ($type === false) {
-            throw new \RuntimeException('Failed to unpack type from WKB');
+            throw new DatabaseException('Failed to unpack type from WKB');
         }
 
         $type = $type[1];
@@ -2030,14 +2030,14 @@ class Postgres extends SQL
 
         $x = unpack($fmt, substr($bin, $offset, 8));
         if ($x === false) {
-            throw new \RuntimeException('Failed to unpack double from WKB');
+            throw new DatabaseException('Failed to unpack double from WKB');
         }
 
         $x = (float)$x[1];
 
         $y = unpack($fmt, substr($bin, $offset + 8, 8));
         if ($y === false) {
-            throw new \RuntimeException('Failed to unpack Y coordinate from WKB');
+            throw new DatabaseException('Failed to unpack Y coordinate from WKB');
         }
 
         $y = (float)$y[1];
@@ -2062,25 +2062,25 @@ class Postgres extends SQL
         if (ctype_xdigit($wkb)) {
             $wkb = hex2bin($wkb);
             if ($wkb === false) {
-                throw new \RuntimeException("Failed to convert hex WKB to binary.");
+                throw new DatabaseException("Failed to convert hex WKB to binary.");
             }
         }
 
         if (strlen($wkb) < 9) {
-            throw new \RuntimeException("WKB too short to be a valid geometry");
+            throw new DatabaseException("WKB too short to be a valid geometry");
         }
 
         $byteOrder = ord($wkb[0]);
         if ($byteOrder === 0) {
-            throw new \RuntimeException("Big-endian WKB not supported");
+            throw new DatabaseException("Big-endian WKB not supported");
         } elseif ($byteOrder !== 1) {
-            throw new \RuntimeException("Invalid byte order in WKB");
+            throw new DatabaseException("Invalid byte order in WKB");
         }
 
         // Type + SRID flag
         $typeField = unpack('V', substr($wkb, 1, 4));
         if ($typeField === false) {
-            throw new \RuntimeException('Failed to unpack the type field from WKB.');
+            throw new DatabaseException('Failed to unpack the type field from WKB.');
         }
 
         $typeField = $typeField[1];
@@ -2088,7 +2088,7 @@ class Postgres extends SQL
         $hasSRID = ($typeField & 0x20000000) !== 0;
 
         if ($geomType !== 2) { // 2 = LINESTRING
-            throw new \RuntimeException("Not a LINESTRING geometry type, got {$geomType}");
+            throw new DatabaseException("Not a LINESTRING geometry type, got {$geomType}");
         }
 
         $offset = 5;
@@ -2098,7 +2098,7 @@ class Postgres extends SQL
 
         $numPoints = unpack('V', substr($wkb, $offset, 4));
         if ($numPoints === false) {
-            throw new \RuntimeException("Failed to unpack number of points at offset {$offset}.");
+            throw new DatabaseException("Failed to unpack number of points at offset {$offset}.");
         }
 
         $numPoints = $numPoints[1];
@@ -2108,7 +2108,7 @@ class Postgres extends SQL
         for ($i = 0; $i < $numPoints; $i++) {
             $x = unpack('e', substr($wkb, $offset, 8));
             if ($x === false) {
-                throw new \RuntimeException("Failed to unpack X coordinate at offset {$offset}.");
+                throw new DatabaseException("Failed to unpack X coordinate at offset {$offset}.");
             }
 
             $x = (float) $x[1];
@@ -2117,7 +2117,7 @@ class Postgres extends SQL
 
             $y = unpack('e', substr($wkb, $offset, 8));
             if ($y === false) {
-                throw new \RuntimeException("Failed to unpack Y coordinate at offset {$offset}.");
+                throw new DatabaseException("Failed to unpack Y coordinate at offset {$offset}.");
             }
 
             $y = (float) $y[1];
@@ -2151,12 +2151,12 @@ class Postgres extends SQL
         if (preg_match('/^[0-9a-fA-F]+$/', $wkb)) {
             $wkb = hex2bin($wkb);
             if ($wkb === false) {
-                throw new \RuntimeException("Invalid hex WKB");
+                throw new DatabaseException("Invalid hex WKB");
             }
         }
 
         if (strlen($wkb) < 9) {
-            throw new \RuntimeException("WKB too short");
+            throw new DatabaseException("WKB too short");
         }
 
         $uInt32 = 'V'; // little-endian 32-bit unsigned
@@ -2164,7 +2164,7 @@ class Postgres extends SQL
 
         $typeInt = unpack($uInt32, substr($wkb, 1, 4));
         if ($typeInt === false) {
-            throw new \RuntimeException('Failed to unpack type field from WKB.');
+            throw new DatabaseException('Failed to unpack type field from WKB.');
         }
 
         $typeInt = (int) $typeInt[1];
@@ -2172,7 +2172,7 @@ class Postgres extends SQL
         $geomType = $typeInt & 0xFF;
 
         if ($geomType !== 3) { // 3 = POLYGON
-            throw new \RuntimeException("Not a POLYGON geometry type, got {$geomType}");
+            throw new DatabaseException("Not a POLYGON geometry type, got {$geomType}");
         }
 
         $offset = 5;
@@ -2183,7 +2183,7 @@ class Postgres extends SQL
         // Number of rings
         $numRings = unpack($uInt32, substr($wkb, $offset, 4));
         if ($numRings === false) {
-            throw new \RuntimeException('Failed to unpack number of rings from WKB.');
+            throw new DatabaseException('Failed to unpack number of rings from WKB.');
         }
 
         $numRings = (int) $numRings[1];
@@ -2193,7 +2193,7 @@ class Postgres extends SQL
         for ($r = 0; $r < $numRings; $r++) {
             $numPoints = unpack($uInt32, substr($wkb, $offset, 4));
             if ($numPoints === false) {
-                throw new \RuntimeException('Failed to unpack number of points from WKB.');
+                throw new DatabaseException('Failed to unpack number of points from WKB.');
             }
 
             $numPoints = (int) $numPoints[1];
@@ -2202,14 +2202,14 @@ class Postgres extends SQL
             for ($i = 0; $i < $numPoints; $i++) {
                 $x = unpack($uDouble, substr($wkb, $offset, 8));
                 if ($x === false) {
-                    throw new \RuntimeException('Failed to unpack X coordinate from WKB.');
+                    throw new DatabaseException('Failed to unpack X coordinate from WKB.');
                 }
 
                 $x = (float) $x[1];
 
                 $y = unpack($uDouble, substr($wkb, $offset + 8, 8));
                 if ($y === false) {
-                    throw new \RuntimeException('Failed to unpack Y coordinate from WKB.');
+                    throw new DatabaseException('Failed to unpack Y coordinate from WKB.');
                 }
 
                 $y = (float) $y[1];

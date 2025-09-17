@@ -2002,4 +2002,14 @@ class Postgres extends SQL
     {
         return false;
     }
+
+    /**
+     * Adapter supports error on not-null spatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    public function getSupportForNotNullSpatialAttributeWithExistingRows(): bool
+    {
+        return true;
+    }
 }

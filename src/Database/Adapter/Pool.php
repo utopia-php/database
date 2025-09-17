@@ -549,4 +549,14 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
+
+    /**
+     * Adapter supports error on not-null spatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    public function getSupportForNotNullSpatialAttributeWithExistingRows(): bool
+    {
+        return false;
+    }
 }

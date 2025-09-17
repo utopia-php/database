@@ -2747,4 +2747,38 @@ trait SpatialTests
             $database->deleteCollection($collectionName);
         }
     }
+
+    public function testCreateSpatialColumnWithExistingData(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        if ($database->getAdapter()->getSupportForSpatialIndexNull()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForNotNullSpatialAttributeWithExistingRows()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = 'spatial_col_existing_data';
+        try {
+            $database->createCollection($col);
+
+            $database->createAttribute($col, 'name', Database::VAR_STRING, 40, false);
+            $database->createDocument($col, new Document(['name' => 'test-doc','$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())]]));
+            try {
+                $database->createAttribute($col, 'loc', Database::VAR_POINT, 0, true);
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
+        } finally {
+            $database->deleteCollection($col);
+        }
+    }
 }

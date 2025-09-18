@@ -392,7 +392,7 @@ class Index extends Validator
         foreach ($this->indexes as $existingIndex) {
             $existingAttributes = $existingIndex->getAttribute('attributes', []);
             $existingOrders = $existingIndex->getAttribute('orders', []);
-           
+
             $attributesMatch = false;
             if (empty(array_diff($existingAttributes, $indexAttributes)) &&
                 empty(array_diff($indexAttributes, $existingAttributes))) {

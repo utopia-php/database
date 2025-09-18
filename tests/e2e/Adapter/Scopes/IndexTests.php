@@ -504,36 +504,36 @@ trait IndexTests
         $database = static::getDatabase();
 
         $collectionId = 'multiple_fulltext_test';
-try {
-        $database->createCollection($collectionId);
-
-        $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 256, false);
-        $database->createAttribute($collectionId, 'content', Database::VAR_STRING, 256, false);
-        $database->createIndex($collectionId, 'fulltext_title', Database::INDEX_FULLTEXT, ['title']);
-
-        $supportsMultipleFulltext = $database->getAdapter()->getSupportForMultipleFulltextIndexes();
-
-        // Try to add second fulltext index
         try {
-            $database->createIndex($collectionId, 'fulltext_content', Database::INDEX_FULLTEXT, ['content']);
+            $database->createCollection($collectionId);
 
-            if ($supportsMultipleFulltext) {
-                $this->assertTrue(true, 'Multiple fulltext indexes are supported and second index was created successfully');
-            } else {
-                $this->fail('Expected exception when creating second fulltext index, but none was thrown');
+            $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 256, false);
+            $database->createAttribute($collectionId, 'content', Database::VAR_STRING, 256, false);
+            $database->createIndex($collectionId, 'fulltext_title', Database::INDEX_FULLTEXT, ['title']);
+
+            $supportsMultipleFulltext = $database->getAdapter()->getSupportForMultipleFulltextIndexes();
+
+            // Try to add second fulltext index
+            try {
+                $database->createIndex($collectionId, 'fulltext_content', Database::INDEX_FULLTEXT, ['content']);
+
+                if ($supportsMultipleFulltext) {
+                    $this->assertTrue(true, 'Multiple fulltext indexes are supported and second index was created successfully');
+                } else {
+                    $this->fail('Expected exception when creating second fulltext index, but none was thrown');
+                }
+            } catch (Throwable $e) {
+                if (!$supportsMultipleFulltext) {
+                    $this->assertTrue(true, 'Multiple fulltext indexes are not supported and exception was thrown as expected');
+                } else {
+                    $this->fail('Unexpected exception when creating second fulltext index: ' . $e->getMessage());
+                }
             }
-        } catch (Throwable $e) {
-            if (!$supportsMultipleFulltext) {
-                $this->assertTrue(true, 'Multiple fulltext indexes are not supported and exception was thrown as expected');
-            } else {
-                $this->fail('Unexpected exception when creating second fulltext index: ' . $e->getMessage());
-            }
+
+        } finally {
+            // Clean up
+            $database->deleteCollection($collectionId);
         }
-
-    } finally {
-        // Clean up
-        $database->deleteCollection($collectionId);
-    }
     }
 
     public function testIdenticalIndexValidation(): void

@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Exception;
+use Utopia\CLI\Console;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
@@ -388,19 +389,6 @@ abstract class Adapter
             } catch (\Throwable $action) {
                 try {
                     $this->rollbackTransaction();
-
-                    if (
-                        $action instanceof DuplicateException ||
-                        $action instanceof RestrictedException ||
-                        $action instanceof AuthorizationException ||
-                        $action instanceof RelationshipException ||
-                        $action instanceof ConflictException ||
-                        $action instanceof LimitException
-                    ) {
-                        $this->inTransaction = 0;
-                        throw $action;
-                    }
-
                 } catch (\Throwable $rollback) {
                     if ($attempts < $retries) {
                         \usleep($sleep * ($attempts + 1));
@@ -409,6 +397,21 @@ abstract class Adapter
 
                     $this->inTransaction = 0;
                     throw $rollback;
+                }
+
+                if (
+                    $action instanceof DuplicateException ||
+                    $action instanceof RestrictedException ||
+                    $action instanceof AuthorizationException ||
+                    $action instanceof RelationshipException ||
+                    $action instanceof ConflictException ||
+                    $action instanceof LimitException
+                ) {
+                    Console::error($action->getMessage());
+                    Console::error($action->getFile());
+                    Console::error($action->getLine());
+                    $this->inTransaction = 0;
+                    throw $action;
                 }
 
                 if ($attempts < $retries) {

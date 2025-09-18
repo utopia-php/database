@@ -22,6 +22,34 @@ use Utopia\Database\Validator\Authorization;
 
 trait DocumentTests
 {
+    public function testBigintSequence(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+
+        $sequence = 5_000_000_000_000_000;
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
+            $sequence = '01995753-881b-78cf-9506-2cffecf8f227';
+        }
+
+        $document = $database->createDocument(__FUNCTION__, new Document([
+            '$sequence' => (string)$sequence,
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+        ]));
+
+        $this->assertEquals((string)$sequence, $document->getSequence());
+
+        $document = $database->getDocument(__FUNCTION__, $document->getId());
+        $this->assertEquals((string)$sequence, $document->getSequence());
+
+        $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string)$sequence])]);
+        $this->assertEquals((string)$sequence, $document->getSequence());
+    }
+
     public function testCreateDocument(): Document
     {
         /** @var Database $database */

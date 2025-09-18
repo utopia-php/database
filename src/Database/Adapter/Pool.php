@@ -470,13 +470,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * @param array<string,mixed> $selections
-     * @param string $prefix
-     * @param array<string,mixed> $spatialAttributes
-     * @return mixed
-     */
-    protected function getAttributeProjection(array $selections, string $prefix, array $spatialAttributes = []): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -546,6 +540,21 @@ class Pool extends Adapter
      * @return bool
      */
     public function getSupportForSpatialAxisOrder(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodePoint(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodeLinestring(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodePolygon(string $wkb): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

@@ -1284,4 +1284,14 @@ class SQLite extends MariaDB
     {
         return false;
     }
+
+    /**
+     * Adapter supports optionalspatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return true;
+    }
 }

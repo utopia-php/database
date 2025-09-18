@@ -6,6 +6,7 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Dependency as DependencyException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Query;
 
@@ -155,6 +156,10 @@ class MySQL extends MariaDB
             return new DependencyException('Attribute cannot be deleted because it is used in an index', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === '22004' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1138) {
+            return new StructureException('Attribute does not allow null values', $e->getCode(), $e);
+        }
+
         return parent::processException($e);
     }
     /**
@@ -248,5 +253,15 @@ class MySQL extends MariaDB
     protected function getSpatialAxisOrderSpec(): string
     {
         return "'axis-order=long-lat'";
+    }
+
+    /**
+     * Adapter supports optional spatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return false;
     }
 }

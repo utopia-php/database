@@ -2263,7 +2263,7 @@ class Mongo extends Adapter
      */
     public function getSupportForQueryContains(): bool
     {
-        return true;
+        return false;
     }
 
     /**

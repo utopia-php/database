@@ -3490,8 +3490,8 @@ trait DocumentTests
         ]);
 
         // Extract IDs for comparison
-        $firstIds = array_map(fn($doc) => $doc['$id'], $firstSet);
-        $secondIds = array_map(fn($doc) => $doc['$id'], $secondSet);
+        $firstIds = array_map(fn ($doc) => $doc['$id'], $firstSet);
+        $secondIds = array_map(fn ($doc) => $doc['$id'], $secondSet);
 
         // While not guaranteed to be different, with 6 movies and selecting 3,
         // the probability of getting the same set in the same order is very low

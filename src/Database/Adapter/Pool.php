@@ -551,12 +551,12 @@ class Pool extends Adapter
     }
 
     /**
-     * Adapter supports error on not-null spatial attributes with existing rows.
+     * Adapter supports optional spatial attributes with existing rows.
      *
      * @return bool
      */
-    public function getSupportForNotNullSpatialAttributeWithExistingRows(): bool
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
     {
-        return false;
+        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 }

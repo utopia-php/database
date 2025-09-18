@@ -2761,7 +2761,7 @@ trait SpatialTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForNotNullSpatialAttributeWithExistingRows()) {
+        if ($database->getAdapter()->getSupportForOptionalSpatialAttributeWithExistingRows()) {
             $this->expectNotToPerformAssertions();
             return;
         }

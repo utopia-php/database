@@ -157,7 +157,7 @@ class MySQL extends MariaDB
         }
 
         if ($e->getCode() === '22004' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1138) {
-            return new StructureException('Attribute not found', $e->getCode(), $e);
+            return new StructureException('Attribute does not allow null values', $e->getCode(), $e);
         }
 
         return parent::processException($e);
@@ -256,12 +256,12 @@ class MySQL extends MariaDB
     }
 
     /**
-     * Adapter supports error on not-null spatial attributes with existing rows.
+     * Adapter supports optional spatial attributes with existing rows.
      *
      * @return bool
      */
-    public function getSupportForNotNullSpatialAttributeWithExistingRows(): bool
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
     {
-        return true;
+        return false;
     }
 }

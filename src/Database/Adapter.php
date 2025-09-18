@@ -1065,11 +1065,11 @@ abstract class Adapter
     abstract public function getSupportForSpatialIndexNull(): bool;
 
     /**
-     * Adapter supports error on not-null spatial attributes with existing rows.
+     * Adapter supports optional spatial attributes with existing rows.
      *
      * @return bool
      */
-    abstract public function getSupportForNotNullSpatialAttributeWithExistingRows(): bool;
+    abstract public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool;
 
     /**
      * Does the adapter support order attribute in spatial indexes?

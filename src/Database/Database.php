@@ -1405,12 +1405,15 @@ class Database
         if ($this->validate) {
             $validator = new IndexValidator(
                 $attributes,
+                [],
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->getSupportForIndexArray(),
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForMultipleFulltextIndexes(),
+                $this->adapter->getSupportForIdenticalIndexes(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2414,12 +2417,15 @@ class Database
                 if ($this->validate) {
                     $validator = new IndexValidator(
                         $attributes,
+                        $indexes,
                         $this->adapter->getMaxIndexLength(),
                         $this->adapter->getInternalIndexesKeys(),
                         $this->adapter->getSupportForIndexArray(),
                         $this->adapter->getSupportForSpatialAttributes(),
                         $this->adapter->getSupportForSpatialIndexNull(),
                         $this->adapter->getSupportForSpatialIndexOrder(),
+                        $this->adapter->getSupportForMultipleFulltextIndexes(),
+                        $this->adapter->getSupportForIdenticalIndexes(),
                     );
 
                     foreach ($indexes as $index) {
@@ -3352,22 +3358,29 @@ class Database
             'orders' => $orders,
         ]);
 
-        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
-
         if ($this->validate) {
+
+            // var_dump($collection);
+            // var_dump($index);
+
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
+                $collection->getAttribute('indexes', []),
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->getSupportForIndexArray(),
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForMultipleFulltextIndexes(),
+                $this->adapter->getSupportForIdenticalIndexes(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
             }
         }
+
+        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
 
         try {
             $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);

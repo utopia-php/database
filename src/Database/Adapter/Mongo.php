@@ -2047,8 +2047,10 @@ class Mongo extends Adapter
                 [$attribute => ['$lt' => $value[0]]],
                 [$attribute => ['$gt' => $value[1]]]
             ];
-        } elseif ($operator === '$regex' && in_array($query->getMethod(), [Query::TYPE_NOT_STARTS_WITH, Query::TYPE_NOT_ENDS_WITH])) {
-            $filter[$attribute] = ['$not' => new Regex($value, 'i')];
+        } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_STARTS_WITH) {
+            $filter[$attribute] = ['$not' => new Regex('^' . $value, 'i')];
+        } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_ENDS_WITH) {
+            $filter[$attribute] = ['$not' => new Regex($value . '$', 'i')];
         } else {
             $filter[$attribute][$operator] = $value;
         }
@@ -2591,6 +2593,7 @@ class Mongo extends Adapter
 
     protected function processException(Exception $e): \Exception
     {
+
         // Timeout
         if ($e->getCode() === 50) {
             return new Timeout('Query timed out', $e->getCode(), $e);

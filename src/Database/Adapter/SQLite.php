@@ -1294,4 +1294,14 @@ class SQLite extends MariaDB
     {
         return true;
     }
+
+    /**
+     * Get the SQL function for random ordering
+     *
+     * @return string
+     */
+    protected function getRandomOrder(): string
+    {
+        return 'RANDOM()';
+    }
 }

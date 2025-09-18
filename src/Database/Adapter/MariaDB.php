@@ -1665,6 +1665,16 @@ class MariaDB extends SQL
     }
 
     /**
+     * Get the SQL function for random ordering
+     *
+     * @return string
+     */
+    protected function getRandomOrder(): string
+    {
+        return 'RAND()';
+    }
+
+    /**
      * Size of POINT spatial type
      *
      * @return int

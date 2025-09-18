@@ -1793,6 +1793,16 @@ class Postgres extends SQL
     }
 
     /**
+     * Get the SQL function for random ordering
+     *
+     * @return string
+     */
+    protected function getRandomOrder(): string
+    {
+        return 'RANDOM()';
+    }
+
+    /**
      * Size of POINT spatial type
      *
      * @return int

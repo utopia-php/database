@@ -44,6 +44,23 @@ trait CollectionTests
         /** @var Database $database */
         $database = static::getDatabase();
 
+
+        $database->createCollection('shmuel', permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]);
+
+        $database->createDocument('shmuel', new Document([
+            '$id' => 'doc1',
+        ]));
+
+        $database->createDocument('shmuel', new Document([
+            '$id' => 'doc1',
+        ]));
+
+        $this->assertEquals(1,222);
+
+
         $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('actors', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),

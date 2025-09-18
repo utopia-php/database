@@ -104,6 +104,8 @@ services:
 
 # Manyally initate the replica set
 # mongo users(!root) do not get created automatically!!!
+#sudo chmod 600 mongo-keyfile
+#sudo chown mongodb:mongodb mongo-keyfile
 #docker compose exec mongo  mongosh admin -u root -p password --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "mongo:27017"}]})'
 
   mongo-express:

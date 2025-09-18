@@ -388,19 +388,6 @@ abstract class Adapter
             } catch (\Throwable $action) {
                 try {
                     $this->rollbackTransaction();
-
-                    if (
-                        $action instanceof DuplicateException ||
-                        $action instanceof RestrictedException ||
-                        $action instanceof AuthorizationException ||
-                        $action instanceof RelationshipException ||
-                        $action instanceof ConflictException ||
-                        $action instanceof LimitException
-                    ) {
-                        $this->inTransaction = 0;
-                        throw $action;
-                    }
-
                 } catch (\Throwable $rollback) {
                     if ($attempts < $retries) {
                         \usleep($sleep * ($attempts + 1));
@@ -409,6 +396,18 @@ abstract class Adapter
 
                     $this->inTransaction = 0;
                     throw $rollback;
+                }
+
+                if (
+                    $action instanceof DuplicateException ||
+                    $action instanceof RestrictedException ||
+                    $action instanceof AuthorizationException ||
+                    $action instanceof RelationshipException ||
+                    $action instanceof ConflictException ||
+                    $action instanceof LimitException
+                ) {
+                    $this->inTransaction = 0;
+                    throw $action;
                 }
 
                 if ($attempts < $retries) {

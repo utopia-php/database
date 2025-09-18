@@ -407,9 +407,6 @@ abstract class Adapter
                     $action instanceof ConflictException ||
                     $action instanceof LimitException
                 ) {
-                    Console::error($action->getMessage());
-                    Console::error($action->getFile());
-                    Console::error($action->getLine());
                     $this->inTransaction = 0;
                     throw $action;
                 }

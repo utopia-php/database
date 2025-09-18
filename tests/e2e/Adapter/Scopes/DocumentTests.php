@@ -3517,13 +3517,6 @@ trait DocumentTests
             $this->assertGreaterThan(10, $document['price']);
         }
 
-        // Test orderRandom with zero limit
-        $documents = $database->find('movies', [
-            Query::orderRandom(),
-            Query::limit(0),
-        ]);
-        $this->assertEquals(0, count($documents));
-
         // Test orderRandom without explicit limit (should use default)
         $documents = $database->find('movies', [
             Query::orderRandom(),

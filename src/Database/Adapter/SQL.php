@@ -1906,10 +1906,10 @@ abstract class SQL extends Adapter
      *
      * @param array<string> $selections
      * @param string $prefix
-     * @return string
+     * @return mixed
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix): string
+    protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         if (empty($selections) || \in_array('*', $selections)) {
             return "{$this->quote($prefix)}.*";

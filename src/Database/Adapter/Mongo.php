@@ -2698,4 +2698,45 @@ class Mongo extends Adapter
 
         return ['$in' => $values];
     }
+
+     public function decodePoint(string $wkb): array
+     {
+       return [];
+     }
+
+    /**
+     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
+     *
+     * @param string $wkb
+     * @return float[][] Array of points, each as [x, y]
+     */
+     public function decodeLinestring(string $wkb): array
+     {
+         return [];
+     }
+
+    /**
+     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
+     *
+     * @param string $wkb
+     * @return float[][][] Array of rings, each ring is an array of points [x, y]
+     */
+     public function decodePolygon(string $wkb): array
+     {
+         return [];
+     }
+
+    /**
+     * Get the query to check for tenant when in shared tables mode
+     *
+     * @param string $collection   The collection being queried
+     * @param string $alias  The alias of the parent collection if in a subquery
+     * @return string
+     */
+    public function getTenantQuery(string $collection, string $alias = ''): string
+    {
+      return '';
+    }
+
+
 }

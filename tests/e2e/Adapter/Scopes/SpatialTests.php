@@ -113,25 +113,29 @@ trait SpatialTests
             $this->assertEquals(true, $database->createIndex($collectionName, 'line_spatial', Database::INDEX_SPATIAL, ['lineAttr']));
             $this->assertEquals(true, $database->createIndex($collectionName, 'poly_spatial', Database::INDEX_SPATIAL, ['polyAttr']));
 
+            $point = [5.0, 5.0];
+            $linestring = [[1.0, 2.0], [3.0, 4.0]];
+            $polygon = [[[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [10.0, 0.0], [0.0, 0.0]]];
+
             // Create test document
             $doc1 = new Document([
                 '$id' => 'doc1',
-                'pointAttr' => [5.0, 5.0],
-                'lineAttr' => [[1.0, 2.0], [3.0, 4.0]],
-                'polyAttr' => [
-                    [
-                        [0.0, 0.0],
-                        [0.0, 10.0],
-                        [10.0, 10.0],
-                        [10.0, 0.0],
-                        [0.0, 0.0]
-                    ]
-                ],
+                'pointAttr' => $point,
+                'lineAttr' => $linestring,
+                'polyAttr' => $polygon,
                 '$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())]
             ]);
             $createdDoc = $database->createDocument($collectionName, $doc1);
             $this->assertInstanceOf(Document::class, $createdDoc);
-            $this->assertEquals([5.0, 5.0], $createdDoc->getAttribute('pointAttr'));
+            $this->assertEquals($point, $createdDoc->getAttribute('pointAttr'));
+            $this->assertEquals($linestring, $createdDoc->getAttribute('lineAttr'));
+            $this->assertEquals($polygon, $createdDoc->getAttribute('polyAttr'));
+
+            $createdDoc = $database->getDocument($collectionName, 'doc1');
+            $this->assertInstanceOf(Document::class, $createdDoc);
+            $this->assertEquals($point, $createdDoc->getAttribute('pointAttr'));
+            $this->assertEquals($linestring, $createdDoc->getAttribute('lineAttr'));
+            $this->assertEquals($polygon, $createdDoc->getAttribute('polyAttr'));
 
             // Update spatial data
             $doc1->setAttribute('pointAttr', [6.0, 6.0]);

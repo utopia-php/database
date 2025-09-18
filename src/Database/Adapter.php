@@ -1272,10 +1272,43 @@ abstract class Adapter
     abstract public function getSchemaAttributes(string $collection): array;
 
     /**
+     * Get the query to check for tenant when in shared tables mode
+     *
+     * @param string $collection   The collection being queried
+     * @param string $alias  The alias of the parent collection if in a subquery
+     * @return string
+     */
+    abstract public function getTenantQuery(string $collection, string $alias = ''): string;
+
+    /**
      * @param mixed $stmt
      * @return bool
      */
     abstract protected function execute(mixed $stmt): bool;
+
+    /**
+     * Decode a WKB or textual POINT into [x, y]
+     *
+     * @param string $wkb
+     * @return float[] Array with two elements: [x, y]
+     */
+    abstract public function decodePoint(string $wkb): array;
+
+    /**
+     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
+     *
+     * @param string $wkb
+     * @return float[][] Array of points, each as [x, y]
+     */
+    abstract public function decodeLinestring(string $wkb): array;
+
+    /**
+     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
+     *
+     * @param string $wkb
+     * @return float[][][] Array of rings, each ring is an array of points [x, y]
+     */
+    abstract public function decodePolygon(string $wkb): array;
 
     /**
         * Returns the document after casting

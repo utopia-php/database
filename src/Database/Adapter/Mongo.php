@@ -1301,7 +1301,7 @@ class Mongo extends Adapter
 
             // Continue fetching with getMore
             while ($cursorId && $cursorId !== 0) {
-                $moreResponse = $this->client->getMore($cursorId, $name, self::DEFAULT_BATCH_SIZE);
+                $moreResponse = $this->client->getMore((int)$cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 $moreResults = $moreResponse->cursor->nextBatch ?? [];
 
                 if (empty($moreResults)) {
@@ -1313,7 +1313,7 @@ class Mongo extends Adapter
                 }
 
                 // Update cursor ID for next iteration
-                $cursorId = $moreResponse->cursor->id ?? null;
+                $cursorId = (int)($moreResponse->cursor->id ?? 0);
             }
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -1612,7 +1612,6 @@ class Mongo extends Adapter
 
             $response = $this->client->find($name, $filters, $options);
             $results = $response->cursor->firstBatch ?? [];
-
             // Process first batch
             foreach ($results as $result) {
                 $record = $this->replaceChars('_', '$', (array)$result);
@@ -1629,7 +1628,7 @@ class Mongo extends Adapter
                     break;
                 }
 
-                $moreResponse = $this->client->getMore($cursorId, $name, self::DEFAULT_BATCH_SIZE);
+                $moreResponse = $this->client->getMore((int)$cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 $moreResults = $moreResponse->cursor->nextBatch ?? [];
 
                 if (empty($moreResults)) {
@@ -1646,7 +1645,7 @@ class Mongo extends Adapter
                     }
                 }
 
-                $cursorId = $moreResponse->cursor->id ?? 0;
+                $cursorId = (int)($moreResponse->cursor->id ?? 0);
             }
 
         } catch (MongoException $e) {
@@ -2264,7 +2263,7 @@ class Mongo extends Adapter
      */
     public function getSupportForQueryContains(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -2553,7 +2552,6 @@ class Mongo extends Adapter
 
     protected function processException(Exception $e): \Exception
     {
-
         // Timeout
         if ($e->getCode() === 50) {
             return new Timeout('Query timed out', $e->getCode(), $e);
@@ -2660,4 +2658,45 @@ class Mongo extends Adapter
 
         return ['$in' => $values];
     }
+
+    public function decodePoint(string $wkb): array
+    {
+        return [];
+    }
+
+    /**
+     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
+     *
+     * @param string $wkb
+     * @return float[][] Array of points, each as [x, y]
+     */
+    public function decodeLinestring(string $wkb): array
+    {
+        return [];
+    }
+
+    /**
+     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
+     *
+     * @param string $wkb
+     * @return float[][][] Array of rings, each ring is an array of points [x, y]
+     */
+    public function decodePolygon(string $wkb): array
+    {
+        return [];
+    }
+
+    /**
+     * Get the query to check for tenant when in shared tables mode
+     *
+     * @param string $collection   The collection being queried
+     * @param string $alias  The alias of the parent collection if in a subquery
+     * @return string
+     */
+    public function getTenantQuery(string $collection, string $alias = ''): string
+    {
+        return '';
+    }
+
+
 }

@@ -30,17 +30,29 @@ class Index extends Validator
 
     protected bool $spatialIndexOrderSupport;
 
+    protected bool $multipleFulltextIndexSupport;
+
+    protected bool $identicalIndexSupport;
+
+    /**
+     * @var array<Document> $indexes
+     */
+    protected array $indexes;
+
     /**
      * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @param int $maxLength
      * @param array<string> $reservedKeys
      * @param bool $arrayIndexSupport
      * @param bool $spatialIndexSupport
      * @param bool $spatialIndexNullSupport
      * @param bool $spatialIndexOrderSupport
+     * @param bool $multipleFulltextIndexSupport
+     * @param bool $identicalIndexSupport
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [], bool $arrayIndexSupport = false, bool $spatialIndexSupport = false, bool $spatialIndexNullSupport = false, bool $spatialIndexOrderSupport = false)
+    public function __construct(array $attributes, array $indexes, int $maxLength, array $reservedKeys = [], bool $arrayIndexSupport = false, bool $spatialIndexSupport = false, bool $spatialIndexNullSupport = false, bool $spatialIndexOrderSupport = false, bool $multipleFulltextIndexSupport = true, bool $identicalIndexSupport = true)
     {
         $this->maxLength = $maxLength;
         $this->reservedKeys = $reservedKeys;
@@ -48,7 +60,9 @@ class Index extends Validator
         $this->spatialIndexSupport = $spatialIndexSupport;
         $this->spatialIndexNullSupport = $spatialIndexNullSupport;
         $this->spatialIndexOrderSupport = $spatialIndexOrderSupport;
-
+        $this->multipleFulltextIndexSupport = $multipleFulltextIndexSupport;
+        $this->identicalIndexSupport = $identicalIndexSupport;
+        $this->indexes = $indexes;
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
             $this->attributes[$key] = $attribute;
@@ -305,6 +319,14 @@ class Index extends Validator
             return false;
         }
 
+        if (!$this->checkMultipleFulltextIndex($value)) {
+            return false;
+        }
+
+        if (!$this->checkIdenticalIndex($value)) {
+            return false;
+        }
+
         return true;
     }
 
@@ -331,6 +353,67 @@ class Index extends Validator
     {
         return self::TYPE_OBJECT;
     }
+
+    /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkMultipleFulltextIndex(Document $index): bool
+    {
+        if ($this->multipleFulltextIndexSupport) {
+            return true;
+        }
+
+        if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
+            foreach ($this->indexes as $existingIndex) {
+                if ($existingIndex->getAttribute('type') === Database::INDEX_FULLTEXT) {
+                    $this->message = 'There is already a fulltext index in the collection';
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkIdenticalIndex(Document $index): bool
+    {
+        if ($this->identicalIndexSupport) {
+            return true;
+        }
+
+        $indexAttributes = $index->getAttribute('attributes', []);
+        $indexOrders = $index->getAttribute('orders', []);
+
+        foreach ($this->indexes as $existingIndex) {
+            $existingAttributes = $existingIndex->getAttribute('attributes', []);
+            $existingOrders = $existingIndex->getAttribute('orders', []);
+           
+            $attributesMatch = false;
+            if (empty(array_diff($existingAttributes, $indexAttributes)) &&
+                empty(array_diff($indexAttributes, $existingAttributes))) {
+                $attributesMatch = true;
+            }
+
+            $ordersMatch = false;
+            if (empty(array_diff($existingOrders, $indexOrders)) &&
+                empty(array_diff($indexOrders, $existingOrders))) {
+                $ordersMatch = true;
+            }
+
+            if ($attributesMatch && $ordersMatch) {
+                $this->message = 'There is already an index with the same attributes and orders';
+                return false;
+            }
+        }
+
+        return true;
+    }
+
 
     /**
      * @param Document $index

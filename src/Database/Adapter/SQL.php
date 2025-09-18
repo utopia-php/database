@@ -1514,13 +1514,33 @@ abstract class SQL extends Adapter
     }
 
     /**
-         * Is internal casting supported?
-         *
-         * @return bool
-         */
+    * Is internal casting supported?
+    *
+    * @return bool
+    */
     public function getSupportForInternalCasting(): bool
     {
         return false;
+    }
+
+    /**
+     * Does the adapter support multiple fulltext indexes?
+    *
+    * @return bool
+ */
+    public function getSupportForMultipleFulltextIndexes(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Does the adapter support identical indexes?
+     *
+     * @return bool
+     */
+    public function getSupportForIdenticalIndexes(): bool
+    {
+        return true;
     }
 
     public function isMongo(): bool

@@ -2039,6 +2039,7 @@ class Mongo extends Adapter
         return $filter;
     }
 
+
     /**
      * Get Query Operator
      *
@@ -2082,7 +2083,6 @@ class Mongo extends Adapter
                 return $value;
         }
     }
-
     /**
      * Get Mongo Order
      *

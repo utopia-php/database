@@ -1153,9 +1153,9 @@ abstract class Adapter
      *
      * @param array<string> $selections
      * @param string $prefix
-     * @return string
+     * @return mixed
      */
-    abstract protected function getAttributeProjection(array $selections, string $prefix): string;
+    abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
 
     /**
      * Get all selected attributes from queries
@@ -1309,4 +1309,43 @@ abstract class Adapter
      * @return float[][][] Array of rings, each ring is an array of points [x, y]
      */
     abstract public function decodePolygon(string $wkb): array;
+
+    /**
+        * Returns the document after casting
+        * @param Document $collection
+        * @param Document $document
+        * @return Document
+        */
+    abstract public function castingBefore(Document $collection, Document $document): Document;
+
+    /**
+     * Returns the document after casting
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     */
+    abstract public function castingAfter(Document $collection, Document $document): Document;
+
+    /**
+     * Is Mongo?
+     *
+     * @return bool
+     */
+    abstract public function isMongo(): bool;
+
+    /**
+     * Is internal casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForInternalCasting(): bool;
+
+    /**
+    * Set UTC Datetime
+    *
+    * @param string $value
+    * @return mixed
+    */
+    abstract public function setUTCDatetime(string $value): mixed;
+
 }

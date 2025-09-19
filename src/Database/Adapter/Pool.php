@@ -470,7 +470,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    protected function getAttributeProjection(array $selections, string $prefix): string
+    protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -555,6 +555,31 @@ class Pool extends Adapter
     }
 
     public function decodePolygon(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingBefore(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function isMongo(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForInternalCasting(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setUTCDatetime(string $value): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

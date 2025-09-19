@@ -4,29 +4,29 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5a68454fa54e1d31deef8571953a3da3",
+    "content-hash": "e23429f4a3f7e66afaa960e249ee7525",
     "packages": [
         {
             "name": "brick/math",
-            "version": "0.13.1",
+            "version": "0.14.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/brick/math.git",
-                "reference": "fc7ed316430118cc7836bf45faff18d5dfc8de04"
+                "reference": "113a8ee2656b882d4c3164fa31aa6e12cbb7aaa2"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/brick/math/zipball/fc7ed316430118cc7836bf45faff18d5dfc8de04",
-                "reference": "fc7ed316430118cc7836bf45faff18d5dfc8de04",
+                "url": "https://api.github.com/repos/brick/math/zipball/113a8ee2656b882d4c3164fa31aa6e12cbb7aaa2",
+                "reference": "113a8ee2656b882d4c3164fa31aa6e12cbb7aaa2",
                 "shasum": ""
             },
             "require": {
-                "php": "^8.1"
+                "php": "^8.2"
             },
             "require-dev": {
                 "php-coveralls/php-coveralls": "^2.2",
-                "phpunit/phpunit": "^10.1",
-                "vimeo/psalm": "6.8.8"
+                "phpstan/phpstan": "2.1.22",
+                "phpunit/phpunit": "^11.5"
             },
             "type": "library",
             "autoload": {
@@ -56,7 +56,7 @@
             ],
             "support": {
                 "issues": "https://github.com/brick/math/issues",
-                "source": "https://github.com/brick/math/tree/0.13.1"
+                "source": "https://github.com/brick/math/tree/0.14.0"
             },
             "funding": [
                 {
@@ -64,7 +64,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-03-29T13:50:30+00:00"
+            "time": "2025-08-29T12:40:03+00:00"
         },
         {
             "name": "composer/semver",
@@ -189,6 +189,83 @@
                 "source": "https://github.com/protocolbuffers/protobuf-php/tree/v4.32.0"
             },
             "time": "2025-08-14T20:00:33+00:00"
+        },
+        {
+            "name": "mongodb/mongodb",
+            "version": "2.1.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/mongodb/mongo-php-library.git",
+                "reference": "3bbe7ba9578724c7e1f47fcd17c881c0995baaad"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/mongodb/mongo-php-library/zipball/3bbe7ba9578724c7e1f47fcd17c881c0995baaad",
+                "reference": "3bbe7ba9578724c7e1f47fcd17c881c0995baaad",
+                "shasum": ""
+            },
+            "require": {
+                "composer-runtime-api": "^2.0",
+                "ext-mongodb": "^2.1",
+                "php": "^8.1",
+                "psr/log": "^1.1.4|^2|^3",
+                "symfony/polyfill-php85": "^1.32"
+            },
+            "replace": {
+                "mongodb/builder": "*"
+            },
+            "require-dev": {
+                "doctrine/coding-standard": "^12.0",
+                "phpunit/phpunit": "^10.5.35",
+                "rector/rector": "^1.2",
+                "squizlabs/php_codesniffer": "^3.7",
+                "vimeo/psalm": "6.5.*"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-master": "1.x-dev"
+                }
+            },
+            "autoload": {
+                "files": [
+                    "src/functions.php"
+                ],
+                "psr-4": {
+                    "MongoDB\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Andreas Braun",
+                    "email": "andreas.braun@mongodb.com"
+                },
+                {
+                    "name": "Jeremy Mikola",
+                    "email": "jmikola@gmail.com"
+                },
+                {
+                    "name": "Jérôme Tamarelle",
+                    "email": "jerome.tamarelle@mongodb.com"
+                }
+            ],
+            "description": "MongoDB driver library",
+            "homepage": "https://jira.mongodb.org/browse/PHPLIB",
+            "keywords": [
+                "database",
+                "driver",
+                "mongodb",
+                "persistence"
+            ],
+            "support": {
+                "issues": "https://github.com/mongodb/mongo-php-library/issues",
+                "source": "https://github.com/mongodb/mongo-php-library/tree/2.1.0"
+            },
+            "time": "2025-05-23T10:48:05+00:00"
         },
         {
             "name": "nyholm/psr7",
@@ -336,16 +413,16 @@
         },
         {
             "name": "open-telemetry/api",
-            "version": "1.4.0",
+            "version": "1.5.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/opentelemetry-php/api.git",
-                "reference": "b3a9286f9c1c8247c83493c5b1fa475cd0cec7f7"
+                "reference": "7692075f486c14d8cfd37fba98a08a5667f089e5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/opentelemetry-php/api/zipball/b3a9286f9c1c8247c83493c5b1fa475cd0cec7f7",
-                "reference": "b3a9286f9c1c8247c83493c5b1fa475cd0cec7f7",
+                "url": "https://api.github.com/repos/opentelemetry-php/api/zipball/7692075f486c14d8cfd37fba98a08a5667f089e5",
+                "reference": "7692075f486c14d8cfd37fba98a08a5667f089e5",
                 "shasum": ""
             },
             "require": {
@@ -402,7 +479,7 @@
                 "issues": "https://github.com/open-telemetry/opentelemetry-php/issues",
                 "source": "https://github.com/open-telemetry/opentelemetry-php"
             },
-            "time": "2025-06-19T23:36:51+00:00"
+            "time": "2025-08-07T23:07:38+00:00"
         },
         {
             "name": "open-telemetry/context",
@@ -592,22 +669,22 @@
         },
         {
             "name": "open-telemetry/sdk",
-            "version": "1.7.0",
+            "version": "1.7.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/opentelemetry-php/sdk.git",
-                "reference": "86287cf30fd6549444d7b8f7d8758d92e24086ac"
+                "reference": "52690d4b37ae4f091af773eef3c238ed2bc0aa06"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/opentelemetry-php/sdk/zipball/86287cf30fd6549444d7b8f7d8758d92e24086ac",
-                "reference": "86287cf30fd6549444d7b8f7d8758d92e24086ac",
+                "url": "https://api.github.com/repos/opentelemetry-php/sdk/zipball/52690d4b37ae4f091af773eef3c238ed2bc0aa06",
+                "reference": "52690d4b37ae4f091af773eef3c238ed2bc0aa06",
                 "shasum": ""
             },
             "require": {
                 "ext-json": "*",
                 "nyholm/psr7-server": "^1.1",
-                "open-telemetry/api": "~1.4.0",
+                "open-telemetry/api": "^1.4",
                 "open-telemetry/context": "^1.0",
                 "open-telemetry/sem-conv": "^1.0",
                 "php": "^8.1",
@@ -685,7 +762,7 @@
                 "issues": "https://github.com/open-telemetry/opentelemetry-php/issues",
                 "source": "https://github.com/open-telemetry/opentelemetry-php"
             },
-            "time": "2025-08-06T03:07:06+00:00"
+            "time": "2025-09-05T07:17:06+00:00"
         },
         {
             "name": "open-telemetry/sem-conv",
@@ -1164,20 +1241,20 @@
         },
         {
             "name": "ramsey/uuid",
-            "version": "4.9.0",
+            "version": "4.9.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ramsey/uuid.git",
-                "reference": "4e0e23cc785f0724a0e838279a9eb03f28b092a0"
+                "reference": "81f941f6f729b1e3ceea61d9d014f8b6c6800440"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ramsey/uuid/zipball/4e0e23cc785f0724a0e838279a9eb03f28b092a0",
-                "reference": "4e0e23cc785f0724a0e838279a9eb03f28b092a0",
+                "url": "https://api.github.com/repos/ramsey/uuid/zipball/81f941f6f729b1e3ceea61d9d014f8b6c6800440",
+                "reference": "81f941f6f729b1e3ceea61d9d014f8b6c6800440",
                 "shasum": ""
             },
             "require": {
-                "brick/math": "^0.8.8 || ^0.9 || ^0.10 || ^0.11 || ^0.12 || ^0.13",
+                "brick/math": "^0.8.8 || ^0.9 || ^0.10 || ^0.11 || ^0.12 || ^0.13 || ^0.14",
                 "php": "^8.0",
                 "ramsey/collection": "^1.2 || ^2.0"
             },
@@ -1236,9 +1313,9 @@
             ],
             "support": {
                 "issues": "https://github.com/ramsey/uuid/issues",
-                "source": "https://github.com/ramsey/uuid/tree/4.9.0"
+                "source": "https://github.com/ramsey/uuid/tree/4.9.1"
             },
-            "time": "2025-06-25T14:20:11+00:00"
+            "time": "2025-09-04T20:59:21+00:00"
         },
         {
             "name": "symfony/deprecation-contracts",
@@ -1731,6 +1808,86 @@
             "time": "2025-07-08T02:45:35+00:00"
         },
         {
+            "name": "symfony/polyfill-php85",
+            "version": "v1.33.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/symfony/polyfill-php85.git",
+                "reference": "d4e5fcd4ab3d998ab16c0db48e6cbb9a01993f91"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/symfony/polyfill-php85/zipball/d4e5fcd4ab3d998ab16c0db48e6cbb9a01993f91",
+                "reference": "d4e5fcd4ab3d998ab16c0db48e6cbb9a01993f91",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.2"
+            },
+            "type": "library",
+            "extra": {
+                "thanks": {
+                    "url": "https://github.com/symfony/polyfill",
+                    "name": "symfony/polyfill"
+                }
+            },
+            "autoload": {
+                "files": [
+                    "bootstrap.php"
+                ],
+                "psr-4": {
+                    "Symfony\\Polyfill\\Php85\\": ""
+                },
+                "classmap": [
+                    "Resources/stubs"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Nicolas Grekas",
+                    "email": "p@tchwork.com"
+                },
+                {
+                    "name": "Symfony Community",
+                    "homepage": "https://symfony.com/contributors"
+                }
+            ],
+            "description": "Symfony polyfill backporting some PHP 8.5+ features to lower PHP versions",
+            "homepage": "https://symfony.com",
+            "keywords": [
+                "compatibility",
+                "polyfill",
+                "portable",
+                "shim"
+            ],
+            "support": {
+                "source": "https://github.com/symfony/polyfill-php85/tree/v1.33.0"
+            },
+            "funding": [
+                {
+                    "url": "https://symfony.com/sponsor",
+                    "type": "custom"
+                },
+                {
+                    "url": "https://github.com/fabpot",
+                    "type": "github"
+                },
+                {
+                    "url": "https://github.com/nicolas-grekas",
+                    "type": "github"
+                },
+                {
+                    "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
+                    "type": "tidelift"
+                }
+            ],
+            "time": "2025-06-23T16:12:55+00:00"
+        },
+        {
             "name": "symfony/service-contracts",
             "version": "v3.6.0",
             "source": {
@@ -1965,16 +2122,16 @@
         },
         {
             "name": "utopia-php/framework",
-            "version": "0.33.24",
+            "version": "0.33.27",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/http.git",
-                "reference": "5112b1023342163e3fbedec99f38fc32c8700aa0"
+                "reference": "d9d10a895e85c8c7675220347cc6109db9d3bd37"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/http/zipball/5112b1023342163e3fbedec99f38fc32c8700aa0",
-                "reference": "5112b1023342163e3fbedec99f38fc32c8700aa0",
+                "url": "https://api.github.com/repos/utopia-php/http/zipball/d9d10a895e85c8c7675220347cc6109db9d3bd37",
+                "reference": "d9d10a895e85c8c7675220347cc6109db9d3bd37",
                 "shasum": ""
             },
             "require": {
@@ -2006,9 +2163,70 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/http/issues",
-                "source": "https://github.com/utopia-php/http/tree/0.33.24"
+                "source": "https://github.com/utopia-php/http/tree/0.33.27"
             },
-            "time": "2025-09-04T04:18:39+00:00"
+            "time": "2025-09-07T18:40:53+00:00"
+        },
+        {
+            "name": "utopia-php/mongo",
+            "version": "0.6.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/utopia-php/mongo.git",
+                "reference": "589e329a7fe4200e23ca87d65f3eb25a70ef0505"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/589e329a7fe4200e23ca87d65f3eb25a70ef0505",
+                "reference": "589e329a7fe4200e23ca87d65f3eb25a70ef0505",
+                "shasum": ""
+            },
+            "require": {
+                "ext-mongodb": "2.1.1",
+                "mongodb/mongodb": "2.1.0",
+                "php": ">=8.0",
+                "ramsey/uuid": "^4.9.0"
+            },
+            "require-dev": {
+                "fakerphp/faker": "^1.14",
+                "laravel/pint": "1.2.*",
+                "phpstan/phpstan": "2.1.*",
+                "phpunit/phpunit": "^9.4",
+                "swoole/ide-helper": "4.8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Utopia\\Mongo\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Eldad Fux",
+                    "email": "eldad@appwrite.io"
+                },
+                {
+                    "name": "Wess",
+                    "email": "wess@appwrite.io"
+                }
+            ],
+            "description": "A simple library to manage Mongo database",
+            "keywords": [
+                "database",
+                "mongo",
+                "php",
+                "upf",
+                "utopia"
+            ],
+            "support": {
+                "issues": "https://github.com/utopia-php/mongo/issues",
+                "source": "https://github.com/utopia-php/mongo/tree/0.6.0"
+            },
+            "time": "2025-09-11T13:26:21+00:00"
         },
         {
             "name": "utopia-php/pools",
@@ -2963,16 +3181,16 @@
         },
         {
             "name": "phpunit/phpunit",
-            "version": "9.6.25",
+            "version": "9.6.26",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sebastianbergmann/phpunit.git",
-                "reference": "049c011e01be805202d8eebedef49f769a8ec7b7"
+                "reference": "a0139ea157533454f611038326f3020b3051f129"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/049c011e01be805202d8eebedef49f769a8ec7b7",
-                "reference": "049c011e01be805202d8eebedef49f769a8ec7b7",
+                "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/a0139ea157533454f611038326f3020b3051f129",
+                "reference": "a0139ea157533454f611038326f3020b3051f129",
                 "shasum": ""
             },
             "require": {
@@ -3046,7 +3264,7 @@
             "support": {
                 "issues": "https://github.com/sebastianbergmann/phpunit/issues",
                 "security": "https://github.com/sebastianbergmann/phpunit/security/policy",
-                "source": "https://github.com/sebastianbergmann/phpunit/tree/9.6.25"
+                "source": "https://github.com/sebastianbergmann/phpunit/tree/9.6.26"
             },
             "funding": [
                 {
@@ -3070,7 +3288,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2025-08-20T14:38:31+00:00"
+            "time": "2025-09-11T06:17:45+00:00"
         },
         {
             "name": "rregeer/phpunit-coverage-check",
@@ -4255,7 +4473,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": [],
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -4263,6 +4481,6 @@
         "ext-pdo": "*",
         "ext-mbstring": "*"
     },
-    "platform-dev": {},
-    "plugin-api-version": "2.6.0"
+    "platform-dev": [],
+    "plugin-api-version": "2.2.0"
 }

@@ -91,12 +91,22 @@ services:
       - database
     ports:
       - "9706:27017"
+    volumes:
+      - ./mongo-keyfile:/etc/mongo-keyfile:ro
+      - mongo-data:/data/db
     environment:
       MONGO_INITDB_DATABASE: utopia_testing
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: password
       MONGO_INITDB_USERNAME: user
       MONGO_INITDB_PASSWORD: paswword
+    command: mongod --replSet rs0 --bind_ip_all --keyFile /etc/mongo-keyfile
+
+# Manyally initate the replica set
+# mongo users(!root) do not get created automatically!!!
+#sudo chmod 600 mongo-keyfile
+#sudo chown mongodb:mongodb mongo-keyfile
+#docker compose exec mongo  mongosh admin -u root -p password --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "mongo:27017"}]})'
 
   mongo-express:
     image: mongo-express
@@ -160,5 +170,7 @@ services:
     networks:
       - database
 
+volumes:
+  mongo-data:
 networks:
   database:

@@ -3276,315 +3276,315 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
     }
 
-    //    public function testFindNotContains(): void
-    //    {
-    //        /** @var Database $database */
-    //        $database = static::getDatabase();
-    //
-    //        if (!$database->getAdapter()->getSupportForQueryContains()) {
-    //            $this->expectNotToPerformAssertions();
-    //            return;
-    //        }
-    //
-    //        // Test notContains with array attributes - should return documents that don't contain specified genres
-    //        $documents = $database->find('movies', [
-    //            Query::notContains('genres', ['comics'])
-    //        ]);
-    //
-    //        $this->assertEquals(4, count($documents)); // All movies except the 2 with 'comics' genre
-    //
-    //        // Test notContains with multiple values (AND logic - exclude documents containing ANY of these)
-    //        $documents = $database->find('movies', [
-    //            Query::notContains('genres', ['comics', 'kids']),
-    //        ]);
-    //
-    //        $this->assertEquals(2, count($documents)); // Movies that have neither 'comics' nor 'kids'
-    //
-    //        // Test notContains with non-existent genre - should return all documents
-    //        $documents = $database->find('movies', [
-    //            Query::notContains('genres', ['non-existent']),
-    //        ]);
-    //
-    //        $this->assertEquals(6, count($documents));
-    //
-    //        // Test notContains with string attribute (substring search)
-    //        $documents = $database->find('movies', [
-    //            Query::notContains('name', ['Captain'])
-    //        ]);
-    //        $this->assertEquals(4, count($documents)); // All movies except those containing 'Captain'
-    //
-    //        // Test notContains combined with other queries (AND logic)
-    //        $documents = $database->find('movies', [
-    //            Query::notContains('genres', ['comics']),
-    //            Query::greaterThan('year', 2000)
-    //        ]);
-    //        $this->assertLessThanOrEqual(4, count($documents)); // Subset of movies without 'comics' and after 2000
-    //
-    //        // Test notContains with case sensitivity
-    //        $documents = $database->find('movies', [
-    //            Query::notContains('genres', ['COMICS']) // Different case
-    //        ]);
-    //        $this->assertEquals(6, count($documents)); // All movies since case doesn't match
-    //
-    //        // Test error handling for invalid attribute type
-    //        try {
-    //            $database->find('movies', [
-    //                Query::notContains('price', [10.5]),
-    //            ]);
-    //            $this->fail('Failed to throw exception');
-    //        } catch (Throwable $e) {
-    //            $this->assertEquals('Invalid query: Cannot query notContains on attribute "price" because it is not an array or string.', $e->getMessage());
-    //            $this->assertTrue($e instanceof DatabaseException);
-    //        }
-    //    }
-    //
-    //     public function testFindNotSearch(): void
-    //     {
-    //         /** @var Database $database */
-    //         $database = static::getDatabase();
-    //
-    //         // Only test if fulltext search is supported
-    //         if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
-    //             // Ensure fulltext index exists (may already exist from previous tests)
-    //             try {
-    //                 $database->createIndex('movies', 'name', Database::INDEX_FULLTEXT, ['name']);
-    //             } catch (Throwable $e) {
-    //                 // Index may already exist, ignore duplicate error
-    //                 if (!str_contains($e->getMessage(), 'already exists')) {
-    //                     throw $e;
-    //                 }
-    //             }
-    //
-    //             // Test notSearch - should return documents that don't match the search term
-    //             $documents = $database->find('movies', [
-    //                 Query::notSearch('name', 'captain'),
-    //             ]);
-    //
-    //             $this->assertEquals(4, count($documents)); // All movies except the 2 with 'captain' in name
-    //
-    //             // Test notSearch with term that doesn't exist - should return all documents
-    //             $documents = $database->find('movies', [
-    //                 Query::notSearch('name', 'nonexistent'),
-    //             ]);
-    //
-    //             $this->assertEquals(6, count($documents));
-    //
-    //             // Test notSearch with partial term
-    //             if ($this->getDatabase()->getAdapter()->getSupportForFulltextWildCardIndex()) {
-    //                 $documents = $database->find('movies', [
-    //                     Query::notSearch('name', 'cap'),
-    //                 ]);
-    //
-    //                 $this->assertEquals(4, count($documents)); // All movies except those matching 'cap'
-    //             }
-    //
-    //             // Test notSearch with empty string - should return all documents
-    //             $documents = $database->find('movies', [
-    //                 Query::notSearch('name', ''),
-    //             ]);
-    //             $this->assertEquals(6, count($documents)); // All movies since empty search matches nothing
-    //
-    //             // Test notSearch combined with other filters
-    //             $documents = $database->find('movies', [
-    //                 Query::notSearch('name', 'captain'),
-    //                 Query::lessThan('year', 2010)
-    //             ]);
-    //             $this->assertLessThanOrEqual(4, count($documents)); // Subset of non-captain movies before 2010
-    //
-    //             // Test notSearch with special characters
-    //             $documents = $database->find('movies', [
-    //                 Query::notSearch('name', '@#$%'),
-    //             ]);
-    //             $this->assertEquals(6, count($documents)); // All movies since special chars don't match
-    //         }
-    //
-    //         $this->assertEquals(true, true); // Test must do an assertion
-    //     }
-    //
-    //     public function testFindNotStartsWith(): void
-    //     {
-    //         /** @var Database $database */
-    //         $database = static::getDatabase();
-    //
-    //         // Test notStartsWith - should return documents that don't start with 'Work'
-    //         $documents = $database->find('movies', [
-    //             Query::notStartsWith('name', 'Work'),
-    //         ]);
-    //
-    //         $this->assertEquals(4, count($documents)); // All movies except the 2 starting with 'Work'
-    //
-    //         // Test notStartsWith with non-existent prefix - should return all documents
-    //         $documents = $database->find('movies', [
-    //             Query::notStartsWith('name', 'NonExistent'),
-    //         ]);
-    //
-    //         $this->assertEquals(6, count($documents));
-    //
-    //         // Test notStartsWith with wildcard characters (should treat them literally)
-    //         if ($this->getDatabase()->getAdapter() instanceof SQL) {
-    //             $documents = $database->find('movies', [
-    //                 Query::notStartsWith('name', '%ork'),
-    //             ]);
-    //         } else {
-    //             $documents = $database->find('movies', [
-    //                 Query::notStartsWith('name', '.*ork'),
-    //             ]);
-    //         }
-    //
-    //         $this->assertEquals(6, count($documents)); // Should return all since no movie starts with these patterns
-    //
-    //         // Test notStartsWith with empty string - should return no documents (all strings start with empty)
-    //         $documents = $database->find('movies', [
-    //             Query::notStartsWith('name', ''),
-    //         ]);
-    //         $this->assertEquals(0, count($documents)); // No documents since all strings start with empty string
-    //
-    //         // Test notStartsWith with single character
-    //         $documents = $database->find('movies', [
-    //             Query::notStartsWith('name', 'C'),
-    //         ]);
-    //         $this->assertGreaterThanOrEqual(4, count($documents)); // Movies not starting with 'C'
-    //
-    //         // Test notStartsWith with case sensitivity (may be case-insensitive depending on DB)
-    //         $documents = $database->find('movies', [
-    //             Query::notStartsWith('name', 'work'), // lowercase vs 'Work'
-    //         ]);
-    //         $this->assertGreaterThanOrEqual(4, count($documents)); // May match case-insensitively
-    //
-    //         // Test notStartsWith combined with other queries
-    //         $documents = $database->find('movies', [
-    //             Query::notStartsWith('name', 'Work'),
-    //             Query::equal('year', [2006])
-    //         ]);
-    //         $this->assertLessThanOrEqual(4, count($documents)); // Subset of non-Work movies from 2006
-    //     }
-    //
-    //     public function testFindNotEndsWith(): void
-    //     {
-    //         /** @var Database $database */
-    //         $database = static::getDatabase();
-    //
-    //         // Test notEndsWith - should return documents that don't end with 'Marvel'
-    //         $documents = $database->find('movies', [
-    //             Query::notEndsWith('name', 'Marvel'),
-    //         ]);
-    //
-    //         $this->assertEquals(5, count($documents)); // All movies except the 1 ending with 'Marvel'
-    //
-    //         // Test notEndsWith with non-existent suffix - should return all documents
-    //         $documents = $database->find('movies', [
-    //             Query::notEndsWith('name', 'NonExistent'),
-    //         ]);
-    //
-    //         $this->assertEquals(6, count($documents));
-    //
-    //         // Test notEndsWith with partial suffix
-    //         $documents = $database->find('movies', [
-    //             Query::notEndsWith('name', 'vel'),
-    //         ]);
-    //
-    //         $this->assertEquals(5, count($documents)); // All movies except the 1 ending with 'vel' (from 'Marvel')
-    //
-    //         // Test notEndsWith with empty string - should return no documents (all strings end with empty)
-    //         $documents = $database->find('movies', [
-    //             Query::notEndsWith('name', ''),
-    //         ]);
-    //         $this->assertEquals(0, count($documents)); // No documents since all strings end with empty string
-    //
-    //         // Test notEndsWith with single character
-    //         $documents = $database->find('movies', [
-    //             Query::notEndsWith('name', 'l'),
-    //         ]);
-    //         $this->assertGreaterThanOrEqual(5, count($documents)); // Movies not ending with 'l'
-    //
-    //         // Test notEndsWith with case sensitivity (may be case-insensitive depending on DB)
-    //         $documents = $database->find('movies', [
-    //             Query::notEndsWith('name', 'marvel'), // lowercase vs 'Marvel'
-    //         ]);
-    //         $this->assertGreaterThanOrEqual(5, count($documents)); // May match case-insensitively
-    //
-    //         // Test notEndsWith combined with limit
-    //         $documents = $database->find('movies', [
-    //             Query::notEndsWith('name', 'Marvel'),
-    //             Query::limit(3)
-    //         ]);
-    //         $this->assertEquals(3, count($documents)); // Limited to 3 results
-    //         $this->assertLessThanOrEqual(5, count($documents)); // But still excluding Marvel movies
-    //     }
-    //
-    //        public function testFindNotBetween(): void
-    //        {
-    //            /** @var Database $database */
-    //            $database = static::getDatabase();
-    //
-    //            // Test notBetween with price range - should return documents outside the range
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('price', 25.94, 25.99),
-    //            ]);
-    //            $this->assertEquals(4, count($documents)); // All movies except the 2 in the price range
-    //
-    //            // Test notBetween with range that includes no documents - should return all documents
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('price', 30, 35),
-    //            ]);
-    //            $this->assertEquals(6, count($documents));
-    //
-    //            // Test notBetween with date range
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('$createdAt', '1975-12-06', '2050-12-06'),
-    //            ]);
-    //            $this->assertEquals(0, count($documents)); // No movies outside this wide date range
-    //
-    //            // Test notBetween with narrower date range
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('$createdAt', '2000-01-01', '2001-01-01'),
-    //            ]);
-    //            $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
-    //
-    //            // Test notBetween with updated date range
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('$updatedAt', '2000-01-01T00:00:00.000+00:00', '2001-01-01T00:00:00.000+00:00'),
-    //            ]);
-    //            $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
-    //
-    //            // Test notBetween with year range (integer values)
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('year', 2005, 2007),
-    //            ]);
-    //            $this->assertLessThanOrEqual(6, count($documents)); // Movies outside 2005-2007 range
-    //
-    //            // Test notBetween with reversed range (start > end) - should still work
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('price', 25.99, 25.94), // Note: reversed order
-    //            ]);
-    //            $this->assertGreaterThanOrEqual(4, count($documents)); // Should handle reversed range gracefully
-    //
-    //            // Test notBetween with same start and end values
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('year', 2006, 2006),
-    //            ]);
-    //            $this->assertGreaterThanOrEqual(5, count($documents)); // All movies except those from exactly 2006
-    //
-    //            // Test notBetween combined with other filters
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('price', 25.94, 25.99),
-    //                Query::orderDesc('year'),
-    //                Query::limit(2)
-    //            ]);
-    //            $this->assertEquals(2, count($documents)); // Limited results, ordered, excluding price range
-    //
-    //            // Test notBetween with extreme ranges
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('year', -1000, 1000), // Very wide range
-    //            ]);
-    //            $this->assertLessThanOrEqual(6, count($documents)); // Movies outside this range
-    //
-    //            // Test notBetween with float precision
-    //            $documents = $database->find('movies', [
-    //                Query::notBetween('price', 25.945, 25.955), // Very narrow range
-    //            ]);
-    //            $this->assertGreaterThanOrEqual(4, count($documents)); // Most movies should be outside this narrow range
-    //        }
+    public function testFindNotContains(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForQueryContains()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Test notContains with array attributes - should return documents that don't contain specified genres
+        $documents = $database->find('movies', [
+            Query::notContains('genres', ['comics'])
+        ]);
+
+        $this->assertEquals(4, count($documents)); // All movies except the 2 with 'comics' genre
+
+        // Test notContains with multiple values (AND logic - exclude documents containing ANY of these)
+        $documents = $database->find('movies', [
+            Query::notContains('genres', ['comics', 'kids']),
+        ]);
+
+        $this->assertEquals(2, count($documents)); // Movies that have neither 'comics' nor 'kids'
+
+        // Test notContains with non-existent genre - should return all documents
+        $documents = $database->find('movies', [
+            Query::notContains('genres', ['non-existent']),
+        ]);
+
+        $this->assertEquals(6, count($documents));
+
+        // Test notContains with string attribute (substring search)
+        $documents = $database->find('movies', [
+            Query::notContains('name', ['Captain'])
+        ]);
+        $this->assertEquals(4, count($documents)); // All movies except those containing 'Captain'
+
+        // Test notContains combined with other queries (AND logic)
+        $documents = $database->find('movies', [
+            Query::notContains('genres', ['comics']),
+            Query::greaterThan('year', 2000)
+        ]);
+        $this->assertLessThanOrEqual(4, count($documents)); // Subset of movies without 'comics' and after 2000
+
+        // Test notContains with case sensitivity
+        $documents = $database->find('movies', [
+            Query::notContains('genres', ['COMICS']) // Different case
+        ]);
+        $this->assertEquals(6, count($documents)); // All movies since case doesn't match
+
+        // Test error handling for invalid attribute type
+        try {
+            $database->find('movies', [
+                Query::notContains('price', [10.5]),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Invalid query: Cannot query notContains on attribute "price" because it is not an array or string.', $e->getMessage());
+            $this->assertTrue($e instanceof DatabaseException);
+        }
+    }
+
+    public function testFindNotSearch(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Only test if fulltext search is supported
+        if ($this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+            // Ensure fulltext index exists (may already exist from previous tests)
+            try {
+                $database->createIndex('movies', 'name', Database::INDEX_FULLTEXT, ['name']);
+            } catch (Throwable $e) {
+                // Index may already exist, ignore duplicate error
+                if (!str_contains($e->getMessage(), 'already exists')) {
+                    throw $e;
+                }
+            }
+
+            // Test notSearch - should return documents that don't match the search term
+            $documents = $database->find('movies', [
+                Query::notSearch('name', 'captain'),
+            ]);
+
+            $this->assertEquals(4, count($documents)); // All movies except the 2 with 'captain' in name
+
+            // Test notSearch with term that doesn't exist - should return all documents
+            $documents = $database->find('movies', [
+                Query::notSearch('name', 'nonexistent'),
+            ]);
+
+            $this->assertEquals(6, count($documents));
+
+            // Test notSearch with partial term
+            if ($this->getDatabase()->getAdapter()->getSupportForFulltextWildCardIndex()) {
+                $documents = $database->find('movies', [
+                    Query::notSearch('name', 'cap'),
+                ]);
+
+                $this->assertEquals(4, count($documents)); // All movies except those matching 'cap'
+            }
+
+            // Test notSearch with empty string - should return all documents
+            $documents = $database->find('movies', [
+                Query::notSearch('name', ''),
+            ]);
+            $this->assertEquals(6, count($documents)); // All movies since empty search matches nothing
+
+            // Test notSearch combined with other filters
+            $documents = $database->find('movies', [
+                Query::notSearch('name', 'captain'),
+                Query::lessThan('year', 2010)
+            ]);
+            $this->assertLessThanOrEqual(4, count($documents)); // Subset of non-captain movies before 2010
+
+            // Test notSearch with special characters
+            $documents = $database->find('movies', [
+                Query::notSearch('name', '@#$%'),
+            ]);
+            $this->assertEquals(6, count($documents)); // All movies since special chars don't match
+        }
+
+        $this->assertEquals(true, true); // Test must do an assertion
+    }
+
+    public function testFindNotStartsWith(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Test notStartsWith - should return documents that don't start with 'Work'
+        $documents = $database->find('movies', [
+            Query::notStartsWith('name', 'Work'),
+        ]);
+
+        $this->assertEquals(4, count($documents)); // All movies except the 2 starting with 'Work'
+
+        // Test notStartsWith with non-existent prefix - should return all documents
+        $documents = $database->find('movies', [
+            Query::notStartsWith('name', 'NonExistent'),
+        ]);
+
+        $this->assertEquals(6, count($documents));
+
+        // Test notStartsWith with wildcard characters (should treat them literally)
+        if ($this->getDatabase()->getAdapter() instanceof SQL) {
+            $documents = $database->find('movies', [
+                Query::notStartsWith('name', '%ork'),
+            ]);
+        } else {
+            $documents = $database->find('movies', [
+                Query::notStartsWith('name', '.*ork'),
+            ]);
+        }
+
+        $this->assertEquals(6, count($documents)); // Should return all since no movie starts with these patterns
+
+        // Test notStartsWith with empty string - should return no documents (all strings start with empty)
+        $documents = $database->find('movies', [
+            Query::notStartsWith('name', ''),
+        ]);
+        $this->assertEquals(0, count($documents)); // No documents since all strings start with empty string
+
+        // Test notStartsWith with single character
+        $documents = $database->find('movies', [
+            Query::notStartsWith('name', 'C'),
+        ]);
+        $this->assertGreaterThanOrEqual(4, count($documents)); // Movies not starting with 'C'
+
+        // Test notStartsWith with case sensitivity (may be case-insensitive depending on DB)
+        $documents = $database->find('movies', [
+            Query::notStartsWith('name', 'work'), // lowercase vs 'Work'
+        ]);
+        $this->assertGreaterThanOrEqual(4, count($documents)); // May match case-insensitively
+
+        // Test notStartsWith combined with other queries
+        $documents = $database->find('movies', [
+            Query::notStartsWith('name', 'Work'),
+            Query::equal('year', [2006])
+        ]);
+        $this->assertLessThanOrEqual(4, count($documents)); // Subset of non-Work movies from 2006
+    }
+
+    public function testFindNotEndsWith(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Test notEndsWith - should return documents that don't end with 'Marvel'
+        $documents = $database->find('movies', [
+            Query::notEndsWith('name', 'Marvel'),
+        ]);
+
+        $this->assertEquals(5, count($documents)); // All movies except the 1 ending with 'Marvel'
+
+        // Test notEndsWith with non-existent suffix - should return all documents
+        $documents = $database->find('movies', [
+            Query::notEndsWith('name', 'NonExistent'),
+        ]);
+
+        $this->assertEquals(6, count($documents));
+
+        // Test notEndsWith with partial suffix
+        $documents = $database->find('movies', [
+            Query::notEndsWith('name', 'vel'),
+        ]);
+
+        $this->assertEquals(5, count($documents)); // All movies except the 1 ending with 'vel' (from 'Marvel')
+
+        // Test notEndsWith with empty string - should return no documents (all strings end with empty)
+        $documents = $database->find('movies', [
+            Query::notEndsWith('name', ''),
+        ]);
+        $this->assertEquals(0, count($documents)); // No documents since all strings end with empty string
+
+        // Test notEndsWith with single character
+        $documents = $database->find('movies', [
+            Query::notEndsWith('name', 'l'),
+        ]);
+        $this->assertGreaterThanOrEqual(5, count($documents)); // Movies not ending with 'l'
+
+        // Test notEndsWith with case sensitivity (may be case-insensitive depending on DB)
+        $documents = $database->find('movies', [
+            Query::notEndsWith('name', 'marvel'), // lowercase vs 'Marvel'
+        ]);
+        $this->assertGreaterThanOrEqual(5, count($documents)); // May match case-insensitively
+
+        // Test notEndsWith combined with limit
+        $documents = $database->find('movies', [
+            Query::notEndsWith('name', 'Marvel'),
+            Query::limit(3)
+        ]);
+        $this->assertEquals(3, count($documents)); // Limited to 3 results
+        $this->assertLessThanOrEqual(5, count($documents)); // But still excluding Marvel movies
+    }
+
+    public function testFindNotBetween(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Test notBetween with price range - should return documents outside the range
+        $documents = $database->find('movies', [
+            Query::notBetween('price', 25.94, 25.99),
+        ]);
+        $this->assertEquals(4, count($documents)); // All movies except the 2 in the price range
+
+        // Test notBetween with range that includes no documents - should return all documents
+        $documents = $database->find('movies', [
+            Query::notBetween('price', 30, 35),
+        ]);
+        $this->assertEquals(6, count($documents));
+
+        // Test notBetween with date range
+        $documents = $database->find('movies', [
+            Query::notBetween('$createdAt', '1975-12-06', '2050-12-06'),
+        ]);
+        $this->assertEquals(0, count($documents)); // No movies outside this wide date range
+
+        // Test notBetween with narrower date range
+        $documents = $database->find('movies', [
+            Query::notBetween('$createdAt', '2000-01-01', '2001-01-01'),
+        ]);
+        $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
+
+        // Test notBetween with updated date range
+        $documents = $database->find('movies', [
+            Query::notBetween('$updatedAt', '2000-01-01T00:00:00.000+00:00', '2001-01-01T00:00:00.000+00:00'),
+        ]);
+        $this->assertEquals(6, count($documents)); // All movies should be outside this narrow range
+
+        // Test notBetween with year range (integer values)
+        $documents = $database->find('movies', [
+            Query::notBetween('year', 2005, 2007),
+        ]);
+        $this->assertLessThanOrEqual(6, count($documents)); // Movies outside 2005-2007 range
+
+        // Test notBetween with reversed range (start > end) - should still work
+        $documents = $database->find('movies', [
+            Query::notBetween('price', 25.99, 25.94), // Note: reversed order
+        ]);
+        $this->assertGreaterThanOrEqual(4, count($documents)); // Should handle reversed range gracefully
+
+        // Test notBetween with same start and end values
+        $documents = $database->find('movies', [
+            Query::notBetween('year', 2006, 2006),
+        ]);
+        $this->assertGreaterThanOrEqual(5, count($documents)); // All movies except those from exactly 2006
+
+        // Test notBetween combined with other filters
+        $documents = $database->find('movies', [
+            Query::notBetween('price', 25.94, 25.99),
+            Query::orderDesc('year'),
+            Query::limit(2)
+        ]);
+        $this->assertEquals(2, count($documents)); // Limited results, ordered, excluding price range
+
+        // Test notBetween with extreme ranges
+        $documents = $database->find('movies', [
+            Query::notBetween('year', -1000, 1000), // Very wide range
+        ]);
+        $this->assertLessThanOrEqual(6, count($documents)); // Movies outside this range
+
+        // Test notBetween with float precision
+        $documents = $database->find('movies', [
+            Query::notBetween('price', 25.945, 25.955), // Very narrow range
+        ]);
+        $this->assertGreaterThanOrEqual(4, count($documents)); // Most movies should be outside this narrow range
+    }
 
     public function testFindSelect(): void
     {

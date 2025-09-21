@@ -500,6 +500,13 @@ trait IndexTests
 
     public function testMultipleFulltextIndexValidation(): void
     {
+
+        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        if (!$fulltextSupport) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         /** @var Database $database */
         $database = static::getDatabase();
 

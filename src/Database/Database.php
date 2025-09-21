@@ -3367,9 +3367,6 @@ class Database
 
         if ($this->validate) {
 
-            // var_dump($collection);
-            // var_dump($index);
-
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
                 $collection->getAttribute('indexes', []),

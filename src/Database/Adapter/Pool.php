@@ -583,4 +583,20 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
+
+    /**
+    * @return bool
+ */
+    public function getSupportForMultipleFulltextIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    /**
+     * @return bool
+     */
+    public function getSupportForIdenticalIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
 }

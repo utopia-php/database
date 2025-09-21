@@ -585,7 +585,7 @@ trait IndexTests
 
             // Test with different orders  order - faliure
             try {
-                $database->createIndex($collectionId, 'index3', Database::INDEX_KEY, ['age', 'name'], [], [ Database::ORDER_DESC, Database::ORDER_ASC]);
+                $database->createIndex($collectionId, 'index4', Database::INDEX_KEY, ['age', 'name'], [], [ Database::ORDER_DESC, Database::ORDER_ASC]);
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
                 if (!$supportsIdenticalIndexes) {
@@ -597,7 +597,7 @@ trait IndexTests
 
             // Test with different attributes - success
             try {
-                $database->createIndex($collectionId, 'index4', Database::INDEX_KEY, ['name'], [], [Database::ORDER_ASC]);
+                $database->createIndex($collectionId, 'index5', Database::INDEX_KEY, ['name'], [], [Database::ORDER_ASC]);
                 $this->assertTrue(true, 'Index with different attributes was created successfully');
             } catch (Throwable $e) {
                 $this->fail('Unexpected exception when creating index with different attributes: ' . $e->getMessage());
@@ -605,7 +605,7 @@ trait IndexTests
 
             // Test with different orders - success
             try {
-                $database->createIndex($collectionId, 'index5', Database::INDEX_KEY, ['name', 'age'], [], [Database::ORDER_ASC]);
+                $database->createIndex($collectionId, 'index6', Database::INDEX_KEY, ['name', 'age'], [], [Database::ORDER_ASC]);
                 $this->assertTrue(true, 'Index with different orders was created successfully');
             } catch (Throwable $e) {
                 $this->fail('Unexpected exception when creating index with different orders: ' . $e->getMessage());

@@ -694,7 +694,7 @@ trait AttributeTests
         $this->assertEquals('renamed', $collection->getAttribute('indexes')[0]['attributes'][0]);
 
         $supportsIdenticalIndexes = $database->getAdapter()->getSupportForIdenticalIndexes();
-        
+
         try {
             // Check empty newKey doesn't cause issues
             $database->updateAttribute(
@@ -702,7 +702,7 @@ trait AttributeTests
                 id: 'renamed',
                 type: Database::VAR_STRING,
             );
-            
+
             if (!$supportsIdenticalIndexes) {
                 $this->fail('Expected exception when getSupportForIdenticalIndexes=false but none was thrown');
             }

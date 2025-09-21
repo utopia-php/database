@@ -2247,6 +2247,13 @@ class Database
     public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, $newKey) {
+    
+            // Store original indexes before any modifications (deep copy preserving Document objects)
+            $originalIndexes = [];
+            foreach ($collectionDoc->getAttribute('indexes', []) as $index) {
+                $originalIndexes[] = clone $index;
+            }
+        
             $altering = !\is_null($type)
                 || !\is_null($size)
                 || !\is_null($signed)
@@ -2417,7 +2424,7 @@ class Database
                 if ($this->validate) {
                     $validator = new IndexValidator(
                         $attributes,
-                        $indexes,
+                        $originalIndexes,
                         $this->adapter->getMaxIndexLength(),
                         $this->adapter->getInternalIndexesKeys(),
                         $this->adapter->getSupportForIndexArray(),

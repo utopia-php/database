@@ -14,6 +14,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
@@ -27,6 +28,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
+use Utopia\Database\Validator\Operator as OperatorValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
@@ -3437,9 +3439,10 @@ class Database
      * @param string $collection
      * @param string $id
      * @param Query[] $queries
-     *
+     * @param bool $forUpdate
      * @return Document
-     * @throws DatabaseException
+     * @throws NotFoundException
+     * @throws QueryException
      * @throws Exception
      */
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
@@ -4399,7 +4402,13 @@ class Database
             }
             $createdAt = $document->getCreatedAt();
 
-            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+            // Extract operators from the document before merging
+            $documentArray = $document->getArrayCopy();
+            $extracted = Operator::extractOperators($documentArray);
+            $operators = $extracted['operators'];
+            $updates = $extracted['updates'];
+
+            $document = \array_merge($old->getArrayCopy(), $updates);
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
@@ -4421,6 +4430,11 @@ class Database
 
                 foreach ($relationships as $relationship) {
                     $relationships[$relationship->getAttribute('key')] = $relationship;
+                }
+
+                // If there are operators, we definitely need to update
+                if (!empty($operators)) {
+                    $shouldUpdate = true;
                 }
 
                 // Compare if the document has any changes
@@ -4550,6 +4564,11 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
+            // Process operators if present
+            if (!empty($operators)) {
+                $document = $this->processOperators($collection, $old, $document, $operators);
+            }
+
             $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
             $this->purgeCachedDocument($collection->getId(), $id);
 
@@ -4662,6 +4681,8 @@ class Database
         $updatedAt = $updates->getUpdatedAt();
         $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
 
+        // Pass updates with operators directly to adapter
+        // The adapter will handle generating SQL expressions for bulk updates
         $updates = $this->encode($collection, $updates);
         // Check new document structure
         $validator = new PartialStructure(
@@ -4709,7 +4730,6 @@ class Database
 
             $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
                 foreach ($batch as $index => $document) {
-
                     $skipPermissionsUpdate = true;
 
                     if ($updates->offsetExists('$permissions')) {
@@ -4718,7 +4738,8 @@ class Database
                         }
 
                         $originalPermissions = $document->getPermissions();
-                        sort($originalPermissions);
+
+                        \sort($originalPermissions);
 
                         $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
                     }
@@ -4746,6 +4767,7 @@ class Database
                     $batch[$index] = $this->encode($collection, $document);
                 }
 
+                // Adapter will handle all operators efficiently using SQL expressions
                 $this->adapter->updateDocuments(
                     $collection,
                     $updates,
@@ -6844,6 +6866,239 @@ class Database
      * @return mixed
      * @throws DatabaseException
      */
+    /**
+     * Process operators and apply them to document attributes
+     *
+     * @param Document $collection
+     * @param Document $old
+     * @param Document $document
+     * @param array<string, Operator> $operators
+     * @return Document
+     * @throws DatabaseException
+     */
+    private function processOperators(Document $collection, Document $old, Document $document, array $operators): Document
+    {
+        foreach ($operators as $key => $operator) {
+            $oldValue = $old->getAttribute($key);
+            $newValue = $this->applyOperator($operator, $oldValue, $document, $collection);
+            $document->setAttribute($key, $newValue);
+        }
+
+        return $document;
+    }
+
+    /**
+     * Apply a single operator to a value
+     *
+     * @param Operator $operator
+     * @param mixed $oldValue
+     * @param Document|null $document
+     * @param Document|null $collection
+     * @return mixed
+     * @throws OperatorException
+     */
+    private function applyOperator(Operator $operator, mixed $oldValue, ?Document $document = null, ?Document $collection = null): mixed
+    {
+        // Validate the operation if we have collection info
+        if ($collection) {
+            $validator = new OperatorValidator($collection);
+            if (!$validator->validateOperation($operator, $operator->getAttribute(), $oldValue, $collection->getAttribute('attributes', []))) {
+                throw new OperatorException($validator->getDescription());
+            }
+        }
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            case Operator::TYPE_INCREMENT:
+                $newValue = ($oldValue ?? 0) + $values[0];
+                if (count($values) > 1 && $values[1] !== null) {
+                    $newValue = min($newValue, $values[1]);
+                }
+                return $newValue;
+
+            case Operator::TYPE_DECREMENT:
+                $newValue = ($oldValue ?? 0) - $values[0];
+                if (count($values) > 1 && $values[1] !== null) {
+                    $newValue = max($newValue, $values[1]);
+                }
+                return $newValue;
+
+            case Operator::TYPE_MULTIPLY:
+                $newValue = ($oldValue ?? 0) * $values[0];
+                if (count($values) > 1 && $values[1] !== null) {
+                    $newValue = min($newValue, $values[1]);
+                }
+                return $newValue;
+
+            case Operator::TYPE_DIVIDE:
+                $newValue = ($oldValue ?? 0) / $values[0];
+                if (count($values) > 1 && $values[1] !== null) {
+                    $newValue = max($newValue, $values[1]);
+                }
+                return $newValue;
+
+            case Operator::TYPE_ARRAY_APPEND:
+                if (!is_array($oldValue)) {
+                    throw new OperatorException("Cannot append to non-array value for attribute '{$operator->getAttribute()}'");
+                }
+                return array_merge($oldValue, $operator->getValues());
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                if (!is_array($oldValue)) {
+                    throw new OperatorException("Cannot prepend to non-array value for attribute '{$operator->getAttribute()}'");
+                }
+                return array_merge($operator->getValues(), $oldValue);
+
+            case Operator::TYPE_ARRAY_INSERT:
+                if (!is_array($oldValue)) {
+                    throw new OperatorException("Cannot insert into non-array value for attribute '{$operator->getAttribute()}'");
+                }
+                if (count($values) !== 2) {
+                    throw new OperatorException("Insert operator requires exactly 2 values: index and value");
+                }
+                $index = $values[0];
+                $insertValue = $values[1];
+
+                if (!is_int($index) || $index < 0) {
+                    throw new OperatorException("Insert index must be a non-negative integer");
+                }
+
+                if ($index > count($oldValue)) {
+                    throw new OperatorException("Insert index {$index} is out of bounds for array of length " . count($oldValue));
+                }
+
+                $result = $oldValue;
+                array_splice($result, $index, 0, [$insertValue]);
+                return $result;
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                if (!is_array($oldValue)) {
+                    throw new OperatorException("Cannot remove from non-array value for attribute '{$operator->getAttribute()}'");
+                }
+                $removeValue = $values[0];
+
+                // Remove all occurrences of the value
+                $result = [];
+                foreach ($oldValue as $item) {
+                    if ($item !== $removeValue) {
+                        $result[] = $item;
+                    }
+                }
+
+                return $result;
+
+            case Operator::TYPE_CONCAT:
+                // Works for both strings and arrays
+                if (is_array($oldValue)) {
+                    if (!is_array($values[0])) {
+                        $values[0] = [$values[0]];
+                    }
+                    return array_merge($oldValue, $values[0]);
+                }
+                return ($oldValue ?? '') . $values[0];
+
+            case Operator::TYPE_REPLACE:
+                return str_replace($values[0], $values[1], $oldValue ?? '');
+
+            case Operator::TYPE_TOGGLE:
+                // null -> true, true -> false, false -> true
+                return $oldValue === null ? true : !$oldValue;
+
+            case Operator::TYPE_DATE_ADD_DAYS:
+                if ($oldValue === null) {
+                    $oldValue = DateTime::now();
+                } elseif (is_string($oldValue)) {
+                    try {
+                        $oldValue = new \DateTime($oldValue);
+                    } catch (\Exception $e) {
+                        throw new OperatorException("Invalid date format for attribute '{$operator->getAttribute()}': {$oldValue}");
+                    }
+                } elseif (!($oldValue instanceof \DateTime)) {
+                    throw new OperatorException("Cannot add days to non-date value for attribute '{$operator->getAttribute()}'");
+                }
+                $currentDate = clone $oldValue;
+                $currentDate->modify("+{$values[0]} days");
+                return $currentDate->format('Y-m-d H:i:s');
+
+            case Operator::TYPE_DATE_SUB_DAYS:
+                if ($oldValue === null) {
+                    $oldValue = DateTime::now();
+                } elseif (is_string($oldValue)) {
+                    try {
+                        $oldValue = new \DateTime($oldValue);
+                    } catch (\Exception $e) {
+                        throw new OperatorException("Invalid date format for attribute '{$operator->getAttribute()}': {$oldValue}");
+                    }
+                } elseif (!($oldValue instanceof \DateTime)) {
+                    throw new OperatorException("Cannot subtract days from non-date value for attribute '{$operator->getAttribute()}'");
+                }
+                $currentDate = clone $oldValue;
+                $currentDate->modify("-{$values[0]} days");
+                return $currentDate->format('Y-m-d H:i:s');
+
+            case Operator::TYPE_DATE_SET_NOW:
+                return DateTime::now();
+
+            case Operator::TYPE_MODULO:
+                return ($oldValue ?? 0) % $values[0];
+
+            case Operator::TYPE_POWER:
+                $newValue = pow(($oldValue ?? 0), $values[0]);
+                // Apply max limit if provided
+                if (count($values) > 1 && $values[1] !== null) {
+                    $newValue = min($newValue, $values[1]);
+                }
+                return $newValue;
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                return array_values(array_unique($oldValue ?? [], SORT_REGULAR));
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                return array_values(array_intersect($oldValue ?? [], $values));
+
+            case Operator::TYPE_ARRAY_DIFF:
+                return array_values(array_diff($oldValue ?? [], $values));
+
+            case Operator::TYPE_ARRAY_FILTER:
+                $condition = $values[0];
+                $filterValue = $values[1] ?? null;
+                $result = [];
+                foreach (($oldValue ?? []) as $item) {
+                    $keep = false;
+                    switch ($condition) {
+                        case 'equals':
+                            $keep = $item === $filterValue;
+                            break;
+                        case 'notEquals':
+                            $keep = $item !== $filterValue;
+                            break;
+                        case 'greaterThan':
+                            $keep = $item > $filterValue;
+                            break;
+                        case 'lessThan':
+                            $keep = $item < $filterValue;
+                            break;
+                        case 'null':
+                            $keep = is_null($item);
+                            break;
+                        case 'notNull':
+                            $keep = !is_null($item);
+                            break;
+                        default:
+                            throw new OperatorException("Unsupported arrayFilter condition: {$condition}");
+                    }
+                    if ($keep) {
+                        $result[] = $item;
+                    }
+                }
+                return $result;
+
+            default:
+                throw new OperatorException("Unsupported operator method: {$method}");
+        }
+    }
+
     protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
@@ -6872,9 +7127,9 @@ class Database
      * @param string $filter
      * @param mixed $value
      * @param Document $document
-     *
+     * @param string $attribute
      * @return mixed
-     * @throws DatabaseException
+     * @throws NotFoundException
      */
     protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {

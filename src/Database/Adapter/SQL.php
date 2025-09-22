@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -479,20 +480,39 @@ abstract class SQL extends Adapter
 
         $bindIndex = 0;
         $columns = '';
+        $operators = [];
+
+        // Separate regular attributes from operators
+        foreach ($attributes as $attribute => $value) {
+            if (Operator::isOperator($value)) {
+                $operators[$attribute] = $value;
+            }
+        }
+
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
 
-            if (in_array($attribute, $spatialAttributes)) {
+            // Check if this is an operator, spatial attribute, or regular attribute
+            if (isset($operators[$attribute])) {
+                $columns .= $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+            } elseif (\in_array($attribute, $spatialAttributes)) {
                 $columns .= "{$this->quote($column)} = " . $this->getSpatialGeomFromText(":key_{$bindIndex}");
+                $bindIndex++;
             } else {
                 $columns .= "{$this->quote($column)} = :key_{$bindIndex}";
+                $bindIndex++;
             }
 
             if ($attribute !== \array_key_last($attributes)) {
                 $columns .= ',';
             }
+        }
 
-            $bindIndex++;
+        // Remove trailing comma if present
+        $columns = \rtrim($columns, ',');
+
+        if (empty($columns)) {
+            return 0;
         }
 
         $name = $this->filter($collection);
@@ -518,12 +538,18 @@ abstract class SQL extends Adapter
 
         $attributeIndex = 0;
         foreach ($attributes as $attributeName => $value) {
+            // Skip operators as they don't need value binding
+            if (isset($operators[$attributeName])) {
+                $this->bindOperatorParams($stmt, $operators[$attributeName], $attributeIndex);
+                continue;
+            }
+
             if (!isset($spatialAttributes[$attributeName]) && is_array($value)) {
-                $value = json_encode($value);
+                $value = \json_encode($value);
             }
 
             $bindKey = 'key_' . $attributeIndex;
-            $value = (is_bool($value)) ? (int)$value : $value;
+            $value = (\is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }
@@ -1705,6 +1731,355 @@ abstract class SQL extends Adapter
     protected function getSQLTable(string $name): string
     {
         return "{$this->quote($this->getDatabase())}.{$this->quote($this->getNamespace() . '_' .$this->filter($name))}";
+    }
+
+    /**
+     * Generate SQL expression for operator
+     *
+     * @param string $column
+     * @param \Utopia\Database\Operator $operator
+     * @param int &$bindIndex
+     * @return string|null Returns null if operator can't be expressed in SQL
+     */
+    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
+    {
+        $quotedColumn = $this->quote($column);
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            // Numeric operators
+            case Operator::TYPE_INCREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // Handle max limit if provided
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = LEAST({$quotedColumn} + :$bindKey, :$maxKey)";
+                }
+                return "{$quotedColumn} = {$quotedColumn} + :$bindKey";
+
+            case Operator::TYPE_DECREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // Handle min limit if provided
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = GREATEST({$quotedColumn} - :$bindKey, :$minKey)";
+                }
+                return "{$quotedColumn} = {$quotedColumn} - :$bindKey";
+
+            case Operator::TYPE_MULTIPLY:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // Handle max limit if provided
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = LEAST({$quotedColumn} * :$bindKey, :$maxKey)";
+                }
+                return "{$quotedColumn} = {$quotedColumn} * :$bindKey";
+
+            case Operator::TYPE_DIVIDE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // Handle min limit if provided
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = GREATEST({$quotedColumn} / :$bindKey, :$minKey)";
+                }
+                return "{$quotedColumn} = {$quotedColumn} / :$bindKey";
+
+            case Operator::TYPE_MODULO:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = MOD({$quotedColumn}, :$bindKey)";
+
+            case Operator::TYPE_POWER:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // Handle max limit if provided
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = LEAST(POWER({$quotedColumn}, :$bindKey), :$maxKey)";
+                }
+                return "{$quotedColumn} = POWER({$quotedColumn}, :$bindKey)";
+
+                // String operators
+            case Operator::TYPE_CONCAT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = CONCAT(IFNULL({$quotedColumn}, ''), :$bindKey)";
+
+            case Operator::TYPE_REPLACE:
+                $searchKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $replaceKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
+
+                // Boolean operators
+            case Operator::TYPE_TOGGLE:
+                return "{$quotedColumn} = NOT {$quotedColumn}";
+
+                // Date operators
+            case Operator::TYPE_DATE_ADD_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = DATE_ADD({$quotedColumn}, INTERVAL :$bindKey DAY)";
+
+            case Operator::TYPE_DATE_SUB_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = DATE_SUB({$quotedColumn}, INTERVAL :$bindKey DAY)";
+
+            case Operator::TYPE_DATE_SET_NOW:
+                return "{$quotedColumn} = NOW()";
+
+                // Array operators (using JSON functions)
+            case Operator::TYPE_ARRAY_APPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, '[]'), :$bindKey)";
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, '[]'))";
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_REMOVE({$quotedColumn}, JSON_UNQUOTE(JSON_SEARCH({$quotedColumn}, 'one', :$bindKey)))";
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                return "{$quotedColumn} = (SELECT JSON_ARRAYAGG(DISTINCT value) FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt)";
+
+            case Operator::TYPE_ARRAY_INSERT:
+                $indexKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_INSERT({$quotedColumn}, CONCAT('$[', :$indexKey, ']'), :$valueKey)";
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = (
+                    SELECT JSON_ARRAYAGG(jt1.value)
+                    FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt1
+                    WHERE jt1.value IN (
+                        SELECT jt2.value
+                        FROM JSON_TABLE(:$bindKey, '$[*]' COLUMNS(value JSON PATH '$')) AS jt2
+                    )
+                )";
+
+            case Operator::TYPE_ARRAY_DIFF:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = (
+                    SELECT JSON_ARRAYAGG(jt1.value)
+                    FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt1
+                    WHERE jt1.value NOT IN (
+                        SELECT jt2.value
+                        FROM JSON_TABLE(:$bindKey, '$[*]' COLUMNS(value JSON PATH '$')) AS jt2
+                    )
+                )";
+
+            case Operator::TYPE_ARRAY_FILTER:
+                $conditionKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = (
+                    SELECT JSON_ARRAYAGG(value)
+                    FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt
+                    WHERE CASE :$conditionKey
+                        WHEN 'equal' THEN value = :$valueKey
+                        WHEN 'notEqual' THEN value != :$valueKey
+                        WHEN 'greaterThan' THEN CAST(value AS SIGNED) > CAST(:$valueKey AS SIGNED)
+                        WHEN 'lessThan' THEN CAST(value AS SIGNED) < CAST(:$valueKey AS SIGNED)
+                        WHEN 'isNull' THEN value IS NULL
+                        WHEN 'isNotNull' THEN value IS NOT NULL
+                        ELSE TRUE
+                    END
+                )";
+            default:
+                throw new DatabaseException("Unsupported operator type: {$method}");
+        }
+    }
+
+    /**
+     * Bind operator parameters to prepared statement
+     *
+     * @param \PDOStatement $stmt
+     * @param \Utopia\Database\Operator $operator
+     * @param int &$bindIndex
+     * @return void
+     */
+    protected function bindOperatorParams(\PDOStatement $stmt, Operator $operator, int &$bindIndex): void
+    {
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            // Numeric operators with optional limits
+            case Operator::TYPE_INCREMENT:
+            case Operator::TYPE_DECREMENT:
+            case Operator::TYPE_MULTIPLY:
+            case Operator::TYPE_DIVIDE:
+                $value = $values[0] ?? 1;
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                $bindIndex++;
+
+                // Bind limit if provided
+                if (isset($values[1])) {
+                    $limitKey = "op_{$bindIndex}";
+                    $stmt->bindValue(':' . $limitKey, $values[1], $this->getPDOType($values[1]));
+                    $bindIndex++;
+                }
+                break;
+
+            case Operator::TYPE_MODULO:
+                $value = $values[0] ?? 1;
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_POWER:
+                $value = $values[0] ?? 1;
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                $bindIndex++;
+
+                // Bind max limit if provided
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $stmt->bindValue(':' . $maxKey, $values[1], $this->getPDOType($values[1]));
+                    $bindIndex++;
+                }
+                break;
+
+                // String operators
+            case Operator::TYPE_CONCAT:
+                $value = $values[0] ?? '';
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $value, \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_REPLACE:
+                $search = $values[0] ?? '';
+                $replace = $values[1] ?? '';
+                $searchKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $searchKey, $search, \PDO::PARAM_STR);
+                $bindIndex++;
+                $replaceKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $replaceKey, $replace, \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+                // Boolean operators
+            case Operator::TYPE_TOGGLE:
+                // No parameters to bind
+                break;
+
+                // Date operators
+            case Operator::TYPE_DATE_ADD_DAYS:
+            case Operator::TYPE_DATE_SUB_DAYS:
+                $days = $values[0] ?? 0;
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $days, \PDO::PARAM_INT);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_DATE_SET_NOW:
+                // No parameters to bind
+                break;
+
+                // Array operators
+            case Operator::TYPE_ARRAY_APPEND:
+            case Operator::TYPE_ARRAY_PREPEND:
+                // Bind JSON array
+                $arrayValue = json_encode($values);
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $value = $values[0] ?? null;
+                $bindKey = "op_{$bindIndex}";
+                if (is_array($value)) {
+                    $value = json_encode($value);
+                }
+                $stmt->bindValue(':' . $bindKey, $value, \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                // No parameters to bind
+                break;
+
+                // Conditional operators
+            case Operator::TYPE_COALESCE:
+                $coalesceValues = $values[0] ?? [];
+                if (is_array($coalesceValues)) {
+                    foreach ($coalesceValues as $val) {
+                        if (!(is_string($val) && str_starts_with($val, '$'))) {
+                            $bindKey = "op_{$bindIndex}";
+                            $stmt->bindValue(':' . $bindKey, $val, $this->getPDOType($val));
+                            $bindIndex++;
+                        }
+                    }
+                }
+                break;
+
+                // Complex array operators
+            case Operator::TYPE_ARRAY_INSERT:
+                $index = $values[0] ?? 0;
+                $value = $values[1] ?? null;
+                $indexKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $indexKey, $index, \PDO::PARAM_INT);
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $valueKey, json_encode($value), \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+            case Operator::TYPE_ARRAY_DIFF:
+                $arrayValue = json_encode($values);
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_ARRAY_FILTER:
+                $condition = $values[0] ?? 'equals';
+                $value = $values[1] ?? null;
+                $conditionKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $conditionKey, $condition, \PDO::PARAM_STR);
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                if ($value !== null) {
+                    $stmt->bindValue(':' . $valueKey, json_encode($value), \PDO::PARAM_STR);
+                } else {
+                    $stmt->bindValue(':' . $valueKey, null, \PDO::PARAM_NULL);
+                }
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_COMPUTE:
+                // No parameters to bind for compute
+                break;
+        }
     }
 
     /**

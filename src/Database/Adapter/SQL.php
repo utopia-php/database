@@ -2027,21 +2027,7 @@ abstract class SQL extends Adapter
                 // No parameters to bind
                 break;
 
-                // Conditional operators
-            case Operator::TYPE_COALESCE:
-                $coalesceValues = $values[0] ?? [];
-                if (is_array($coalesceValues)) {
-                    foreach ($coalesceValues as $val) {
-                        if (!(is_string($val) && str_starts_with($val, '$'))) {
-                            $bindKey = "op_{$bindIndex}";
-                            $stmt->bindValue(':' . $bindKey, $val, $this->getPDOType($val));
-                            $bindIndex++;
-                        }
-                    }
-                }
-                break;
-
-                // Complex array operators
+            // Complex array operators
             case Operator::TYPE_ARRAY_INSERT:
                 $index = $values[0] ?? 0;
                 $value = $values[1] ?? null;
@@ -2074,10 +2060,6 @@ abstract class SQL extends Adapter
                     $stmt->bindValue(':' . $valueKey, null, \PDO::PARAM_NULL);
                 }
                 $bindIndex++;
-                break;
-
-            case Operator::TYPE_COMPUTE:
-                // No parameters to bind for compute
                 break;
         }
     }

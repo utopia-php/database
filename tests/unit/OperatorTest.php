@@ -81,13 +81,6 @@ class OperatorTest extends TestCase
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([], $operator->getValues());
 
-
-        // Test utility helpers
-        $operator = Operator::coalesce(['$field', 'default']);
-        $this->assertEquals(Operator::TYPE_COALESCE, $operator->getMethod());
-        $this->assertEquals('', $operator->getAttribute());
-        $this->assertEquals([['$field', 'default']], $operator->getValues());
-
         $operator = Operator::dateSetNow();
         $this->assertEquals(Operator::TYPE_DATE_SET_NOW, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
@@ -98,12 +91,6 @@ class OperatorTest extends TestCase
         $this->assertEquals(Operator::TYPE_CONCAT, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([' - Updated'], $operator->getValues());
-
-        // Test compute operator with callable
-        $operator = Operator::compute(function ($doc) { return $doc->getAttribute('price') * 2; });
-        $this->assertEquals(Operator::TYPE_COMPUTE, $operator->getMethod());
-        $this->assertEquals('', $operator->getAttribute());
-        $this->assertTrue(is_callable($operator->getValue()));
 
         // Test modulo and power operators
         $operator = Operator::modulo(3);
@@ -192,12 +179,7 @@ class OperatorTest extends TestCase
         $this->assertTrue($toggleOp->isBooleanOperation());
 
 
-        // Test conditional operations
-        $coalesceOp = Operator::coalesce(['$field', 'default']);
-        $this->assertFalse($coalesceOp->isNumericOperation());
-        $this->assertFalse($coalesceOp->isArrayOperation());
-        $this->assertTrue($coalesceOp->isConditionalOperation());
-
+        // Test date operations
         $dateSetNowOp = Operator::dateSetNow();
         $this->assertFalse($dateSetNowOp->isNumericOperation());
         $this->assertFalse($dateSetNowOp->isArrayOperation());
@@ -232,7 +214,6 @@ class OperatorTest extends TestCase
         $this->assertTrue(Operator::isMethod(Operator::TYPE_REPLACE));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_TOGGLE));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_CONCAT));
-        $this->assertTrue(Operator::isMethod(Operator::TYPE_COALESCE));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_DATE_SET_NOW));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_MODULO));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_POWER));
@@ -484,7 +465,6 @@ class OperatorTest extends TestCase
             'views' => Operator::multiply(2, 1000),
             'rating' => Operator::divide(2, 1),
             'featured' => Operator::toggle(),
-            'default_value' => Operator::coalesce(['$default_value', 'default']),
             'last_modified' => Operator::dateSetNow(),
             'title_prefix' => Operator::concat(' - Updated'),
             'views_modulo' => Operator::modulo(3),
@@ -525,8 +505,7 @@ class OperatorTest extends TestCase
         $this->assertEquals(Operator::TYPE_MODULO, $operators['views_modulo']->getMethod());
         $this->assertEquals(Operator::TYPE_POWER, $operators['score_power']->getMethod());
 
-        // Check utility operators
-        $this->assertEquals(Operator::TYPE_COALESCE, $operators['default_value']->getMethod());
+        // Check date operator
         $this->assertEquals(Operator::TYPE_DATE_SET_NOW, $operators['last_modified']->getMethod());
 
         // Check that max/min values are preserved
@@ -696,7 +675,6 @@ class OperatorTest extends TestCase
             'concat' => Operator::concat(' suffix'),
             'replace' => Operator::replace('old', 'new'),
             'toggle' => Operator::toggle(),
-            'coalesce' => Operator::coalesce(['$field', 'default']),
             'dateSetNow' => Operator::dateSetNow(),
             'concat' => Operator::concat(' suffix'),
             'modulo' => Operator::modulo(3),
@@ -707,7 +685,7 @@ class OperatorTest extends TestCase
         $result = Operator::extractOperators($data);
         $operators = $result['operators'];
 
-        $this->assertCount(13, $operators);
+        $this->assertCount(12, $operators);
 
         // Verify each operator type
         $this->assertEquals(Operator::TYPE_ARRAY_APPEND, $operators['arrayAppend']->getMethod());
@@ -722,7 +700,6 @@ class OperatorTest extends TestCase
         $this->assertEquals(Operator::TYPE_CONCAT, $operators['concat']->getMethod());
         $this->assertEquals(Operator::TYPE_REPLACE, $operators['replace']->getMethod());
         $this->assertEquals(Operator::TYPE_TOGGLE, $operators['toggle']->getMethod());
-        $this->assertEquals(Operator::TYPE_COALESCE, $operators['coalesce']->getMethod());
         $this->assertEquals(Operator::TYPE_DATE_SET_NOW, $operators['dateSetNow']->getMethod());
         $this->assertEquals(Operator::TYPE_CONCAT, $operators['concat']->getMethod());
         $this->assertEquals(Operator::TYPE_MODULO, $operators['modulo']->getMethod());
@@ -762,10 +739,8 @@ class OperatorTest extends TestCase
         $this->assertFalse(Operator::toggle()->isArrayOperation());
 
 
-        // Test conditional and date operations
-        $this->assertTrue(Operator::coalesce(['$field', 'value'])->isConditionalOperation());
+        // Test date operations
         $this->assertTrue(Operator::dateSetNow()->isDateOperation());
-        $this->assertFalse(Operator::coalesce(['$field', 'value'])->isNumericOperation());
         $this->assertFalse(Operator::dateSetNow()->isNumericOperation());
     }
 
@@ -856,12 +831,6 @@ class OperatorTest extends TestCase
 
     public function testUtilityOperators(): void
     {
-        // Test coalesce
-        $operator = Operator::coalesce(['$field', 'default-value']);
-        $this->assertEquals(Operator::TYPE_COALESCE, $operator->getMethod());
-        $this->assertEquals([['$field', 'default-value']], $operator->getValues());
-        $this->assertEquals(['$field', 'default-value'], $operator->getValue());
-
         // Test dateSetNow
         $operator = Operator::dateSetNow();
         $this->assertEquals(Operator::TYPE_DATE_SET_NOW, $operator->getMethod());
@@ -882,7 +851,6 @@ class OperatorTest extends TestCase
             ['method' => Operator::TYPE_MODULO, 'attribute' => 'remainder', 'values' => [3]],
             ['method' => Operator::TYPE_POWER, 'attribute' => 'exponential', 'values' => [2, 1000]],
             ['method' => Operator::TYPE_TOGGLE, 'attribute' => 'active', 'values' => []],
-            ['method' => Operator::TYPE_COALESCE, 'attribute' => 'default', 'values' => [['$default', 'value']]],
             ['method' => Operator::TYPE_DATE_SET_NOW, 'attribute' => 'updated', 'values' => []],
         ];
 
@@ -913,9 +881,7 @@ class OperatorTest extends TestCase
             Operator::modulo(3),
             Operator::power(2, 100),
             Operator::toggle(),
-            Operator::coalesce(['$field', 'default']),
             Operator::dateSetNow(),
-            Operator::compute(function ($doc) { return $doc->getAttribute('test'); }),
         ];
 
         foreach ($operators as $operator) {
@@ -954,10 +920,6 @@ class OperatorTest extends TestCase
         $operator = Operator::replace('same', 'same');
         $this->assertEquals(['same', 'same'], $operator->getValues());
 
-        // Test coalesce with multiple values
-        $operator = Operator::coalesce(['$field1', '$field2', null]);
-        $this->assertEquals(['$field1', '$field2', null], $operator->getValue());
-
         // Test modulo edge cases
         $operator = Operator::modulo(1.5);
         $this->assertEquals(1.5, $operator->getValue());
@@ -965,24 +927,5 @@ class OperatorTest extends TestCase
         // Test power with zero exponent
         $operator = Operator::power(0);
         $this->assertEquals(0, $operator->getValue());
-    }
-
-    public function testComputeOperator(): void
-    {
-        // Test compute operator with simple calculation
-        $operator = Operator::compute(function ($doc) {
-            return $doc->getAttribute('price') * $doc->getAttribute('quantity');
-        });
-        $this->assertEquals(Operator::TYPE_COMPUTE, $operator->getMethod());
-        $this->assertTrue(is_callable($operator->getValue()));
-
-        // Test compute operator with complex logic
-        $operator = Operator::compute(function ($doc) {
-            $price = $doc->getAttribute('price', 0);
-            $discount = $doc->getAttribute('discount', 0);
-            return $price * (1 - $discount / 100);
-        });
-        $this->assertTrue(is_callable($operator->getValue()));
-        $this->assertEquals(1, count($operator->getValues())); // Should have exactly one callable
     }
 }

@@ -6454,36 +6454,6 @@ trait DocumentTests
         $database->deleteCollection($collectionId);
     }
 
-    public function testOperatorSetIfNull(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        $collectionId = 'test_set_if_null_operator';
-        $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_STRING, 255, false, null);
-
-        // Success case: null value should be set
-        $doc = $database->createDocument($collectionId, new Document([
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => null
-        ]));
-
-        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'value' => Operator::coalesce(['$value', 'default'])
-        ]));
-
-        $this->assertEquals('default', $updated->getAttribute('value'));
-
-        // Test with non-null value (should not change)
-        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'value' => Operator::coalesce(['$value', 'should not change'])
-        ]));
-
-        $this->assertEquals('default', $updated->getAttribute('value'));
-
-        $database->deleteCollection($collectionId);
-    }
 
     public function testOperatorArrayUnique(): void
     {
@@ -6509,36 +6479,6 @@ trait DocumentTests
         $this->assertContains('a', $result);
         $this->assertContains('b', $result);
         $this->assertContains('c', $result);
-
-        $database->deleteCollection($collectionId);
-    }
-
-    public function testOperatorCompute(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        $collectionId = 'test_compute_operator';
-        $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'price', Database::VAR_FLOAT, 0, false, 0.0);
-        $database->createAttribute($collectionId, 'quantity', Database::VAR_INTEGER, 0, false, 0);
-        $database->createAttribute($collectionId, 'total', Database::VAR_FLOAT, 0, false, 0.0);
-
-        // Success case
-        $doc = $database->createDocument($collectionId, new Document([
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'price' => 10.50,
-            'quantity' => 3,
-            'total' => 0
-        ]));
-
-        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'total' => Operator::compute(function ($doc) {
-                return $doc->getAttribute('price') * $doc->getAttribute('quantity');
-            })
-        ]));
-
-        $this->assertEquals(31.5, $updated->getAttribute('total'));
 
         $database->deleteCollection($collectionId);
     }
@@ -7232,128 +7172,6 @@ trait DocumentTests
         $database->deleteCollection($collectionId);
     }
 
-    public function testOperatorSetIfNullComprehensive(): void
-    {
-        $database = static::getDatabase();
-
-        $collectionId = 'operator_set_if_null_test';
-        $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'value', Database::VAR_STRING, 255, false);
-
-        // Success case - null value
-        $doc = $database->createDocument($collectionId, new Document([
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => null
-        ]));
-
-        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'value' => Operator::coalesce(['$value', 'default'])
-        ]));
-
-        $this->assertEquals('default', $updated->getAttribute('value'));
-
-        // Success case - non-null value (should not change)
-        $doc2 = $database->createDocument($collectionId, new Document([
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'value' => 'existing'
-        ]));
-
-        $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'value' => Operator::coalesce(['$value', 'should not change'])
-        ]));
-
-        $this->assertEquals('existing', $updated->getAttribute('value'));
-
-        $database->deleteCollection($collectionId);
-    }
-
-    public function testOperatorCoalesceComprehensive(): void
-    {
-        $database = static::getDatabase();
-
-        $collectionId = 'operator_coalesce_test';
-        $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'field1', Database::VAR_STRING, 255, false);
-        $database->createAttribute($collectionId, 'field2', Database::VAR_STRING, 255, false);
-        $database->createAttribute($collectionId, 'result', Database::VAR_STRING, 255, false);
-
-        // Success case - field references and literals
-        $doc = $database->createDocument($collectionId, new Document([
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'field1' => null,
-            'field2' => 'value2',
-            'result' => null
-        ]));
-
-        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'result' => Operator::coalesce(['$field1', '$field2', 'fallback'])
-        ]));
-
-        $this->assertEquals('value2', $updated->getAttribute('result'));
-
-        // Success case - all null, use literal
-        $doc2 = $database->createDocument($collectionId, new Document([
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'field1' => null,
-            'field2' => null,
-            'result' => null
-        ]));
-
-        $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'result' => Operator::coalesce(['$field1', '$field2', 'fallback'])
-        ]));
-
-        $this->assertEquals('fallback', $updated->getAttribute('result'));
-
-        $database->deleteCollection($collectionId);
-    }
-
-    public function testOperatorComputeComprehensive(): void
-    {
-        $database = static::getDatabase();
-
-        $collectionId = 'operator_compute_test';
-        $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, 'price', Database::VAR_FLOAT, 0, false);
-        $database->createAttribute($collectionId, 'quantity', Database::VAR_INTEGER, 0, false);
-        $database->createAttribute($collectionId, 'total', Database::VAR_FLOAT, 0, false);
-        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 255, false);
-        $database->createAttribute($collectionId, 'display', Database::VAR_STRING, 255, false);
-
-        // Success case - arithmetic computation
-        $doc = $database->createDocument($collectionId, new Document([
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'price' => 10.50,
-            'quantity' => 3,
-            'total' => 0
-        ]));
-
-        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'total' => Operator::compute(function ($doc) {
-                return $doc->getAttribute('price') * $doc->getAttribute('quantity');
-            })
-        ]));
-
-        $this->assertEquals(31.5, $updated->getAttribute('total'));
-
-        // Success case - string computation
-        $doc2 = $database->createDocument($collectionId, new Document([
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'name' => 'Product',
-            'price' => 25.99,
-            'display' => ''
-        ]));
-
-        $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'display' => Operator::compute(function ($doc) {
-                return $doc->getAttribute('name') . ' - $' . number_format($doc->getAttribute('price'), 2);
-            })
-        ]));
-
-        $this->assertEquals('Product - $25.99', $updated->getAttribute('display'));
-
-        $database->deleteCollection($collectionId);
-    }
 
     public function testMixedOperators(): void
     {

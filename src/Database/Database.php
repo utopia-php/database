@@ -4681,20 +4681,28 @@ class Database
         $updatedAt = $updates->getUpdatedAt();
         $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
 
-        // Pass updates with operators directly to adapter
-        // The adapter will handle generating SQL expressions for bulk updates
-        $updates = $this->encode($collection, $updates);
-        // Check new document structure
-        $validator = new PartialStructure(
-            $collection,
-            $this->adapter->getIdAttributeType(),
-            $this->adapter->getMinDateTime(),
-            $this->adapter->getMaxDateTime(),
-        );
+        // Separate operators from regular updates for validation
+        $extracted = Operator::extractOperators($updates->getArrayCopy());
+        $operators = $extracted['operators'];
+        $regularUpdates = $extracted['updates'];
 
-        if (!$validator->isValid($updates)) {
-            throw new StructureException($validator->getDescription());
+        // Only validate regular updates, not operators
+        if (!empty($regularUpdates)) {
+            $updatesForValidation = new Document($regularUpdates);
+            $validator = new PartialStructure(
+                $collection,
+                $this->adapter->getIdAttributeType(),
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+            );
+
+            if (!$validator->isValid($updatesForValidation)) {
+                throw new StructureException($validator->getDescription());
+            }
         }
+
+        // Pass full updates with operators to adapter
+        $updates = $this->encode($collection, $updates);
 
         $originalLimit = $limit;
         $last = $cursor;

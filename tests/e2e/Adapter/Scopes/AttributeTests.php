@@ -1474,12 +1474,10 @@ trait AttributeTests
                     $this->fail('Failed to throw exception');
                 }
             } catch (Throwable $e) {
-                if ($database->getAdapter()->getSupportForAttributes()) {
-                    if ($database->getAdapter()->getSupportForFulltextIndex()) {
-                        $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
-                    } else {
-                        $this->assertEquals('Fulltext index is not supported', $e->getMessage());
-                    }
+                if ($database->getAdapter()->getSupportForFulltextIndex()) {
+                    $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
+                } else {
+                    $this->assertEquals('Fulltext index is not supported', $e->getMessage());
                 }
             }
 
@@ -1491,6 +1489,8 @@ trait AttributeTests
             } catch (Throwable $e) {
                 if ($database->getAdapter()->getSupportForAttributes()) {
                     $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+                } else {
+                    $this->assertEquals('Index already exists', $e->getMessage());
                 }
             }
         }
@@ -1703,10 +1703,8 @@ trait AttributeTests
                     $this->fail('Failed to throw exception');
                 }
             } catch (Throwable $e) {
-                if ($database->getAdapter()->getSupportForAttributes()) {
-                    $this->assertTrue($e instanceof QueryException);
-                    $this->assertEquals('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());
-                }
+                $this->assertTrue($e instanceof QueryException);
+                $this->assertEquals('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());
             }
         }
 

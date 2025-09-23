@@ -98,7 +98,6 @@ class Filter extends Base
         if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
             return true;
         }
-
         $attributeSchema = $this->schema[$attribute];
 
         if (count($values) > $this->maxValuesCount) {

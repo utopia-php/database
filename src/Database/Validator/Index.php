@@ -31,7 +31,6 @@ class Index extends Validator
     protected bool $spatialIndexOrderSupport;
 
     protected bool $supportForAttributes;
-
     /**
      * @param array<Document> $attributes
      * @param int $maxLength

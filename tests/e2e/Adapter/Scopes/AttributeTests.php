@@ -1470,20 +1470,28 @@ trait AttributeTests
         if ($database->getAdapter()->getSupportForIndexArray()) {
             try {
                 $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
-                $this->fail('Failed to throw exception');
+                if ($database->getAdapter()->getSupportForAttributes()) {
+                    $this->fail('Failed to throw exception');
+                }
             } catch (Throwable $e) {
-                if ($database->getAdapter()->getSupportForFulltextIndex()) {
-                    $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
-                } else {
-                    $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+                if ($database->getAdapter()->getSupportForAttributes()) {
+                    if ($database->getAdapter()->getSupportForFulltextIndex()) {
+                        $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
+                    } else {
+                        $this->assertEquals('Fulltext index is not supported', $e->getMessage());
+                    }
                 }
             }
 
             try {
                 $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
-                $this->fail('Failed to throw exception');
+                if ($database->getAdapter()->getSupportForAttributes()) {
+                    $this->fail('Failed to throw exception');
+                }
             } catch (Throwable $e) {
-                $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+                if ($database->getAdapter()->getSupportForAttributes()) {
+                    $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+                }
             }
         }
 
@@ -1517,8 +1525,10 @@ trait AttributeTests
             $database->createIndex($collection, 'indx3', Database::INDEX_KEY, ['names'], [255], ['desc']);
 
             try {
-                $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
-                $this->fail('Failed to throw exception');
+                if ($database->getAdapter()->getSupportForAttributes()) {
+                    $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
+                    $this->fail('Failed to throw exception');
+                }
             } catch (Throwable $e) {
                 $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
             }

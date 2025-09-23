@@ -30,6 +30,7 @@ class Documents extends IndexedQueries
         int $maxValuesCount = 100,
         \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+        private bool $supportForAttributes = true
     ) {
         $attributes[] = new Document([
             '$id' => '$id',
@@ -66,9 +67,10 @@ class Documents extends IndexedQueries
                 $maxValuesCount,
                 $minAllowedDate,
                 $maxAllowedDate,
+                $this->supportForAttributes
             ),
-            new Order($attributes),
-            new Select($attributes),
+            new Order($attributes, $this->supportForAttributes),
+            new Select($attributes, $this->supportForAttributes),
         ];
 
         parent::__construct($attributes, $indexes, $validators);

@@ -11,12 +11,15 @@ class Order extends Base
      * @var array<int|string, mixed>
      */
     protected array $schema = [];
+    protected bool $supportForAttributes;
 
     /**
      * @param array<Document> $attributes
+     * @param bool $supportForAttributes
      */
-    public function __construct(array $attributes = [])
+    public function __construct(array $attributes = [], bool $supportForAttributes = true)
     {
+        $this->supportForAttributes = $supportForAttributes;
         foreach ($attributes as $attribute) {
             $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
         }
@@ -29,7 +32,7 @@ class Order extends Base
     protected function isValidAttribute(string $attribute): bool
     {
         // Search for attribute in schema
-        if (!isset($this->schema[$attribute])) {
+        if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
             $this->message = 'Attribute not found in schema: ' . $attribute;
             return false;
         }

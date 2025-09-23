@@ -95,6 +95,9 @@ trait GeneralTests
 
         /** @var Database $database */
         $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('This test is only for schema based adapters');
+        }
 
         $database->setPreserveDates(true);
 
@@ -190,6 +193,9 @@ trait GeneralTests
 
         /** @var Database $database */
         $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('This test is only for schema based adapters');
+        }
 
         $database->setPreserveDates(true);
 

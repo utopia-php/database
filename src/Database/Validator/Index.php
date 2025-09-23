@@ -30,6 +30,8 @@ class Index extends Validator
 
     protected bool $spatialIndexOrderSupport;
 
+    protected bool $supportForAttributes;
+
     /**
      * @param array<Document> $attributes
      * @param int $maxLength
@@ -40,7 +42,7 @@ class Index extends Validator
      * @param bool $spatialIndexOrderSupport
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [], bool $arrayIndexSupport = false, bool $spatialIndexSupport = false, bool $spatialIndexNullSupport = false, bool $spatialIndexOrderSupport = false)
+    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [], bool $arrayIndexSupport = false, bool $spatialIndexSupport = false, bool $spatialIndexNullSupport = false, bool $spatialIndexOrderSupport = false, bool $supportForAttributes = true)
     {
         $this->maxLength = $maxLength;
         $this->reservedKeys = $reservedKeys;
@@ -48,6 +50,7 @@ class Index extends Validator
         $this->spatialIndexSupport = $spatialIndexSupport;
         $this->spatialIndexNullSupport = $spatialIndexNullSupport;
         $this->spatialIndexOrderSupport = $spatialIndexOrderSupport;
+        $this->supportForAttributes = $supportForAttributes;
 
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -75,7 +78,7 @@ class Index extends Validator
     public function checkAttributesNotFound(Document $index): bool
     {
         foreach ($index->getAttribute('attributes', []) as $attribute) {
-            if (!isset($this->attributes[\strtolower($attribute)])) {
+            if ($this->supportForAttributes && !isset($this->attributes[\strtolower($attribute)])) {
                 $this->message = 'Invalid index attribute "' . $attribute . '" not found';
                 return false;
             }
@@ -123,6 +126,9 @@ class Index extends Validator
      */
     public function checkFulltextIndexNonString(Document $index): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
         if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
             foreach ($index->getAttribute('attributes', []) as $attribute) {
                 $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
@@ -141,6 +147,9 @@ class Index extends Validator
      */
     public function checkArrayIndex(Document $index): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
         $attributes = $index->getAttribute('attributes', []);
         $orders = $index->getAttribute('orders', []);
         $lengths = $index->getAttribute('lengths', []);

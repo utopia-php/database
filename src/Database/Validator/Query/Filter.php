@@ -31,6 +31,7 @@ class Filter extends Base
         private readonly int $maxValuesCount = 100,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+        private bool $supportForAttributes = true
     ) {
         foreach ($attributes as $attribute) {
             $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
@@ -67,7 +68,7 @@ class Filter extends Base
         }
 
         // Search for attribute in schema
-        if (!isset($this->schema[$attribute])) {
+        if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
             $this->message = 'Attribute not found in schema: ' . $attribute;
             return false;
         }
@@ -92,6 +93,10 @@ class Filter extends Base
             // For relationships, just validate the top level.
             // Utopia will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];
+        }
+
+        if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
+            return true;
         }
 
         $attributeSchema = $this->schema[$attribute];

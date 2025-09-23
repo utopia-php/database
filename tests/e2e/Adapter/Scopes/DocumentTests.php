@@ -229,8 +229,10 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertTrue($e instanceof StructureException);
+                $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
+            }
         }
 
         try {
@@ -248,8 +250,10 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertTrue($e instanceof StructureException);
+                $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
+            }
         }
 
         try {
@@ -270,8 +274,10 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertTrue($e instanceof StructureException);
+                $this->assertEquals('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
+            }
         }
 
         /**
@@ -933,7 +939,9 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertTrue($e instanceof StructureException, $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertTrue($e instanceof StructureException, $e->getMessage());
+            }
         }
 
         // Ensure missing optionals on existing document is allowed
@@ -5151,16 +5159,18 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectException(Exception::class);
+            if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+                $this->expectExceptionMessage('Fulltext index is not supported');
+            } else {
+                $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a FULLTEXT index, must be of type string');
+            }
 
-        $this->expectException(Exception::class);
-
-        if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
-            $this->expectExceptionMessage('Fulltext index is not supported');
+            $database->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
         } else {
-            $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a FULLTEXT index, must be of type string');
+            $this->markTestSkipped('This test is only for schema based adapters');
         }
-
-        $database->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
     }
 
     public function testEnableDisableValidation(): void

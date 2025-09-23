@@ -4681,6 +4681,8 @@ class Database
         $updatedAt = $updates->getUpdatedAt();
         $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
 
+        $updates = $this->encode($collection, $updates);
+
         // Separate operators from regular updates for validation
         $extracted = Operator::extractOperators($updates->getArrayCopy());
         $operators = $extracted['operators'];
@@ -4688,7 +4690,6 @@ class Database
 
         // Only validate regular updates, not operators
         if (!empty($regularUpdates)) {
-            $updatesForValidation = new Document($regularUpdates);
             $validator = new PartialStructure(
                 $collection,
                 $this->adapter->getIdAttributeType(),
@@ -4696,13 +4697,10 @@ class Database
                 $this->adapter->getMaxDateTime(),
             );
 
-            if (!$validator->isValid($updatesForValidation)) {
+            if (!$validator->isValid(new Document($regularUpdates))) {
                 throw new StructureException($validator->getDescription());
             }
         }
-
-        // Pass full updates with operators to adapter
-        $updates = $this->encode($collection, $updates);
 
         $originalLimit = $limit;
         $last = $cursor;

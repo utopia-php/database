@@ -6054,7 +6054,7 @@ trait DocumentTests
         $database->deleteCollection($colName);
     }
 
-    public function testSchemalessCreateDocumentWithExtraAttribute()
+    public function testSchemalessDocumentOperation(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();
@@ -6152,7 +6152,45 @@ trait DocumentTests
         $database->deleteCollection($colName);
     }
 
-    public function testSchemaEnforcedDocumentCreation()
+    public function testSchemalessDocumentInvalidInteralAttributeValidation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // test to ensure internal attributes are checked during creating schemaless document
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('This test is only for schemaless adapters');
+        }
+
+        $colName = uniqid("schemaless");
+        $database->createCollection($colName);
+        try {
+            $docs = [
+                new Document(['$id' => true, 'freeA' => 'doc1']),
+                new Document(['$id' => true, 'freeB' => 'test']),
+                new Document(['$id' => true]),
+            ];
+            $database->createDocuments($colName, $docs);
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        try {
+            $docs = [
+                new Document(['$createdAt' => true, 'freeA' => 'doc1']),
+                new Document(['$updatedAt' => true, 'freeB' => 'test']),
+                new Document(['$permissions' => 12]),
+            ];
+            $database->createDocuments($colName, $docs);
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        $database->deleteCollection($colName);
+
+    }
+
+    public function testSchemaEnforcedDocumentCreation(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();

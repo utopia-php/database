@@ -86,6 +86,9 @@ class Structure extends Validator
             'filters' => [],
         ]
     ];
+    /**
+     * @var array<string,int>
+     */
     private array $internalAttributes = [];
 
     /**

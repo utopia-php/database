@@ -6053,4 +6053,131 @@ trait DocumentTests
         }
         $database->deleteCollection($colName);
     }
+
+    public function testSchemalessCreateDocumentWithExtraAttribute()
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('This test is only for schemaless adapters');
+        }
+
+        $colName = uniqid("schemaless");
+        $database->createCollection($colName);
+        $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
+        $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false, 'value');
+
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
+
+        // Valid documents without any predefined attributes
+        $docs = [
+            new Document(['$id' => 'doc1', '$permissions' => $permissions, 'freeA' => 'doc1']),
+            new Document(['$id' => 'doc2', '$permissions' => $permissions, 'freeB' => 'test']),
+            new Document(['$id' => 'doc3', '$permissions' => $permissions]),
+        ];
+        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+
+        // Any extra attributes should be allowed (fully schemaless)
+        $docs = [
+            new Document(['$id' => 'doc11', 'title' => 'doc1', '$permissions' => $permissions]),
+            new Document(['$id' => 'doc21', 'moviename' => 'doc2', 'moviedescription' => 'test', '$permissions' => $permissions]),
+            new Document(['$id' => 'doc31', '$permissions' => $permissions]),
+        ];
+
+        $createdDocs = $database->createDocuments($colName, $docs);
+        $this->assertEquals(3, $createdDocs);
+
+        // Create a single document with extra attribute as well
+        $single = $database->createDocument($colName, new Document(['$id' => 'docS', 'extra' => 'yes', '$permissions' => $permissions]));
+        $this->assertEquals('docS', $single->getId());
+        $this->assertEquals('yes', $single->getAttribute('extra'));
+
+        $found = $database->find($colName);
+        $this->assertCount(7, $found);
+        $doc11 = $database->getDocument($colName, 'doc11');
+        $this->assertEquals('doc1', $doc11->getAttribute('title'));
+
+        $doc21 = $database->getDocument($colName, 'doc21');
+        $this->assertEquals('doc2', $doc21->getAttribute('moviename'));
+        $this->assertEquals('test', $doc21->getAttribute('moviedescription'));
+
+        $updated = $database->updateDocument($colName, 'doc31', new Document(['moviename' => 'updated']))
+        ;
+        $this->assertEquals('updated', $updated->getAttribute('moviename'));
+
+        $this->assertTrue($database->deleteDocument($colName, 'doc21'));
+        $deleted = $database->getDocument($colName, 'doc21');
+        $this->assertTrue($deleted->isEmpty());
+        $remaining = $database->find($colName);
+        $this->assertCount(6, $remaining);
+
+        // Bulk update: set a new extra attribute on all remaining docs
+        $modified = $database->updateDocuments($colName, new Document(['bulkExtra' => 'yes']));
+        $this->assertEquals(6, $modified);
+        $all = $database->find($colName);
+        foreach ($all as $doc) {
+            $this->assertEquals('yes', $doc->getAttribute('bulkExtra'));
+        }
+
+        // Upsert: create new and update existing with extra attributes preserved
+        $upserts = [
+            new Document(['$id' => 'docU1', 'extraU' => 1, '$permissions' => $permissions]),
+            new Document(['$id' => 'doc1', 'extraU' => 2, '$permissions' => $permissions]),
+        ];
+        $countUpserts = $database->upsertDocuments($colName, $upserts);
+        $this->assertEquals(2, $countUpserts);
+        $docU1 = $database->getDocument($colName, 'docU1');
+        $this->assertEquals(1, $docU1->getAttribute('extraU'));
+        $doc1AfterUpsert = $database->getDocument($colName, 'doc1');
+        $this->assertEquals(2, $doc1AfterUpsert->getAttribute('extraU'));
+
+        // Increase/Decrease numeric attribute: add numeric attribute and mutate it
+        $database->createAttribute($colName, 'counter', Database::VAR_INTEGER, 0, false, 0);
+        $docS = $database->getDocument($colName, 'docS');
+        $this->assertEquals(0, $docS->getAttribute('counter'));
+        $docS = $database->increaseDocumentAttribute($colName, 'docS', 'counter', 5);
+        $this->assertEquals(5, $docS->getAttribute('counter'));
+        $docS = $database->decreaseDocumentAttribute($colName, 'docS', 'counter', 3);
+        $this->assertEquals(2, $docS->getAttribute('counter'));
+
+        $deletedByCounter = $database->deleteDocuments($colName, [Query::equal('counter', [2])]);
+        $this->assertEquals(1, $deletedByCounter);
+
+        $deletedCount = $database->deleteDocuments($colName, [Query::startsWith('$id', 'doc')]);
+        $this->assertEquals(6, $deletedCount);
+        $postDelete = $database->find($colName);
+        $this->assertCount(0, $postDelete);
+
+        $database->deleteCollection($colName);
+    }
+
+    public function testSchemaEnforcedDocumentCreation()
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->markTestSkipped('This test is only for schema-enforced adapters');
+        }
+
+        $colName = uniqid("schema");
+        $database->createCollection($colName);
+        $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
+        $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false, 'value');
+
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
+
+        // Extra attributes should fail
+        $docs = [
+            new Document(['$id' => 'doc11', 'key' => 'doc1', 'title' => 'doc1', '$permissions' => $permissions]),
+            new Document(['$id' => 'doc21', 'key' => 'doc2', 'moviename' => 'doc2', 'moviedescription' => 'test', '$permissions' => $permissions]),
+            new Document(['$id' => 'doc31', 'key' => 'doc3', '$permissions' => $permissions]),
+        ];
+
+        $this->expectException(StructureException::class);
+        $database->createDocuments($colName, $docs);
+
+        $database->deleteCollection($colName);
+    }
 }

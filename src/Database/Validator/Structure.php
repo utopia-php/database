@@ -252,11 +252,16 @@ class Structure extends Validator
      */
     protected function checkForAllRequiredValues(array $structure, array $attributes, array &$keys): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
+
         foreach ($attributes as $attribute) { // Check all required attributes are set
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
 
             $keys[$name] = $attribute; // List of allowed attributes to help find unknown ones
+
             if ($required && !isset($structure[$name])) {
                 $this->message = 'Missing required attribute "'.$name.'"';
                 return false;

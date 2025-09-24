@@ -12,7 +12,6 @@ class Select extends Base
      * @var array<int|string, mixed>
      */
     protected array $schema = [];
-    protected bool $supportForAttributes;
 
     /**
      * List of internal attributes
@@ -32,9 +31,8 @@ class Select extends Base
      * @param array<Document> $attributes
      * @param bool $supportForAttributes
      */
-    public function __construct(array $attributes = [], bool $supportForAttributes = true)
+    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
     {
-        $this->supportForAttributes = $supportForAttributes;
         foreach ($attributes as $attribute) {
             $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
         }

@@ -393,7 +393,7 @@ trait AttributeTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->markTestSkipped('This test is only for schema-enforced adapters');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->updateAttributeRequired('flowers', 'inStock', true);
@@ -453,7 +453,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->markTestSkipped('This test is only for schema-enforced adapters');
+            $this->expectNotToPerformAssertions();
         }
         $database->createAttribute('flowers', 'price', Database::VAR_INTEGER, 0, false);
 
@@ -655,7 +655,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->markTestSkipped('This test is only for schema-enforced adapters');
+            $this->expectNotToPerformAssertions();
         }
 
         $database->createCollection('rename_test');

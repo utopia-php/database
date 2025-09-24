@@ -549,7 +549,10 @@ abstract class SQL extends Adapter
             }
 
             $bindKey = 'key_' . $attributeIndex;
-            $value = (\is_bool($value)) ? (int)$value : $value;
+            // For PostgreSQL, preserve boolean values directly
+            if (!($this instanceof \Utopia\Database\Adapter\Postgres && \is_bool($value))) {
+                $value = (\is_bool($value)) ? (int)$value : $value;
+            }
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }

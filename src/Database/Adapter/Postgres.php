@@ -2053,9 +2053,124 @@ class Postgres extends SQL
                 $bindIndex++;
                 return "{$quotedColumn} = :$bindKey::jsonb || COALESCE({$quotedColumn}, '[]'::jsonb)";
 
+            case Operator::TYPE_ARRAY_UNIQUE:
+                // PostgreSQL-specific implementation for array unique
+                return "{$quotedColumn} = (
+                    SELECT jsonb_agg(DISTINCT value)
+                    FROM jsonb_array_elements({$quotedColumn}) AS value
+                )";
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = (
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$quotedColumn}) AS value
+                    WHERE value != :$bindKey::jsonb
+                )";
+
+            case Operator::TYPE_ARRAY_INSERT:
+                // For PostgreSQL, we'll use parent implementation which falls back to PHP processing
+                // as jsonb array insertion at specific index is complex
+                return null;
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = (
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$quotedColumn}) AS value
+                    WHERE value IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
+                )";
+
+            case Operator::TYPE_ARRAY_DIFF:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = (
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$quotedColumn}) AS value
+                    WHERE value NOT IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
+                )";
+
+            case Operator::TYPE_REPLACE:
+                $searchKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $replaceKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
+
+            case Operator::TYPE_TOGGLE:
+                // PostgreSQL boolean toggle with proper casting
+                return "{$quotedColumn} = NOT {$quotedColumn}";
+
+            case Operator::TYPE_DATE_ADD_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = {$quotedColumn} + (:$bindKey || ' days')::INTERVAL";
+
+            case Operator::TYPE_DATE_SUB_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = {$quotedColumn} - (:$bindKey || ' days')::INTERVAL";
+
+            case Operator::TYPE_DATE_SET_NOW:
+                return "{$quotedColumn} = NOW()";
+
             default:
                 // Fall back to parent implementation for other operators
                 return parent::getOperatorSQL($column, $operator, $bindIndex);
+        }
+    }
+
+
+    /**
+     * Update documents
+     * Override to handle PostgreSQL boolean type properly
+
+
+    /**
+     * Bind operator parameters to statement
+     * Override to handle PostgreSQL-specific JSON binding
+     *
+     * @param \PDOStatement $stmt
+     * @param Operator $operator
+     * @param int &$bindIndex
+     * @return void
+     */
+    protected function bindOperatorParams(\PDOStatement $stmt, Operator $operator, int &$bindIndex): void
+    {
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            case Operator::TYPE_ARRAY_APPEND:
+            case Operator::TYPE_ARRAY_PREPEND:
+                $value = $values[0] ?? [];
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, json_encode($value), \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $value = $values[0] ?? null;
+                $bindKey = "op_{$bindIndex}";
+                // Always JSON encode for PostgreSQL jsonb comparison
+                $stmt->bindValue(':' . $bindKey, json_encode($value), \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+            case Operator::TYPE_ARRAY_DIFF:
+                $value = $values[0] ?? [];
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, json_encode($value), \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            default:
+                // Use parent implementation for other operators
+                parent::bindOperatorParams($stmt, $operator, $bindIndex);
+                break;
         }
     }
 }

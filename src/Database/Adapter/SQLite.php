@@ -14,6 +14,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Operator;
 
 /**
  * Main differences from MariaDB and MySQL:
@@ -1303,5 +1304,57 @@ class SQLite extends MariaDB
     protected function getRandomOrder(): string
     {
         return 'RANDOM()';
+    }
+
+    /**
+     * Get SQL expression for operator
+     *
+     * @param string $column
+     * @param Operator $operator
+     * @param int &$bindIndex
+     * @return ?string
+     */
+    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
+    {
+        $quotedColumn = $this->quote($column);
+        $method = $operator->getMethod();
+
+        switch ($method) {
+            case Operator::TYPE_CONCAT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = IFNULL({$quotedColumn}, '') || :$bindKey";
+
+            case Operator::TYPE_ARRAY_APPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // SQLite: merge arrays by using json_group_array on extracted elements
+                // We use json_each to extract elements from both arrays and combine them
+                return "{$quotedColumn} = (
+                    SELECT json_group_array(value)
+                    FROM (
+                        SELECT value FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                        UNION ALL
+                        SELECT value FROM json_each(:$bindKey)
+                    )
+                )";
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // SQLite: prepend by extracting and recombining with new elements first
+                return "{$quotedColumn} = (
+                    SELECT json_group_array(value)
+                    FROM (
+                        SELECT value FROM json_each(:$bindKey)
+                        UNION ALL
+                        SELECT value FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                    )
+                )";
+
+            default:
+                // Fall back to parent implementation for other operators
+                return parent::getOperatorSQL($column, $operator, $bindIndex);
+        }
     }
 }

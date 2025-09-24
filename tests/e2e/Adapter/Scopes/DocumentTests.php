@@ -5169,7 +5169,8 @@ trait DocumentTests
 
             $database->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
         } else {
-            $this->markTestSkipped('This test is only for schema based adapters');
+            $this->expectNotToPerformAssertions();
+            return;
         }
     }
 

@@ -253,10 +253,6 @@ class Structure extends Validator
     protected function checkForAllRequiredValues(array $structure, array $attributes, array &$keys): bool
     {
         foreach ($attributes as $attribute) { // Check all required attributes are set
-            $isInternalAttribute = in_array($attribute['$id'], array_column($this->attributes, '$id'));
-            if (!$this->supportForAttributes && $isInternalAttribute) {
-                return true;
-            }
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
 

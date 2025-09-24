@@ -6532,6 +6532,412 @@ trait DocumentTests
         $database->deleteCollection($collectionId);
     }
 
+    /**
+     * Comprehensive edge case tests for operator validation failures
+     */
+    public function testOperatorValidationEdgeCases(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Create comprehensive test collection
+        $collectionId = 'test_operator_edge_cases';
+        $database->createCollection($collectionId);
+
+        // Create various attribute types for testing
+        $database->createAttribute($collectionId, 'string_field', Database::VAR_STRING, 100, false, 'default');
+        $database->createAttribute($collectionId, 'int_field', Database::VAR_INTEGER, 0, false, 10);
+        $database->createAttribute($collectionId, 'float_field', Database::VAR_FLOAT, 0, false, 1.5);
+        $database->createAttribute($collectionId, 'bool_field', Database::VAR_BOOLEAN, 0, false, false);
+        $database->createAttribute($collectionId, 'array_field', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, 'date_field', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+
+        // Create test document
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'edge_test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'string_field' => 'hello',
+            'int_field' => 42,
+            'float_field' => 3.14,
+            'bool_field' => true,
+            'array_field' => ['a', 'b', 'c'],
+            'date_field' => '2023-01-01 00:00:00'
+        ]));
+
+        // Test: Math operator on string field
+        try {
+            $database->updateDocument($collectionId, 'edge_test_doc', new Document([
+                'string_field' => Operator::increment(5)
+            ]));
+            $this->fail('Expected exception for increment on string field');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString("Cannot apply increment to non-numeric field 'string_field'", $e->getMessage());
+        }
+
+        // Test: String operator on numeric field
+        try {
+            $database->updateDocument($collectionId, 'edge_test_doc', new Document([
+                'int_field' => Operator::concat(' suffix')
+            ]));
+            $this->fail('Expected exception for concat on integer field');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString("Cannot apply concat", $e->getMessage());
+        }
+
+        // Test: Array operator on non-array field
+        try {
+            $database->updateDocument($collectionId, 'edge_test_doc', new Document([
+                'string_field' => Operator::arrayAppend(['new'])
+            ]));
+            $this->fail('Expected exception for arrayAppend on string field');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString("Cannot apply arrayAppend to non-array field 'string_field'", $e->getMessage());
+        }
+
+        // Test: Boolean operator on non-boolean field
+        try {
+            $database->updateDocument($collectionId, 'edge_test_doc', new Document([
+                'int_field' => Operator::toggle()
+            ]));
+            $this->fail('Expected exception for toggle on integer field');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString("Cannot apply toggle to non-boolean field 'int_field'", $e->getMessage());
+        }
+
+        // Test: Date operator on non-date field
+        try {
+            $database->updateDocument($collectionId, 'edge_test_doc', new Document([
+                'string_field' => Operator::dateAddDays(5)
+            ]));
+            $this->fail('Expected exception for dateAddDays on string field');
+        } catch (DatabaseException $e) {
+            // Date operators check if string can be parsed as date
+            $this->assertStringContainsString("Invalid date format in field 'string_field'", $e->getMessage());
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testOperatorDivisionModuloByZero(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_division_zero';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'number', Database::VAR_FLOAT, 0, false, 100.0);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'zero_test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'number' => 100.0
+        ]));
+
+        // Test: Division by zero
+        try {
+            $database->updateDocument($collectionId, 'zero_test_doc', new Document([
+                'number' => Operator::divide(0)
+            ]));
+            $this->fail('Expected exception for division by zero');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString("Division by zero is not allowed", $e->getMessage());
+        }
+
+        // Test: Modulo by zero
+        try {
+            $database->updateDocument($collectionId, 'zero_test_doc', new Document([
+                'number' => Operator::modulo(0)
+            ]));
+            $this->fail('Expected exception for modulo by zero');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString("Modulo by zero is not allowed", $e->getMessage());
+        }
+
+        // Test: Valid division
+        $updated = $database->updateDocument($collectionId, 'zero_test_doc', new Document([
+            'number' => Operator::divide(2)
+        ]));
+        $this->assertEquals(50.0, $updated->getAttribute('number'));
+
+        // Test: Valid modulo
+        $updated = $database->updateDocument($collectionId, 'zero_test_doc', new Document([
+            'number' => Operator::modulo(7)
+        ]));
+        $this->assertEquals(1.0, $updated->getAttribute('number')); // 50 % 7 = 1
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testOperatorArrayInsertOutOfBounds(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_array_insert_bounds';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'bounds_test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'items' => ['a', 'b', 'c'] // Length = 3
+        ]));
+
+        // Test: Insert at out of bounds index
+        try {
+            $database->updateDocument($collectionId, 'bounds_test_doc', new Document([
+                'items' => Operator::arrayInsert(10, 'new') // Index 10 > length 3
+            ]));
+            $this->fail('Expected exception for out of bounds insert');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString("Insert index 10 is out of bounds for array of length 3", $e->getMessage());
+        }
+
+        // Test: Insert at valid index (end)
+        $updated = $database->updateDocument($collectionId, 'bounds_test_doc', new Document([
+            'items' => Operator::arrayInsert(3, 'd') // Insert at end
+        ]));
+        $this->assertEquals(['a', 'b', 'c', 'd'], $updated->getAttribute('items'));
+
+        // Test: Insert at valid index (middle)
+        $updated = $database->updateDocument($collectionId, 'bounds_test_doc', new Document([
+            'items' => Operator::arrayInsert(2, 'x') // Insert at index 2
+        ]));
+        $this->assertEquals(['a', 'b', 'x', 'c', 'd'], $updated->getAttribute('items'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testOperatorValueLimits(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_operator_limits';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 10);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 5.0);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'limits_test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'counter' => 10,
+            'score' => 5.0
+        ]));
+
+        // Test: Increment with max limit
+        $updated = $database->updateDocument($collectionId, 'limits_test_doc', new Document([
+            'counter' => Operator::increment(100, 50) // Increment by 100 but max is 50
+        ]));
+        $this->assertEquals(50, $updated->getAttribute('counter')); // Should be capped at 50
+
+        // Test: Decrement with min limit
+        $updated = $database->updateDocument($collectionId, 'limits_test_doc', new Document([
+            'score' => Operator::decrement(10, 0) // Decrement score by 10 but min is 0
+        ]));
+        $this->assertEquals(0, $updated->getAttribute('score')); // Should be capped at 0
+
+        // Test: Multiply with max limit
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'limits_test_doc2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'counter' => 10,
+            'score' => 5.0
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'limits_test_doc2', new Document([
+            'counter' => Operator::multiply(10, 75) // 10 * 10 = 100, but max is 75
+        ]));
+        $this->assertEquals(75, $updated->getAttribute('counter')); // Should be capped at 75
+
+        // Test: Power with max limit
+        $updated = $database->updateDocument($collectionId, 'limits_test_doc2', new Document([
+            'score' => Operator::power(3, 100) // 5^3 = 125, but max is 100
+        ]));
+        $this->assertEquals(100, $updated->getAttribute('score')); // Should be capped at 100
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testOperatorArrayFilterValidation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_array_filter';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'filter_test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'numbers' => [1, 2, 3, 4, 5],
+            'tags' => ['apple', 'banana', 'cherry']
+        ]));
+
+        // Test: Filter with equals condition on numbers
+        $updated = $database->updateDocument($collectionId, 'filter_test_doc', new Document([
+            'numbers' => Operator::arrayFilter('equals', 3) // Keep only 3
+        ]));
+        $this->assertEquals([3], $updated->getAttribute('numbers'));
+
+        // Test: Filter with not-equals condition on strings
+        $updated = $database->updateDocument($collectionId, 'filter_test_doc', new Document([
+            'tags' => Operator::arrayFilter('notEquals', 'banana') // Remove 'banana'
+        ]));
+        $this->assertEquals(['apple', 'cherry'], $updated->getAttribute('tags'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testOperatorReplaceValidation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_replace';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false, 'default text');
+        $database->createAttribute($collectionId, 'number', Database::VAR_INTEGER, 0, false, 0);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'replace_test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'text' => 'The quick brown fox',
+            'number' => 42
+        ]));
+
+        // Test: Valid replace operation
+        $updated = $database->updateDocument($collectionId, 'replace_test_doc', new Document([
+            'text' => Operator::replace('quick', 'slow')
+        ]));
+        $this->assertEquals('The slow brown fox', $updated->getAttribute('text'));
+
+        // Test: Replace on non-string field
+        try {
+            $database->updateDocument($collectionId, 'replace_test_doc', new Document([
+                'number' => Operator::replace('4', '5')
+            ]));
+            $this->fail('Expected exception for replace on integer field');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString("Cannot apply replace to non-string field 'number'", $e->getMessage());
+        }
+
+        // Test: Replace with empty string
+        $updated = $database->updateDocument($collectionId, 'replace_test_doc', new Document([
+            'text' => Operator::replace('slow', '')
+        ]));
+        $this->assertEquals('The  brown fox', $updated->getAttribute('text')); // Two spaces where 'slow' was
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testOperatorNullValueHandling(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_null_handling';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'nullable_int', Database::VAR_INTEGER, 0, false, null, false, false);
+        $database->createAttribute($collectionId, 'nullable_string', Database::VAR_STRING, 100, false, null, false, false);
+        $database->createAttribute($collectionId, 'nullable_bool', Database::VAR_BOOLEAN, 0, false, null, false, false);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'null_test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'nullable_int' => null,
+            'nullable_string' => null,
+            'nullable_bool' => null
+        ]));
+
+        // Test: Increment on null numeric field (should treat as 0)
+        $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
+            'nullable_int' => Operator::increment(5)
+        ]));
+        $this->assertEquals(5, $updated->getAttribute('nullable_int'));
+
+        // Test: Concat on null string field (should treat as empty string)
+        $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
+            'nullable_string' => Operator::concat('hello')
+        ]));
+        $this->assertEquals('hello', $updated->getAttribute('nullable_string'));
+
+        // Test: Toggle on null boolean field (should treat as false)
+        $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
+            'nullable_bool' => Operator::toggle()
+        ]));
+        $this->assertEquals(true, $updated->getAttribute('nullable_bool'));
+
+        // Test operators on non-null values
+        $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
+            'nullable_int' => Operator::multiply(2)  // 5 * 2 = 10
+        ]));
+        $this->assertEquals(10, $updated->getAttribute('nullable_int'));
+
+        $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
+            'nullable_string' => Operator::replace('hello', 'hi')
+        ]));
+        $this->assertEquals('hi', $updated->getAttribute('nullable_string'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testOperatorComplexScenarios(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_complex_operators';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'stats', Database::VAR_INTEGER, 0, false, null, true, true);
+        $database->createAttribute($collectionId, 'metadata', Database::VAR_STRING, 100, false, null, true, true);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 255, false, '');
+
+        // Create document with complex data
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'complex_test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'stats' => [10, 20, 20, 30, 20, 40],
+            'metadata' => ['key1', 'key2', 'key3'],
+            'score' => 50.0,
+            'name' => 'Test'
+        ]));
+
+        // Test: Multiple operations on same array
+        $updated = $database->updateDocument($collectionId, 'complex_test_doc', new Document([
+            'stats' => Operator::arrayUnique() // Should remove duplicate 20s
+        ]));
+        $stats = $updated->getAttribute('stats');
+        $this->assertCount(4, $stats); // [10, 20, 30, 40]
+        $this->assertEquals([10, 20, 30, 40], $stats);
+
+        // Test: Array intersection
+        $updated = $database->updateDocument($collectionId, 'complex_test_doc', new Document([
+            'stats' => Operator::arrayIntersect([20, 30, 50]) // Keep only 20 and 30
+        ]));
+        $this->assertEquals([20, 30], $updated->getAttribute('stats'));
+
+        // Test: Array difference
+        $doc2 = $database->createDocument($collectionId, new Document([
+            '$id' => 'complex_test_doc2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'stats' => [1, 2, 3, 4, 5],
+            'metadata' => ['a', 'b', 'c'],
+            'score' => 100.0,
+            'name' => 'Test2'
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'complex_test_doc2', new Document([
+            'stats' => Operator::arrayDiff([2, 4, 6]) // Remove 2 and 4
+        ]));
+        $this->assertEquals([1, 3, 5], $updated->getAttribute('stats'));
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testOperatorIncrement(): void
     {
         /** @var Database $database */

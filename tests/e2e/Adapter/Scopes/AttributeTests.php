@@ -394,6 +394,7 @@ trait AttributeTests
 
         if (!$database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->updateAttributeRequired('flowers', 'inStock', true);
@@ -454,6 +455,7 @@ trait AttributeTests
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
         $database->createAttribute('flowers', 'price', Database::VAR_INTEGER, 0, false);
 
@@ -656,6 +658,7 @@ trait AttributeTests
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $database->createCollection('rename_test');

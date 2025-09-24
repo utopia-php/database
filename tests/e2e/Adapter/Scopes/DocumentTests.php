@@ -6070,7 +6070,8 @@ trait DocumentTests
         $database = static::getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->markTestSkipped('This test is only for schemaless adapters');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $colName = uniqid("schemaless");
@@ -6169,7 +6170,8 @@ trait DocumentTests
 
         // test to ensure internal attributes are checked during creating schemaless document
         if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->markTestSkipped('This test is only for schemaless adapters');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $colName = uniqid("schemaless");
@@ -6207,6 +6209,7 @@ trait DocumentTests
 
         if (!$database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
+            return;
         }
 
         $colName = uniqid("schema");

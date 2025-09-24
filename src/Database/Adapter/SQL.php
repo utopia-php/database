@@ -2027,7 +2027,7 @@ abstract class SQL extends Adapter
                 // No parameters to bind
                 break;
 
-            // Complex array operators
+                // Complex array operators
             case Operator::TYPE_ARRAY_INSERT:
                 $index = $values[0] ?? 0;
                 $value = $values[1] ?? null;

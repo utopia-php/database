@@ -10,6 +10,7 @@ use Utopia\Validator;
 class Operator extends Validator
 {
     protected Document $collection;
+    /** @var array<string, mixed> */
     protected array $attributes;
 
     /**
@@ -80,7 +81,7 @@ class Operator extends Validator
      * Find attribute configuration by key
      *
      * @param string $key
-     * @return array|null
+     * @return array<string, mixed>|null
      */
     private function findAttribute(string $key): ?array
     {
@@ -96,7 +97,7 @@ class Operator extends Validator
      * Validate operator against attribute configuration
      *
      * @param DatabaseOperator $operator
-     * @param array $attribute
+     * @param array<string, mixed> $attribute
      * @return bool
      */
     private function validateOperatorForAttribute(DatabaseOperator $operator, array $attribute): bool
@@ -283,8 +284,7 @@ class Operator extends Validator
         string $attribute,
         mixed $currentValue,
         array $attributes
-    ): bool
-    {
+    ): bool {
         $method = $operator->getMethod();
         $values = $operator->getValues();
 

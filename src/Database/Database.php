@@ -6680,6 +6680,11 @@ class Database
                 continue;
             }
 
+            // Skip encoding for Operator objects
+            if ($value instanceof Operator) {
+                continue;
+            }
+
             // Assign default only if no value provided
             // False positive "Call to function is_null() with mixed will always evaluate to false"
             // @phpstan-ignore-next-line
@@ -6763,6 +6768,11 @@ class Database
                 if (!\is_null($value)) {
                     $document->removeAttribute($this->adapter->filter($key));
                 }
+            }
+
+            // Skip decoding for Operator objects (shouldn't happen, but safety check)
+            if ($value instanceof Operator) {
+                continue;
             }
 
             $value = ($array) ? $value : [$value];
@@ -7013,33 +7023,37 @@ class Database
 
             case Operator::TYPE_DATE_ADD_DAYS:
                 if ($oldValue === null) {
-                    $oldValue = DateTime::now();
+                    $dateValue = new \DateTime(DateTime::now());
                 } elseif (is_string($oldValue)) {
                     try {
-                        $oldValue = new \DateTime($oldValue);
+                        $dateValue = new \DateTime($oldValue);
                     } catch (\Exception $e) {
                         throw new OperatorException("Invalid date format for attribute '{$operator->getAttribute()}': {$oldValue}");
                     }
-                } elseif (!($oldValue instanceof \DateTime)) {
+                } elseif ($oldValue instanceof \DateTime) {
+                    $dateValue = $oldValue;
+                } else {
                     throw new OperatorException("Cannot add days to non-date value for attribute '{$operator->getAttribute()}'");
                 }
-                $currentDate = clone $oldValue;
+                $currentDate = clone $dateValue;
                 $currentDate->modify("+{$values[0]} days");
                 return $currentDate->format('Y-m-d H:i:s');
 
             case Operator::TYPE_DATE_SUB_DAYS:
                 if ($oldValue === null) {
-                    $oldValue = DateTime::now();
+                    $dateValue = new \DateTime(DateTime::now());
                 } elseif (is_string($oldValue)) {
                     try {
-                        $oldValue = new \DateTime($oldValue);
+                        $dateValue = new \DateTime($oldValue);
                     } catch (\Exception $e) {
                         throw new OperatorException("Invalid date format for attribute '{$operator->getAttribute()}': {$oldValue}");
                     }
-                } elseif (!($oldValue instanceof \DateTime)) {
+                } elseif ($oldValue instanceof \DateTime) {
+                    $dateValue = $oldValue;
+                } else {
                     throw new OperatorException("Cannot subtract days from non-date value for attribute '{$operator->getAttribute()}'");
                 }
-                $currentDate = clone $oldValue;
+                $currentDate = clone $dateValue;
                 $currentDate->modify("-{$values[0]} days");
                 return $currentDate->format('Y-m-d H:i:s');
 

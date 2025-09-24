@@ -310,6 +310,7 @@ class OperatorTest extends TestCase
 
         // Test parse from JSON string
         $json = json_encode($array);
+        $this->assertIsString($json);
         $operator = Operator::parse($json);
         $this->assertEquals(Operator::TYPE_INCREMENT, $operator->getMethod());
         $this->assertEquals('score', $operator->getAttribute());
@@ -318,10 +319,13 @@ class OperatorTest extends TestCase
 
     public function testParseOperators(): void
     {
-        $operators = [
-            json_encode(['method' => Operator::TYPE_INCREMENT, 'attribute' => 'count', 'values' => [1]]),
-            json_encode(['method' => Operator::TYPE_ARRAY_APPEND, 'attribute' => 'tags', 'values' => ['new']])
-        ];
+        $json1 = json_encode(['method' => Operator::TYPE_INCREMENT, 'attribute' => 'count', 'values' => [1]]);
+        $json2 = json_encode(['method' => Operator::TYPE_ARRAY_APPEND, 'attribute' => 'tags', 'values' => ['new']]);
+
+        $this->assertIsString($json1);
+        $this->assertIsString($json2);
+
+        $operators = [$json1, $json2];
 
         $parsed = Operator::parseOperators($operators);
         $this->assertCount(2, $parsed);
@@ -477,8 +481,8 @@ class OperatorTest extends TestCase
         $operators = $result['operators'];
         $updates = $result['updates'];
 
-        // Check operators count
-        $this->assertCount(16, $operators);
+        // Check operators count (all fields except 'name' and 'age')
+        $this->assertCount(15, $operators);
 
         // Check that array methods are properly extracted
         $this->assertInstanceOf(Operator::class, $operators['tags']);
@@ -676,7 +680,6 @@ class OperatorTest extends TestCase
             'replace' => Operator::replace('old', 'new'),
             'toggle' => Operator::toggle(),
             'dateSetNow' => Operator::dateSetNow(),
-            'concat' => Operator::concat(' suffix'),
             'modulo' => Operator::modulo(3),
             'power' => Operator::power(2),
             'remove' => Operator::arrayRemove('bad'),
@@ -753,12 +756,13 @@ class OperatorTest extends TestCase
         $this->assertEquals(Operator::TYPE_CONCAT, $operator->getMethod());
         $this->assertEquals([' - Updated'], $operator->getValues());
         $this->assertEquals(' - Updated', $operator->getValue());
+        $this->assertEquals('', $operator->getAttribute());
 
-        // Test concat operator (deprecated)
-        $operator = Operator::concat(' - Updated');
+        // Test concat with different values
+        $operator = Operator::concat('prefix-');
         $this->assertEquals(Operator::TYPE_CONCAT, $operator->getMethod());
-        $this->assertEquals([' - Updated'], $operator->getValues());
-        $this->assertEquals(' - Updated', $operator->getValue());
+        $this->assertEquals(['prefix-'], $operator->getValues());
+        $this->assertEquals('prefix-', $operator->getValue());
 
         // Test replace operator
         $operator = Operator::replace('old', 'new');

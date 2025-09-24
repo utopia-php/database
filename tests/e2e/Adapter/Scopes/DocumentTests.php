@@ -6,6 +6,7 @@ use Exception;
 use Throwable;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -6230,6 +6231,210 @@ trait DocumentTests
         $this->assertEquals(25, $doc1->getAttribute('count')); // 10 + 5 + 10
         $this->assertEquals(35, $doc2->getAttribute('count')); // 20 + 5 + 10
         $this->assertEquals(35, $doc3->getAttribute('count')); // 30 + 5 (not updated in second batch)
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testUpdateDocumentsWithAllOperators(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Create comprehensive test collection
+        $collectionId = 'test_all_operators_bulk';
+        $database->createCollection($collectionId);
+
+        // Create attributes for all operator types
+        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 10);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 5.0);
+        $database->createAttribute($collectionId, 'multiplier', Database::VAR_FLOAT, 0, false, 2.0);
+        $database->createAttribute($collectionId, 'divisor', Database::VAR_FLOAT, 0, false, 100.0);
+        $database->createAttribute($collectionId, 'remainder', Database::VAR_INTEGER, 0, false, 20);
+        $database->createAttribute($collectionId, 'power_val', Database::VAR_FLOAT, 0, false, 2.0);
+        $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 255, false, 'Title');
+        $database->createAttribute($collectionId, 'content', Database::VAR_STRING, 500, false, 'old content');
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, 'categories', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, 'duplicates', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, false, false);
+        $database->createAttribute($collectionId, 'last_update', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+        $database->createAttribute($collectionId, 'next_update', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+        $database->createAttribute($collectionId, 'now_field', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+
+        // Create test documents
+        $docs = [];
+        for ($i = 1; $i <= 3; $i++) {
+            $docs[] = $database->createDocument($collectionId, new Document([
+                '$id' => "bulk_doc_{$i}",
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'counter' => $i * 10,
+                'score' => $i * 1.5,
+                'multiplier' => $i * 1.0,
+                'divisor' => $i * 50.0,
+                'remainder' => $i * 7,
+                'power_val' => $i + 1.0,
+                'title' => "Title {$i}",
+                'content' => "old content {$i}",
+                'tags' => ["tag_{$i}", "common"],
+                'categories' => ["cat_{$i}", "test"],
+                'items' => ["item_{$i}", "shared", "item_{$i}"],
+                'duplicates' => ["a", "b", "a", "c", "b", "d"],
+                'active' => $i % 2 === 0,
+                'last_update' => DateTime::addSeconds(new \DateTime(), -86400),
+                'next_update' => DateTime::addSeconds(new \DateTime(), 86400)
+            ]));
+        }
+
+        // Test bulk update with ALL operators
+        $count = $database->updateDocuments(
+            $collectionId,
+            new Document([
+                'counter' => Operator::increment(5, 50),           // Math with limit
+                'score' => Operator::decrement(0.5, 0),            // Math with limit
+                'multiplier' => Operator::multiply(2, 100),        // Math with limit
+                'divisor' => Operator::divide(2, 10),              // Math with limit
+                'remainder' => Operator::modulo(5),                // Math
+                'power_val' => Operator::power(2, 100),            // Math with limit
+                'title' => Operator::concat(' - Updated'),         // String
+                'content' => Operator::replace('old', 'new'),      // String
+                'tags' => Operator::arrayAppend(['bulk']),         // Array
+                'categories' => Operator::arrayPrepend(['priority']), // Array
+                'items' => Operator::arrayRemove('shared'),        // Array
+                'duplicates' => Operator::arrayUnique(),           // Array
+                'active' => Operator::toggle(),                    // Boolean
+                'last_update' => Operator::dateAddDays(1),         // Date
+                'next_update' => Operator::dateSubDays(1),         // Date
+                'now_field' => Operator::dateSetNow()              // Date
+            ])
+        );
+
+        $this->assertEquals(3, $count);
+
+        // Verify all operators worked correctly
+        $updated = $database->find($collectionId, [Query::orderAsc('$id')]);
+        $this->assertCount(3, $updated);
+
+        // Check bulk_doc_1
+        $doc1 = $updated[0];
+        $this->assertEquals(15, $doc1->getAttribute('counter'));          // 10 + 5
+        $this->assertEquals(1.0, $doc1->getAttribute('score'));           // 1.5 - 0.5
+        $this->assertEquals(2.0, $doc1->getAttribute('multiplier'));      // 1.0 * 2
+        $this->assertEquals(25.0, $doc1->getAttribute('divisor'));        // 50.0 / 2
+        $this->assertEquals(2, $doc1->getAttribute('remainder'));         // 7 % 5
+        $this->assertEquals(4.0, $doc1->getAttribute('power_val'));       // 2^2
+        $this->assertEquals('Title 1 - Updated', $doc1->getAttribute('title'));
+        $this->assertEquals('new content 1', $doc1->getAttribute('content'));
+        $this->assertContains('bulk', $doc1->getAttribute('tags'));
+        $this->assertContains('priority', $doc1->getAttribute('categories'));
+        $this->assertNotContains('shared', $doc1->getAttribute('items'));
+        $this->assertCount(4, $doc1->getAttribute('duplicates')); // Should have unique values
+        $this->assertEquals(true, $doc1->getAttribute('active'));         // Was false, toggled to true
+
+        // Check bulk_doc_2
+        $doc2 = $updated[1];
+        $this->assertEquals(25, $doc2->getAttribute('counter'));          // 20 + 5
+        $this->assertEquals(2.5, $doc2->getAttribute('score'));           // 3.0 - 0.5
+        $this->assertEquals(4.0, $doc2->getAttribute('multiplier'));      // 2.0 * 2
+        $this->assertEquals(50.0, $doc2->getAttribute('divisor'));        // 100.0 / 2
+        $this->assertEquals(4, $doc2->getAttribute('remainder'));         // 14 % 5
+        $this->assertEquals(9.0, $doc2->getAttribute('power_val'));       // 3^2
+        $this->assertEquals('Title 2 - Updated', $doc2->getAttribute('title'));
+        $this->assertEquals('new content 2', $doc2->getAttribute('content'));
+        $this->assertEquals(false, $doc2->getAttribute('active'));        // Was true, toggled to false
+
+        // Check bulk_doc_3
+        $doc3 = $updated[2];
+        $this->assertEquals(35, $doc3->getAttribute('counter'));          // 30 + 5
+        $this->assertEquals(4.0, $doc3->getAttribute('score'));           // 4.5 - 0.5
+        $this->assertEquals(6.0, $doc3->getAttribute('multiplier'));      // 3.0 * 2
+        $this->assertEquals(75.0, $doc3->getAttribute('divisor'));        // 150.0 / 2
+        $this->assertEquals(1, $doc3->getAttribute('remainder'));         // 21 % 5
+        $this->assertEquals(16.0, $doc3->getAttribute('power_val'));      // 4^2
+        $this->assertEquals('Title 3 - Updated', $doc3->getAttribute('title'));
+        $this->assertEquals('new content 3', $doc3->getAttribute('content'));
+        $this->assertEquals(true, $doc3->getAttribute('active'));         // Was false, toggled to true
+
+        // Verify date operations worked (just check they're not null and are strings)
+        $this->assertNotNull($doc1->getAttribute('last_update'));
+        $this->assertNotNull($doc1->getAttribute('next_update'));
+        $this->assertNotNull($doc1->getAttribute('now_field'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testUpdateDocumentsOperatorsWithQueries(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Create test collection
+        $collectionId = 'test_operators_with_queries';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'category', Database::VAR_STRING, 50, true);
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+        $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, false, false);
+
+        // Create test documents
+        for ($i = 1; $i <= 5; $i++) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => "query_doc_{$i}",
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'category' => $i <= 3 ? 'A' : 'B',
+                'count' => $i * 10,
+                'score' => $i * 1.5,
+                'active' => $i % 2 === 0
+            ]));
+        }
+
+        // Test 1: Update only category A documents
+        $count = $database->updateDocuments(
+            $collectionId,
+            new Document([
+                'count' => Operator::increment(100),
+                'score' => Operator::multiply(2)
+            ]),
+            [Query::equal('category', ['A'])]
+        );
+
+        $this->assertEquals(3, $count);
+
+        // Verify only category A documents were updated
+        $categoryA = $database->find($collectionId, [Query::equal('category', ['A']), Query::orderAsc('$id')]);
+        $categoryB = $database->find($collectionId, [Query::equal('category', ['B']), Query::orderAsc('$id')]);
+
+        $this->assertEquals(110, $categoryA[0]->getAttribute('count')); // 10 + 100
+        $this->assertEquals(120, $categoryA[1]->getAttribute('count')); // 20 + 100
+        $this->assertEquals(130, $categoryA[2]->getAttribute('count')); // 30 + 100
+        $this->assertEquals(40, $categoryB[0]->getAttribute('count'));  // Not updated
+        $this->assertEquals(50, $categoryB[1]->getAttribute('count'));  // Not updated
+
+        // Test 2: Update only documents with count < 50
+        $count = $database->updateDocuments(
+            $collectionId,
+            new Document([
+                'active' => Operator::toggle(),
+                'score' => Operator::multiply(10)
+            ]),
+            [Query::lessThan('count', 50)]
+        );
+
+        // Only doc_4 (count=40) matches, doc_5 has count=50 which is not < 50
+        $this->assertEquals(1, $count);
+
+        $doc4 = $database->getDocument($collectionId, 'query_doc_4');
+        $this->assertEquals(false, $doc4->getAttribute('active')); // Was true, now false
+        // Doc_4 initial score: 4*1.5 = 6.0
+        // Category B so not updated in first batch
+        // Second update: 6.0 * 10 = 60.0
+        $this->assertEquals(60.0, $doc4->getAttribute('score'));
+
+        // Verify doc_5 was not updated
+        $doc5 = $database->getDocument($collectionId, 'query_doc_5');
+        $this->assertEquals(false, $doc5->getAttribute('active')); // Still false
+        $this->assertEquals(7.5, $doc5->getAttribute('score'));    // Still 5*1.5=7.5 (category B, not updated)
 
         $database->deleteCollection($collectionId);
     }

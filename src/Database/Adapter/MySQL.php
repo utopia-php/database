@@ -8,6 +8,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
 class MySQL extends MariaDB
@@ -263,5 +264,35 @@ class MySQL extends MariaDB
     public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
     {
         return false;
+    }
+
+    /**
+     * Get SQL expression for operator
+     * Override for MySQL-specific operator implementations
+     *
+     * @param string $column
+     * @param \Utopia\Database\Operator $operator
+     * @param int &$bindIndex
+     * @return ?string
+     */
+    protected function getOperatorSQL(string $column, \Utopia\Database\Operator $operator, int &$bindIndex): ?string
+    {
+        $quotedColumn = $this->quote($column);
+        $method = $operator->getMethod();
+
+        switch ($method) {
+            case Operator::TYPE_ARRAY_UNIQUE:
+                // MySQL doesn't support DISTINCT in JSON_ARRAYAGG, use subquery approach
+                return "{$quotedColumn} = (
+                    SELECT JSON_ARRAYAGG(value)
+                    FROM (
+                        SELECT DISTINCT value
+                        FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt
+                    ) AS distinct_values
+                )";
+        }
+
+        // For all other operators, use parent implementation
+        return parent::getOperatorSQL($column, $operator, $bindIndex);
     }
 }

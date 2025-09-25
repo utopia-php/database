@@ -1837,6 +1837,35 @@ class MariaDB extends SQL
         return "`{$string}`";
     }
 
+    /**
+     * Get operator SQL
+     * Override to handle MariaDB/MySQL-specific operators
+     *
+     * @param string $column
+     * @param \Utopia\Database\Operator $operator
+     * @param int &$bindIndex
+     * @return ?string
+     */
+    protected function getOperatorSQL(string $column, \Utopia\Database\Operator $operator, int &$bindIndex): ?string
+    {
+        $quotedColumn = $this->quote($column);
+        $method = $operator->getMethod();
+
+        switch ($method) {
+            case \Utopia\Database\Operator::TYPE_ARRAY_UNIQUE:
+                // MariaDB supports JSON_ARRAYAGG(DISTINCT ...) but the parent's JSON_TABLE syntax needs adjustment
+                // Use a simpler subquery approach
+                return "{$quotedColumn} = (
+                    SELECT JSON_ARRAYAGG(DISTINCT jt.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                )";
+
+            default:
+                // Fall back to parent implementation for other operators
+                return parent::getOperatorSQL($column, $operator, $bindIndex);
+        }
+    }
+
     public function getSupportForNumericCasting(): bool
     {
         return true;

@@ -1411,6 +1411,7 @@ class Database
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForAttributes()
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2420,6 +2421,7 @@ class Database
                         $this->adapter->getSupportForSpatialAttributes(),
                         $this->adapter->getSupportForSpatialIndexNull(),
                         $this->adapter->getSupportForSpatialIndexOrder(),
+                        $this->adapter->getSupportForAttributes()
                     );
 
                     foreach ($indexes as $index) {
@@ -3363,6 +3365,7 @@ class Database
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -3906,6 +3909,7 @@ class Database
             $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
+            $this->adapter->getSupportForAttributes()
         );
         if (!$structure->isValid($document)) {
             throw new StructureException($structure->getDescription());
@@ -4006,6 +4010,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$validator->isValid($document)) {
                 throw new StructureException($validator->getDescription());
@@ -4559,6 +4564,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                 throw new StructureException($structureValidator->getDescription());
@@ -4693,6 +4699,7 @@ class Database
             $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
+            $this->adapter->getSupportForAttributes()
         );
 
         if (!$validator->isValid($updates)) {
@@ -5404,6 +5411,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
 
             if (!$validator->isValid($document)) {
@@ -6397,6 +6405,7 @@ class Database
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());

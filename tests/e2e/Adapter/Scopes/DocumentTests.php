@@ -6551,7 +6551,7 @@ trait DocumentTests
         $database->deleteCollection($colName);
     }
 
-    public function testSchemalessSelectionOnUnknownAttributes()
+    public function testSchemalessSelectionOnUnknownAttributes(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();

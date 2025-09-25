@@ -353,7 +353,7 @@ class IndexTest extends TestCase
     /**
      * @throws Exception
     */
-    public function testIndexWithNoAttributeSupport()
+    public function testIndexWithNoAttributeSupport(): void
     {
         $collection = new Document([
             '$id' => ID::custom('test'),

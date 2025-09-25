@@ -6020,4 +6020,322 @@ trait DocumentTests
         }
         $database->deleteCollection($colName);
     }
+    public function testDecodeWithDifferentSelectionTypes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->addFilter(
+            'encrypt',
+            function (mixed $value) {
+                return json_encode([
+                    'data' => base64_encode($value),
+                    'method' => 'base64',
+                    'version' => 'v1',
+                ]);
+            },
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                $value = json_decode($value, true);
+                return base64_decode($value['data']);
+            }
+        );
+
+        $citiesId = 'TestCities';
+        $storesId = 'TestStores';
+
+        $database->createCollection($citiesId);
+        $database->createCollection($storesId);
+
+        $database->createAttribute($citiesId, 'name', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($citiesId, 'area', Database::VAR_POLYGON, 0, required: true);
+        $database->createAttribute($citiesId, 'population', Database::VAR_INTEGER, 0, required: false, default: 0);
+        $database->createAttribute($citiesId, 'secretCode', Database::VAR_STRING, 255, required: false, default: 'default-secret', filters: ['encrypt']);
+        $database->createAttribute($citiesId, 'center', Database::VAR_POINT, 0, required: false, default: [0.0, 0.0]);
+
+        $database->createAttribute($storesId, 'name', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($storesId, 'revenue', Database::VAR_FLOAT, 0, required: false, default: 0.0);
+        $database->createAttribute($storesId, 'location', Database::VAR_POINT, 0, required: false, default: [1.0, 1.0]);
+
+        $database->createRelationship(
+            collection: $storesId,
+            relatedCollection: $citiesId,
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'city',
+            twoWayKey: 'stores'
+        );
+
+        $cityDoc = new Document([
+            '$id' => 'city-1',
+            'name' => 'Test City',
+            'area' => [[[40.7128, -74.0060], [40.7589, -74.0060], [40.7589, -73.9851], [40.7128, -73.9851], [40.7128, -74.0060]]],
+            'population' => 1000000,
+            'secretCode' => 'super-secret-code',
+            'center' => [40.7282, -73.9942],
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $createdCity = $database->createDocument($citiesId, $cityDoc);
+
+        $storeDoc = new Document([
+            '$id' => 'store-1',
+            'name' => 'Main Store',
+            'revenue' => 50000.75,
+            'location' => [40.7300, -73.9900],
+            'city' => $createdCity->getId(),
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $createdStore = $database->createDocument($storesId, $storeDoc);
+
+        $cityWithSelection = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'population'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithSelection->getAttribute('name'));
+        $this->assertEquals(1000000, $cityWithSelection->getAttribute('population'));
+
+        $this->assertNull($cityWithSelection->getAttribute('area'));
+        $this->assertNull($cityWithSelection->getAttribute('secretCode'));
+        $this->assertNull($cityWithSelection->getAttribute('center'));
+
+        $cityWithSpatial = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'area', 'center'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithSpatial->getAttribute('name'));
+        $this->assertNotNull($cityWithSpatial->getAttribute('area'));
+        $this->assertEquals([[[40.7128, -74.0060], [40.7589, -74.0060], [40.7589, -73.9851], [40.7128, -73.9851], [40.7128, -74.0060]]], $cityWithSpatial->getAttribute('area'));
+        $this->assertEquals([40.7282, -73.9942], $cityWithSpatial->getAttribute('center'));
+        // Null -> not selected
+        $this->assertNull($cityWithSpatial->getAttribute('population'));
+        $this->assertNull($cityWithSpatial->getAttribute('secretCode'));
+
+        $cityWithEncrypted = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'secretCode'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithEncrypted->getAttribute('name'));
+        $this->assertEquals('super-secret-code', $cityWithEncrypted->getAttribute('secretCode')); // Should be decrypted
+
+        $this->assertNull($cityWithEncrypted->getAttribute('area'));
+        $this->assertNull($cityWithEncrypted->getAttribute('population'));
+
+        $cityWithStores = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['stores.name'])
+        ]);
+
+        $this->assertNotNull($cityWithStores->getAttribute('stores'));
+        $this->assertCount(1, $cityWithStores->getAttribute('stores'));
+        $this->assertEquals('Main Store', $cityWithStores->getAttribute('stores')[0]['name']);
+
+        $this->assertEquals('super-secret-code', $cityWithStores->getAttribute('secretCode'));
+        $this->assertNotNull($cityWithStores->getAttribute('area'));
+        $this->assertEquals([40.7282, -73.9942], $cityWithStores->getAttribute('center'));
+
+        $cityWithMultipleStoreFields = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['stores.name', 'stores.revenue'])
+        ]);
+
+        $this->assertNotNull($cityWithMultipleStoreFields->getAttribute('stores'));
+        $this->assertEquals('Main Store', $cityWithMultipleStoreFields->getAttribute('stores')[0]['name']);
+        $this->assertEquals(50000.75, $cityWithMultipleStoreFields->getAttribute('stores')[0]['revenue']);
+
+        $this->assertEquals('super-secret-code', $cityWithMultipleStoreFields->getAttribute('secretCode'));
+
+        $cityWithMixed = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'population', 'stores.name'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithMixed->getAttribute('name'));
+        $this->assertEquals(1000000, $cityWithMixed->getAttribute('population'));
+
+        $this->assertNotNull($cityWithMixed->getAttribute('stores'));
+        $this->assertEquals('Main Store', $cityWithMixed->getAttribute('stores')[0]['name']);
+
+        $citiesWithStores = $database->find($citiesId, [
+            Query::select(['stores.name']),
+            Query::equal('$id', ['city-1'])
+        ]);
+
+        $this->assertCount(1, $citiesWithStores);
+        $city = $citiesWithStores[0];
+        $this->assertNotNull($city->getAttribute('stores'));
+        $this->assertEquals('Main Store', $city->getAttribute('stores')[0]['name']);
+        $this->assertEquals('super-secret-code', $city->getAttribute('secretCode'));
+
+        $storeWithCityArea = $database->getDocument($storesId, 'store-1', [
+            Query::select(['location','city.area'])
+        ]);
+
+        $this->assertNotNull($storeWithCityArea->getAttribute('city'));
+        $this->assertNotNull($storeWithCityArea->getAttribute('city')['area']);
+        $this->assertEquals([40.7300, -73.9900], $storeWithCityArea->getAttribute('location'));
+
+        $database->deleteCollection($citiesId);
+        $database->deleteCollection($storesId);
+    }
+
+    public function testDecodeWithoutRelationships(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->addFilter(
+            'encryptTest',
+            function (mixed $value) {
+                return 'encrypted:' . base64_encode($value);
+            },
+            function (mixed $value) {
+                if (is_null($value) || !str_starts_with($value, 'encrypted:')) {
+                    return $value;
+                }
+                return base64_decode(substr($value, 10));
+            }
+        );
+
+        $collectionId = 'TestDecodeCollection';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($collectionId, 'description', Database::VAR_STRING, 1000, required: false, default: 'No description');
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, required: false, default: 0);
+        $database->createAttribute($collectionId, 'price', Database::VAR_FLOAT, 0, required: false, default: 0.0);
+        $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, required: false, default: true);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, required: false, array: true);
+        $database->createAttribute($collectionId, 'secret', Database::VAR_STRING, 255, required: false, default: 'default-secret', filters: ['encryptTest']);
+        $database->createAttribute($collectionId, 'location', Database::VAR_POINT, 0, required: false, default: [0.0, 0.0]);
+        $database->createAttribute($collectionId, 'boundary', Database::VAR_POLYGON, 0, required: false);
+
+        $doc = new Document([
+            '$id' => 'test-1',
+            'title' => 'Test Document',
+            'description' => 'This is a test document',
+            'count' => 42,
+            'price' => 99.99,
+            'active' => true,
+            'tags' => ['tag1', 'tag2', 'tag3'],
+            'secret' => 'my-secret-value',
+            'location' => [40.7128, -74.0060],
+            'boundary' => [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]],
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $created = $database->createDocument($collectionId, $doc);
+
+        $selected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['title', 'count', 'secret'])
+        ]);
+
+        $this->assertEquals('Test Document', $selected->getAttribute('title'));
+        $this->assertEquals(42, $selected->getAttribute('count'));
+        $this->assertEquals('my-secret-value', $selected->getAttribute('secret'));
+
+        $this->assertNull($selected->getAttribute('description'));
+        $this->assertNull($selected->getAttribute('price'));
+        $this->assertNull($selected->getAttribute('location'));
+
+        $spatialSelected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['title', 'location', 'boundary'])
+        ]);
+
+        $this->assertEquals('Test Document', $spatialSelected->getAttribute('title'));
+        $this->assertEquals([40.7128, -74.0060], $spatialSelected->getAttribute('location'));
+        $this->assertEquals([[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]], $spatialSelected->getAttribute('boundary'));
+        $this->assertNull($spatialSelected->getAttribute('secret'));
+        $this->assertNull($spatialSelected->getAttribute('count'));
+
+        $arraySelected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['title', 'tags'])
+        ]);
+
+        $this->assertEquals('Test Document', $arraySelected->getAttribute('title'));
+        $this->assertEquals(['tag1', 'tag2', 'tag3'], $arraySelected->getAttribute('tags'));
+        $this->assertNull($arraySelected->getAttribute('active'));
+
+        $allSelected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['*'])
+        ]);
+
+        $this->assertEquals('Test Document', $allSelected->getAttribute('title'));
+        $this->assertEquals('This is a test document', $allSelected->getAttribute('description'));
+        $this->assertEquals(42, $allSelected->getAttribute('count'));
+        $this->assertEquals('my-secret-value', $allSelected->getAttribute('secret'));
+        $this->assertEquals([40.7128, -74.0060], $allSelected->getAttribute('location'));
+
+        $noSelection = $database->getDocument($collectionId, 'test-1');
+
+        $this->assertEquals('Test Document', $noSelection->getAttribute('title'));
+        $this->assertEquals('This is a test document', $noSelection->getAttribute('description'));
+        $this->assertEquals('my-secret-value', $noSelection->getAttribute('secret'));
+        $this->assertEquals([40.7128, -74.0060], $noSelection->getAttribute('location'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testDecodeWithMultipleFilters(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->addFilter(
+            'upperCase',
+            function (mixed $value) { return strtoupper($value); },
+            function (mixed $value) { return strtolower($value); }
+        );
+
+        $database->addFilter(
+            'prefix',
+            function (mixed $value) { return 'prefix_' . $value; },
+            function (mixed $value) { return str_replace('prefix_', '', $value); }
+        );
+
+        $collectionId = 'EdgeCaseCollection';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($collectionId, 'processedName', Database::VAR_STRING, 255, required: false, filters: ['upperCase', 'prefix']);
+        $database->createAttribute($collectionId, 'nullableField', Database::VAR_STRING, 255, required: false);
+
+        $doc = new Document([
+            '$id' => 'edge-1',
+            'name' => 'Test Name',
+            'processedName' => 'test value',
+            'nullableField' => null,
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $created = $database->createDocument($collectionId, $doc);
+
+        $selected = $database->getDocument($collectionId, 'edge-1', [
+            Query::select(['name', 'processedName'])
+        ]);
+
+        $this->assertEquals('Test Name', $selected->getAttribute('name'));
+        $this->assertEquals('test value', $selected->getAttribute('processedName'));
+        $this->assertNull($selected->getAttribute('nullableField'));
+
+        $nullSelected = $database->getDocument($collectionId, 'edge-1', [
+            Query::select(['name', 'nullableField'])
+        ]);
+
+        $this->assertEquals('Test Name', $nullSelected->getAttribute('name'));
+        $this->assertNull($nullSelected->getAttribute('nullableField'));
+
+        $database->deleteCollection($collectionId);
+    }
 }

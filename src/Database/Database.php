@@ -3470,7 +3470,7 @@ class Database
         $this->checkQueriesType($queries);
 
         if ($this->validate) {
-            $validator = new DocumentValidator($attributes);
+            $validator = new DocumentValidator($attributes, $this->adapter->getSupportForAttributes());
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -7062,10 +7062,11 @@ class Database
                 $keys[] = $attribute['key'] ?? $attribute['$id'];
             }
         }
-
-        $invalid = \array_diff($selections, $keys);
-        if (!empty($invalid) && !\in_array('*', $invalid)) {
-            throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
+        if ($this->adapter->getSupportForAttributes()) {
+            $invalid = \array_diff($selections, $keys);
+            if (!empty($invalid) && !\in_array('*', $invalid)) {
+                throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
+            }
         }
 
         $selections = \array_merge($selections, $relationshipSelections);

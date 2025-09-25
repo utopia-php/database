@@ -6550,4 +6550,51 @@ trait DocumentTests
 
         $database->deleteCollection($colName);
     }
+
+    public function testSchemalessSelectionOnUnknownAttributes()
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $colName = uniqid("schemaless");
+        $database->createCollection($colName);
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
+        $docs = [
+            new Document(['$id' => 'doc1', '$permissions' => $permissions, 'freeA' => 'doc1']),
+            new Document(['$id' => 'doc2', '$permissions' => $permissions, 'freeB' => 'test']),
+            new Document(['$id' => 'doc3', '$permissions' => $permissions]),
+        ];
+        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+
+        $docA = $database->getDocument($colName, 'doc1', [Query::select(['freeA'])]);
+        $this->assertEquals('doc1', $docA->getAttribute('freeA'));
+
+        $docC = $database->getDocument($colName, 'doc1', [Query::select(['freeC'])]);
+        $this->assertNull($docC->getAttribute('freeC'));
+
+        $docs = $database->find($colName, [Query::equal('$id', ['doc1','doc2']),Query::select(['freeC'])]);
+        foreach ($docs as $doc) {
+            $this->assertNull($doc->getAttribute('freeC'));
+            // since not selected
+            $this->assertNull($doc->getAttribute('freeA'));
+            $this->assertNull($doc->getAttribute('freeB'));
+        }
+
+        $docA = $database->find($colName, [
+            Query::equal('$id', ['doc1']),
+            Query::select(['freeA'])
+        ]);
+        $this->assertEquals('doc1', $docA[0]->getAttribute('freeA'));
+
+        $docC = $database->find($colName, [
+            Query::equal('$id', ['doc1']),
+            Query::select(['freeC'])
+        ]);
+        $this->assertNull($docC[0]->getAttribute('freeC'));
+    }
 }

@@ -6795,6 +6795,8 @@ class Database
             fn ($attribute) => $attribute['type'] === self::VAR_RELATIONSHIP
         );
 
+        $filteredValue = [];
+
         foreach ($relationships as $relationship) {
             $key = $relationship['$id'] ?? '';
 
@@ -6843,6 +6845,8 @@ class Database
                 $value[$index] = $node;
             }
 
+            $filteredValue[$key] = ($array) ? $value : $value[0];
+
             if (
                 empty($selections)
                 || \in_array($key, $selections)
@@ -6852,6 +6856,29 @@ class Database
             }
         }
 
+        $hasRelationshipSelections = false;
+        if (!empty($selections)) {
+            foreach ($selections as $selection) {
+                if (\str_contains($selection, '.')) {
+                    $hasRelationshipSelections = true;
+                    break;
+                }
+            }
+        }
+
+        if ($hasRelationshipSelections && !empty($selections) && !\in_array('*', $selections)) {
+            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+                $key = $attribute['$id'] ?? '';
+
+                if ($attribute['type'] === self::VAR_RELATIONSHIP || $key === '$permissions') {
+                    continue;
+                }
+
+                if (!in_array($key, $selections) && isset($filteredValue[$key])) {
+                    $document->setAttribute($key, $filteredValue[$key]);
+                }
+            }
+        }
         return $document;
     }
 

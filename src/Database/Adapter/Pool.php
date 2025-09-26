@@ -544,6 +544,16 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * Adapter supports optional spatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function decodePoint(string $wkb): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

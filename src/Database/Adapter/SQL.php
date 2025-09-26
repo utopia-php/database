@@ -1725,6 +1725,13 @@ abstract class SQL extends Adapter
     abstract protected function getPDOType(mixed $value): int;
 
     /**
+     * Get the SQL function for random ordering
+     *
+     * @return string
+     */
+    abstract protected function getRandomOrder(): string;
+
+    /**
      * Returns default PDO configuration
      *
      * @return array<int, mixed>
@@ -2363,10 +2370,18 @@ abstract class SQL extends Adapter
         $cursorWhere = [];
 
         foreach ($orderAttributes as $i => $originalAttribute) {
+            $orderType = $orderTypes[$i] ?? Database::ORDER_ASC;
+
+            // Handle random ordering specially
+            if ($orderType === Database::ORDER_RANDOM) {
+                $orders[] = $this->getRandomOrder();
+                continue;
+            }
+
             $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
 
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $orderType = $this->filter($orderType);
             $direction = $orderType;
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {

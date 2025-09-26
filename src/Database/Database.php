@@ -91,6 +91,8 @@ class Database
     public const ORDER_ASC = 'ASC';
     public const ORDER_DESC = 'DESC';
 
+    public const ORDER_RANDOM = 'RANDOM';
+
     // Permissions
     public const PERMISSION_CREATE = 'create';
     public const PERMISSION_READ = 'read';

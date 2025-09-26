@@ -1552,7 +1552,7 @@ abstract class SQL extends Adapter
         return true;
     }
 
-    public function isMongo(): bool
+    public function getSupportForUTCCasting(): bool
     {
         return false;
     }

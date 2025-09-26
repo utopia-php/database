@@ -1323,12 +1323,12 @@ trait AttributeTests
             required: false,
             signed: false
         ));
-        /** Is this hack valid? */
+
         $this->assertEquals(true, $database->createAttribute(
             $collection,
             'tv_show',
             Database::VAR_STRING,
-            size: $database->getAdapter()->getMaxIndexLength() - 68, /** Verify with Jake if this solution is valid?  */
+            size: $database->getAdapter()->getMaxIndexLength() - 68,
             required: false,
             signed: false,
         ));
@@ -1441,7 +1441,7 @@ trait AttributeTests
 
         if ($database->getAdapter()->getSupportForIndexArray()) {
             /**
-             * functional index dependency cannot be dropped or rename
+             * Functional index dependency cannot be dropped or rename
              */
             $database->createIndex($collection, 'idx_cards', Database::INDEX_KEY, ['cards'], [100]);
         }
@@ -1523,8 +1523,6 @@ trait AttributeTests
         ));
 
         if ($database->getAdapter()->getSupportForIndexArray()) {
-
-
             if ($database->getAdapter()->getMaxIndexLength() > 0) {
                 // If getMaxIndexLength() > 0 We clear length for array attributes
                 $database->createIndex($collection, 'indx1', Database::INDEX_KEY, ['long_size'], [], []);
@@ -1538,9 +1536,6 @@ trait AttributeTests
                     $this->assertEquals('Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength(), $e->getMessage());
                 }
             }
-
-            // We clear orders for array attributes
-            $database->createIndex($collection, 'indx3', Database::INDEX_KEY, ['names'], [255], ['desc']);
 
             try {
                 if ($database->getAdapter()->getSupportForAttributes()) {

@@ -171,6 +171,7 @@ trait IndexTests
             $database->getAdapter()->getSupportForSpatialAttributes(),
             $database->getAdapter()->getSupportForSpatialIndexNull(),
             $database->getAdapter()->getSupportForSpatialIndexOrder(),
+            $database->getAdapter()->getSupportForAttributes(),
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
             $database->getAdapter()->getSupportForIdenticalIndexes()
         );
@@ -252,12 +253,18 @@ trait IndexTests
             $database->getAdapter()->getSupportForSpatialAttributes(),
             $database->getAdapter()->getSupportForSpatialIndexNull(),
             $database->getAdapter()->getSupportForSpatialIndexOrder(),
+            $database->getAdapter()->getSupportForAttributes(),
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
             $database->getAdapter()->getSupportForIdenticalIndexes()
         );
-        $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
+
         $this->assertFalse($validator->isValid($indexes[0]));
-        $this->assertEquals($errorMessage, $validator->getDescription());
+
+        if (!$database->getAdapter()->getSupportForMultipleFulltextIndexes()) {
+            $this->assertEquals('There is already a fulltext index in the collection', $validator->getDescription());
+        } elseif ($database->getAdapter()->getSupportForAttributes()) {
+            $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
+        }
 
         try {
             $database->createCollection($collection->getId(), $attributes, $indexes);

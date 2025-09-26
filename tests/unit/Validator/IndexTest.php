@@ -103,7 +103,7 @@ class IndexTest extends TestCase
         $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes'), 768);
         $index = $collection->getAttribute('indexes')[0];
         $this->assertFalse($validator->isValid($index));
-        $this->assertEquals('Attribute "date" cannot be part of a FULLTEXT index, must be of type string', $validator->getDescription());
+        $this->assertEquals('Attribute "date" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
     }
 
     /**

@@ -5235,7 +5235,7 @@ trait DocumentTests
             if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
                 $this->expectExceptionMessage('Fulltext index is not supported');
             } else {
-                $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a FULLTEXT index, must be of type string');
+                $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a fulltext index, must be of type string');
             }
 
             $database->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);

@@ -161,7 +161,7 @@ class Index extends Validator
             foreach ($index->getAttribute('attributes', []) as $attribute) {
                 $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
                 if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
-                    $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a FULLTEXT index, must be of type string';
+                    $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a fulltext index, must be of type string';
                     return false;
                 }
             }

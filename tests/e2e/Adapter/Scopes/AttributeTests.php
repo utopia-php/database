@@ -392,6 +392,11 @@ trait AttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $database->updateAttributeRequired('flowers', 'inStock', true);
 
         $this->expectExceptionMessage('Invalid document structure: Missing required attribute "inStock"');
@@ -448,7 +453,10 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
         $database->createAttribute('flowers', 'price', Database::VAR_INTEGER, 0, false);
 
         $doc = $database->createDocument('flowers', new Document([
@@ -648,6 +656,10 @@ trait AttributeTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $database->createCollection('rename_test');
 
@@ -1345,7 +1357,9 @@ trait AttributeTests
             $database->createDocument($collection, new Document([]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertEquals('Invalid document structure: Missing required attribute "booleans"', $e->getMessage());
+            }
         }
 
         $database->updateAttribute($collection, 'booleans', required: false);
@@ -1365,7 +1379,9 @@ trait AttributeTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Invalid document structure: Attribute "short[\'0\']" has invalid type. Value must be a valid string and no longer than 5 chars', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertEquals('Invalid document structure: Attribute "short[\'0\']" has invalid type. Value must be a valid string and no longer than 5 chars', $e->getMessage());
+            }
         }
 
         try {
@@ -1374,7 +1390,9 @@ trait AttributeTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 255 chars', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertEquals('Invalid document structure: Attribute "names[\'1\']" has invalid type. Value must be a valid string and no longer than 255 chars', $e->getMessage());
+            }
         }
 
         try {
@@ -1383,7 +1401,9 @@ trait AttributeTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid integer', $e->getMessage());
+            }
         }
 
         try {
@@ -1392,7 +1412,9 @@ trait AttributeTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertEquals('Invalid document structure: Attribute "age" has invalid type. Value must be a valid range between 0 and 2,147,483,647', $e->getMessage());
+            }
         }
 
         $database->createDocument($collection, new Document([
@@ -1466,7 +1488,9 @@ trait AttributeTests
         if ($database->getAdapter()->getSupportForIndexArray()) {
             try {
                 $database->createIndex($collection, 'indx', Database::INDEX_FULLTEXT, ['names']);
-                $this->fail('Failed to throw exception');
+                if ($database->getAdapter()->getSupportForAttributes()) {
+                    $this->fail('Failed to throw exception');
+                }
             } catch (Throwable $e) {
                 if ($database->getAdapter()->getSupportForFulltextIndex()) {
                     $this->assertEquals('"Fulltext" index is forbidden on array attributes', $e->getMessage());
@@ -1477,9 +1501,15 @@ trait AttributeTests
 
             try {
                 $database->createIndex($collection, 'indx', Database::INDEX_KEY, ['numbers', 'names'], [100,100]);
-                $this->fail('Failed to throw exception');
+                if ($database->getAdapter()->getSupportForAttributes()) {
+                    $this->fail('Failed to throw exception');
+                }
             } catch (Throwable $e) {
-                $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+                if ($database->getAdapter()->getSupportForAttributes()) {
+                    $this->assertEquals('An index may only contain one array attribute', $e->getMessage());
+                } else {
+                    $this->assertEquals('Index already exists', $e->getMessage());
+                }
             }
         }
 
@@ -1513,8 +1543,10 @@ trait AttributeTests
             $database->createIndex($collection, 'indx3', Database::INDEX_KEY, ['names'], [255], ['desc']);
 
             try {
-                $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
-                $this->fail('Failed to throw exception');
+                if ($database->getAdapter()->getSupportForAttributes()) {
+                    $database->createIndex($collection, 'indx4', Database::INDEX_KEY, ['age', 'names'], [10, 255], []);
+                    $this->fail('Failed to throw exception');
+                }
             } catch (Throwable $e) {
                 $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
             }
@@ -1581,17 +1613,22 @@ trait AttributeTests
         $database = static::getDatabase();
 
         $database->createCollection('datetime');
-
-        $this->assertEquals(true, $database->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true, null, true, false, null, [], ['datetime']));
-        $this->assertEquals(true, $database->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->assertEquals(true, $database->createAttribute('datetime', 'date', Database::VAR_DATETIME, 0, true, null, true, false, null, [], ['datetime']));
+            $this->assertEquals(true, $database->createAttribute('datetime', 'date2', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']));
+        }
 
         try {
             $database->createDocument('datetime', new Document([
                 'date' => ['2020-01-01'], // array
             ]));
-            $this->fail('Failed to throw exception');
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->fail('Failed to throw exception');
+            }
         } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
         }
 
         $doc = $database->createDocument('datetime', new Document([
@@ -1634,20 +1671,29 @@ trait AttributeTests
 
         try {
             $database->createDocument('datetime', new Document([
-                'date' => "1975-12-06 00:00:61" // 61 seconds is invalid
+                '$id' => 'datenew1',
+                'date' => "1975-12-06 00:00:61", // 61 seconds is invalid,
             ]));
-            $this->fail('Failed to throw exception');
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->fail('Failed to throw exception');
+            }
         } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
         }
 
         try {
             $database->createDocument('datetime', new Document([
                 'date' => '+055769-02-14T17:56:18.000Z'
             ]));
-            $this->fail('Failed to throw exception');
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->fail('Failed to throw exception');
+            }
         } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
         }
 
         $invalidDates = [
@@ -1671,7 +1717,9 @@ trait AttributeTests
                 $database->find('datetime', [
                     Query::equal('date', [$date])
                 ]);
-                $this->fail('Failed to throw exception');
+                if ($database->getAdapter()->getSupportForAttributes()) {
+                    $this->fail('Failed to throw exception');
+                }
             } catch (Throwable $e) {
                 $this->assertTrue($e instanceof QueryException);
                 $this->assertEquals('Invalid query: Query value is invalid for attribute "date"', $e->getMessage());

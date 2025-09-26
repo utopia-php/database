@@ -229,8 +229,10 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertTrue($e instanceof StructureException);
+                $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
+            }
         }
 
         try {
@@ -248,8 +250,10 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertTrue($e instanceof StructureException);
+                $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
+            }
         }
 
         try {
@@ -270,8 +274,10 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertTrue($e instanceof StructureException);
-            $this->assertEquals('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertTrue($e instanceof StructureException);
+                $this->assertEquals('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
+            }
         }
 
         /**
@@ -933,7 +939,9 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertTrue($e instanceof StructureException, $e->getMessage());
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->assertTrue($e instanceof StructureException, $e->getMessage());
+            }
         }
 
         // Ensure missing optionals on existing document is allowed
@@ -3512,6 +3520,72 @@ trait DocumentTests
         $this->assertLessThanOrEqual(5, count($documents)); // But still excluding Marvel movies
     }
 
+    public function testFindOrderRandom(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Test orderRandom with default limit
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(1, count($documents));
+        $this->assertNotEmpty($documents[0]['name']); // Ensure we got a valid document
+
+        // Test orderRandom with multiple documents
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(3),
+        ]);
+        $this->assertEquals(3, count($documents));
+
+        // Test that orderRandom returns different results (not guaranteed but highly likely)
+        $firstSet = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(3),
+        ]);
+        $secondSet = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(3),
+        ]);
+
+        // Extract IDs for comparison
+        $firstIds = array_map(fn ($doc) => $doc['$id'], $firstSet);
+        $secondIds = array_map(fn ($doc) => $doc['$id'], $secondSet);
+
+        // While not guaranteed to be different, with 6 movies and selecting 3,
+        // the probability of getting the same set in the same order is very low
+        // We'll just check that we got valid results
+        $this->assertEquals(3, count($firstIds));
+        $this->assertEquals(3, count($secondIds));
+
+        // Test orderRandom with more than available documents
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(10), // We only have 6 movies
+        ]);
+        $this->assertLessThanOrEqual(6, count($documents)); // Should return all available documents
+
+        // Test orderRandom with filters
+        $documents = $database->find('movies', [
+            Query::greaterThan('price', 10),
+            Query::orderRandom(),
+            Query::limit(2),
+        ]);
+        $this->assertLessThanOrEqual(2, count($documents));
+        foreach ($documents as $document) {
+            $this->assertGreaterThan(10, $document['price']);
+        }
+
+        // Test orderRandom without explicit limit (should use default)
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+        $this->assertLessThanOrEqual(25, count($documents)); // Default limit is 25
+    }
+
     public function testFindNotBetween(): void
     {
         /** @var Database $database */
@@ -5151,16 +5225,19 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectException(Exception::class);
+            if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+                $this->expectExceptionMessage('Fulltext index is not supported');
+            } else {
+                $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a FULLTEXT index, must be of type string');
+            }
 
-        $this->expectException(Exception::class);
-
-        if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
-            $this->expectExceptionMessage('Fulltext index is not supported');
+            $database->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
         } else {
-            $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a FULLTEXT index, must be of type string');
+            $this->expectNotToPerformAssertions();
+            return;
         }
-
-        $database->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
     }
 
     public function testEnableDisableValidation(): void
@@ -6052,5 +6129,495 @@ trait DocumentTests
             $this->assertEquals('value', $doc->getAttribute('value'));
         }
         $database->deleteCollection($colName);
+    }
+
+    public function testSchemalessDocumentOperation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $colName = uniqid("schemaless");
+        $database->createCollection($colName);
+        $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
+        $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false, 'value');
+
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
+
+        // Valid documents without any predefined attributes
+        $docs = [
+            new Document(['$id' => 'doc1', '$permissions' => $permissions, 'freeA' => 'doc1']),
+            new Document(['$id' => 'doc2', '$permissions' => $permissions, 'freeB' => 'test']),
+            new Document(['$id' => 'doc3', '$permissions' => $permissions]),
+        ];
+        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+
+        // Any extra attributes should be allowed (fully schemaless)
+        $docs = [
+            new Document(['$id' => 'doc11', 'title' => 'doc1', '$permissions' => $permissions]),
+            new Document(['$id' => 'doc21', 'moviename' => 'doc2', 'moviedescription' => 'test', '$permissions' => $permissions]),
+            new Document(['$id' => 'doc31', '$permissions' => $permissions]),
+        ];
+
+        $createdDocs = $database->createDocuments($colName, $docs);
+        $this->assertEquals(3, $createdDocs);
+
+        // Create a single document with extra attribute as well
+        $single = $database->createDocument($colName, new Document(['$id' => 'docS', 'extra' => 'yes', '$permissions' => $permissions]));
+        $this->assertEquals('docS', $single->getId());
+        $this->assertEquals('yes', $single->getAttribute('extra'));
+
+        $found = $database->find($colName);
+        $this->assertCount(7, $found);
+        $doc11 = $database->getDocument($colName, 'doc11');
+        $this->assertEquals('doc1', $doc11->getAttribute('title'));
+
+        $doc21 = $database->getDocument($colName, 'doc21');
+        $this->assertEquals('doc2', $doc21->getAttribute('moviename'));
+        $this->assertEquals('test', $doc21->getAttribute('moviedescription'));
+
+        $updated = $database->updateDocument($colName, 'doc31', new Document(['moviename' => 'updated']))
+        ;
+        $this->assertEquals('updated', $updated->getAttribute('moviename'));
+
+        $this->assertTrue($database->deleteDocument($colName, 'doc21'));
+        $deleted = $database->getDocument($colName, 'doc21');
+        $this->assertTrue($deleted->isEmpty());
+        $remaining = $database->find($colName);
+        $this->assertCount(6, $remaining);
+
+        // Bulk update: set a new extra attribute on all remaining docs
+        $modified = $database->updateDocuments($colName, new Document(['bulkExtra' => 'yes']));
+        $this->assertEquals(6, $modified);
+        $all = $database->find($colName);
+        foreach ($all as $doc) {
+            $this->assertEquals('yes', $doc->getAttribute('bulkExtra'));
+        }
+
+        // Upsert: create new and update existing with extra attributes preserved
+        $upserts = [
+            new Document(['$id' => 'docU1', 'extraU' => 1, '$permissions' => $permissions]),
+            new Document(['$id' => 'doc1', 'extraU' => 2, '$permissions' => $permissions]),
+        ];
+        $countUpserts = $database->upsertDocuments($colName, $upserts);
+        $this->assertEquals(2, $countUpserts);
+        $docU1 = $database->getDocument($colName, 'docU1');
+        $this->assertEquals(1, $docU1->getAttribute('extraU'));
+        $doc1AfterUpsert = $database->getDocument($colName, 'doc1');
+        $this->assertEquals(2, $doc1AfterUpsert->getAttribute('extraU'));
+
+        // Increase/Decrease numeric attribute: add numeric attribute and mutate it
+        $database->createAttribute($colName, 'counter', Database::VAR_INTEGER, 0, false, 0);
+        $docS = $database->getDocument($colName, 'docS');
+        $this->assertEquals(0, $docS->getAttribute('counter'));
+        $docS = $database->increaseDocumentAttribute($colName, 'docS', 'counter', 5);
+        $this->assertEquals(5, $docS->getAttribute('counter'));
+        $docS = $database->decreaseDocumentAttribute($colName, 'docS', 'counter', 3);
+        $this->assertEquals(2, $docS->getAttribute('counter'));
+
+        $deletedByCounter = $database->deleteDocuments($colName, [Query::equal('counter', [2])]);
+        $this->assertEquals(1, $deletedByCounter);
+
+        $deletedCount = $database->deleteDocuments($colName, [Query::startsWith('$id', 'doc')]);
+        $this->assertEquals(6, $deletedCount);
+        $postDelete = $database->find($colName);
+        $this->assertCount(0, $postDelete);
+
+        $database->deleteCollection($colName);
+    }
+
+    public function testDecodeWithDifferentSelectionTypes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->addFilter(
+            'encrypt',
+            function (mixed $value) {
+                return json_encode([
+                    'data' => base64_encode($value),
+                    'method' => 'base64',
+                    'version' => 'v1',
+                ]);
+            },
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                $value = json_decode($value, true);
+                return base64_decode($value['data']);
+            }
+        );
+
+        $citiesId = 'TestCities';
+        $storesId = 'TestStores';
+
+        $database->createCollection($citiesId);
+        $database->createCollection($storesId);
+
+        $database->createAttribute($citiesId, 'name', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($citiesId, 'area', Database::VAR_POLYGON, 0, required: true);
+        $database->createAttribute($citiesId, 'population', Database::VAR_INTEGER, 0, required: false, default: 0);
+        $database->createAttribute($citiesId, 'secretCode', Database::VAR_STRING, 255, required: false, default: 'default-secret', filters: ['encrypt']);
+        $database->createAttribute($citiesId, 'center', Database::VAR_POINT, 0, required: false, default: [0.0, 0.0]);
+
+        $database->createAttribute($storesId, 'name', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($storesId, 'revenue', Database::VAR_FLOAT, 0, required: false, default: 0.0);
+        $database->createAttribute($storesId, 'location', Database::VAR_POINT, 0, required: false, default: [1.0, 1.0]);
+
+        $database->createRelationship(
+            collection: $storesId,
+            relatedCollection: $citiesId,
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'city',
+            twoWayKey: 'stores'
+        );
+
+        $cityDoc = new Document([
+            '$id' => 'city-1',
+            'name' => 'Test City',
+            'area' => [[[40.7128, -74.0060], [40.7589, -74.0060], [40.7589, -73.9851], [40.7128, -73.9851], [40.7128, -74.0060]]],
+            'population' => 1000000,
+            'secretCode' => 'super-secret-code',
+            'center' => [40.7282, -73.9942],
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $createdCity = $database->createDocument($citiesId, $cityDoc);
+
+        $storeDoc = new Document([
+            '$id' => 'store-1',
+            'name' => 'Main Store',
+            'revenue' => 50000.75,
+            'location' => [40.7300, -73.9900],
+            'city' => $createdCity->getId(),
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $createdStore = $database->createDocument($storesId, $storeDoc);
+
+        $cityWithSelection = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'population'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithSelection->getAttribute('name'));
+        $this->assertEquals(1000000, $cityWithSelection->getAttribute('population'));
+
+        $this->assertNull($cityWithSelection->getAttribute('area'));
+        $this->assertNull($cityWithSelection->getAttribute('secretCode'));
+        $this->assertNull($cityWithSelection->getAttribute('center'));
+
+        $cityWithSpatial = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'area', 'center'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithSpatial->getAttribute('name'));
+        $this->assertNotNull($cityWithSpatial->getAttribute('area'));
+        $this->assertEquals([[[40.7128, -74.0060], [40.7589, -74.0060], [40.7589, -73.9851], [40.7128, -73.9851], [40.7128, -74.0060]]], $cityWithSpatial->getAttribute('area'));
+        $this->assertEquals([40.7282, -73.9942], $cityWithSpatial->getAttribute('center'));
+        // Null -> not selected
+        $this->assertNull($cityWithSpatial->getAttribute('population'));
+        $this->assertNull($cityWithSpatial->getAttribute('secretCode'));
+
+        $cityWithEncrypted = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'secretCode'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithEncrypted->getAttribute('name'));
+        $this->assertEquals('super-secret-code', $cityWithEncrypted->getAttribute('secretCode')); // Should be decrypted
+
+        $this->assertNull($cityWithEncrypted->getAttribute('area'));
+        $this->assertNull($cityWithEncrypted->getAttribute('population'));
+
+        $cityWithStores = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['stores.name'])
+        ]);
+
+        $this->assertNotNull($cityWithStores->getAttribute('stores'));
+        $this->assertCount(1, $cityWithStores->getAttribute('stores'));
+        $this->assertEquals('Main Store', $cityWithStores->getAttribute('stores')[0]['name']);
+
+        $this->assertEquals('super-secret-code', $cityWithStores->getAttribute('secretCode'));
+        $this->assertNotNull($cityWithStores->getAttribute('area'));
+        $this->assertEquals([40.7282, -73.9942], $cityWithStores->getAttribute('center'));
+
+        $cityWithMultipleStoreFields = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['stores.name', 'stores.revenue'])
+        ]);
+
+        $this->assertNotNull($cityWithMultipleStoreFields->getAttribute('stores'));
+        $this->assertEquals('Main Store', $cityWithMultipleStoreFields->getAttribute('stores')[0]['name']);
+        $this->assertEquals(50000.75, $cityWithMultipleStoreFields->getAttribute('stores')[0]['revenue']);
+
+        $this->assertEquals('super-secret-code', $cityWithMultipleStoreFields->getAttribute('secretCode'));
+
+        $cityWithMixed = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'population', 'stores.name'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithMixed->getAttribute('name'));
+        $this->assertEquals(1000000, $cityWithMixed->getAttribute('population'));
+
+        $this->assertNotNull($cityWithMixed->getAttribute('stores'));
+        $this->assertEquals('Main Store', $cityWithMixed->getAttribute('stores')[0]['name']);
+
+        $citiesWithStores = $database->find($citiesId, [
+            Query::select(['stores.name']),
+            Query::equal('$id', ['city-1'])
+        ]);
+
+        $this->assertCount(1, $citiesWithStores);
+        $city = $citiesWithStores[0];
+        $this->assertNotNull($city->getAttribute('stores'));
+        $this->assertEquals('Main Store', $city->getAttribute('stores')[0]['name']);
+        $this->assertEquals('super-secret-code', $city->getAttribute('secretCode'));
+
+        $storeWithCityArea = $database->getDocument($storesId, 'store-1', [
+            Query::select(['location','city.area'])
+        ]);
+
+        $this->assertNotNull($storeWithCityArea->getAttribute('city'));
+        $this->assertNotNull($storeWithCityArea->getAttribute('city')['area']);
+        $this->assertEquals([40.7300, -73.9900], $storeWithCityArea->getAttribute('location'));
+
+        $database->deleteCollection($citiesId);
+        $database->deleteCollection($storesId);
+    }
+
+    public function testSchemalessDocumentInvalidInteralAttributeValidation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // test to ensure internal attributes are checked during creating schemaless document
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $colName = uniqid("schemaless");
+        $database->createCollection($colName);
+        try {
+            $docs = [
+                new Document(['$id' => true, 'freeA' => 'doc1']),
+                new Document(['$id' => true, 'freeB' => 'test']),
+                new Document(['$id' => true]),
+            ];
+            $database->createDocuments($colName, $docs);
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        try {
+            $docs = [
+                new Document(['$createdAt' => true, 'freeA' => 'doc1']),
+                new Document(['$updatedAt' => true, 'freeB' => 'test']),
+                new Document(['$permissions' => 12]),
+            ];
+            $database->createDocuments($colName, $docs);
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        $database->deleteCollection($colName);
+
+    }
+
+    public function testDecodeWithoutRelationships(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+
+        $database->addFilter(
+            'encryptTest',
+            function (mixed $value) {
+                return 'encrypted:' . base64_encode($value);
+            },
+            function (mixed $value) {
+                if (is_null($value) || !str_starts_with($value, 'encrypted:')) {
+                    return $value;
+                }
+                return base64_decode(substr($value, 10));
+            }
+        );
+
+        $collectionId = 'TestDecodeCollection';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($collectionId, 'description', Database::VAR_STRING, 1000, required: false, default: 'No description');
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, required: false, default: 0);
+        $database->createAttribute($collectionId, 'price', Database::VAR_FLOAT, 0, required: false, default: 0.0);
+        $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, required: false, default: true);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, required: false, array: true);
+        $database->createAttribute($collectionId, 'secret', Database::VAR_STRING, 255, required: false, default: 'default-secret', filters: ['encryptTest']);
+        $database->createAttribute($collectionId, 'location', Database::VAR_POINT, 0, required: false, default: [0.0, 0.0]);
+        $database->createAttribute($collectionId, 'boundary', Database::VAR_POLYGON, 0, required: false);
+
+        $doc = new Document([
+            '$id' => 'test-1',
+            'title' => 'Test Document',
+            'description' => 'This is a test document',
+            'count' => 42,
+            'price' => 99.99,
+            'active' => true,
+            'tags' => ['tag1', 'tag2', 'tag3'],
+            'secret' => 'my-secret-value',
+            'location' => [40.7128, -74.0060],
+            'boundary' => [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]],
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $created = $database->createDocument($collectionId, $doc);
+
+        $selected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['title', 'count', 'secret'])
+        ]);
+
+        $this->assertEquals('Test Document', $selected->getAttribute('title'));
+        $this->assertEquals(42, $selected->getAttribute('count'));
+        $this->assertEquals('my-secret-value', $selected->getAttribute('secret'));
+
+        $this->assertNull($selected->getAttribute('description'));
+        $this->assertNull($selected->getAttribute('price'));
+        $this->assertNull($selected->getAttribute('location'));
+
+        $spatialSelected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['title', 'location', 'boundary'])
+        ]);
+
+        $this->assertEquals('Test Document', $spatialSelected->getAttribute('title'));
+        $this->assertEquals([40.7128, -74.0060], $spatialSelected->getAttribute('location'));
+        $this->assertEquals([[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]], $spatialSelected->getAttribute('boundary'));
+        $this->assertNull($spatialSelected->getAttribute('secret'));
+        $this->assertNull($spatialSelected->getAttribute('count'));
+
+        $arraySelected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['title', 'tags'])
+        ]);
+
+        $this->assertEquals('Test Document', $arraySelected->getAttribute('title'));
+        $this->assertEquals(['tag1', 'tag2', 'tag3'], $arraySelected->getAttribute('tags'));
+        $this->assertNull($arraySelected->getAttribute('active'));
+
+        $allSelected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['*'])
+        ]);
+
+        $this->assertEquals('Test Document', $allSelected->getAttribute('title'));
+        $this->assertEquals('This is a test document', $allSelected->getAttribute('description'));
+        $this->assertEquals(42, $allSelected->getAttribute('count'));
+        $this->assertEquals('my-secret-value', $allSelected->getAttribute('secret'));
+        $this->assertEquals([40.7128, -74.0060], $allSelected->getAttribute('location'));
+
+        $noSelection = $database->getDocument($collectionId, 'test-1');
+
+        $this->assertEquals('Test Document', $noSelection->getAttribute('title'));
+        $this->assertEquals('This is a test document', $noSelection->getAttribute('description'));
+        $this->assertEquals('my-secret-value', $noSelection->getAttribute('secret'));
+        $this->assertEquals([40.7128, -74.0060], $noSelection->getAttribute('location'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testSchemaEnforcedDocumentCreation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $colName = uniqid("schema");
+        $database->createCollection($colName);
+        $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
+        $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false, 'value');
+
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
+
+        // Extra attributes should fail
+        $docs = [
+            new Document(['$id' => 'doc11', 'key' => 'doc1', 'title' => 'doc1', '$permissions' => $permissions]),
+            new Document(['$id' => 'doc21', 'key' => 'doc2', 'moviename' => 'doc2', 'moviedescription' => 'test', '$permissions' => $permissions]),
+            new Document(['$id' => 'doc31', 'key' => 'doc3', '$permissions' => $permissions]),
+        ];
+
+        $this->expectException(StructureException::class);
+        $database->createDocuments($colName, $docs);
+
+        $database->deleteCollection($colName);
+    }
+
+    public function testDecodeWithMultipleFilters(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+
+        $database->addFilter(
+            'upperCase',
+            function (mixed $value) { return strtoupper($value); },
+            function (mixed $value) { return strtolower($value); }
+        );
+
+        $database->addFilter(
+            'prefix',
+            function (mixed $value) { return 'prefix_' . $value; },
+            function (mixed $value) { return str_replace('prefix_', '', $value); }
+        );
+
+        $collectionId = 'EdgeCaseCollection';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($collectionId, 'processedName', Database::VAR_STRING, 255, required: false, filters: ['upperCase', 'prefix']);
+        $database->createAttribute($collectionId, 'nullableField', Database::VAR_STRING, 255, required: false);
+
+        $doc = new Document([
+            '$id' => 'edge-1',
+            'name' => 'Test Name',
+            'processedName' => 'test value',
+            'nullableField' => null,
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $created = $database->createDocument($collectionId, $doc);
+
+        $selected = $database->getDocument($collectionId, 'edge-1', [
+            Query::select(['name', 'processedName'])
+        ]);
+
+        $this->assertEquals('Test Name', $selected->getAttribute('name'));
+        $this->assertEquals('test value', $selected->getAttribute('processedName'));
+        $this->assertNull($selected->getAttribute('nullableField'));
+
+        $nullSelected = $database->getDocument($collectionId, 'edge-1', [
+            Query::select(['name', 'nullableField'])
+        ]);
+
+        $this->assertEquals('Test Name', $nullSelected->getAttribute('name'));
+        $this->assertNull($nullSelected->getAttribute('nullableField'));
+
+        $database->deleteCollection($collectionId);
     }
 }

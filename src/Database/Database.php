@@ -91,6 +91,8 @@ class Database
     public const ORDER_ASC = 'ASC';
     public const ORDER_DESC = 'DESC';
 
+    public const ORDER_RANDOM = 'RANDOM';
+
     // Permissions
     public const PERMISSION_CREATE = 'create';
     public const PERMISSION_READ = 'read';
@@ -1412,6 +1414,7 @@ class Database
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
             );
@@ -2431,6 +2434,7 @@ class Database
                         $this->adapter->getSupportForSpatialAttributes(),
                         $this->adapter->getSupportForSpatialIndexNull(),
                         $this->adapter->getSupportForSpatialIndexOrder(),
+                        $this->adapter->getSupportForAttributes(),
                         $this->adapter->getSupportForMultipleFulltextIndexes(),
                         $this->adapter->getSupportForIdenticalIndexes(),
                     );
@@ -3376,6 +3380,7 @@ class Database
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForAttributes(),
                 $this->adapter->getSupportForMultipleFulltextIndexes(),
                 $this->adapter->getSupportForIdenticalIndexes(),
             );
@@ -3923,6 +3928,7 @@ class Database
             $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
+            $this->adapter->getSupportForAttributes()
         );
         if (!$structure->isValid($document)) {
             throw new StructureException($structure->getDescription());
@@ -4023,6 +4029,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$validator->isValid($document)) {
                 throw new StructureException($validator->getDescription());
@@ -4576,6 +4583,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                 throw new StructureException($structureValidator->getDescription());
@@ -4710,6 +4718,7 @@ class Database
             $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
+            $this->adapter->getSupportForAttributes()
         );
 
         if (!$validator->isValid($updates)) {
@@ -5421,6 +5430,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
 
             if (!$validator->isValid($document)) {
@@ -6414,6 +6424,7 @@ class Database
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -6803,6 +6814,8 @@ class Database
             fn ($attribute) => $attribute['type'] === self::VAR_RELATIONSHIP
         );
 
+        $filteredValue = [];
+
         foreach ($relationships as $relationship) {
             $key = $relationship['$id'] ?? '';
 
@@ -6851,6 +6864,8 @@ class Database
                 $value[$index] = $node;
             }
 
+            $filteredValue[$key] = ($array) ? $value : $value[0];
+
             if (
                 empty($selections)
                 || \in_array($key, $selections)
@@ -6860,6 +6875,29 @@ class Database
             }
         }
 
+        $hasRelationshipSelections = false;
+        if (!empty($selections)) {
+            foreach ($selections as $selection) {
+                if (\str_contains($selection, '.')) {
+                    $hasRelationshipSelections = true;
+                    break;
+                }
+            }
+        }
+
+        if ($hasRelationshipSelections && !empty($selections) && !\in_array('*', $selections)) {
+            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+                $key = $attribute['$id'] ?? '';
+
+                if ($attribute['type'] === self::VAR_RELATIONSHIP || $key === '$permissions') {
+                    continue;
+                }
+
+                if (!in_array($key, $selections) && isset($filteredValue[$key])) {
+                    $document->setAttribute($key, $filteredValue[$key]);
+                }
+            }
+        }
         return $document;
     }
 

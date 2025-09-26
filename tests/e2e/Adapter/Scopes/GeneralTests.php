@@ -95,6 +95,10 @@ trait GeneralTests
 
         /** @var Database $database */
         $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $database->setPreserveDates(true);
 
@@ -190,6 +194,10 @@ trait GeneralTests
 
         /** @var Database $database */
         $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $database->setPreserveDates(true);
 

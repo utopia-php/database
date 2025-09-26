@@ -261,7 +261,9 @@ trait IndexTests
 
         try {
             $database->createCollection($collection->getId(), $attributes, $indexes);
-            $this->fail('Failed to throw exception');
+            if ($database->getAdapter()->getSupportForAttributes()) {
+                $this->fail('Failed to throw exception');
+            }
         } catch (Exception $e) {
             $this->assertEquals($errorMessage, $e->getMessage());
         }

@@ -1099,6 +1099,28 @@ abstract class Adapter
     abstract public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool;
 
     /**
+     * Does the adapter support multiple fulltext indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForMultipleFulltextIndexes(): bool;
+
+
+    /**
+     * Does the adapter support identical indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForIdenticalIndexes(): bool;
+
+    /**
+     * Does the adapter support random order by?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOrderRandom(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection

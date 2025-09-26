@@ -243,7 +243,11 @@ class Mongo extends Adapter
             unset($index);
         }
 
-        $indexesCreated = $this->client->createIndexes($id, $internalIndex);
+        try {
+            $indexesCreated = $this->client->createIndexes($id, $internalIndex);
+        } catch (\Exception $e) {
+            throw $this->processException($e);
+        }
 
         if (!$indexesCreated) {
             return false;
@@ -327,7 +331,14 @@ class Mongo extends Adapter
                 }
             }
 
-            if (!$this->getClient()->createIndexes($id, $newIndexes)) {
+
+            try {
+                $indexesCreated = $this->getClient()->createIndexes($id, $newIndexes);
+            } catch (\Exception $e) {
+                throw $this->processException($e);
+            }
+
+            if (!$indexesCreated) {
                 return false;
             }
         }
@@ -714,8 +725,11 @@ class Mongo extends Adapter
                 $indexes['partialFilterExpression'] = $partialFilter;
             }
         }
-
-        return $this->client->createIndexes($name, [$indexes], $options);
+        try {
+            return $this->client->createIndexes($name, [$indexes], $options);
+        } catch (\Exception $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -762,18 +776,14 @@ class Mongo extends Adapter
             }
         }
 
-        if ($index
-            && $this->deleteIndex($collection, $old)
-            && $this->createIndex(
-                $collection,
-                $new,
-                $index['type'],
-                $index['attributes'],
-                $index['lengths'] ?? [],
-                $index['orders'] ?? [],
-                $indexAttributeTypes, // Use extracted attribute types
-                []
-            )) {
+        try {
+            $deletedindex = $this->deleteIndex($collection, $old);
+            $createdindex = $this->createIndex($collection, $new, $index['type'], $index['attributes'], $index['lengths'] ?? [], $index['orders'] ?? [], $indexAttributeTypes, []);
+        } catch (\Exception $e) {
+            throw $this->processException($e);
+        }
+
+        if ($index && $deletedindex && $createdindex) {
             return true;
         }
 
@@ -2542,6 +2552,39 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support multiple fulltext indexes?
+     *
+     * @return bool
+     */
+    public function getSupportForMultipleFulltextIndexes(): bool
+    {
+        return false;
+    }
+    /**
+     * Does the adapter support identical indexes?
+     *
+     * @return bool
+     */
+    public function getSupportForIdenticalIndexes(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support random order for queries?
+     *
+     * @return bool
+     */
+    public function getSupportForOrderRandom(): bool
+    {
+        return false;
+    }
 
     /**
      * Flattens the array.

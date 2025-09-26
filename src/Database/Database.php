@@ -1407,13 +1407,16 @@ class Database
         if ($this->validate) {
             $validator = new IndexValidator(
                 $attributes,
+                [],
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->getSupportForIndexArray(),
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForMultipleFulltextIndexes(),
+                $this->adapter->getSupportForIdenticalIndexes(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2247,6 +2250,13 @@ class Database
     public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, $newKey) {
+
+            // Store original indexes before any modifications (deep copy preserving Document objects)
+            $originalIndexes = [];
+            foreach ($collectionDoc->getAttribute('indexes', []) as $index) {
+                $originalIndexes[] = clone $index;
+            }
+
             $altering = !\is_null($type)
                 || !\is_null($size)
                 || !\is_null($signed)
@@ -2417,13 +2427,16 @@ class Database
                 if ($this->validate) {
                     $validator = new IndexValidator(
                         $attributes,
+                        $originalIndexes,
                         $this->adapter->getMaxIndexLength(),
                         $this->adapter->getInternalIndexesKeys(),
                         $this->adapter->getSupportForIndexArray(),
                         $this->adapter->getSupportForSpatialAttributes(),
                         $this->adapter->getSupportForSpatialIndexNull(),
                         $this->adapter->getSupportForSpatialIndexOrder(),
-                        $this->adapter->getSupportForAttributes()
+                        $this->adapter->getSupportForAttributes(),
+                        $this->adapter->getSupportForMultipleFulltextIndexes(),
+                        $this->adapter->getSupportForIdenticalIndexes(),
                     );
 
                     foreach ($indexes as $index) {
@@ -3356,23 +3369,27 @@ class Database
             'orders' => $orders,
         ]);
 
-        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
-
         if ($this->validate) {
+
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
+                $collection->getAttribute('indexes', []),
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->getSupportForIndexArray(),
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForMultipleFulltextIndexes(),
+                $this->adapter->getSupportForIdenticalIndexes(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
             }
         }
+
+        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
 
         try {
             $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);

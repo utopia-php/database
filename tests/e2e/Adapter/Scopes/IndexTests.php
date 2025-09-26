@@ -272,7 +272,7 @@ trait IndexTests
                 $this->fail('Failed to throw exception');
             }
         } catch (Exception $e) {
-            $this->assertEquals($errorMessage, $e->getMessage());
+            $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $e->getMessage());
         }
 
 

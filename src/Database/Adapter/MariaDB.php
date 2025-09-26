@@ -1665,6 +1665,16 @@ class MariaDB extends SQL
     }
 
     /**
+     * Get the SQL function for random ordering
+     *
+     * @return string
+     */
+    protected function getRandomOrder(): string
+    {
+        return 'RAND()';
+    }
+
+    /**
      * Size of POINT spatial type
      *
      * @return int
@@ -1916,5 +1926,15 @@ class MariaDB extends SQL
     public function getSupportForSpatialAxisOrder(): bool
     {
         return false;
+    }
+
+    /**
+     * Adapter supports optional spatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return true;
     }
 }

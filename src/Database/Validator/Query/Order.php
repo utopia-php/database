@@ -61,6 +61,10 @@ class Order extends Base
             return $this->isValidAttribute($attribute);
         }
 
+        if ($method === Query::TYPE_ORDER_RANDOM) {
+            return true; // orderRandom doesn't need an attribute
+        }
+
         return false;
     }
 

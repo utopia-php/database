@@ -580,12 +580,12 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function isMongo(): bool
+    public function getSupportForInternalCasting(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function getSupportForInternalCasting(): bool
+    public function getSupportForUTCCasting(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

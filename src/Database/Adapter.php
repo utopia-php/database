@@ -1355,18 +1355,18 @@ abstract class Adapter
     abstract public function castingAfter(Document $collection, Document $document): Document;
 
     /**
-     * Is Mongo?
-     *
-     * @return bool
-     */
-    abstract public function isMongo(): bool;
-
-    /**
      * Is internal casting supported?
      *
      * @return bool
      */
     abstract public function getSupportForInternalCasting(): bool;
+
+    /**
+     * Is UTC casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUTCCasting(): bool;
 
     /**
     * Set UTC Datetime

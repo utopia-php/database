@@ -7180,7 +7180,7 @@ class Database
                 $values = $query->getValues();
                 foreach ($values as $valueIndex => $value) {
                     try {
-                        $values[$valueIndex] = $this->adapter->isMongo()
+                        $values[$valueIndex] = $this->adapter->getSupportForUTCCasting()
                             ? $this->adapter->setUTCDatetime($value)
                             : DateTime::setTimezone($value);
                     } catch (\Throwable $e) {

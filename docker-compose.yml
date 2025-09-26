@@ -17,7 +17,6 @@ services:
       - ./dev/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
-      #- ./vendor/utopia-php/mongo/src/Client.php:/usr/src/code/vendor/utopia-php/mongo/src/Client.php
     environment:
       PHP_IDE_CONFIG: serverName=tests
 
@@ -85,35 +84,54 @@ services:
       - MYSQL_ROOT_PASSWORD=password
 
   mongo:
-    image: mongo:latest
+    image: mongo:8.0.14
     container_name: utopia-mongo
+    entrypoint: ["/entrypoint.sh"]
     networks:
       - database
     ports:
       - "9706:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ./tests/resources/mongo/mongo-keyfile:/tmp/keyfile:ro
+      - ./tests/resources/mongo/entrypoint.sh:/entrypoint.sh:ro
     environment:
-      MONGO_INITDB_DATABASE: utopia_testing
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: password
-      MONGO_INITDB_USERNAME: user
-      MONGO_INITDB_PASSWORD: paswword
+      MONGO_INITDB_DATABASE: utopia_testing
+    healthcheck:
+      test: |
+        bash -c "
+          if mongosh -u root -p password --authenticationDatabase admin --quiet --eval 'rs.status().ok' 2>/dev/null; then
+            exit 0
+          else
+            mongosh -u root -p password --authenticationDatabase admin --quiet --eval \"
+              rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]})
+            \" 2>/dev/null || exit 1
+          fi
+        "
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
   mongo-express:
     image: mongo-express
     container_name: mongo-express
+    depends_on:
+      mongo:
+        condition: service_healthy
     networks:
       - database
     ports:
       - "8083:8081"
     environment:
-      ME_CONFIG_MONGODB_SERVER: mongo
-      ME_CONFIG_MONGODB_ADMINUSERNAME: root
-      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://root:password@mongo:27017/?authSource=admin&directConnection=true
       ME_CONFIG_BASICAUTH_USERNAME: admin
       ME_CONFIG_BASICAUTH_PASSWORD: admin
 
   mysql:
-    image: mysql:8.0.41
+    image: mysql:8.0.43
     container_name: utopia-mysql
     networks:
       - database
@@ -129,7 +147,7 @@ services:
       - SYS_NICE
 
   mysql-mirror:
-    image: mysql:8.0.41
+    image: mysql:8.0.43
     container_name: utopia-mysql-mirror
     networks:
       - database
@@ -145,7 +163,7 @@ services:
       - SYS_NICE
 
   redis:
-    image: redis:7.4.1-alpine3.20
+    image: redis:8.2.1-alpine3.22
     container_name: utopia-redis
     ports:
       - "8708:6379"
@@ -153,12 +171,20 @@ services:
       - database
 
   redis-mirror:
-    image: redis:7.4.1-alpine3.20
+    image: redis:8.2.1-alpine3.22
     container_name: utopia-redis-mirror
     ports:
       - "8709:6379"
     networks:
       - database
 
+volumes:
+  mongo-data:
+
 networks:
   database:
+
+secrets:
+  mongo_keyfile:
+    file: ./tests/resources/mongo/mongo-keyfile
+

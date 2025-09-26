@@ -11,9 +11,10 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Spatial;
+use Utopia\Database\Validator\Authorization;
 
 abstract class SQL extends Adapter
 {
@@ -66,19 +67,17 @@ abstract class SQL extends Adapter
                     $this->getPDO()->prepare('ROLLBACK')->execute();
                 }
 
-                $result = $this->getPDO()->beginTransaction();
+                $this->getPDO()->beginTransaction();
+
             } else {
-                $result = $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
+                $this->getPDO()->exec('SAVEPOINT transaction' . $this->inTransaction);
             }
         } catch (PDOException $e) {
             throw new TransactionException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!$result) {
-            throw new TransactionException('Failed to start transaction');
-        }
-
         $this->inTransaction++;
+
         return true;
     }
 
@@ -124,21 +123,17 @@ abstract class SQL extends Adapter
 
         try {
             if ($this->inTransaction > 1) {
-                $result = $this->getPDO()->exec('ROLLBACK TO transaction' . ($this->inTransaction - 1));
+                $this->getPDO()->exec('ROLLBACK TO transaction' . ($this->inTransaction - 1));
                 $this->inTransaction--;
             } else {
-                $result = $this->getPDO()->rollBack();
+                $this->getPDO()->rollBack();
                 $this->inTransaction = 0;
             }
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
-        if (!$result) {
-            throw new TransactionException('Failed to rollback transaction');
-        }
-
-        return $result;
+        return true;
     }
 
     /**
@@ -355,7 +350,6 @@ abstract class SQL extends Adapter
      */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
 
         $name = $this->filter($collection);
@@ -366,7 +360,7 @@ abstract class SQL extends Adapter
         $alias = Query::DEFAULT_ALIAS;
 
         $sql = "
-		    SELECT {$this->getAttributeProjection($selections, $alias, $spatialAttributes)}
+		    SELECT {$this->getAttributeProjection($selections, $alias)}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             WHERE {$this->quote($alias)}.{$this->quote('_uid')} = :_uid 
             {$this->getTenantQuery($collection, $alias)}
@@ -488,7 +482,7 @@ abstract class SQL extends Adapter
             $column = $this->filter($attribute);
 
             if (in_array($attribute, $spatialAttributes)) {
-                $columns .= "{$this->quote($column)} = ST_GeomFromText(:key_{$bindIndex})";
+                $columns .= "{$this->quote($column)} = " . $this->getSpatialGeomFromText(":key_{$bindIndex}");
             } else {
                 $columns .= "{$this->quote($column)} = :key_{$bindIndex}";
             }
@@ -1519,6 +1513,47 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Generate ST_GeomFromText call with proper SRID and axis order support
+     *
+     * @param string $wktPlaceholder
+     * @param int|null $srid
+     * @return string
+     */
+    protected function getSpatialGeomFromText(string $wktPlaceholder, ?int $srid = null): string
+    {
+        $srid = $srid ?? Database::SRID;
+        $geomFromText = "ST_GeomFromText({$wktPlaceholder}, {$srid}";
+
+        if ($this->getSupportForSpatialAxisOrder()) {
+            $geomFromText .= ", " . $this->getSpatialAxisOrderSpec();
+        }
+
+        $geomFromText .= ")";
+
+        return $geomFromText;
+    }
+
+    /**
+     * Get the spatial axis order specification string
+     *
+     * @return string
+     */
+    protected function getSpatialAxisOrderSpec(): string
+    {
+        return "'axis-order=long-lat'";
+    }
+
+    /**
      * @param string $tableName
      * @param string $columns
      * @param array<string> $batchKeys
@@ -1690,6 +1725,13 @@ abstract class SQL extends Adapter
     abstract protected function getPDOType(mixed $value): int;
 
     /**
+     * Get the SQL function for random ordering
+     *
+     * @return string
+     */
+    abstract protected function getRandomOrder(): string;
+
+    /**
      * Returns default PDO configuration
      *
      * @return array<int, mixed>
@@ -1841,36 +1883,13 @@ abstract class SQL extends Adapter
      *
      * @param array<string> $selections
      * @param string $prefix
-     * @param array<string> $spatialAttributes
-     * @return mixed
+     * @return string
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix, array $spatialAttributes = []): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): string
     {
         if (empty($selections) || \in_array('*', $selections)) {
-            if (empty($spatialAttributes)) {
-                return "{$this->quote($prefix)}.*";
-            }
-
-            $projections = [];
-            $projections[] = "{$this->quote($prefix)}.*";
-
-            $internalColumns = ['_id', '_uid', '_createdAt', '_updatedAt', '_permissions'];
-            if ($this->sharedTables) {
-                $internalColumns[] = '_tenant';
-            }
-            foreach ($internalColumns as $col) {
-                $projections[] = "{$this->quote($prefix)}.{$this->quote($col)}";
-            }
-
-            foreach ($spatialAttributes as $spatialAttr) {
-                $filteredAttr = $this->filter($spatialAttr);
-                $quotedAttr = $this->quote($filteredAttr);
-                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedAttr}) AS {$quotedAttr}";
-            }
-
-
-            return implode(', ', $projections);
+            return "{$this->quote($prefix)}.*";
         }
 
         // Handle specific selections with spatial conversion where needed
@@ -1892,12 +1911,7 @@ abstract class SQL extends Adapter
         foreach ($selections as $selection) {
             $filteredSelection = $this->filter($selection);
             $quotedSelection = $this->quote($filteredSelection);
-
-            if (in_array($selection, $spatialAttributes)) {
-                $projections[] = "ST_AsText({$this->quote($prefix)}.{$quotedSelection}) AS {$quotedSelection}";
-            } else {
-                $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
-            }
+            $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
         }
 
         return \implode(',', $projections);
@@ -2024,7 +2038,7 @@ abstract class SQL extends Adapter
                     }
                     if (in_array($key, $spatialAttributes)) {
                         $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
+                        $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
                     } else {
                         $value = (\is_bool($value)) ? (int)$value : $value;
                         $bindKey = 'key_' . $bindIndex;
@@ -2095,7 +2109,7 @@ abstract class SQL extends Adapter
      * @return array<Document>
      * @throws DatabaseException
      */
-    public function createOrUpdateDocuments(
+    public function upsertDocuments(
         Document $collection,
         string $attribute,
         array $changes
@@ -2150,7 +2164,7 @@ abstract class SQL extends Adapter
 
                     if (in_array($attributeKey, $spatialAttributes)) {
                         $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = "ST_GeomFromText(:" . $bindKey . ")";
+                        $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
                     } else {
                         $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
                         $bindKey = 'key_' . $bindIndex;
@@ -2320,5 +2334,554 @@ abstract class SQL extends Adapter
             }
         }
         return null;
+    }
+
+    /**
+     * Find Documents
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
+     * @param string $cursorDirection
+     * @param string $forPermission
+     * @return array<Document>
+     * @throws DatabaseException
+     * @throws TimeoutException
+     * @throws Exception
+     */
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    {
+        $attributes = $collection->getAttribute('attributes', []);
+
+        $collection = $collection->getId();
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $where = [];
+        $orders = [];
+        $alias = Query::DEFAULT_ALIAS;
+        $binds = [];
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
+        $cursorWhere = [];
+
+        foreach ($orderAttributes as $i => $originalAttribute) {
+            $orderType = $orderTypes[$i] ?? Database::ORDER_ASC;
+
+            // Handle random ordering specially
+            if ($orderType === Database::ORDER_RANDOM) {
+                $orders[] = $this->getRandomOrder();
+                continue;
+            }
+
+            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
+            $attribute = $this->filter($attribute);
+
+            $orderType = $this->filter($orderType);
+            $direction = $orderType;
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $direction = ($direction === Database::ORDER_ASC)
+                    ? Database::ORDER_DESC
+                    : Database::ORDER_ASC;
+            }
+
+            $orders[] = "{$this->quote($attribute)} {$direction}";
+
+            // Build pagination WHERE clause only if we have a cursor
+            if (!empty($cursor)) {
+                // Special case: No tie breaks. only 1 attribute and it's a unique primary key
+                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
+                    $operator = ($direction === Database::ORDER_DESC)
+                        ? Query::TYPE_LESSER
+                        : Query::TYPE_GREATER;
+
+                    $bindName = ":cursor_pk";
+                    $binds[$bindName] = $cursor[$originalAttribute];
+
+                    $cursorWhere[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                    break;
+                }
+
+                $conditions = [];
+
+                // Add equality conditions for previous attributes
+                for ($j = 0; $j < $i; $j++) {
+                    $prevOriginal = $orderAttributes[$j];
+                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
+
+                    $bindName = ":cursor_{$j}";
+                    $binds[$bindName] = $cursor[$prevOriginal];
+
+                    $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} = {$bindName}";
+                }
+
+                // Add comparison for current attribute
+                $operator = ($direction === Database::ORDER_DESC)
+                    ? Query::TYPE_LESSER
+                    : Query::TYPE_GREATER;
+
+                $bindName = ":cursor_{$i}";
+                $binds[$bindName] = $cursor[$originalAttribute];
+
+                $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+
+                $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
+            }
+        }
+
+        if (!empty($cursorWhere)) {
+            $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
+        }
+
+        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
+        }
+
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
+        }
+
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+        }
+
+        $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
+
+        $sqlLimit = '';
+        if (! \is_null($limit)) {
+            $binds[':limit'] = $limit;
+            $sqlLimit = 'LIMIT :limit';
+        }
+
+        if (! \is_null($offset)) {
+            $binds[':offset'] = $offset;
+            $sqlLimit .= ' OFFSET :offset';
+        }
+
+        $selections = $this->getAttributeSelections($queries);
+
+
+        $sql = "
+            SELECT {$this->getAttributeProjection($selections, $alias)}
+            FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+            {$sqlWhere}
+            {$sqlOrder}
+            {$sqlLimit};
+        ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_FIND, $sql);
+
+        try {
+            $stmt = $this->getPDO()->prepare($sql);
+
+            foreach ($binds as $key => $value) {
+                if (gettype($value) === 'double') {
+                    $stmt->bindValue($key, $this->getFloatPrecision($value), \PDO::PARAM_STR);
+                } else {
+                    $stmt->bindValue($key, $value, $this->getPDOType($value));
+                }
+            }
+
+            $this->execute($stmt);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        $results = $stmt->fetchAll();
+        $stmt->closeCursor();
+
+        foreach ($results as $index => $document) {
+            if (\array_key_exists('_uid', $document)) {
+                $results[$index]['$id'] = $document['_uid'];
+                unset($results[$index]['_uid']);
+            }
+            if (\array_key_exists('_id', $document)) {
+                $results[$index]['$sequence'] = $document['_id'];
+                unset($results[$index]['_id']);
+            }
+            if (\array_key_exists('_tenant', $document)) {
+                $results[$index]['$tenant'] = $document['_tenant'];
+                unset($results[$index]['_tenant']);
+            }
+            if (\array_key_exists('_createdAt', $document)) {
+                $results[$index]['$createdAt'] = $document['_createdAt'];
+                unset($results[$index]['_createdAt']);
+            }
+            if (\array_key_exists('_updatedAt', $document)) {
+                $results[$index]['$updatedAt'] = $document['_updatedAt'];
+                unset($results[$index]['_updatedAt']);
+            }
+            if (\array_key_exists('_permissions', $document)) {
+                $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
+                unset($results[$index]['_permissions']);
+            }
+
+            $results[$index] = new Document($results[$index]);
+        }
+
+        if ($cursorDirection === Database::CURSOR_BEFORE) {
+            $results = \array_reverse($results);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Count Documents
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @param int|null $max
+     * @return int
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    {
+        $attributes = $collection->getAttribute("attributes", []);
+        $collection = $collection->getId();
+        $name = $this->filter($collection);
+        $roles = Authorization::getRoles();
+        $binds = [];
+        $where = [];
+        $alias = Query::DEFAULT_ALIAS;
+
+        $limit = '';
+        if (! \is_null($max)) {
+            $binds[':limit'] = $max;
+            $limit = 'LIMIT :limit';
+        }
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
+        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
+        }
+
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
+        }
+
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+        }
+
+        $sqlWhere = !empty($where)
+            ? 'WHERE ' . \implode(' AND ', $where)
+            : '';
+
+        $sql = "
+			SELECT COUNT(1) as sum FROM (
+				SELECT 1
+				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+				{$sqlWhere}
+				{$limit}
+			) table_count
+        ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value, $this->getPDOType($value));
+        }
+
+        $this->execute($stmt);
+
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
+        }
+
+        return $result['sum'] ?? 0;
+    }
+
+    /**
+     * Sum an Attribute
+     *
+     * @param Document $collection
+     * @param string $attribute
+     * @param array<Query> $queries
+     * @param int|null $max
+     * @return int|float
+     * @throws Exception
+     * @throws PDOException
+     */
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): int|float
+    {
+        $collectionAttributes = $collection->getAttribute("attributes", []);
+        $collection = $collection->getId();
+        $name = $this->filter($collection);
+        $attribute = $this->filter($attribute);
+        $roles = Authorization::getRoles();
+        $where = [];
+        $alias = Query::DEFAULT_ALIAS;
+        $binds = [];
+
+        $limit = '';
+        if (! \is_null($max)) {
+            $binds[':limit'] = $max;
+            $limit = 'LIMIT :limit';
+        }
+
+        $queries = array_map(fn ($query) => clone $query, $queries);
+
+        $conditions = $this->getSQLConditions($queries, $binds, attributes:$collectionAttributes);
+        if (!empty($conditions)) {
+            $where[] = $conditions;
+        }
+
+        if (Authorization::$status) {
+            $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
+        }
+
+        if ($this->sharedTables) {
+            $binds[':_tenant'] = $this->tenant;
+            $where[] = "{$this->getTenantQuery($collection, $alias, condition: '')}";
+        }
+
+        $sqlWhere = !empty($where)
+            ? 'WHERE ' . \implode(' AND ', $where)
+            : '';
+
+        $sql = "
+			SELECT SUM({$this->quote($attribute)}) as sum FROM (
+				SELECT {$this->quote($attribute)}
+				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+				{$sqlWhere}
+				{$limit}
+			) table_count
+        ";
+
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
+
+        $stmt = $this->getPDO()->prepare($sql);
+
+        foreach ($binds as $key => $value) {
+            $stmt->bindValue($key, $value, $this->getPDOType($value));
+        }
+
+        $this->execute($stmt);
+
+        $result = $stmt->fetchAll();
+        $stmt->closeCursor();
+        if (!empty($result)) {
+            $result = $result[0];
+        }
+
+        return $result['sum'] ?? 0;
+    }
+
+    public function getSpatialTypeFromWKT(string $wkt): string
+    {
+        $wkt = trim($wkt);
+        $pos = strpos($wkt, '(');
+        if ($pos === false) {
+            throw new DatabaseException("Invalid spatial type");
+        }
+        return strtolower(trim(substr($wkt, 0, $pos)));
+    }
+
+    public function decodePoint(string $wkb): array
+    {
+        if (str_starts_with(strtoupper($wkb), 'POINT(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, $end - $start);
+            $coords = explode(' ', trim($inside));
+            return [(float)$coords[0], (float)$coords[1]];
+        }
+
+        /**
+         * [0..3]   SRID (4 bytes, little-endian)
+         * [4]      Byte order (1 = little-endian, 0 = big-endian)
+         * [5..8]   Geometry type (with SRID flag bit)
+         * [9..]    Geometry payload (coordinates, etc.)
+         */
+
+        if (strlen($wkb) < 25) {
+            throw new DatabaseException('Invalid WKB: too short for POINT');
+        }
+
+        // 4 bytes SRID first → skip to byteOrder at offset 4
+        $byteOrder = ord($wkb[4]);
+        $littleEndian = ($byteOrder === 1);
+
+        if (!$littleEndian) {
+            throw new DatabaseException('Only little-endian WKB supported');
+        }
+
+        // After SRID (4) + byteOrder (1) + type (4) = 9 bytes
+        $coordsBin = substr($wkb, 9, 16);
+        if (strlen($coordsBin) !== 16) {
+            throw new DatabaseException('Invalid WKB: missing coordinate bytes');
+        }
+
+        // Unpack two doubles
+        $coords = unpack('d2', $coordsBin);
+        if ($coords === false || !isset($coords[1], $coords[2])) {
+            throw new DatabaseException('Invalid WKB: failed to unpack coordinates');
+        }
+
+        return [(float)$coords[1], (float)$coords[2]];
+    }
+
+    public function decodeLinestring(string $wkb): array
+    {
+        if (str_starts_with(strtoupper($wkb), 'LINESTRING(')) {
+            $start = strpos($wkb, '(') + 1;
+            $end = strrpos($wkb, ')');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $points = explode(',', $inside);
+            return array_map(function ($point) {
+                $coords = explode(' ', trim($point));
+                return [(float)$coords[0], (float)$coords[1]];
+            }, $points);
+        }
+
+        // Skip 1 byte (endianness) + 4 bytes (type) + 4 bytes (SRID)
+        $offset = 9;
+
+        // Number of points (4 bytes little-endian)
+        $numPointsArr = unpack('V', substr($wkb, $offset, 4));
+        if ($numPointsArr === false || !isset($numPointsArr[1])) {
+            throw new DatabaseException('Invalid WKB: cannot unpack number of points');
+        }
+
+        $numPoints = $numPointsArr[1];
+        $offset += 4;
+
+        $points = [];
+        for ($i = 0; $i < $numPoints; $i++) {
+            $xArr = unpack('d', substr($wkb, $offset, 8));
+            $yArr = unpack('d', substr($wkb, $offset + 8, 8));
+
+            if ($xArr === false || !isset($xArr[1]) || $yArr === false || !isset($yArr[1])) {
+                throw new DatabaseException('Invalid WKB: cannot unpack point coordinates');
+            }
+
+            $points[] = [(float)$xArr[1], (float)$yArr[1]];
+            $offset += 16;
+        }
+
+        return $points;
+    }
+
+    public function decodePolygon(string $wkb): array
+    {
+        // POLYGON((x1,y1),(x2,y2))
+        if (str_starts_with($wkb, 'POLYGON((')) {
+            $start = strpos($wkb, '((') + 2;
+            $end = strrpos($wkb, '))');
+            $inside = substr($wkb, $start, $end - $start);
+
+            $rings = explode('),(', $inside);
+            return array_map(function ($ring) {
+                $points = explode(',', $ring);
+                return array_map(function ($point) {
+                    $coords = explode(' ', trim($point));
+                    return [(float)$coords[0], (float)$coords[1]];
+                }, $points);
+            }, $rings);
+        }
+
+        // Convert HEX string to binary if needed
+        if (str_starts_with($wkb, '0x') || ctype_xdigit($wkb)) {
+            $wkb = hex2bin(str_starts_with($wkb, '0x') ? substr($wkb, 2) : $wkb);
+            if ($wkb === false) {
+                throw new DatabaseException('Invalid hex WKB');
+            }
+        }
+
+        if (strlen($wkb) < 21) {
+            throw new DatabaseException('WKB too short to be a POLYGON');
+        }
+
+        // MySQL SRID-aware WKB layout: 4 bytes SRID prefix
+        $offset = 4;
+
+        $byteOrder = ord($wkb[$offset]);
+        if ($byteOrder !== 1) {
+            throw new DatabaseException('Only little-endian WKB supported');
+        }
+        $offset += 1;
+
+        $typeArr = unpack('V', substr($wkb, $offset, 4));
+        if ($typeArr === false || !isset($typeArr[1])) {
+            throw new DatabaseException('Invalid WKB: cannot unpack geometry type');
+        }
+
+        $type = $typeArr[1];
+        $hasSRID = ($type & 0x20000000) === 0x20000000;
+        $geomType = $type & 0xFF;
+        $offset += 4;
+
+        if ($geomType !== 3) { // 3 = POLYGON
+            throw new DatabaseException("Not a POLYGON geometry type, got {$geomType}");
+        }
+
+        // Skip SRID in type flag if present
+        if ($hasSRID) {
+            $offset += 4;
+        }
+
+        $numRingsArr = unpack('V', substr($wkb, $offset, 4));
+
+        if ($numRingsArr === false || !isset($numRingsArr[1])) {
+            throw new DatabaseException('Invalid WKB: cannot unpack number of rings');
+        }
+
+        $numRings = $numRingsArr[1];
+        $offset += 4;
+
+        $rings = [];
+
+        for ($r = 0; $r < $numRings; $r++) {
+            $numPointsArr = unpack('V', substr($wkb, $offset, 4));
+
+            if ($numPointsArr === false || !isset($numPointsArr[1])) {
+                throw new DatabaseException('Invalid WKB: cannot unpack number of points');
+            }
+
+            $numPoints = $numPointsArr[1];
+            $offset += 4;
+            $ring = [];
+
+            for ($p = 0; $p < $numPoints; $p++) {
+                $xArr = unpack('d', substr($wkb, $offset, 8));
+                if ($xArr === false) {
+                    throw new DatabaseException('Failed to unpack X coordinate from WKB.');
+                }
+
+                $x = (float) $xArr[1];
+
+                $yArr = unpack('d', substr($wkb, $offset + 8, 8));
+                if ($yArr === false) {
+                    throw new DatabaseException('Failed to unpack Y coordinate from WKB.');
+                }
+
+                $y = (float) $yArr[1];
+
+                $ring[] = [$x, $y];
+                $offset += 16;
+            }
+
+            $rings[] = $ring;
+        }
+
+        return $rings;
     }
 }

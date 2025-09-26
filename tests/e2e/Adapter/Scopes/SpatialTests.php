@@ -21,7 +21,8 @@ trait SpatialTests
         $database = static::getDatabase();
         $collectionName = "test_spatial_Col";
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         };
         $attributes = [
             new Document([
@@ -94,7 +95,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_spatial_doc_';
@@ -918,7 +920,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'complex_shapes_';
@@ -1348,7 +1351,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_combinations_';
@@ -1478,7 +1482,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_spatial_bulk_ops';
@@ -1780,7 +1785,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
         $collectionName = 'spatial_agg_';
         try {
@@ -1867,7 +1873,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_update_attrs_';
@@ -1953,7 +1960,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_defaults_';
@@ -2057,7 +2065,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_invalid_spatial_types';
@@ -2162,7 +2171,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_distance_meters_';
@@ -2232,11 +2242,13 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         if (!$database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
-            $this->markTestSkipped('Adapter does not support spatial distance(in meter) for multidimension');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $multiCollection = 'spatial_distance_meters_multi_';
@@ -2362,11 +2374,13 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         if ($database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
-            $this->markTestSkipped('Adapter supports spatial distance (in meter) for multidimension geometries');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collection = 'spatial_distance_error_test';
@@ -2445,7 +2459,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
         $point = "POINT(1 2)";
         $line = "LINESTRING(1 2, 1 2)";
@@ -2635,7 +2650,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_spatial_order_axis';
@@ -2666,7 +2682,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_invalid_coord_';
@@ -2749,6 +2766,40 @@ trait SpatialTests
 
         } finally {
             $database->deleteCollection($collectionName);
+        }
+    }
+
+    public function testCreateSpatialColumnWithExistingData(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+        if ($database->getAdapter()->getSupportForSpatialIndexNull()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if ($database->getAdapter()->getSupportForOptionalSpatialAttributeWithExistingRows()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = 'spatial_col_existing_data';
+        try {
+            $database->createCollection($col);
+
+            $database->createAttribute($col, 'name', Database::VAR_STRING, 40, false);
+            $database->createDocument($col, new Document(['name' => 'test-doc','$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())]]));
+            try {
+                $database->createAttribute($col, 'loc', Database::VAR_POINT, 0, true);
+            } catch (\Throwable $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
+        } finally {
+            $database->deleteCollection($col);
         }
     }
 }

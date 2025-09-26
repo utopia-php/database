@@ -1791,6 +1791,16 @@ class Postgres extends SQL
     }
 
     /**
+     * Get the SQL function for random ordering
+     *
+     * @return string
+     */
+    protected function getRandomOrder(): string
+    {
+        return 'RANDOM()';
+    }
+
+    /**
      * Size of POINT spatial type
      *
      * @return int
@@ -1997,6 +2007,16 @@ class Postgres extends SQL
      * @return bool
      */
     public function getSupportForSpatialAxisOrder(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Adapter supports optional spatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
     {
         return false;
     }
@@ -2238,5 +2258,4 @@ class Postgres extends SQL
 
         return $rings; // array of rings, each ring is array of [x,y]
     }
-
 }

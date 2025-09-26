@@ -1524,9 +1524,9 @@ abstract class SQL extends Adapter
 
     /**
      * Does the adapter support multiple fulltext indexes?
-    *
-    * @return bool
- */
+     *
+     * @return bool
+     */
     public function getSupportForMultipleFulltextIndexes(): bool
     {
         return true;

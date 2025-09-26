@@ -2577,6 +2577,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Does the adapter support random order for queries?
+     *
+     * @return bool
+     */
+    public function getSupportForOrderRandom(): bool
+    {
+        return false;
+    }
+
+    /**
      * Flattens the array.
      *
      * @param mixed $list

@@ -3525,6 +3525,11 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
+        if (!$database->getAdapter()->getSupportForOrderRandom()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         // Test orderRandom with default limit
         $documents = $database->find('movies', [
             Query::orderRandom(),

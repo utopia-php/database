@@ -1542,6 +1542,16 @@ abstract class SQL extends Adapter
         return true;
     }
 
+    /**
+     * Does the adapter support random order for queries?
+     *
+     * @return bool
+     */
+    public function getSupportForOrderRandom(): bool
+    {
+        return true;
+    }
+
     public function isMongo(): bool
     {
         return false;

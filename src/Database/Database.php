@@ -43,7 +43,7 @@ class Database
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
     public const VAR_ID = 'id';
-    public const VAR_OBJECT_ID = 'objectId';
+    public const VAR_UUID7 = 'uuid7';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
@@ -1407,12 +1407,16 @@ class Database
         if ($this->validate) {
             $validator = new IndexValidator(
                 $attributes,
+                [],
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->getSupportForIndexArray(),
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForMultipleFulltextIndexes(),
+                $this->adapter->getSupportForIdenticalIndexes(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2246,6 +2250,13 @@ class Database
     public function updateAttribute(string $collection, string $id, ?string $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute, $collectionDoc, $attributeIndex) use ($collection, $id, $type, $size, $required, $default, $signed, $array, $format, $formatOptions, $filters, $newKey) {
+
+            // Store original indexes before any modifications (deep copy preserving Document objects)
+            $originalIndexes = [];
+            foreach ($collectionDoc->getAttribute('indexes', []) as $index) {
+                $originalIndexes[] = clone $index;
+            }
+
             $altering = !\is_null($type)
                 || !\is_null($size)
                 || !\is_null($signed)
@@ -2416,12 +2427,16 @@ class Database
                 if ($this->validate) {
                     $validator = new IndexValidator(
                         $attributes,
+                        $originalIndexes,
                         $this->adapter->getMaxIndexLength(),
                         $this->adapter->getInternalIndexesKeys(),
                         $this->adapter->getSupportForIndexArray(),
                         $this->adapter->getSupportForSpatialAttributes(),
                         $this->adapter->getSupportForSpatialIndexNull(),
                         $this->adapter->getSupportForSpatialIndexOrder(),
+                        $this->adapter->getSupportForAttributes(),
+                        $this->adapter->getSupportForMultipleFulltextIndexes(),
+                        $this->adapter->getSupportForIdenticalIndexes(),
                     );
 
                     foreach ($indexes as $index) {
@@ -3354,22 +3369,27 @@ class Database
             'orders' => $orders,
         ]);
 
-        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
-
         if ($this->validate) {
+
             $validator = new IndexValidator(
                 $collection->getAttribute('attributes', []),
+                $collection->getAttribute('indexes', []),
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->getSupportForIndexArray(),
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForMultipleFulltextIndexes(),
+                $this->adapter->getSupportForIdenticalIndexes(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
             }
         }
+
+        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
 
         try {
             $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes);
@@ -3527,6 +3547,9 @@ class Database
         if ($document->isEmpty()) {
             return $document;
         }
+
+        $document = $this->adapter->castingAfter($collection, $document);
+
         $document->setAttribute('$collection', $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
@@ -3905,10 +3928,13 @@ class Database
             $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
+            $this->adapter->getSupportForAttributes()
         );
         if (!$structure->isValid($document)) {
             throw new StructureException($structure->getDescription());
         }
+
+        $document = $this->adapter->castingBefore($collection, $document);
 
         $document = $this->withTransaction(function () use ($collection, $document) {
             if ($this->resolveRelationships) {
@@ -3916,6 +3942,8 @@ class Database
             }
             return $this->adapter->createDocument($collection, $document);
         });
+
+        $document = $this->adapter->castingAfter($collection, $document);
 
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
@@ -4001,6 +4029,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$validator->isValid($document)) {
                 throw new StructureException($validator->getDescription());
@@ -4009,6 +4038,8 @@ class Database
             if ($this->resolveRelationships) {
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
+
+            $document = $this->adapter->castingBefore($collection, $document);
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
@@ -4019,6 +4050,7 @@ class Database
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
             foreach ($batch as $document) {
+                $document = $this->adapter->castingAfter($collection, $document);
                 if ($this->resolveRelationships) {
                     $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
                 }
@@ -4551,6 +4583,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                 throw new StructureException($structureValidator->getDescription());
@@ -4560,7 +4593,13 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
+
+            $document = $this->adapter->castingBefore($collection, $document);
+
             $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
+
+            $document = $this->adapter->castingAfter($collection, $document);
+
             $this->purgeCachedDocument($collection->getId(), $id);
 
             return $document;
@@ -4679,6 +4718,7 @@ class Database
             $this->adapter->getIdAttributeType(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
+            $this->adapter->getSupportForAttributes()
         );
 
         if (!$validator->isValid($updates)) {
@@ -4754,6 +4794,7 @@ class Database
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
                     $batch[$index] = $this->encode($collection, $document);
+                    $batch[$index] = $this->adapter->castingBefore($collection, $document);
                 }
 
                 $this->adapter->updateDocuments(
@@ -4763,7 +4804,11 @@ class Database
                 );
             });
 
+            $updates = $this->adapter->castingBefore($collection, $updates);
+
+
             foreach ($batch as $index => $doc) {
+                $doc = $this->adapter->castingAfter($collection, $doc);
                 $doc->removeAttribute('$skipPermissionsUpdate');
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($collection, $doc);
@@ -5385,6 +5430,7 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
 
             if (!$validator->isValid($document)) {
@@ -5409,6 +5455,9 @@ class Database
             }
 
             $seenIds[] = $document->getId();
+
+            $old = $this->adapter->castingBefore($collection, $old);
+            $document = $this->adapter->castingBefore($collection, $document);
 
             $documents[$key] = new Change(
                 old: $old,
@@ -5442,6 +5491,9 @@ class Database
             }
 
             foreach ($batch as $index => $doc) {
+
+                $doc = $this->adapter->castingAfter($collection, $doc);
+
                 if ($this->resolveRelationships) {
                     $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
@@ -6372,6 +6424,7 @@ class Database
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -6427,7 +6480,13 @@ class Database
             throw new DatabaseException("cursor Document must be from the same Collection.");
         }
 
-        $cursor = empty($cursor) ? [] : $this->encode($collection, $cursor)->getArrayCopy();
+        if (!empty($cursor)) {
+            $cursor = $this->encode($collection, $cursor);
+            $cursor = $this->adapter->castingBefore($collection, $cursor);
+            $cursor = $cursor->getArrayCopy();
+        } else {
+            $cursor =  [];
+        }
 
         /**  @var array<Query> $queries */
         $queries = \array_merge(
@@ -6453,6 +6512,9 @@ class Database
         $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
 
         foreach ($results as $index => $node) {
+
+            $node = $this->adapter->castingAfter($collection, $node);
+
             if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
                 $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
             }
@@ -7069,15 +7131,15 @@ class Database
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
-    public static function convertQueries(Document $collection, array $queries): array
+    public function convertQueries(Document $collection, array $queries): array
     {
         foreach ($queries as $index => $query) {
             if ($query->isNested()) {
-                $values = self::convertQueries($collection, $query->getValues());
+                $values = $this->convertQueries($collection, $query->getValues());
                 $query->setValues($values);
             }
 
-            $query = self::convertQuery($collection, $query);
+            $query = $this->convertQuery($collection, $query);
 
             $queries[$index] = $query;
         }
@@ -7092,7 +7154,7 @@ class Database
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
-    public static function convertQuery(Document $collection, Query $query): Query
+    public function convertQuery(Document $collection, Query $query): Query
     {
         /**
          * @var array<Document> $attributes
@@ -7118,7 +7180,9 @@ class Database
                 $values = $query->getValues();
                 foreach ($values as $valueIndex => $value) {
                     try {
-                        $values[$valueIndex] = DateTime::setTimezone($value);
+                        $values[$valueIndex] = $this->adapter->getSupportForUTCCasting()
+                            ? $this->adapter->setUTCDatetime($value)
+                            : DateTime::setTimezone($value);
                     } catch (\Throwable $e) {
                         throw new QueryException($e->getMessage(), $e->getCode(), $e);
                     }

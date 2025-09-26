@@ -524,32 +524,33 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
-    /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-     */
+
     public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
     public function getSupportForSpatialAxisOrder(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * Adapter supports optional spatial attributes with existing rows.
-     *
-     * @return bool
-     */
     public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForMultipleFulltextIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForIdenticalIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForOrderRandom(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -590,22 +591,6 @@ class Pool extends Adapter
     }
 
     public function setUTCDatetime(string $value): mixed
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    /**
-    * @return bool
- */
-    public function getSupportForMultipleFulltextIndexes(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    /**
-     * @return bool
-     */
-    public function getSupportForIdenticalIndexes(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

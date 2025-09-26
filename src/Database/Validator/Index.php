@@ -56,18 +56,18 @@ class Index extends Validator
      * @throws DatabaseException
      */
     public function __construct(
-		array $attributes,
-		array $indexes,
-		int $maxLength,
-		array $reservedKeys = [],
-		bool $arrayIndexSupport = false,
-		bool $spatialIndexSupport = false,
-		bool $spatialIndexNullSupport = false,
-		bool $spatialIndexOrderSupport = false,
-		bool $supportForAttributes = true,
-		bool $multipleFulltextIndexSupport = true,
-		bool $identicalIndexSupport = true
-	) {
+        array $attributes,
+        array $indexes,
+        int $maxLength,
+        array $reservedKeys = [],
+        bool $arrayIndexSupport = false,
+        bool $spatialIndexSupport = false,
+        bool $spatialIndexNullSupport = false,
+        bool $spatialIndexOrderSupport = false,
+        bool $supportForAttributes = true,
+        bool $multipleFulltextIndexSupport = true,
+        bool $identicalIndexSupport = true
+    ) {
         $this->maxLength = $maxLength;
         $this->reservedKeys = $reservedKeys;
         $this->arrayIndexSupport = $arrayIndexSupport;

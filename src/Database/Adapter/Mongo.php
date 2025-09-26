@@ -2552,6 +2552,11 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return false;
+    }
+
     /**
      * Does the adapter support multiple fulltext indexes?
      *

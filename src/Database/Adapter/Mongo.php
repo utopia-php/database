@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+use MongoDB\BSON\Int64;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;
@@ -103,10 +104,6 @@ class Mongo extends Adapter
             return $result;
         }
 
-        // Removed the attmpts to retry the transaction.
-        //Unlike pdo if we run theabortTransaction more then once (same transactioId),
-        // it will throw an error the there is no transaction in progress.
-
         try {
             $this->startTransaction();
             $result = $callback();
@@ -115,17 +112,16 @@ class Mongo extends Adapter
         } catch (\Throwable $action) {
             try {
                 $this->rollbackTransaction();
-            } catch (\Throwable $rollback) {
-                $this->inTransaction = 0;
+            } catch (\Throwable) {
                 // Throw the original exception, not the rollback one
-                // Since if it's a duplicate key error, the rollback will fail
-                //and we want to throw the original exception.
+                // Since if it's a duplicate key error, the rollback will fail,
+                // and we want to throw the original exception.
             }
+
             $this->inTransaction = 0;
             throw $action;
         }
     }
-
 
     public function startTransaction(): bool
     {
@@ -171,16 +167,14 @@ class Mongo extends Adapter
                 }
                 try {
                     $result = $this->client->commitTransaction(
-                        ['id' => $this->sessionId], // Pass raw id object
-                        $this->txnNumber,
-                        false
+                        ['id' => $this->sessionId],
+                        $this->txnNumber
                     );
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
 
-                // Session is now closed by the client using endSessions,  state is reseted
-                // TODO  do we want  session per transaction or to manage it on the connection level?
+                // Session is now closed by the client using endSessions,  state is reset
                 $this->sessionId = null;
                 $this->txnNumber = null;
 
@@ -194,7 +188,6 @@ class Mongo extends Adapter
 
     public function rollbackTransaction(): bool
     {
-
         try {
             if ($this->inTransaction === 0) {
                 return false;
@@ -208,8 +201,7 @@ class Mongo extends Adapter
                 try {
                     $result = $this->client->abortTransaction(
                         ['id' => $this->sessionId], // Pass raw id object
-                        $this->txnNumber,
-                        false
+                        $this->txnNumber
                     );
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
@@ -229,15 +221,15 @@ class Mongo extends Adapter
 
     /**
      * Helper to add transaction/session context to command options if in transaction
-     * 
+     *
      * @param array<string, mixed> $options
      * @return array<string, mixed>
      */
-    private function addTransactionContext(array $options = []): array
+    private function getTransactionOptions(array $options = []): array
     {
         if ($this->inTransaction) {
             $options['lsid'] = ['id' => $this->sessionId];
-            $options['txnNumber'] = new \MongoDB\BSON\Int64($this->txnNumber);
+            $options['txnNumber'] = new Int64($this->txnNumber);
             $options['autocommit'] = false;
 
             if ($this->firstOpInTransaction) {
@@ -931,7 +923,7 @@ class Mongo extends Adapter
 
         try {
             $deletedindex = $this->deleteIndex($collection, $old);
-            $createdindex = $this->createIndex($collection, $new, $index['type'], $index['attributes'], $index['lengths'] ?? [], $index['orders'] ?? [], $indexAttributeTypes, []);
+            $createdindex = $this->createIndex($collection, $new, $index['type'], $index['attributes'], $index['lengths'] ?? [], $index['orders'] ?? [], $indexAttributeTypes);
         } catch (\Exception $e) {
             throw $this->processException($e);
         }
@@ -1031,7 +1023,7 @@ class Mongo extends Adapter
         if (!empty($sequence)) {
             $record['_id'] = $sequence;
         }
-        $options = $this->addTransactionContext([]);
+        $options = $this->getTransactionOptions();
         $result = $this->insertDocument($name, $this->removeNullKeys($record), $options);
         $result = $this->replaceChars('_', '$', $result);
         // in order to keep the original object refrence.
@@ -1066,7 +1058,7 @@ class Mongo extends Adapter
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
-            $value = $document->getAttribute($key, null);
+            $value = $document->getAttribute($key);
             if (is_null($value)) {
                 continue;
             }
@@ -1127,7 +1119,7 @@ class Mongo extends Adapter
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
 
-            $value = $document->getAttribute($key, null);
+            $value = $document->getAttribute($key);
             if (is_null($value)) {
                 continue;
             }
@@ -1172,7 +1164,7 @@ class Mongo extends Adapter
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
-        $options = $this->addTransactionContext([]);
+        $options = $this->getTransactionOptions();
         $records = [];
         $hasSequence = null;
         $documents = \array_map(fn ($doc) => clone $doc, $documents);
@@ -1271,7 +1263,7 @@ class Mongo extends Adapter
         try {
             unset($record['_id']); // Don't update _id
 
-            $options = $this->addTransactionContext([]);
+            $options = $this->getTransactionOptions();
             $this->client->update($name, $filters, $record, $options);
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -1298,7 +1290,7 @@ class Mongo extends Adapter
         ;
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
-        $options = $this->addTransactionContext([]);
+        $options = $this->getTransactionOptions();
         $queries = [
             Query::equal('$sequence', \array_map(fn ($document) => $document->getSequence(), $documents))
         ];
@@ -1402,7 +1394,7 @@ class Mongo extends Adapter
                 ];
             }
 
-            $options = $this->addTransactionContext([]);
+            $options = $this->getTransactionOptions();
 
             $this->client->upsert(
                 $name,
@@ -1459,7 +1451,7 @@ class Mongo extends Adapter
                 'batchSize' => self::DEFAULT_BATCH_SIZE
             ];
 
-            $options = $this->addTransactionContext(['projection' => ['_uid' => 1, '_id' => 1]]);
+            $options = $this->getTransactionOptions(['projection' => ['_uid' => 1, '_id' => 1]]);
             $response = $this->client->find($name, $filters, $options);
             $results = $response->cursor->firstBatch ?? [];
 
@@ -1532,7 +1524,7 @@ class Mongo extends Adapter
             $filters[$attribute] = ['$gte' => $min];
         }
 
-        $options = $this->addTransactionContext([]);
+        $options = $this->getTransactionOptions();
         $this->client->update(
             $this->getNamespace() . '_' . $this->filter($collection),
             $filters,
@@ -1566,7 +1558,7 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenantFilters($collection);
         }
 
-        $options = $this->addTransactionContext([]);
+        $options = $this->getTransactionOptions();
         $result = $this->client->delete($name, $filters, 1, [], $options);
 
         return (!!$result);
@@ -1596,14 +1588,13 @@ class Mongo extends Adapter
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
-        $options = $this->addTransactionContext([]);
+        $options = $this->getTransactionOptions();
 
         try {
             $count = $this->client->delete(
                 collection: $name,
                 filters: $filters,
                 limit: 0,
-                deleteOptions: [],
                 options: $options
             );
         } catch (MongoException $e) {
@@ -1708,7 +1699,7 @@ class Mongo extends Adapter
         }
 
         // Add transaction context to options
-        $options = $this->addTransactionContext($options);
+        $options = $this->getTransactionOptions($options);
 
         $orFilters = [];
 
@@ -1947,14 +1938,7 @@ class Mongo extends Adapter
          * https://www.mongodb.com/docs/manual/reference/command/count/#response
          **/
 
-        // Original count command (commented for reference and fallback)
-        // Use this for single-instance MongoDB when performance is critical and accuracy is not a concern
-
-
-
-        $options = $this->addTransactionContext([]);
-        // return $this->client->count($name, $filters, $options);
-
+        $options = $this->getTransactionOptions();
         $pipeline = [];
 
         // Add match stage if filters are provided
@@ -2057,7 +2041,7 @@ class Mongo extends Adapter
             ],
         ];
 
-        $options = $this->addTransactionContext([]);
+        $options = $this->getTransactionOptions();
         return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
     }
 

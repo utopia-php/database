@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e23429f4a3f7e66afaa960e249ee7525",
+    "content-hash": "0d7b7b4e8299046f6d9881d12a27708d",
     "packages": [
         {
             "name": "brick/math",
@@ -2166,16 +2166,16 @@
         },
         {
             "name": "utopia-php/mongo",
-            "version": "0.6.0",
+            "version": "0.7.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "589e329a7fe4200e23ca87d65f3eb25a70ef0505"
+                "reference": "1363598f9f8e6c066f5821704be95e3e24ea66aa"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/589e329a7fe4200e23ca87d65f3eb25a70ef0505",
-                "reference": "589e329a7fe4200e23ca87d65f3eb25a70ef0505",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/1363598f9f8e6c066f5821704be95e3e24ea66aa",
+                "reference": "1363598f9f8e6c066f5821704be95e3e24ea66aa",
                 "shasum": ""
             },
             "require": {
@@ -2221,9 +2221,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/0.6.0"
+                "source": "https://github.com/utopia-php/mongo/tree/0.7.0"
             },
-            "time": "2025-09-11T13:26:21+00:00"
+            "time": "2025-09-26T09:15:55+00:00"
         },
         {
             "name": "utopia-php/pools",

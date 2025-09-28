@@ -6995,10 +6995,6 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
-                if (is_string($node) && in_array($type, Database::SPATIAL_TYPES)) {
-                    $node = $this->decodeSpatialData($node);
-                }
-
                 foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }

@@ -519,10 +519,18 @@ class V2 extends Validator
                         $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
 
                         break;
+                    case Query::TYPE_CROSSES:
+                    case Query::TYPE_NOT_CROSSES:
                     case Query::TYPE_DISTANCE_EQUAL:
                     case Query::TYPE_DISTANCE_NOT_EQUAL:
                     case Query::TYPE_DISTANCE_GREATER_THAN:
                     case Query::TYPE_DISTANCE_LESS_THAN:
+                    case Query::TYPE_INTERSECTS:
+                    case Query::TYPE_NOT_INTERSECTS:
+                    case Query::TYPE_OVERLAPS:
+                    case Query::TYPE_NOT_OVERLAPS:
+                    case Query::TYPE_TOUCHES:
+                    case Query::TYPE_NOT_TOUCHES :
                         if (count($query->getValues()) !== 1 || !is_array($query->getValues()[0]) || count($query->getValues()[0]) !== 2) {
                             $this->message = 'Distance query requires [[geometry, distance]] parameters';
                             return false;
@@ -657,6 +665,12 @@ class V2 extends Validator
                         $ambiguous[] = $needle;
 
                         break;
+
+                    case Query::TYPE_ORDER_RANDOM:
+                        /**
+                         * todo: Validations
+                         */
+                        break;
                     case Query::TYPE_ORDER_ASC:
                     case Query::TYPE_ORDER_DESC:
                         $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
@@ -670,15 +684,8 @@ class V2 extends Validator
                         }
 
                         break;
-                    default:
-                        if ($value->isSpatialQuery()) {
-                            if ($this->isEmpty($value->getValues())) {
-                                $this->message = \ucfirst($method) . ' queries require at least one value.';
-                                return false;
-                            }
-                            return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
-                        }
 
+                    default:
                         throw new \Exception('Invalid query: Method not found ');
                 }
             }

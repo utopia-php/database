@@ -2411,7 +2411,7 @@ var_dump($sql);
             $direction = $order->getOrderDirection();
 
             // Handle random ordering specially
-            if ($orderType === Database::ORDER_RANDOM) {
+            if ($direction === Database::ORDER_RANDOM) {
                 $orders[] = $this->getRandomOrder();
                 continue;
             }

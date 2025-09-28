@@ -5325,7 +5325,7 @@ trait DocumentTests
         if ($database->getAdapter()->getSharedTables()) {
             $documents = $database->find(
                 'documents',
-                [Query::select(['*'])] // Mongo bug with Integer UID
+                [Query::select('*')] // Mongo bug with Integer UID
             );
 
             $document = $documents[0];
@@ -6189,7 +6189,8 @@ trait DocumentTests
         $createdStore = $database->createDocument($storesId, $storeDoc);
 
         $cityWithSelection = $database->getDocument($citiesId, 'city-1', [
-            Query::select(['name', 'population'])
+            Query::select('name'),
+            Query::select('population')
         ]);
 
         $this->assertEquals('Test City', $cityWithSelection->getAttribute('name'));
@@ -6200,7 +6201,9 @@ trait DocumentTests
         $this->assertNull($cityWithSelection->getAttribute('center'));
 
         $cityWithSpatial = $database->getDocument($citiesId, 'city-1', [
-            Query::select(['name', 'area', 'center'])
+            Query::select('name'),
+            Query::select('area'),
+            Query::select('center')
         ]);
 
         $this->assertEquals('Test City', $cityWithSpatial->getAttribute('name'));
@@ -6212,7 +6215,8 @@ trait DocumentTests
         $this->assertNull($cityWithSpatial->getAttribute('secretCode'));
 
         $cityWithEncrypted = $database->getDocument($citiesId, 'city-1', [
-            Query::select(['name', 'secretCode'])
+            Query::select('name'),
+            Query::select('secretCode')
         ]);
 
         $this->assertEquals('Test City', $cityWithEncrypted->getAttribute('name'));
@@ -6222,7 +6226,7 @@ trait DocumentTests
         $this->assertNull($cityWithEncrypted->getAttribute('population'));
 
         $cityWithStores = $database->getDocument($citiesId, 'city-1', [
-            Query::select(['stores.name'])
+            Query::select('stores.name')
         ]);
 
         $this->assertNotNull($cityWithStores->getAttribute('stores'));
@@ -6234,7 +6238,8 @@ trait DocumentTests
         $this->assertEquals([40.7282, -73.9942], $cityWithStores->getAttribute('center'));
 
         $cityWithMultipleStoreFields = $database->getDocument($citiesId, 'city-1', [
-            Query::select(['stores.name', 'stores.revenue'])
+            Query::select('stores.name'),
+            Query::select('stores.revenue')
         ]);
 
         $this->assertNotNull($cityWithMultipleStoreFields->getAttribute('stores'));
@@ -6244,7 +6249,9 @@ trait DocumentTests
         $this->assertEquals('super-secret-code', $cityWithMultipleStoreFields->getAttribute('secretCode'));
 
         $cityWithMixed = $database->getDocument($citiesId, 'city-1', [
-            Query::select(['name', 'population', 'stores.name'])
+            Query::select('name'),
+            Query::select('population'),
+            Query::select('stores.name')
         ]);
 
         $this->assertEquals('Test City', $cityWithMixed->getAttribute('name'));
@@ -6254,7 +6261,7 @@ trait DocumentTests
         $this->assertEquals('Main Store', $cityWithMixed->getAttribute('stores')[0]['name']);
 
         $citiesWithStores = $database->find($citiesId, [
-            Query::select(['stores.name']),
+            Query::select('stores.name'),
             Query::equal('$id', ['city-1'])
         ]);
 
@@ -6265,7 +6272,8 @@ trait DocumentTests
         $this->assertEquals('super-secret-code', $city->getAttribute('secretCode'));
 
         $storeWithCityArea = $database->getDocument($storesId, 'store-1', [
-            Query::select(['location','city.area'])
+            Query::select('location'),
+            Query::select('city.area')
         ]);
 
         $this->assertNotNull($storeWithCityArea->getAttribute('city'));
@@ -6328,7 +6336,9 @@ trait DocumentTests
         $created = $database->createDocument($collectionId, $doc);
 
         $selected = $database->getDocument($collectionId, 'test-1', [
-            Query::select(['title', 'count', 'secret'])
+            Query::select('title'),
+            Query::select('count'),
+            Query::select('secret')
         ]);
 
         $this->assertEquals('Test Document', $selected->getAttribute('title'));
@@ -6340,7 +6350,9 @@ trait DocumentTests
         $this->assertNull($selected->getAttribute('location'));
 
         $spatialSelected = $database->getDocument($collectionId, 'test-1', [
-            Query::select(['title', 'location', 'boundary'])
+            Query::select('title'),
+            Query::select('location'),
+            Query::select('boundary')
         ]);
 
         $this->assertEquals('Test Document', $spatialSelected->getAttribute('title'));
@@ -6350,7 +6362,8 @@ trait DocumentTests
         $this->assertNull($spatialSelected->getAttribute('count'));
 
         $arraySelected = $database->getDocument($collectionId, 'test-1', [
-            Query::select(['title', 'tags'])
+            Query::select('title'),
+            Query::select('tags')
         ]);
 
         $this->assertEquals('Test Document', $arraySelected->getAttribute('title'));
@@ -6358,7 +6371,7 @@ trait DocumentTests
         $this->assertNull($arraySelected->getAttribute('active'));
 
         $allSelected = $database->getDocument($collectionId, 'test-1', [
-            Query::select(['*'])
+            Query::select('*')
         ]);
 
         $this->assertEquals('Test Document', $allSelected->getAttribute('title'));
@@ -6411,7 +6424,8 @@ trait DocumentTests
         $created = $database->createDocument($collectionId, $doc);
 
         $selected = $database->getDocument($collectionId, 'edge-1', [
-            Query::select(['name', 'processedName'])
+            Query::select('name'),
+            Query::select('processedName')
         ]);
 
         $this->assertEquals('Test Name', $selected->getAttribute('name'));
@@ -6419,7 +6433,8 @@ trait DocumentTests
         $this->assertNull($selected->getAttribute('nullableField'));
 
         $nullSelected = $database->getDocument($collectionId, 'edge-1', [
-            Query::select(['name', 'nullableField'])
+            Query::select('name'),
+            Query::select('nullableField')
         ]);
 
         $this->assertEquals('Test Name', $nullSelected->getAttribute('name'));

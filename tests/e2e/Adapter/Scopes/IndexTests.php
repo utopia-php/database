@@ -164,9 +164,16 @@ trait IndexTests
 
         $validator = new Index(
             $attributes,
+            $indexes,
             $database->getAdapter()->getMaxIndexLength(),
             $database->getAdapter()->getInternalIndexesKeys(),
-            $database->getAdapter()->getSupportForIndexArray()
+            $database->getAdapter()->getSupportForIndexArray(),
+            $database->getAdapter()->getSupportForSpatialAttributes(),
+            $database->getAdapter()->getSupportForSpatialIndexNull(),
+            $database->getAdapter()->getSupportForSpatialIndexOrder(),
+            $database->getAdapter()->getSupportForAttributes(),
+            $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
+            $database->getAdapter()->getSupportForIdenticalIndexes()
         );
 
         $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
@@ -239,13 +246,25 @@ trait IndexTests
 
         $validator = new Index(
             $attributes,
+            $indexes,
             $database->getAdapter()->getMaxIndexLength(),
             $database->getAdapter()->getInternalIndexesKeys(),
-            $database->getAdapter()->getSupportForIndexArray()
+            $database->getAdapter()->getSupportForIndexArray(),
+            $database->getAdapter()->getSupportForSpatialAttributes(),
+            $database->getAdapter()->getSupportForSpatialIndexNull(),
+            $database->getAdapter()->getSupportForSpatialIndexOrder(),
+            $database->getAdapter()->getSupportForAttributes(),
+            $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
+            $database->getAdapter()->getSupportForIdenticalIndexes()
         );
-        $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
+
         $this->assertFalse($validator->isValid($indexes[0]));
-        $this->assertEquals($errorMessage, $validator->getDescription());
+
+        if (!$database->getAdapter()->getSupportForMultipleFulltextIndexes()) {
+            $this->assertEquals('There is already a fulltext index in the collection', $validator->getDescription());
+        } elseif ($database->getAdapter()->getSupportForAttributes()) {
+            $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
+        }
 
         try {
             $database->createCollection($collection->getId(), $attributes, $indexes);
@@ -253,7 +272,7 @@ trait IndexTests
                 $this->fail('Failed to throw exception');
             }
         } catch (Exception $e) {
-            $this->assertEquals($errorMessage, $e->getMessage());
+            $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $e->getMessage());
         }
 
 
@@ -486,5 +505,130 @@ trait IndexTests
             Query::search('string', '<>'),
         ]);
         $this->assertEquals(0, count($documents));
+    }
+
+    public function testMultipleFulltextIndexValidation(): void
+    {
+
+        $fulltextSupport = $this->getDatabase()->getAdapter()->getSupportForFulltextIndex();
+        if (!$fulltextSupport) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'multiple_fulltext_test';
+        try {
+            $database->createCollection($collectionId);
+
+            $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 256, false);
+            $database->createAttribute($collectionId, 'content', Database::VAR_STRING, 256, false);
+            $database->createIndex($collectionId, 'fulltext_title', Database::INDEX_FULLTEXT, ['title']);
+
+            $supportsMultipleFulltext = $database->getAdapter()->getSupportForMultipleFulltextIndexes();
+
+            // Try to add second fulltext index
+            try {
+                $database->createIndex($collectionId, 'fulltext_content', Database::INDEX_FULLTEXT, ['content']);
+
+                if ($supportsMultipleFulltext) {
+                    $this->assertTrue(true, 'Multiple fulltext indexes are supported and second index was created successfully');
+                } else {
+                    $this->fail('Expected exception when creating second fulltext index, but none was thrown');
+                }
+            } catch (Throwable $e) {
+                if (!$supportsMultipleFulltext) {
+                    $this->assertTrue(true, 'Multiple fulltext indexes are not supported and exception was thrown as expected');
+                } else {
+                    $this->fail('Unexpected exception when creating second fulltext index: ' . $e->getMessage());
+                }
+            }
+
+        } finally {
+            // Clean up
+            $database->deleteCollection($collectionId);
+        }
+    }
+
+    public function testIdenticalIndexValidation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'identical_index_test';
+
+        try {
+            $database->createCollection($collectionId);
+
+            $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 256, false);
+            $database->createAttribute($collectionId, 'age', Database::VAR_INTEGER, 8, false);
+
+            $database->createIndex($collectionId, 'index1', Database::INDEX_KEY, ['name', 'age'], [], [Database::ORDER_ASC, Database::ORDER_DESC]);
+
+            $supportsIdenticalIndexes = $database->getAdapter()->getSupportForIdenticalIndexes();
+
+            // Try to add identical index (failure)
+            try {
+                $database->createIndex($collectionId, 'index2', Database::INDEX_KEY, ['name', 'age'], [], [Database::ORDER_ASC, Database::ORDER_DESC]);
+                if ($supportsIdenticalIndexes) {
+                    $this->assertTrue(true, 'Identical indexes are supported and second index was created successfully');
+                } else {
+                    $this->fail('Expected exception but got none');
+                }
+
+            } catch (Throwable $e) {
+                if (!$supportsIdenticalIndexes) {
+                    $this->assertTrue(true, 'Identical indexes are not supported and exception was thrown as expected');
+                } else {
+                    $this->fail('Unexpected exception when creating identical index: ' . $e->getMessage());
+                }
+
+            }
+
+            // Test with different attributes order - faliure
+            try {
+                $database->createIndex($collectionId, 'index3', Database::INDEX_KEY, ['age', 'name'], [], [ Database::ORDER_ASC, Database::ORDER_DESC]);
+                $this->assertTrue(true, 'Index with different attributes was created successfully');
+            } catch (Throwable $e) {
+                if (!$supportsIdenticalIndexes) {
+                    $this->assertTrue(true, 'Identical indexes are not supported and exception was thrown as expected');
+                } else {
+                    $this->fail('Unexpected exception when creating identical index: ' . $e->getMessage());
+                }
+            }
+
+            // Test with different orders  order - faliure
+            try {
+                $database->createIndex($collectionId, 'index4', Database::INDEX_KEY, ['age', 'name'], [], [ Database::ORDER_DESC, Database::ORDER_ASC]);
+                $this->assertTrue(true, 'Index with different attributes was created successfully');
+            } catch (Throwable $e) {
+                if (!$supportsIdenticalIndexes) {
+                    $this->assertTrue(true, 'Identical indexes are not supported and exception was thrown as expected');
+                } else {
+                    $this->fail('Unexpected exception when creating identical index: ' . $e->getMessage());
+                }
+            }
+
+            // Test with different attributes - success
+            try {
+                $database->createIndex($collectionId, 'index5', Database::INDEX_KEY, ['name'], [], [Database::ORDER_ASC]);
+                $this->assertTrue(true, 'Index with different attributes was created successfully');
+            } catch (Throwable $e) {
+                $this->fail('Unexpected exception when creating index with different attributes: ' . $e->getMessage());
+            }
+
+            // Test with different orders - success
+            try {
+                $database->createIndex($collectionId, 'index6', Database::INDEX_KEY, ['name', 'age'], [], [Database::ORDER_ASC]);
+                $this->assertTrue(true, 'Index with different orders was created successfully');
+            } catch (Throwable $e) {
+                $this->fail('Unexpected exception when creating index with different orders: ' . $e->getMessage());
+            }
+        } finally {
+            // Clean up
+            $database->deleteCollection($collectionId);
+        }
     }
 }

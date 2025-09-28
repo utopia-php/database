@@ -1513,16 +1513,46 @@ abstract class SQL extends Adapter
     }
 
     /**
-         * Is internal casting supported?
-         *
-         * @return bool
-         */
+    * Is internal casting supported?
+    *
+    * @return bool
+    */
     public function getSupportForInternalCasting(): bool
     {
         return false;
     }
 
-    public function isMongo(): bool
+    /**
+     * Does the adapter support multiple fulltext indexes?
+     *
+     * @return bool
+     */
+    public function getSupportForMultipleFulltextIndexes(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Does the adapter support identical indexes?
+     *
+     * @return bool
+     */
+    public function getSupportForIdenticalIndexes(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Does the adapter support random order for queries?
+     *
+     * @return bool
+     */
+    public function getSupportForOrderRandom(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForUTCCasting(): bool
     {
         return false;
     }
@@ -1753,6 +1783,13 @@ abstract class SQL extends Adapter
      * @throws Exception
      */
     abstract protected function getPDOType(mixed $value): int;
+
+    /**
+     * Get the SQL function for random ordering
+     *
+     * @return string
+     */
+    abstract protected function getRandomOrder(): string;
 
     /**
      * Returns default PDO configuration
@@ -2393,10 +2430,18 @@ abstract class SQL extends Adapter
         $cursorWhere = [];
 
         foreach ($orderAttributes as $i => $originalAttribute) {
+            $orderType = $orderTypes[$i] ?? Database::ORDER_ASC;
+
+            // Handle random ordering specially
+            if ($orderType === Database::ORDER_RANDOM) {
+                $orders[] = $this->getRandomOrder();
+                continue;
+            }
+
             $attribute = $this->getInternalKeyForAttribute($originalAttribute);
             $attribute = $this->filter($attribute);
 
-            $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
+            $orderType = $this->filter($orderType);
             $direction = $orderType;
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {

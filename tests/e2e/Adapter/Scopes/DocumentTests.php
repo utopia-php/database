@@ -3520,6 +3520,77 @@ trait DocumentTests
         $this->assertLessThanOrEqual(5, count($documents)); // But still excluding Marvel movies
     }
 
+    public function testFindOrderRandom(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOrderRandom()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Test orderRandom with default limit
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(1, count($documents));
+        $this->assertNotEmpty($documents[0]['name']); // Ensure we got a valid document
+
+        // Test orderRandom with multiple documents
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(3),
+        ]);
+        $this->assertEquals(3, count($documents));
+
+        // Test that orderRandom returns different results (not guaranteed but highly likely)
+        $firstSet = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(3),
+        ]);
+        $secondSet = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(3),
+        ]);
+
+        // Extract IDs for comparison
+        $firstIds = array_map(fn ($doc) => $doc['$id'], $firstSet);
+        $secondIds = array_map(fn ($doc) => $doc['$id'], $secondSet);
+
+        // While not guaranteed to be different, with 6 movies and selecting 3,
+        // the probability of getting the same set in the same order is very low
+        // We'll just check that we got valid results
+        $this->assertEquals(3, count($firstIds));
+        $this->assertEquals(3, count($secondIds));
+
+        // Test orderRandom with more than available documents
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(10), // We only have 6 movies
+        ]);
+        $this->assertLessThanOrEqual(6, count($documents)); // Should return all available documents
+
+        // Test orderRandom with filters
+        $documents = $database->find('movies', [
+            Query::greaterThan('price', 10),
+            Query::orderRandom(),
+            Query::limit(2),
+        ]);
+        $this->assertLessThanOrEqual(2, count($documents));
+        foreach ($documents as $document) {
+            $this->assertGreaterThan(10, $document['price']);
+        }
+
+        // Test orderRandom without explicit limit (should use default)
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+        $this->assertLessThanOrEqual(25, count($documents)); // Default limit is 25
+    }
+
     public function testFindNotBetween(): void
     {
         /** @var Database $database */
@@ -5164,7 +5235,7 @@ trait DocumentTests
             if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
                 $this->expectExceptionMessage('Fulltext index is not supported');
             } else {
-                $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a FULLTEXT index, must be of type string');
+                $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a fulltext index, must be of type string');
             }
 
             $database->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);

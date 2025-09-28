@@ -524,22 +524,33 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
-    /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-     */
+
     public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
     public function getSupportForSpatialAxisOrder(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForMultipleFulltextIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForIdenticalIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForOrderRandom(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -569,12 +580,12 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function isMongo(): bool
+    public function getSupportForInternalCasting(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function getSupportForInternalCasting(): bool
+    public function getSupportForUTCCasting(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

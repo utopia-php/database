@@ -388,19 +388,6 @@ abstract class Adapter
             } catch (\Throwable $action) {
                 try {
                     $this->rollbackTransaction();
-
-                    if (
-                        $action instanceof DuplicateException ||
-                        $action instanceof RestrictedException ||
-                        $action instanceof AuthorizationException ||
-                        $action instanceof RelationshipException ||
-                        $action instanceof ConflictException ||
-                        $action instanceof LimitException
-                    ) {
-                        $this->inTransaction = 0;
-                        throw $action;
-                    }
-
                 } catch (\Throwable $rollback) {
                     if ($attempts < $retries) {
                         \usleep($sleep * ($attempts + 1));
@@ -409,6 +396,18 @@ abstract class Adapter
 
                     $this->inTransaction = 0;
                     throw $rollback;
+                }
+
+                if (
+                    $action instanceof DuplicateException ||
+                    $action instanceof RestrictedException ||
+                    $action instanceof AuthorizationException ||
+                    $action instanceof RelationshipException ||
+                    $action instanceof ConflictException ||
+                    $action instanceof LimitException
+                ) {
+                    $this->inTransaction = 0;
+                    throw $action;
                 }
 
                 if ($attempts < $retries) {
@@ -1065,6 +1064,13 @@ abstract class Adapter
     abstract public function getSupportForSpatialIndexNull(): bool;
 
     /**
+     * Adapter supports optional spatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool;
+
+    /**
      * Does the adapter support order attribute in spatial indexes?
      *
      * @return bool
@@ -1091,6 +1097,28 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool;
+
+    /**
+     * Does the adapter support multiple fulltext indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForMultipleFulltextIndexes(): bool;
+
+
+    /**
+     * Does the adapter support identical indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForIdenticalIndexes(): bool;
+
+    /**
+     * Does the adapter support random order by?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOrderRandom(): bool;
 
     /**
      * Get current attribute count from collection document
@@ -1327,18 +1355,18 @@ abstract class Adapter
     abstract public function castingAfter(Document $collection, Document $document): Document;
 
     /**
-     * Is Mongo?
-     *
-     * @return bool
-     */
-    abstract public function isMongo(): bool;
-
-    /**
      * Is internal casting supported?
      *
      * @return bool
      */
     abstract public function getSupportForInternalCasting(): bool;
+
+    /**
+     * Is UTC casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUTCCasting(): bool;
 
     /**
     * Set UTC Datetime

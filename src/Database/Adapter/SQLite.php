@@ -327,11 +327,12 @@ class SQLite extends MariaDB
      * @param bool $signed
      * @param bool $array
      * @param string|null $newKey
+     * @param bool $required
      * @return bool
      * @throws Exception
      * @throws PDOException
      */
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
         if (!empty($newKey) && $newKey !== $id) {
             return $this->renameAttribute($collection, $id, $newKey);
@@ -1262,5 +1263,45 @@ class SQLite extends MariaDB
     public function getSupportForBoundaryInclusiveContains(): bool
     {
         return false;
+    }
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Adapter supports optionalspatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the SQL function for random ordering
+     *
+     * @return string
+     */
+    protected function getRandomOrder(): string
+    {
+        return 'RANDOM()';
     }
 }

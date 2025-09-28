@@ -143,6 +143,24 @@ class QueryTest extends TestCase
         $this->assertEquals(Query::TYPE_GREATER, $query->getMethod());
         $this->assertEquals('$updatedAt', $query->getAttribute());
         $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::createdBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z');
+
+        $this->assertEquals(Query::TYPE_BETWEEN, $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::updatedBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z');
+
+        $this->assertEquals(Query::TYPE_BETWEEN, $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        // Test orderRandom query
+        $query = Query::orderRandom();
+        $this->assertEquals(Query::TYPE_ORDER_RANDOM, $query->getMethod());
+        $this->assertEquals('', $query->getAttribute());
+        $this->assertEquals([], $query->getValues());
     }
 
     /**
@@ -274,6 +292,16 @@ class QueryTest extends TestCase
         $this->assertEquals('$updatedAt', $query->getAttribute());
         $this->assertEquals(['2023-12-31T23:59:59.999Z'], $query->getValues());
 
+        $query = Query::parse(Query::createdBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z')->toString());
+        $this->assertEquals('between', $query->getMethod());
+        $this->assertEquals('$createdAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
+
+        $query = Query::parse(Query::updatedBetween('2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z')->toString());
+        $this->assertEquals('between', $query->getMethod());
+        $this->assertEquals('$updatedAt', $query->getAttribute());
+        $this->assertEquals(['2023-01-01T00:00:00.000Z', '2023-12-31T23:59:59.999Z'], $query->getValues());
+
         $query = Query::parse(Query::between('age', 15, 18)->toString());
         $this->assertEquals('between', $query->getMethod());
         $this->assertEquals('age', $query->getAttribute());
@@ -346,6 +374,12 @@ class QueryTest extends TestCase
         } catch (QueryException $e) {
             $this->assertEquals('Invalid query. Must be an array, got boolean', $e->getMessage());
         }
+
+        // Test orderRandom query parsing
+        $query = Query::parse(Query::orderRandom()->toString());
+        $this->assertEquals('orderRandom', $query->getMethod());
+        $this->assertEquals('', $query->getAttribute());
+        $this->assertEquals([], $query->getValues());
     }
 
     public function testIsMethod(): void
@@ -370,6 +404,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod('offset'));
         $this->assertTrue(Query::isMethod('cursorAfter'));
         $this->assertTrue(Query::isMethod('cursorBefore'));
+        $this->assertTrue(Query::isMethod('orderRandom'));
         $this->assertTrue(Query::isMethod('isNull'));
         $this->assertTrue(Query::isMethod('isNotNull'));
         $this->assertTrue(Query::isMethod('between'));
@@ -398,6 +433,7 @@ class QueryTest extends TestCase
         $this->assertTrue(Query::isMethod(QUERY::TYPE_OFFSET));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSOR_AFTER));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_CURSOR_BEFORE));
+        $this->assertTrue(Query::isMethod(QUERY::TYPE_ORDER_RANDOM));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_IS_NOT_NULL));
         $this->assertTrue(Query::isMethod(QUERY::TYPE_BETWEEN));
@@ -418,6 +454,7 @@ class QueryTest extends TestCase
         $this->assertContains(Query::TYPE_NOT_STARTS_WITH, Query::TYPES);
         $this->assertContains(Query::TYPE_NOT_ENDS_WITH, Query::TYPES);
         $this->assertContains(Query::TYPE_NOT_BETWEEN, Query::TYPES);
+        $this->assertContains(Query::TYPE_ORDER_RANDOM, Query::TYPES);
     }
 
 

@@ -176,7 +176,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool
+    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -246,7 +246,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createOrUpdateDocuments(Document $collection, string $attribute, array $changes): array
+    public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -534,6 +534,50 @@ class Pool extends Adapter
     }
 
     public function getSupportForSpatialIndexOrder(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    public function getSupportForSpatialAxisOrder(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    /**
+     * Adapter supports optional spatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodePoint(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodeLinestring(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function decodePolygon(string $wkb): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

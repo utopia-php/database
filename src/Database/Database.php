@@ -48,6 +48,10 @@ class Database
     public const BIG_INT_MAX = PHP_INT_MAX;
     public const DOUBLE_MAX = PHP_FLOAT_MAX;
 
+    // Global SRID for geographic coordinates (WGS84)
+    public const SRID = 4326;
+    public const EARTH_RADIUS = 6371000;
+
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
 
@@ -56,7 +60,7 @@ class Database
     public const VAR_LINESTRING = 'linestring';
     public const VAR_POLYGON = 'polygon';
 
-    public const SPATIAL_TYPES = [self::VAR_POINT,self::VAR_LINESTRING, self::VAR_POLYGON];
+    public const SPATIAL_TYPES = [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON];
 
     // Index Types
     public const INDEX_KEY = 'key';
@@ -85,6 +89,8 @@ class Database
     // Orders
     public const ORDER_ASC = 'ASC';
     public const ORDER_DESC = 'DESC';
+
+    public const ORDER_RANDOM = 'RANDOM';
 
     // Permissions
     public const PERMISSION_CREATE = 'create';
@@ -471,6 +477,90 @@ class Database
              */
             function (?string $value) {
                 return DateTime::formatTz($value);
+            }
+        );
+
+        self::addFilter(
+            Database::VAR_POINT,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!is_array($value)) {
+                    return $value;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_POINT);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return array|null
+             */
+            function (?string $value) {
+                if ($value === null) {
+                    return null;
+                }
+                return $this->adapter->decodePoint($value);
+            }
+        );
+
+        self::addFilter(
+            Database::VAR_LINESTRING,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!is_array($value)) {
+                    return $value;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_LINESTRING);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return array|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return null;
+                }
+                return $this->adapter->decodeLinestring($value);
+            }
+        );
+
+        self::addFilter(
+            Database::VAR_POLYGON,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!is_array($value)) {
+                    return $value;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_POLYGON);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return array|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return null;
+                }
+                return $this->adapter->decodePolygon($value);
             }
         );
     }
@@ -1238,6 +1328,19 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
+        foreach ($attributes as &$attribute) {
+            if (in_array($attribute['type'], Database::SPATIAL_TYPES)) {
+                $existingFilters = $attribute['filters'] ?? [];
+                if (!is_array($existingFilters)) {
+                    $existingFilters = [$existingFilters];
+                }
+                $attribute['filters'] = array_values(
+                    array_unique(array_merge($existingFilters, [$attribute['type']]))
+                );
+            }
+        }
+        unset($attribute);
+
         $permissions ??= [
             Permission::create(Role::any()),
         ];
@@ -1594,6 +1697,10 @@ class Database
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
+        }
+        if (in_array($type, Database::SPATIAL_TYPES)) {
+            $filters[] = $type;
+            $filters = array_unique($filters);
         }
 
         $attribute = $this->validateAttribute(
@@ -2158,6 +2265,11 @@ class Database
                 $default = null;
             }
 
+            // we need to alter table attribute type to NOT NULL/NULL for change in required
+            if (!$this->adapter->getSupportForSpatialIndexNull() && in_array($type, Database::SPATIAL_TYPES)) {
+                $altering = true;
+            }
+
             switch ($type) {
                 case self::VAR_STRING:
                     if (empty($size)) {
@@ -2319,7 +2431,7 @@ class Database
                     }
                 }
 
-                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
+                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey, $required);
 
                 if (!$updated) {
                     throw new DatabaseException('Failed to update attribute');
@@ -3214,12 +3326,12 @@ class Database
         if ($type === self::INDEX_SPATIAL) {
             foreach ($attributes as $attr) {
                 if (!isset($indexAttributesWithTypes[$attr])) {
-                    throw new DatabaseException('Attribute "' . $attr . '" not found in collection');
+                    throw new IndexException('Attribute "' . $attr . '" not found in collection');
                 }
 
                 $attributeType = $indexAttributesWithTypes[$attr];
                 if (!in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    throw new DatabaseException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                    throw new IndexException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
                 }
             }
 
@@ -3843,7 +3955,8 @@ class Database
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
-     * @param callable|null $onNext
+     * @param (callable(Document): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws StructureException
@@ -3855,6 +3968,7 @@ class Database
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null,
     ): int {
         if (!$this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument()) {
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
@@ -3934,7 +4048,13 @@ class Database
 
                 $document = $this->casting($context, $document);
                 $document = $this->decode($context, $document);
-                $onNext && $onNext($document);
+
+                try {
+                    $onNext && $onNext($document);
+                } catch (\Throwable $e) {
+                    $onError ? $onError($e) : throw $e;
+                }
+
                 $modified++;
             }
         }
@@ -4295,12 +4415,15 @@ class Database
             $old = Authorization::skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
+            if ($old->isEmpty()) {
+                return new Document();
+            }
 
             $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
-                $currentPermissions  = $document->getPermissions();
+                $currentPermissions = $document->getPermissions();
 
                 sort($originalPermissions);
                 sort($currentPermissions);
@@ -4434,10 +4557,6 @@ class Database
                 }
             }
 
-            if ($old->isEmpty()) {
-                return new Document();
-            }
-
             if ($shouldUpdate) {
                 $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
             }
@@ -4470,6 +4589,10 @@ class Database
             return $document;
         });
 
+        if ($document->isEmpty()) {
+            return $document;
+        }
+
         if ($this->resolveRelationships) {
             $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
         }
@@ -4493,8 +4616,8 @@ class Database
      * @param Document $updates
      * @param array<Query> $queries
      * @param int $batchSize
-     * @param callable|null $onNext
-     * @param callable|null $onError
+     * @param (callable(Document $updated, Document $old): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws ConflictException
@@ -4625,12 +4748,12 @@ class Database
                 }
             }
 
-            $currentPermissions  = $updates->getPermissions();
+            $old = array_map(fn ($doc) => clone $doc, $batch);
+            $currentPermissions = $updates->getPermissions();
             sort($currentPermissions);
 
             $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
                 foreach ($batch as $index => $document) {
-
                     $skipPermissionsUpdate = true;
 
                     if ($updates->offsetExists('$permissions')) {
@@ -4664,7 +4787,6 @@ class Database
                     if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
-
                     $batch[$index] = $this->encode($collection, $document);
                 }
 
@@ -4675,13 +4797,12 @@ class Database
                 );
             });
 
-            foreach ($batch as $doc) {
+            foreach ($batch as $index => $doc) {
                 $doc->removeAttribute('$skipPermissionsUpdate');
-
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 $doc = $this->decode($context, $doc);
                 try {
-                    $onNext && $onNext($doc);
+                    $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {
                     $onError ? $onError($th) : throw $th;
                 }
@@ -5098,27 +5219,61 @@ class Database
     }
 
     /**
+     * Create or update a document.
+     *
+     * @param string $collection
+     * @param Document $document
+     * @return Document
+     * @throws StructureException
+     * @throws Throwable
+     */
+    public function upsertDocument(
+        string $collection,
+        Document $document,
+    ): Document {
+        $result = null;
+
+        $this->upsertDocumentsWithIncrease(
+            $collection,
+            '',
+            [$document],
+            function (Document $doc, ?Document $_old = null) use (&$result) {
+                $result = $doc;
+            }
+        );
+
+        if ($result === null) {
+            // No-op (unchanged): return the current persisted doc
+            $result = $this->getDocument($collection, $document->getId());
+        }
+        return $result;
+    }
+
+    /**
      * Create or update documents.
      *
      * @param string $collection
      * @param array<Document> $documents
      * @param int $batchSize
-     * @param callable|null $onNext
+     * @param (callable(Document, ?Document): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws StructureException
      * @throws \Throwable
      */
-    public function createOrUpdateDocuments(
+    public function upsertDocuments(
         string $collection,
         array $documents,
         int $batchSize = self::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
+        ?callable $onError = null
     ): int {
-        return $this->createOrUpdateDocumentsWithIncrease(
+        return $this->upsertDocumentsWithIncrease(
             $collection,
             '',
             $documents,
             $onNext,
+            $onError,
             $batchSize
         );
     }
@@ -5129,18 +5284,20 @@ class Database
      * @param string $collection
      * @param string $attribute
      * @param array<Document> $documents
-     * @param callable|null $onNext
+     * @param (callable(Document, ?Document): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @param int $batchSize
      * @return int
      * @throws StructureException
      * @throws \Throwable
      * @throws Exception
      */
-    public function createOrUpdateDocumentsWithIncrease(
+    public function upsertDocumentsWithIncrease(
         string $collection,
         string $attribute,
         array $documents,
         ?callable $onNext = null,
+        ?callable $onError = null,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
         if (empty($documents)) {
@@ -5176,7 +5333,7 @@ class Database
 
             if ($document->offsetExists('$permissions')) {
                 $originalPermissions = $old->getPermissions();
-                $currentPermissions  = $document->getPermissions();
+                $currentPermissions = $document->getPermissions();
 
                 sort($originalPermissions);
                 sort($currentPermissions);
@@ -5306,7 +5463,7 @@ class Database
             /**
              * @var array<Change> $chunk
              */
-            $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->createOrUpdateDocuments(
+            $batch = $this->withTransaction(fn () => Authorization::skip(fn () => $this->adapter->upsertDocuments(
                 $collection,
                 $attribute,
                 $chunk
@@ -5322,7 +5479,7 @@ class Database
                 }
             }
 
-            foreach ($batch as $doc) {
+            foreach ($batch as $index => $doc) {
                 if ($this->resolveRelationships) {
                     $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
@@ -5337,7 +5494,13 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 }
 
-                $onNext && $onNext($doc);
+                $old = $chunk[$index]->getOld();
+
+                try {
+                    $onNext && $onNext($doc, $old->isEmpty() ? null : $old);
+                } catch (\Throwable $th) {
+                    $onError ? $onError($th) : throw $th;
+                }
             }
         }
 
@@ -5608,7 +5771,9 @@ class Database
             return $result;
         });
 
-        $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
+        if ($deleted) {
+            $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
+        }
 
         return $deleted;
     }
@@ -6003,8 +6168,8 @@ class Database
      * @param string $collection
      * @param array<Query> $queries
      * @param int $batchSize
-     * @param callable|null $onNext
-     * @param callable|null $onError
+     * @param (callable(Document, Document): void)|null $onNext
+     * @param (callable(Throwable): void)|null $onError
      * @return int
      * @throws AuthorizationException
      * @throws DatabaseException
@@ -6104,6 +6269,7 @@ class Database
                 }
             }
 
+            $old = array_map(fn ($doc) => clone $doc, $batch);
             $sequences = [];
             $permissionIds = [];
 
@@ -6140,7 +6306,7 @@ class Database
                 );
             });
 
-            foreach ($batch as $document) {
+            foreach ($batch as $index => $document) {
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($document->getTenant(), function () use ($collection, $document) {
                         $this->purgeCachedDocument($collection->getId(), $document->getId());
@@ -6149,7 +6315,7 @@ class Database
                     $this->purgeCachedDocument($collection->getId(), $document->getId());
                 }
                 try {
-                    $onNext && $onNext($document);
+                    $onNext && $onNext($document, $old[$index]);
                 } catch (Throwable $th) {
                     $onError ? $onError($th) : throw $th;
                 }
@@ -6593,7 +6759,7 @@ class Database
     public function encode(Document $collection, Document $document): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
-        $internalDateAttributes = ['$createdAt','$updatedAt'];
+        $internalDateAttributes = ['$createdAt', '$updatedAt'];
         foreach ($this->getInternalAttributes() as $attribute) {
             $attributes[] = $attribute;
         }
@@ -6630,14 +6796,6 @@ class Database
 
             foreach ($value as $index => $node) {
                 if ($node !== null) {
-                    // Handle spatial data encoding
-                    $attributeType = $attribute['type'] ?? '';
-                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                        if (is_array($node)) {
-                            $node = $this->encodeSpatialData($node, $attributeType);
-                        }
-                    }
-
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
@@ -6674,6 +6832,8 @@ class Database
             $collection->getAttribute('attributes', []),
             fn ($attribute) => $attribute['type'] === self::VAR_RELATIONSHIP
         );
+
+        $filteredValue = [];
 
         foreach ($relationships as $relationship) {
             $key = $relationship['$id'] ?? '';
@@ -6716,15 +6876,14 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
-                if (is_string($node) && in_array($type, Database::SPATIAL_TYPES)) {
-                    $node = $this->decodeSpatialData($node);
-                }
 
                 foreach (array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
                 $value[$index] = $node;
             }
+
+            $filteredValue[$key] = ($array) ? $value : $value[0];
 
             if (
                 empty($selections)
@@ -6735,6 +6894,29 @@ class Database
             }
         }
 
+        $hasRelationshipSelections = false;
+        if (!empty($selections)) {
+            foreach ($selections as $selection) {
+                if (\str_contains($selection, '.')) {
+                    $hasRelationshipSelections = true;
+                    break;
+                }
+            }
+        }
+
+        if ($hasRelationshipSelections && !empty($selections) && !\in_array('*', $selections)) {
+            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+                $key = $attribute['$id'] ?? '';
+
+                if ($attribute['type'] === self::VAR_RELATIONSHIP || $key === '$permissions') {
+                    continue;
+                }
+
+                if (!in_array($key, $selections) && isset($filteredValue[$key])) {
+                    $document->setAttribute($key, $filteredValue[$key]);
+                }
+            }
+        }
         return $document;
     }
 
@@ -7156,7 +7338,7 @@ class Database
             }
         }
 
-        if (! $attribute->isEmpty()) {
+        if (!$attribute->isEmpty()) {
             $query->setOnArray($attribute->getAttribute('array', false));
 
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
@@ -7356,7 +7538,9 @@ class Database
     protected function encodeSpatialData(mixed $value, string $type): string
     {
         $validator = new Spatial($type);
-        $validator->isValid($value);
+        if (!$validator->isValid($value)) {
+            throw new StructureException($validator->getDescription());
+        }
 
         switch ($type) {
             case self::VAR_POINT:
@@ -7392,58 +7576,5 @@ class Database
             default:
                 throw new DatabaseException('Unknown spatial type: ' . $type);
         }
-    }
-
-    /**
-     * Decode spatial data from WKT (Well-Known Text) format to array format
-     *
-     * @param string $wkt
-     * @return array<mixed>
-     * @throws DatabaseException
-     */
-    public function decodeSpatialData(string $wkt): array
-    {
-        $upper = strtoupper($wkt);
-
-        // POINT(x y)
-        if (str_starts_with($upper, 'POINT(')) {
-            $start = strpos($wkt, '(') + 1;
-            $end   = strrpos($wkt, ')');
-            $inside = substr($wkt, $start, $end - $start);
-
-            $coords = explode(' ', trim($inside));
-            return [(float)$coords[0], (float)$coords[1]];
-        }
-
-        // LINESTRING(x1 y1, x2 y2, ...)
-        if (str_starts_with($upper, 'LINESTRING(')) {
-            $start = strpos($wkt, '(') + 1;
-            $end   = strrpos($wkt, ')');
-            $inside = substr($wkt, $start, $end - $start);
-
-            $points = explode(',', $inside);
-            return array_map(function ($point) {
-                $coords = explode(' ', trim($point));
-                return [(float)$coords[0], (float)$coords[1]];
-            }, $points);
-        }
-
-        // POLYGON((x1,y1),(x2,y2))
-        if (str_starts_with($upper, 'POLYGON((')) {
-            $start = strpos($wkt, '((') + 2;
-            $end   = strrpos($wkt, '))');
-            $inside = substr($wkt, $start, $end - $start);
-
-            $rings = explode('),(', $inside);
-            return array_map(function ($ring) {
-                $points = explode(',', $ring);
-                return array_map(function ($point) {
-                    $coords = explode(' ', trim($point));
-                    return [(float)$coords[0], (float)$coords[1]];
-                }, $points);
-            }, $rings);
-        }
-
-        return [$wkt];
     }
 }

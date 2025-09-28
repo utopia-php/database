@@ -23,6 +23,31 @@ use Utopia\Database\Validator\Authorization;
 
 trait DocumentTests
 {
+    public function testBigintSequence(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+
+        $sequence = 5_000_000_000_000_000;
+
+        $document = $database->createDocument(__FUNCTION__, new Document([
+            '$sequence' => (string)$sequence,
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+        ]));
+
+        $this->assertEquals((string)$sequence, $document->getSequence());
+
+        $document = $database->getDocument(__FUNCTION__, $document->getId());
+        $this->assertEquals((string)$sequence, $document->getSequence());
+
+        $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string)$sequence])]);
+        $this->assertEquals((string)$sequence, $document->getSequence());
+    }
+
     public function testCreateDocument(): Document
     {
         /** @var Database $database */
@@ -533,7 +558,7 @@ trait DocumentTests
         Authorization::disable();
 
         $results = [];
-        $count = $database->createOrUpdateDocuments(
+        $count = $database->upsertDocuments(
             __FUNCTION__,
             $documents,
             onNext: function ($doc) use (&$results) {
@@ -595,7 +620,7 @@ trait DocumentTests
         ];
 
         $results = [];
-        $count = $database->createOrUpdateDocuments(
+        $count = $database->upsertDocuments(
             __FUNCTION__,
             $documents,
             onNext: function ($doc) use (&$results) {
@@ -638,7 +663,7 @@ trait DocumentTests
         $documents[1]->setAttribute('integer', 10);
 
         $results = [];
-        $count = $database->createOrUpdateDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
+        $count = $database->upsertDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
             $results[] = $doc;
         });
 
@@ -715,7 +740,7 @@ trait DocumentTests
         $documents[0]->setAttribute('integer', 1);
         $documents[1]->setAttribute('integer', 1);
 
-        $database->createOrUpdateDocumentsWithIncrease(
+        $database->upsertDocumentsWithIncrease(
             collection: __FUNCTION__,
             attribute: 'integer',
             documents: $documents
@@ -730,7 +755,7 @@ trait DocumentTests
         $documents[0]->setAttribute('integer', -1);
         $documents[1]->setAttribute('integer', -1);
 
-        $database->createOrUpdateDocumentsWithIncrease(
+        $database->upsertDocumentsWithIncrease(
             collection: __FUNCTION__,
             attribute: 'integer',
             documents: $documents
@@ -765,10 +790,10 @@ trait DocumentTests
             ],
         ]);
 
-        $database->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $database->upsertDocuments(__FUNCTION__, [$document]);
 
         try {
-            $database->createOrUpdateDocuments(__FUNCTION__, [$document->setAttribute('string', 'updated')]);
+            $database->upsertDocuments(__FUNCTION__, [$document->setAttribute('string', 'updated')]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(AuthorizationException::class, $e);
@@ -783,10 +808,10 @@ trait DocumentTests
             ],
         ]);
 
-        $database->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $database->upsertDocuments(__FUNCTION__, [$document]);
 
         $results = [];
-        $count = $database->createOrUpdateDocuments(
+        $count = $database->upsertDocuments(
             __FUNCTION__,
             [$document->setAttribute('string', 'updated')],
             onNext: function ($doc) use (&$results) {
@@ -807,7 +832,7 @@ trait DocumentTests
             ],
         ]);
 
-        $database->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $database->upsertDocuments(__FUNCTION__, [$document]);
 
         $newPermissions = [
             Permission::read(Role::any()),
@@ -816,7 +841,7 @@ trait DocumentTests
         ];
 
         $results = [];
-        $count = $database->createOrUpdateDocuments(
+        $count = $database->upsertDocuments(
             __FUNCTION__,
             [$document->setAttribute('$permissions', $newPermissions)],
             onNext: function ($doc) use (&$results) {
@@ -863,7 +888,7 @@ trait DocumentTests
         ]);
 
         // Ensure missing optionals on new document is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments(__FUNCTION__, [
             $existingDocument->setAttribute('first', 'updated'),
             $newDocument,
         ]);
@@ -875,7 +900,7 @@ trait DocumentTests
         $this->assertEquals('', $newDocument->getAttribute('last'));
 
         try {
-            $database->createOrUpdateDocuments(__FUNCTION__, [
+            $database->upsertDocuments(__FUNCTION__, [
                 $existingDocument->removeAttribute('first'),
                 $newDocument
             ]);
@@ -885,7 +910,7 @@ trait DocumentTests
         }
 
         // Ensure missing optionals on existing document is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments(__FUNCTION__, [
             $existingDocument
                 ->setAttribute('first', 'first')
                 ->removeAttribute('last'),
@@ -900,7 +925,7 @@ trait DocumentTests
         $this->assertEquals('last', $newDocument->getAttribute('last'));
 
         // Ensure set null on existing document is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments(__FUNCTION__, [
             $existingDocument
                 ->setAttribute('first', 'first')
                 ->setAttribute('last', null),
@@ -927,7 +952,7 @@ trait DocumentTests
         ]);
 
         // Ensure mismatch of attribute orders is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments(__FUNCTION__, [
             $doc3,
             $doc4
         ]);
@@ -968,11 +993,11 @@ trait DocumentTests
             ],
         ]);
 
-        $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $count = static::getDatabase()->upsertDocuments(__FUNCTION__, [$document]);
         $this->assertEquals(1, $count);
 
         // No changes, should return 0
-        $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $count = static::getDatabase()->upsertDocuments(__FUNCTION__, [$document]);
         $this->assertEquals(0, $count);
     }
 
@@ -991,7 +1016,7 @@ trait DocumentTests
         $doc2 = new Document(['$id' => 'dup', 'num' => 2]);
 
         try {
-            $db->createOrUpdateDocuments(__FUNCTION__, [$doc1, $doc2]);
+            $db->upsertDocuments(__FUNCTION__, [$doc1, $doc2]);
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e, $e->getMessage());
@@ -1033,7 +1058,7 @@ trait DocumentTests
             Permission::read(Role::any())
         ]);
 
-        $db->createOrUpdateDocuments(__FUNCTION__, [$d1, $d2]);
+        $db->upsertDocuments(__FUNCTION__, [$d1, $d2]);
 
         $this->assertEquals([
             Permission::read(Role::any()),
@@ -2749,6 +2774,98 @@ trait DocumentTests
         $this->assertEquals(0, count($documents));
     }
 
+    public function testFindCreatedBetween(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        /**
+         * Test Query::createdBetween wrapper
+         */
+        $pastDate = '1900-01-01T00:00:00.000Z';
+        $futureDate = '2050-01-01T00:00:00.000Z';
+        $recentPastDate = '2020-01-01T00:00:00.000Z';
+        $nearFutureDate = '2025-01-01T00:00:00.000Z';
+
+        // All documents should be between past and future
+        $documents = $database->find('movies', [
+            Query::createdBetween($pastDate, $futureDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertGreaterThan(0, count($documents));
+
+        // No documents should exist in this range
+        $documents = $database->find('movies', [
+            Query::createdBetween($pastDate, $pastDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertEquals(0, count($documents));
+
+        // Documents created between recent past and near future
+        $documents = $database->find('movies', [
+            Query::createdBetween($recentPastDate, $nearFutureDate),
+            Query::limit(25)
+        ]);
+
+        $count = count($documents);
+
+        // Same count should be returned with expanded range
+        $documents = $database->find('movies', [
+            Query::createdBetween($pastDate, $nearFutureDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertGreaterThanOrEqual($count, count($documents));
+    }
+
+    public function testFindUpdatedBetween(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        /**
+         * Test Query::updatedBetween wrapper
+         */
+        $pastDate = '1900-01-01T00:00:00.000Z';
+        $futureDate = '2050-01-01T00:00:00.000Z';
+        $recentPastDate = '2020-01-01T00:00:00.000Z';
+        $nearFutureDate = '2025-01-01T00:00:00.000Z';
+
+        // All documents should be between past and future
+        $documents = $database->find('movies', [
+            Query::updatedBetween($pastDate, $futureDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertGreaterThan(0, count($documents));
+
+        // No documents should exist in this range
+        $documents = $database->find('movies', [
+            Query::updatedBetween($pastDate, $pastDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertEquals(0, count($documents));
+
+        // Documents updated between recent past and near future
+        $documents = $database->find('movies', [
+            Query::updatedBetween($recentPastDate, $nearFutureDate),
+            Query::limit(25)
+        ]);
+
+        $count = count($documents);
+
+        // Same count should be returned with expanded range
+        $documents = $database->find('movies', [
+            Query::updatedBetween($pastDate, $nearFutureDate),
+            Query::limit(25)
+        ]);
+
+        $this->assertGreaterThanOrEqual($count, count($documents));
+    }
+
     public function testFindLimit(): void
     {
         /** @var Database $database */
@@ -3369,6 +3486,72 @@ trait DocumentTests
         ]);
         $this->assertEquals(3, count($documents)); // Limited to 3 results
         $this->assertLessThanOrEqual(5, count($documents)); // But still excluding Marvel movies
+    }
+
+    public function testFindOrderRandom(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Test orderRandom with default limit
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(1),
+        ]);
+        $this->assertEquals(1, count($documents));
+        $this->assertNotEmpty($documents[0]['name']); // Ensure we got a valid document
+
+        // Test orderRandom with multiple documents
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(3),
+        ]);
+        $this->assertEquals(3, count($documents));
+
+        // Test that orderRandom returns different results (not guaranteed but highly likely)
+        $firstSet = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(3),
+        ]);
+        $secondSet = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(3),
+        ]);
+
+        // Extract IDs for comparison
+        $firstIds = array_map(fn ($doc) => $doc['$id'], $firstSet);
+        $secondIds = array_map(fn ($doc) => $doc['$id'], $secondSet);
+
+        // While not guaranteed to be different, with 6 movies and selecting 3,
+        // the probability of getting the same set in the same order is very low
+        // We'll just check that we got valid results
+        $this->assertEquals(3, count($firstIds));
+        $this->assertEquals(3, count($secondIds));
+
+        // Test orderRandom with more than available documents
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+            Query::limit(10), // We only have 6 movies
+        ]);
+        $this->assertLessThanOrEqual(6, count($documents)); // Should return all available documents
+
+        // Test orderRandom with filters
+        $documents = $database->find('movies', [
+            Query::greaterThan('price', 10),
+            Query::orderRandom(),
+            Query::limit(2),
+        ]);
+        $this->assertLessThanOrEqual(2, count($documents));
+        foreach ($documents as $document) {
+            $this->assertGreaterThan(10, $document['price']);
+        }
+
+        // Test orderRandom without explicit limit (should use default)
+        $documents = $database->find('movies', [
+            Query::orderRandom(),
+        ]);
+        $this->assertGreaterThan(0, count($documents));
+        $this->assertLessThanOrEqual(25, count($documents)); // Default limit is 25
     }
 
     public function testFindNotBetween(): void
@@ -5570,7 +5753,7 @@ trait DocumentTests
 
         // Test 1: Upsert new document with custom createdAt
         $upsertResults = [];
-        $database->createOrUpdateDocuments($collection, [
+        $database->upsertDocuments($collection, [
             new Document([
                 '$id' => 'upsert1',
                 '$permissions' => $permissions,
@@ -5589,7 +5772,7 @@ trait DocumentTests
         $upsertDoc1->setAttribute('string', 'upsert1_updated');
         $upsertDoc1->setAttribute('$updatedAt', $updateDate);
         $updatedUpsertResults = [];
-        $database->createOrUpdateDocuments($collection, [$upsertDoc1], onNext: function ($doc) use (&$updatedUpsertResults) {
+        $database->upsertDocuments($collection, [$upsertDoc1], onNext: function ($doc) use (&$updatedUpsertResults) {
             $updatedUpsertResults[] = $doc;
         });
         $updatedUpsertDoc1 = $updatedUpsertResults[0];
@@ -5599,7 +5782,7 @@ trait DocumentTests
 
         // Test 3: Upsert new document with both custom dates
         $upsertResults2 = [];
-        $database->createOrUpdateDocuments($collection, [
+        $database->upsertDocuments($collection, [
             new Document([
                 '$id' => 'upsert2',
                 '$permissions' => $permissions,
@@ -5620,7 +5803,7 @@ trait DocumentTests
         $upsertDoc2->setAttribute('$createdAt', $date3);
         $upsertDoc2->setAttribute('$updatedAt', $date3);
         $updatedUpsertResults2 = [];
-        $database->createOrUpdateDocuments($collection, [$upsertDoc2], onNext: function ($doc) use (&$updatedUpsertResults2) {
+        $database->upsertDocuments($collection, [$upsertDoc2], onNext: function ($doc) use (&$updatedUpsertResults2) {
             $updatedUpsertResults2[] = $doc;
         });
         $updatedUpsertDoc2 = $updatedUpsertResults2[0];
@@ -5633,7 +5816,7 @@ trait DocumentTests
 
         $customDate = '2000-01-01T10:00:00.000+00:00';
         $upsertResults3 = [];
-        $database->createOrUpdateDocuments($collection, [
+        $database->upsertDocuments($collection, [
             new Document([
                 '$id' => 'upsert3',
                 '$permissions' => $permissions,
@@ -5654,7 +5837,7 @@ trait DocumentTests
         $upsertDoc3->setAttribute('$createdAt', $customDate);
         $upsertDoc3->setAttribute('$updatedAt', $customDate);
         $updatedUpsertResults3 = [];
-        $database->createOrUpdateDocuments($collection, [$upsertDoc3], onNext: function ($doc) use (&$updatedUpsertResults3) {
+        $database->upsertDocuments($collection, [$upsertDoc3], onNext: function ($doc) use (&$updatedUpsertResults3) {
             $updatedUpsertResults3[] = $doc;
         });
         $updatedUpsertDoc3 = $updatedUpsertResults3[0];
@@ -5694,7 +5877,7 @@ trait DocumentTests
         ];
 
         $bulkUpsertResults = [];
-        $database->createOrUpdateDocuments($collection, $upsertDocuments, onNext: function ($doc) use (&$bulkUpsertResults) {
+        $database->upsertDocuments($collection, $upsertDocuments, onNext: function ($doc) use (&$bulkUpsertResults) {
             $bulkUpsertResults[] = $doc;
         });
 
@@ -5761,7 +5944,7 @@ trait DocumentTests
             $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
         }
 
-        // Test 11: Bulk upsert operations with createOrUpdateDocuments
+        // Test 11: Bulk upsert operations with upsertDocuments
         $upsertUpdateDocuments = [];
         foreach ($upsertDocuments as $doc) {
             $updatedDoc = clone $doc;
@@ -5772,7 +5955,7 @@ trait DocumentTests
         }
 
         $upsertUpdateResults = [];
-        $countUpsertUpdate = $database->createOrUpdateDocuments($collection, $upsertUpdateDocuments, onNext: function ($doc) use (&$upsertUpdateResults) {
+        $countUpsertUpdate = $database->upsertDocuments($collection, $upsertUpdateDocuments, onNext: function ($doc) use (&$upsertUpdateResults) {
             $upsertUpdateResults[] = $doc;
         });
         $this->assertEquals(4, $countUpsertUpdate);
@@ -5797,7 +5980,7 @@ trait DocumentTests
         }
 
         $upsertDisabledResults = [];
-        $countUpsertDisabled = $database->createOrUpdateDocuments($collection, $upsertDisabledDocuments, onNext: function ($doc) use (&$upsertDisabledResults) {
+        $countUpsertDisabled = $database->upsertDocuments($collection, $upsertDisabledDocuments, onNext: function ($doc) use (&$upsertDisabledResults) {
             $upsertDisabledResults[] = $doc;
         });
         $this->assertEquals(4, $countUpsertDisabled);
@@ -5852,7 +6035,7 @@ trait DocumentTests
             ])
         ];
         $upsertUpdateResults = [];
-        $count = $database->createOrUpdateDocuments($collectionName, $docs, onNext: function ($doc) use (&$upsertUpdateResults) {
+        $count = $database->upsertDocuments($collectionName, $docs, onNext: function ($doc) use (&$upsertUpdateResults) {
             $upsertUpdateResults[] = $doc;
         });
         $this->assertCount(4, $upsertUpdateResults);
@@ -5925,5 +6108,323 @@ trait DocumentTests
             $this->assertEquals('value', $doc->getAttribute('value'));
         }
         $database->deleteCollection($colName);
+    }
+    public function testDecodeWithDifferentSelectionTypes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->addFilter(
+            'encrypt',
+            function (mixed $value) {
+                return json_encode([
+                    'data' => base64_encode($value),
+                    'method' => 'base64',
+                    'version' => 'v1',
+                ]);
+            },
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                $value = json_decode($value, true);
+                return base64_decode($value['data']);
+            }
+        );
+
+        $citiesId = 'TestCities';
+        $storesId = 'TestStores';
+
+        $database->createCollection($citiesId);
+        $database->createCollection($storesId);
+
+        $database->createAttribute($citiesId, 'name', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($citiesId, 'area', Database::VAR_POLYGON, 0, required: true);
+        $database->createAttribute($citiesId, 'population', Database::VAR_INTEGER, 0, required: false, default: 0);
+        $database->createAttribute($citiesId, 'secretCode', Database::VAR_STRING, 255, required: false, default: 'default-secret', filters: ['encrypt']);
+        $database->createAttribute($citiesId, 'center', Database::VAR_POINT, 0, required: false, default: [0.0, 0.0]);
+
+        $database->createAttribute($storesId, 'name', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($storesId, 'revenue', Database::VAR_FLOAT, 0, required: false, default: 0.0);
+        $database->createAttribute($storesId, 'location', Database::VAR_POINT, 0, required: false, default: [1.0, 1.0]);
+
+        $database->createRelationship(
+            collection: $storesId,
+            relatedCollection: $citiesId,
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'city',
+            twoWayKey: 'stores'
+        );
+
+        $cityDoc = new Document([
+            '$id' => 'city-1',
+            'name' => 'Test City',
+            'area' => [[[40.7128, -74.0060], [40.7589, -74.0060], [40.7589, -73.9851], [40.7128, -73.9851], [40.7128, -74.0060]]],
+            'population' => 1000000,
+            'secretCode' => 'super-secret-code',
+            'center' => [40.7282, -73.9942],
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $createdCity = $database->createDocument($citiesId, $cityDoc);
+
+        $storeDoc = new Document([
+            '$id' => 'store-1',
+            'name' => 'Main Store',
+            'revenue' => 50000.75,
+            'location' => [40.7300, -73.9900],
+            'city' => $createdCity->getId(),
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $createdStore = $database->createDocument($storesId, $storeDoc);
+
+        $cityWithSelection = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'population'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithSelection->getAttribute('name'));
+        $this->assertEquals(1000000, $cityWithSelection->getAttribute('population'));
+
+        $this->assertNull($cityWithSelection->getAttribute('area'));
+        $this->assertNull($cityWithSelection->getAttribute('secretCode'));
+        $this->assertNull($cityWithSelection->getAttribute('center'));
+
+        $cityWithSpatial = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'area', 'center'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithSpatial->getAttribute('name'));
+        $this->assertNotNull($cityWithSpatial->getAttribute('area'));
+        $this->assertEquals([[[40.7128, -74.0060], [40.7589, -74.0060], [40.7589, -73.9851], [40.7128, -73.9851], [40.7128, -74.0060]]], $cityWithSpatial->getAttribute('area'));
+        $this->assertEquals([40.7282, -73.9942], $cityWithSpatial->getAttribute('center'));
+        // Null -> not selected
+        $this->assertNull($cityWithSpatial->getAttribute('population'));
+        $this->assertNull($cityWithSpatial->getAttribute('secretCode'));
+
+        $cityWithEncrypted = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'secretCode'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithEncrypted->getAttribute('name'));
+        $this->assertEquals('super-secret-code', $cityWithEncrypted->getAttribute('secretCode')); // Should be decrypted
+
+        $this->assertNull($cityWithEncrypted->getAttribute('area'));
+        $this->assertNull($cityWithEncrypted->getAttribute('population'));
+
+        $cityWithStores = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['stores.name'])
+        ]);
+
+        $this->assertNotNull($cityWithStores->getAttribute('stores'));
+        $this->assertCount(1, $cityWithStores->getAttribute('stores'));
+        $this->assertEquals('Main Store', $cityWithStores->getAttribute('stores')[0]['name']);
+
+        $this->assertEquals('super-secret-code', $cityWithStores->getAttribute('secretCode'));
+        $this->assertNotNull($cityWithStores->getAttribute('area'));
+        $this->assertEquals([40.7282, -73.9942], $cityWithStores->getAttribute('center'));
+
+        $cityWithMultipleStoreFields = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['stores.name', 'stores.revenue'])
+        ]);
+
+        $this->assertNotNull($cityWithMultipleStoreFields->getAttribute('stores'));
+        $this->assertEquals('Main Store', $cityWithMultipleStoreFields->getAttribute('stores')[0]['name']);
+        $this->assertEquals(50000.75, $cityWithMultipleStoreFields->getAttribute('stores')[0]['revenue']);
+
+        $this->assertEquals('super-secret-code', $cityWithMultipleStoreFields->getAttribute('secretCode'));
+
+        $cityWithMixed = $database->getDocument($citiesId, 'city-1', [
+            Query::select(['name', 'population', 'stores.name'])
+        ]);
+
+        $this->assertEquals('Test City', $cityWithMixed->getAttribute('name'));
+        $this->assertEquals(1000000, $cityWithMixed->getAttribute('population'));
+
+        $this->assertNotNull($cityWithMixed->getAttribute('stores'));
+        $this->assertEquals('Main Store', $cityWithMixed->getAttribute('stores')[0]['name']);
+
+        $citiesWithStores = $database->find($citiesId, [
+            Query::select(['stores.name']),
+            Query::equal('$id', ['city-1'])
+        ]);
+
+        $this->assertCount(1, $citiesWithStores);
+        $city = $citiesWithStores[0];
+        $this->assertNotNull($city->getAttribute('stores'));
+        $this->assertEquals('Main Store', $city->getAttribute('stores')[0]['name']);
+        $this->assertEquals('super-secret-code', $city->getAttribute('secretCode'));
+
+        $storeWithCityArea = $database->getDocument($storesId, 'store-1', [
+            Query::select(['location','city.area'])
+        ]);
+
+        $this->assertNotNull($storeWithCityArea->getAttribute('city'));
+        $this->assertNotNull($storeWithCityArea->getAttribute('city')['area']);
+        $this->assertEquals([40.7300, -73.9900], $storeWithCityArea->getAttribute('location'));
+
+        $database->deleteCollection($citiesId);
+        $database->deleteCollection($storesId);
+    }
+
+    public function testDecodeWithoutRelationships(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->addFilter(
+            'encryptTest',
+            function (mixed $value) {
+                return 'encrypted:' . base64_encode($value);
+            },
+            function (mixed $value) {
+                if (is_null($value) || !str_starts_with($value, 'encrypted:')) {
+                    return $value;
+                }
+                return base64_decode(substr($value, 10));
+            }
+        );
+
+        $collectionId = 'TestDecodeCollection';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'title', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($collectionId, 'description', Database::VAR_STRING, 1000, required: false, default: 'No description');
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, required: false, default: 0);
+        $database->createAttribute($collectionId, 'price', Database::VAR_FLOAT, 0, required: false, default: 0.0);
+        $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, required: false, default: true);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, required: false, array: true);
+        $database->createAttribute($collectionId, 'secret', Database::VAR_STRING, 255, required: false, default: 'default-secret', filters: ['encryptTest']);
+        $database->createAttribute($collectionId, 'location', Database::VAR_POINT, 0, required: false, default: [0.0, 0.0]);
+        $database->createAttribute($collectionId, 'boundary', Database::VAR_POLYGON, 0, required: false);
+
+        $doc = new Document([
+            '$id' => 'test-1',
+            'title' => 'Test Document',
+            'description' => 'This is a test document',
+            'count' => 42,
+            'price' => 99.99,
+            'active' => true,
+            'tags' => ['tag1', 'tag2', 'tag3'],
+            'secret' => 'my-secret-value',
+            'location' => [40.7128, -74.0060],
+            'boundary' => [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]],
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $created = $database->createDocument($collectionId, $doc);
+
+        $selected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['title', 'count', 'secret'])
+        ]);
+
+        $this->assertEquals('Test Document', $selected->getAttribute('title'));
+        $this->assertEquals(42, $selected->getAttribute('count'));
+        $this->assertEquals('my-secret-value', $selected->getAttribute('secret'));
+
+        $this->assertNull($selected->getAttribute('description'));
+        $this->assertNull($selected->getAttribute('price'));
+        $this->assertNull($selected->getAttribute('location'));
+
+        $spatialSelected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['title', 'location', 'boundary'])
+        ]);
+
+        $this->assertEquals('Test Document', $spatialSelected->getAttribute('title'));
+        $this->assertEquals([40.7128, -74.0060], $spatialSelected->getAttribute('location'));
+        $this->assertEquals([[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]], $spatialSelected->getAttribute('boundary'));
+        $this->assertNull($spatialSelected->getAttribute('secret'));
+        $this->assertNull($spatialSelected->getAttribute('count'));
+
+        $arraySelected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['title', 'tags'])
+        ]);
+
+        $this->assertEquals('Test Document', $arraySelected->getAttribute('title'));
+        $this->assertEquals(['tag1', 'tag2', 'tag3'], $arraySelected->getAttribute('tags'));
+        $this->assertNull($arraySelected->getAttribute('active'));
+
+        $allSelected = $database->getDocument($collectionId, 'test-1', [
+            Query::select(['*'])
+        ]);
+
+        $this->assertEquals('Test Document', $allSelected->getAttribute('title'));
+        $this->assertEquals('This is a test document', $allSelected->getAttribute('description'));
+        $this->assertEquals(42, $allSelected->getAttribute('count'));
+        $this->assertEquals('my-secret-value', $allSelected->getAttribute('secret'));
+        $this->assertEquals([40.7128, -74.0060], $allSelected->getAttribute('location'));
+
+        $noSelection = $database->getDocument($collectionId, 'test-1');
+
+        $this->assertEquals('Test Document', $noSelection->getAttribute('title'));
+        $this->assertEquals('This is a test document', $noSelection->getAttribute('description'));
+        $this->assertEquals('my-secret-value', $noSelection->getAttribute('secret'));
+        $this->assertEquals([40.7128, -74.0060], $noSelection->getAttribute('location'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testDecodeWithMultipleFilters(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->addFilter(
+            'upperCase',
+            function (mixed $value) { return strtoupper($value); },
+            function (mixed $value) { return strtolower($value); }
+        );
+
+        $database->addFilter(
+            'prefix',
+            function (mixed $value) { return 'prefix_' . $value; },
+            function (mixed $value) { return str_replace('prefix_', '', $value); }
+        );
+
+        $collectionId = 'EdgeCaseCollection';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 255, required: true);
+        $database->createAttribute($collectionId, 'processedName', Database::VAR_STRING, 255, required: false, filters: ['upperCase', 'prefix']);
+        $database->createAttribute($collectionId, 'nullableField', Database::VAR_STRING, 255, required: false);
+
+        $doc = new Document([
+            '$id' => 'edge-1',
+            'name' => 'Test Name',
+            'processedName' => 'test value',
+            'nullableField' => null,
+            '$permissions' => [Permission::read(Role::any())],
+        ]);
+        $created = $database->createDocument($collectionId, $doc);
+
+        $selected = $database->getDocument($collectionId, 'edge-1', [
+            Query::select(['name', 'processedName'])
+        ]);
+
+        $this->assertEquals('Test Name', $selected->getAttribute('name'));
+        $this->assertEquals('test value', $selected->getAttribute('processedName'));
+        $this->assertNull($selected->getAttribute('nullableField'));
+
+        $nullSelected = $database->getDocument($collectionId, 'edge-1', [
+            Query::select(['name', 'nullableField'])
+        ]);
+
+        $this->assertEquals('Test Name', $nullSelected->getAttribute('name'));
+        $this->assertNull($nullSelected->getAttribute('nullableField'));
+
+        $database->deleteCollection($collectionId);
     }
 }

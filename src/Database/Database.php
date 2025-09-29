@@ -7112,12 +7112,10 @@ class Database
         }
 
         if (!$attribute->isEmpty()) {
-            $type = $attribute->getAttribute('type');
-
             $query->setOnArray($attribute->getAttribute('array', false));
-            $query->setAttributeType($type);
+            $query->setAttributeType($attribute->getAttribute('type'));
 
-            if ($type == Database::VAR_DATETIME) {
+            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
                 $values = $query->getValues();
                 foreach ($values as $valueIndex => $value) {
                     try {

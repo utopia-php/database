@@ -14,6 +14,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Timeout;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
@@ -126,8 +127,8 @@ class Mongo extends Adapter
     public function startTransaction(): bool
     {
 
-         // If the database is not a replica set, we can't use transactions
-         if (!$this->client->isReplicaSet()) {
+        // If the database is not a replica set, we can't use transactions
+        if (!$this->client->isReplicaSet()) {
             return false;
         }
 
@@ -1531,15 +1532,19 @@ class Mongo extends Adapter
         }
 
         $options = $this->getTransactionOptions();
-        $this->client->update(
-            $this->getNamespace() . '_' . $this->filter($collection),
-            $filters,
-            [
-                '$inc' => [$attribute => $value],
-                '$set' => ['_updatedAt' => $this->toMongoDatetime($updatedAt)],
-            ],
-            options: $options
-        );
+        try {
+            $this->client->update(
+                $this->getNamespace() . '_' . $this->filter($collection),
+                $filters,
+                [
+                    '$inc' => [$attribute => $value],
+                    '$set' => ['_updatedAt' => $this->toMongoDatetime($updatedAt)],
+                ],
+                options: $options
+            );
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
 
         return true;
     }
@@ -2821,6 +2826,11 @@ class Mongo extends Adapter
         // Index already exists (MongoDB error code 85)
         if ($e->getCode() === 85) {
             return new Duplicate('Index already exists', $e->getCode(), $e);
+        }
+
+        // Invalid operation(MongoDB error code 14)
+        if ($e->getCode() === 14) {
+            return new TypeException('Invalid operation', $e->getCode(), $e);
         }
 
         return $e;

@@ -253,7 +253,7 @@ trait SchemalessTests
         ];
 
         $docs = [
-            new Document(['$id' => 'doc1', '$permissions' => $permissions, 'counter' => '10', 'score' => 5.5]),
+            new Document(['$id' => 'doc1', '$permissions' => $permissions, 'counter' => 10, 'score' => 5.5]),
             new Document(['$id' => 'doc2', '$permissions' => $permissions, 'counter' => 20, 'points' => 100]),
             new Document(['$id' => 'doc3', '$permissions' => $permissions, 'value' => 0]),
         ];

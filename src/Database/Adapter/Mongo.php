@@ -125,10 +125,9 @@ class Mongo extends Adapter
 
     public function startTransaction(): bool
     {
-
          // If the database is not a replica set, we can't use transactions
          if (!$this->client->isReplicaSet()) {
-            return false;
+            return true;
         }
 
         try {
@@ -162,6 +161,11 @@ class Mongo extends Adapter
 
     public function commitTransaction(): bool
     {
+        // If the database is not a replica set, we can't use transactions
+        if (!$this->client->isReplicaSet()) {
+            return true;
+        }
+
         try {
             if ($this->inTransaction === 0) {
                 return false;
@@ -194,6 +198,11 @@ class Mongo extends Adapter
 
     public function rollbackTransaction(): bool
     {
+        // If the database is not a replica set, we can't use transactions
+        if (!$this->client->isReplicaSet()) {
+            return true;
+        }
+
         try {
             if ($this->inTransaction === 0) {
                 return false;

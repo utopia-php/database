@@ -964,4 +964,228 @@ trait SchemalessTests
         $database->deleteCollection($col);
         Authorization::cleanRoles();
     }
+
+    public function testSchemalessDates(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_dates');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        // Seed deterministic date strings
+        $createdAt1 = '2000-01-01T10:00:00.000+00:00';
+        $updatedAt1 = '2000-01-02T11:11:11.000+00:00';
+        $curDate1   = '2000-01-05T05:05:05.000+00:00';
+
+        // createDocument with preserved dates
+        $doc1 = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt1, $updatedAt1, $curDate1) {
+            return $database->createDocument($col, new Document([
+                '$id' => 'd1',
+                '$permissions' => $permissions,
+                '$createdAt' => $createdAt1,
+                '$updatedAt' => $updatedAt1,
+                'curDate' => $curDate1,
+                'counter' => 0,
+            ]));
+        });
+
+        $this->assertEquals('d1', $doc1->getId());
+        $this->assertTrue(is_string($doc1->getAttribute('curDate')));
+        $this->assertEquals($curDate1, $doc1->getAttribute('curDate'));
+        $this->assertTrue(is_string($doc1->getAttribute('$createdAt')));
+        $this->assertTrue(is_string($doc1->getAttribute('$updatedAt')));
+        $this->assertEquals($createdAt1, $doc1->getAttribute('$createdAt'));
+        $this->assertEquals($updatedAt1, $doc1->getAttribute('$updatedAt'));
+
+        $fetched1 = $database->getDocument($col, 'd1');
+        $this->assertEquals($curDate1, $fetched1->getAttribute('curDate'));
+        $this->assertTrue(is_string($fetched1->getAttribute('curDate')));
+        $this->assertTrue(is_string($fetched1->getAttribute('$createdAt')));
+        $this->assertTrue(is_string($fetched1->getAttribute('$updatedAt')));
+        $this->assertEquals($createdAt1, $fetched1->getAttribute('$createdAt'));
+        $this->assertEquals($updatedAt1, $fetched1->getAttribute('$updatedAt'));
+
+        // createDocuments with preserved dates
+        $createdAt2 = '2001-02-03T04:05:06.000+00:00';
+        $updatedAt2 = '2001-02-04T04:05:07.000+00:00';
+        $curDate2   = '2001-02-05T06:07:08.000+00:00';
+
+        $createdAt3 = '2002-03-04T05:06:07.000+00:00';
+        $updatedAt3 = '2002-03-05T05:06:08.000+00:00';
+        $curDate3   = '2002-03-06T07:08:09.000+00:00';
+
+        $countCreated = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt2, $updatedAt2, $curDate2, $createdAt3, $updatedAt3, $curDate3) {
+            return $database->createDocuments($col, [
+                new Document([
+                    '$id' => 'd2',
+                    '$permissions' => $permissions,
+                    '$createdAt' => $createdAt2,
+                    '$updatedAt' => $updatedAt2,
+                    'curDate' => $curDate2,
+                ]),
+                new Document([
+                    '$id' => 'd3',
+                    '$permissions' => $permissions,
+                    '$createdAt' => $createdAt3,
+                    '$updatedAt' => $updatedAt3,
+                    'curDate' => $curDate3,
+                ]),
+            ]);
+        });
+        $this->assertEquals(2, $countCreated);
+
+        $fetched2 = $database->getDocument($col, 'd2');
+        $this->assertEquals($curDate2, $fetched2->getAttribute('curDate'));
+        $this->assertEquals($createdAt2, $fetched2->getAttribute('$createdAt'));
+        $this->assertEquals($updatedAt2, $fetched2->getAttribute('$updatedAt'));
+
+        $fetched3 = $database->getDocument($col, 'd3');
+        $this->assertEquals($curDate3, $fetched3->getAttribute('curDate'));
+        $this->assertEquals($createdAt3, $fetched3->getAttribute('$createdAt'));
+        $this->assertEquals($updatedAt3, $fetched3->getAttribute('$updatedAt'));
+
+        // updateDocument with preserved $updatedAt and custom date field
+        $newCurDate1   = '2000-02-01T00:00:00.000+00:00';
+        $newUpdatedAt1 = '2000-02-02T02:02:02.000+00:00';
+        $updated1 = $database->withPreserveDates(function () use ($database, $col, $newCurDate1, $newUpdatedAt1) {
+            return $database->updateDocument($col, 'd1', new Document([
+                'curDate' => $newCurDate1,
+                '$updatedAt' => $newUpdatedAt1,
+            ]));
+        });
+        $this->assertEquals($newCurDate1, $updated1->getAttribute('curDate'));
+        $this->assertEquals($newUpdatedAt1, $updated1->getAttribute('$updatedAt'));
+        $refetched1 = $database->getDocument($col, 'd1');
+        $this->assertEquals($newCurDate1, $refetched1->getAttribute('curDate'));
+        $this->assertEquals($newUpdatedAt1, $refetched1->getAttribute('$updatedAt'));
+
+        // updateDocuments with preserved $updatedAt over a subset
+        $bulkCurDate   = '2001-01-01T00:00:00.000+00:00';
+        $bulkUpdatedAt = '2001-01-02T00:00:00.000+00:00';
+        $updatedCount = $database->withPreserveDates(function () use ($database, $col, $bulkCurDate, $bulkUpdatedAt) {
+            return $database->updateDocuments(
+                $col,
+                new Document([
+                    'curDate' => $bulkCurDate,
+                    '$updatedAt' => $bulkUpdatedAt,
+                ]),
+                [Query::equal('$id', ['d2', 'd3'])]
+            );
+        });
+        $this->assertEquals(2, $updatedCount);
+        $afterBulk2 = $database->getDocument($col, 'd2');
+        $afterBulk3 = $database->getDocument($col, 'd3');
+        $this->assertEquals($bulkCurDate, $afterBulk2->getAttribute('curDate'));
+        $this->assertEquals($bulkUpdatedAt, $afterBulk2->getAttribute('$updatedAt'));
+        $this->assertEquals($bulkCurDate, $afterBulk3->getAttribute('curDate'));
+        $this->assertEquals($bulkUpdatedAt, $afterBulk3->getAttribute('$updatedAt'));
+
+        // upsertDocument: create new then update existing with preserved dates
+        $createdAt4 = '2003-03-03T03:03:03.000+00:00';
+        $updatedAt4 = '2003-03-04T04:04:04.000+00:00';
+        $curDate4   = '2003-03-05T05:05:05.000+00:00';
+        $up1 = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt4, $updatedAt4, $curDate4) {
+            return $database->upsertDocument($col, new Document([
+                '$id' => 'd4',
+                '$permissions' => $permissions,
+                '$createdAt' => $createdAt4,
+                '$updatedAt' => $updatedAt4,
+                'curDate' => $curDate4,
+            ]));
+        });
+        $this->assertEquals('d4', $up1->getId());
+        $this->assertEquals($curDate4, $up1->getAttribute('curDate'));
+        $this->assertEquals($createdAt4, $up1->getAttribute('$createdAt'));
+        $this->assertEquals($updatedAt4, $up1->getAttribute('$updatedAt'));
+
+        $updatedAt4b = '2003-03-06T06:06:06.000+00:00';
+        $curDate4b   = '2003-03-07T07:07:07.000+00:00';
+        $up2 = $database->withPreserveDates(function () use ($database, $col, $updatedAt4b, $curDate4b) {
+            return $database->upsertDocument($col, new Document([
+                '$id' => 'd4',
+                'curDate' => $curDate4b,
+                '$updatedAt' => $updatedAt4b,
+            ]));
+        });
+        $this->assertEquals($curDate4b, $up2->getAttribute('curDate'));
+        $this->assertEquals($updatedAt4b, $up2->getAttribute('$updatedAt'));
+        $refetched4 = $database->getDocument($col, 'd4');
+        $this->assertEquals($curDate4b, $refetched4->getAttribute('curDate'));
+        $this->assertEquals($updatedAt4b, $refetched4->getAttribute('$updatedAt'));
+
+        // upsertDocuments: mix create and update with preserved dates
+        $createdAt5 = '2004-04-01T01:01:01.000+00:00';
+        $updatedAt5 = '2004-04-02T02:02:02.000+00:00';
+        $curDate5   = '2004-04-03T03:03:03.000+00:00';
+        $updatedAt2b = '2001-02-08T08:08:08.000+00:00';
+        $curDate2b   = '2001-02-09T09:09:09.000+00:00';
+
+        $upCount = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt5, $updatedAt5, $curDate5, $updatedAt2b, $curDate2b) {
+            return $database->upsertDocuments($col, [
+                new Document([
+                    '$id' => 'd5',
+                    '$permissions' => $permissions,
+                    '$createdAt' => $createdAt5,
+                    '$updatedAt' => $updatedAt5,
+                    'curDate' => $curDate5,
+                ]),
+                new Document([
+                    '$id' => 'd2',
+                    '$updatedAt' => $updatedAt2b,
+                    'curDate' => $curDate2b,
+                ]),
+            ]);
+        });
+        $this->assertEquals(2, $upCount);
+
+        $fetched5 = $database->getDocument($col, 'd5');
+        $this->assertEquals($curDate5, $fetched5->getAttribute('curDate'));
+        $this->assertEquals($createdAt5, $fetched5->getAttribute('$createdAt'));
+        $this->assertEquals($updatedAt5, $fetched5->getAttribute('$updatedAt'));
+
+        $fetched2b = $database->getDocument($col, 'd2');
+        $this->assertEquals($curDate2b, $fetched2b->getAttribute('curDate'));
+        $this->assertEquals($updatedAt2b, $fetched2b->getAttribute('$updatedAt'));
+
+        // increase/decrease should not affect date types; ensure they remain strings
+        $afterInc = $database->increaseDocumentAttribute($col, 'd1', 'counter', 5);
+        $this->assertEquals(5, $afterInc->getAttribute('counter'));
+        $this->assertTrue(is_string($afterInc->getAttribute('curDate')));
+        $this->assertTrue(is_string($afterInc->getAttribute('$createdAt')));
+        $this->assertTrue(is_string($afterInc->getAttribute('$updatedAt')));
+
+        $afterIncFetched = $database->getDocument($col, 'd1');
+        $this->assertEquals(5, $afterIncFetched->getAttribute('counter'));
+        $this->assertTrue(is_string($afterIncFetched->getAttribute('curDate')));
+        $this->assertTrue(is_string($afterIncFetched->getAttribute('$createdAt')));
+        $this->assertTrue(is_string($afterIncFetched->getAttribute('$updatedAt')));
+
+        $afterDec = $database->decreaseDocumentAttribute($col, 'd1', 'counter', 2);
+        $this->assertEquals(3, $afterDec->getAttribute('counter'));
+        $this->assertTrue(is_string($afterDec->getAttribute('curDate')));
+        $this->assertTrue(is_string($afterDec->getAttribute('$createdAt')));
+        $this->assertTrue(is_string($afterDec->getAttribute('$updatedAt')));
+
+        $afterDecFetched = $database->getDocument($col, 'd1');
+        $this->assertEquals(3, $afterDecFetched->getAttribute('counter'));
+        $this->assertTrue(is_string($afterDecFetched->getAttribute('curDate')));
+        $this->assertTrue(is_string($afterDecFetched->getAttribute('$createdAt')));
+        $this->assertTrue(is_string($afterDecFetched->getAttribute('$updatedAt')));
+
+        $database->deleteCollection($col);
+    }
+
 }

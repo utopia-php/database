@@ -4049,17 +4049,17 @@ class Database
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
-            foreach ($batch as $document) {
-                $document = $this->adapter->castingAfter($collection, $document);
+            foreach ($batch as $doc) {
+                $doc = $this->adapter->castingAfter($collection, $doc);
                 if ($this->resolveRelationships) {
-                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+                    $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
                 }
 
-                $document = $this->casting($collection, $document);
-                $document = $this->decode($collection, $document);
+                $doc = $this->casting($collection, $doc);
+                $doc = $this->decode($collection, $doc);
 
                 try {
-                    $onNext && $onNext($document);
+                    $onNext && $onNext($doc);
                 } catch (\Throwable $e) {
                     $onError ? $onError($e) : throw $e;
                 }

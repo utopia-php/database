@@ -1273,6 +1273,7 @@ class Database
     public function exists(?string $database = null, ?string $collection = null): bool
     {
         $database ??= $this->adapter->getDatabase();
+
         return $this->adapter->exists($database, $collection);
     }
 

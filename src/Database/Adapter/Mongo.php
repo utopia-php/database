@@ -55,10 +55,8 @@ class Mongo extends Adapter
     /**
      * Transaction/session state for MongoDB transactions
      */
-    private ?object $sessionId = null; // Store raw BSON id object
-    private ?int $txnNumber = null;
+    private ?array $session = null; // Store session array from startSession
     protected int $inTransaction = 0;
-    private bool $firstOpInTransaction = false;
 
     /**
      * Constructor.
@@ -132,25 +130,10 @@ class Mongo extends Adapter
 
         try {
             if ($this->inTransaction === 0) {
-                if (!$this->sessionId) {
-                    $this->sessionId = $this->client->startSession(); // Store raw id object
+                if (!$this->session) {
+                    $this->session = $this->client->startSession(); // Get session array
+                    $this->client->startTransaction($this->session); // Start the transaction
                 }
-                $this->txnNumber = ($this->txnNumber ?? 0) + 1;
-                $this->firstOpInTransaction = true;
-
-                // Initialize the transaction on MongoDB's side with a dummy find operation
-                // This ensures the transaction is active even if validation fails later.
-                $this->client->query([
-                    'find' => 'system.version',
-                    'filter' => $this->client->toObject([]),
-                    'limit' => 1,
-                    'lsid' => ['id' => $this->sessionId],
-                    'txnNumber' => new \MongoDB\BSON\Int64($this->txnNumber), // Long type for txnNumber
-                    'autocommit' => false,
-                    'startTransaction' => true
-                ], 'admin');
-
-                $this->firstOpInTransaction = false;
             }
             $this->inTransaction++;
             return true;
@@ -172,21 +155,17 @@ class Mongo extends Adapter
             }
             $this->inTransaction--;
             if ($this->inTransaction === 0) {
-                if (!$this->sessionId) {
+                if (!$this->session) {
                     return false;
                 }
                 try {
-                    $result = $this->client->commitTransaction(
-                        ['id' => $this->sessionId],
-                        $this->txnNumber
-                    );
+                    $result = $this->client->commitTransaction($this->session);
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
 
                 // Session is now closed by the client using endSessions,  state is reset
-                $this->sessionId = null;
-                $this->txnNumber = null;
+                $this->session = null;
 
                 return true;
             }
@@ -209,22 +188,18 @@ class Mongo extends Adapter
             }
             $this->inTransaction--;
             if ($this->inTransaction === 0) {
-                if (!$this->sessionId) {
+                if (!$this->session) {
                     return false;
                 }
 
                 try {
-                    $result = $this->client->abortTransaction(
-                        ['id' => $this->sessionId], // Pass raw id object
-                        $this->txnNumber
-                    );
+                    $result = $this->client->abortTransaction($this->session);
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
 
                 // Session is now closed by the client using endSessions, reset our state
-                $this->sessionId = null;
-                $this->txnNumber = null;
+                $this->session = null;
 
                 return true;
             }
@@ -242,16 +217,9 @@ class Mongo extends Adapter
      */
     private function getTransactionOptions(array $options = []): array
     {
-        if ($this->inTransaction) {
-            $options['lsid'] = ['id' => $this->sessionId];
-            $options['txnNumber'] = new Int64($this->txnNumber);
-            $options['autocommit'] = false;
-
-            if ($this->firstOpInTransaction) {
-                // For MongoDB, the first operation in a transaction should include startTransaction
-                $options['startTransaction'] = true;
-                $this->firstOpInTransaction = false;
-            }
+        if ($this->inTransaction && $this->session) {
+            // Pass the session array directly - the client will handle the transaction state internally
+            $options['session'] = $this->session;
         }
         return $options;
     }

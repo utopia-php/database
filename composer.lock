@@ -2170,12 +2170,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "0ee577e01e146cf856bc1d50ffed5d0c85621e11"
+                "reference": "f2656f9ebd99184f15d7080091b2f1650b6afdb5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/0ee577e01e146cf856bc1d50ffed5d0c85621e11",
-                "reference": "0ee577e01e146cf856bc1d50ffed5d0c85621e11",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/f2656f9ebd99184f15d7080091b2f1650b6afdb5",
+                "reference": "f2656f9ebd99184f15d7080091b2f1650b6afdb5",
                 "shasum": ""
             },
             "require": {
@@ -2223,7 +2223,7 @@
                 "issues": "https://github.com/utopia-php/mongo/issues",
                 "source": "https://github.com/utopia-php/mongo/tree/feat-client-updates"
             },
-            "time": "2025-09-29T10:27:04+00:00"
+            "time": "2025-09-29T11:09:16+00:00"
         },
         {
             "name": "utopia-php/pools",

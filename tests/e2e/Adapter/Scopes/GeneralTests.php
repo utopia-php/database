@@ -424,7 +424,9 @@ trait GeneralTests
 
     public function testSharedTablesTenantPerDocument(): void
     {
+        /** @var Database $database */
         $database = static::getDatabase();
+
         $sharedTables = $database->getSharedTables();
         $tenantPerDocument = $database->getTenantPerDocument();
         $namespace = $database->getNamespace();
@@ -435,8 +437,13 @@ trait GeneralTests
             return;
         }
 
-        if ($database->exists(__FUNCTION__)) {
+        try {
+            /**
+             * MirrorTest returning false $database->exists(__FUNCTION__)
+             */
             $database->delete(__FUNCTION__);
+        } catch (\Throwable $e) {
+
         }
 
         $database

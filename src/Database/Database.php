@@ -1273,7 +1273,6 @@ class Database
     public function exists(?string $database = null, ?string $collection = null): bool
     {
         $database ??= $this->adapter->getDatabase();
-
         return $this->adapter->exists($database, $collection);
     }
 
@@ -7112,9 +7111,12 @@ class Database
         }
 
         if (!$attribute->isEmpty()) {
-            $query->setOnArray($attribute->getAttribute('array', false));
+            $type = $attribute->getAttribute('type');
 
-            if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
+            $query->setOnArray($attribute->getAttribute('array', false));
+            $query->setAttributeType($type);
+
+            if ($type == Database::VAR_DATETIME) {
                 $values = $query->getValues();
                 foreach ($values as $valueIndex => $value) {
                     try {

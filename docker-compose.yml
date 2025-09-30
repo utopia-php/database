@@ -16,7 +16,6 @@ services:
       - ./phpunit.xml:/usr/src/code/phpunit.xml
       - ./dev/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./vendor/utopia-php/mongo/src:/usr/src/code/vendor/utopia-php/mongo/src
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
     environment:
       PHP_IDE_CONFIG: serverName=tests

@@ -2201,7 +2201,18 @@ class Mongo extends Adapter
             $filter[$attribute]['$nin'] = $value;
         } elseif ($operator == '$in') {
             if ($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
-                $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
+                // contains support array values
+                if (is_array($value)) {
+                    $filter['$or'] = array_map(function ($val) use ($attribute) {
+                        return [
+                            $attribute => [
+                                '$regex' => new Regex(".*{$this->escapeWildcards($val)}.*", 'i')
+                            ]
+                        ];
+                    }, $value);
+                } else {
+                    $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
+                }
             } else {
                 $filter[$attribute]['$in'] = $query->getValues();
             }

@@ -1137,7 +1137,7 @@ class Mongo extends Adapter
 
             foreach ($value as &$node) {
                 switch ($type) {
-                    case Database::VAR_DATETIME :
+                    case Database::VAR_DATETIME:
                         if (!($node instanceof UTCDateTime)) {
                             $node = new UTCDateTime(new \DateTime($node));
                         }

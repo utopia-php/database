@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e813a541a5351cc4f97fe22ad586c2bf",
+    "content-hash": "184ee2b7970239a0842ea4dccf633d72",
     "packages": [
         {
             "name": "brick/math",
@@ -2170,12 +2170,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "11a919b698cec10bd133ec0b580c84a607614310"
+                "reference": "85a806bfaa18a5dfee4ed216e57d155de3e788a1"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/11a919b698cec10bd133ec0b580c84a607614310",
-                "reference": "11a919b698cec10bd133ec0b580c84a607614310",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/85a806bfaa18a5dfee4ed216e57d155de3e788a1",
+                "reference": "85a806bfaa18a5dfee4ed216e57d155de3e788a1",
                 "shasum": ""
             },
             "require": {
@@ -2223,7 +2223,7 @@
                 "issues": "https://github.com/utopia-php/mongo/issues",
                 "source": "https://github.com/utopia-php/mongo/tree/feat-client-updates"
             },
-            "time": "2025-09-30T04:56:48+00:00"
+            "time": "2025-09-30T08:08:50+00:00"
         },
         {
             "name": "utopia-php/pools",
@@ -4494,6 +4494,7 @@
     "platform": {
         "php": ">=8.1",
         "ext-pdo": "*",
+        "ext-mongodb": "*",
         "ext-mbstring": "*"
     },
     "platform-dev": {},

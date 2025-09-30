@@ -95,15 +95,15 @@ class Filter extends Base
             $attribute = \explode('.', $attribute)[0];
         }
 
-        if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
-            return true;
-        }
-        $attributeSchema = $this->schema[$attribute];
-
         if (count($values) > $this->maxValuesCount) {
             $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
             return false;
         }
+
+        if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
+            return true;
+        }
+        $attributeSchema = $this->schema[$attribute];
 
         $attributeType = $attributeSchema['type'];
 

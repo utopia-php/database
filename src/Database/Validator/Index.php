@@ -232,6 +232,10 @@ class Index extends Validator
             return true;
         }
 
+        if (!$this->supportForAttributes) {
+            return true;
+        }
+
         $total = 0;
         $lengths = $index->getAttribute('lengths', []);
         $attributes = $index->getAttribute('attributes', []);

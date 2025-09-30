@@ -14,6 +14,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
@@ -1530,15 +1531,19 @@ class Mongo extends Adapter
         }
 
         $options = $this->getTransactionOptions();
-        $this->client->update(
-            $this->getNamespace() . '_' . $this->filter($collection),
-            $filters,
-            [
-                '$inc' => [$attribute => $value],
-                '$set' => ['_updatedAt' => $this->toMongoDatetime($updatedAt)],
-            ],
-            options: $options
-        );
+        try {
+            $this->client->update(
+                $this->getNamespace() . '_' . $this->filter($collection),
+                $filters,
+                [
+                    '$inc' => [$attribute => $value],
+                    '$set' => ['_updatedAt' => $this->toMongoDatetime($updatedAt)],
+                ],
+                options: $options
+            );
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
 
         return true;
     }
@@ -2186,7 +2191,18 @@ class Mongo extends Adapter
             $filter[$attribute]['$nin'] = $value;
         } elseif ($operator == '$in') {
             if ($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
-                $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
+                // contains support array values
+                if (is_array($value)) {
+                    $filter['$or'] = array_map(function ($val) use ($attribute) {
+                        return [
+                            $attribute => [
+                                '$regex' => new Regex(".*{$this->escapeWildcards($val)}.*", 'i')
+                            ]
+                        ];
+                    }, $value);
+                } else {
+                    $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
+                }
             } else {
                 $filter[$attribute]['$in'] = $query->getValues();
             }
@@ -2824,6 +2840,11 @@ class Mongo extends Adapter
         // No transaction
         if ($e->getCode() === 251) {
             return new TransactionException('No active transaction', $e->getCode(), $e);
+        }
+
+        // Invalid operation(MongoDB error code 14)
+        if ($e->getCode() === 14) {
+            return new TypeException('Invalid operation', $e->getCode(), $e);
         }
 
         return $e;

@@ -452,6 +452,10 @@ class Mongo extends Adapter
                     'unique' => $unique
                 ];
 
+                if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
+                    $newIndexes[$i]['default_language'] = 'none';
+                }
+
                 // Add partial filter for indexes to avoid indexing null values
                 if (in_array($index->getAttribute('type'), [
                     Database::INDEX_UNIQUE,
@@ -859,6 +863,15 @@ class Mongo extends Adapter
                 'locale' => 'en',
                 'strength' => 1,
             ];
+        }
+
+        /**
+         * Text index language configuration
+         * Set to 'none' to disable stop words (words like 'other', 'the', 'a', etc.)
+         * This ensures all words are indexed and searchable
+         */
+        if ($type === Database::INDEX_FULLTEXT) {
+            $indexes['default_language'] = 'none';
         }
 
         // Add partial filter for indexes to avoid indexing null values

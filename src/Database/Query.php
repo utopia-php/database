@@ -45,8 +45,6 @@ class Query
 
     public const TYPE_SELECT = 'select';
 
-    //public const TYPE_SELECTION = 'selection';
-
     // Order methods
     public const TYPE_ORDER_DESC = 'orderDesc';
     public const TYPE_ORDER_ASC = 'orderAsc';
@@ -148,6 +146,7 @@ class Query
     protected string $collection = '';
     protected string $alias = '';
     protected string $attribute = '';
+    protected string $attributeType = '';
     protected string $aliasRight = '';
     protected string $attributeRight = '';
     protected string $as = '';
@@ -697,17 +696,6 @@ class Query
     public static function notSearch(string $attribute, string $value): self
     {
         return new self(self::TYPE_NOT_SEARCH, $attribute, [$value]);
-    }
-
-    /**
-     * Helper method to create Query with select method
-     *
-     * @param array<string> $attributes
-     * @return Query
-     */
-    public static function select_old(array $attributes): self
-    {
-        return new self(self::TYPE_SELECT, values: $attributes);
     }
 
     public static function select(string $attribute, string $alias = '', string $as = '', string $function = '', bool $system = false): self
@@ -1271,6 +1259,30 @@ class Query
     public function setOnArray(bool $bool): void
     {
         $this->onArray = $bool;
+    }
+
+    /**
+     * @param string $type
+     * @return void
+     */
+    public function setAttributeType(string $type): void
+    {
+        $this->attributeType = $type;
+    }
+
+    /**
+     * @return string
+     */
+    public function getAttributeType(): string
+    {
+        return $this->attributeType;
+    }
+    /**
+     * @return bool
+     */
+    public function isSpatialAttribute(): bool
+    {
+        return in_array($this->attributeType, Database::SPATIAL_TYPES);
     }
 
     // Spatial query methods

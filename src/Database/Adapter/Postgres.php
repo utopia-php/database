@@ -1577,11 +1577,10 @@ class Postgres extends SQL
      *
      * @param Query $query
      * @param array<string, mixed> $binds
-     * @param array<mixed> $attributes
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query, array &$binds, array $attributes = []): string
+    protected function getSQLCondition(Query $query, array &$binds): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
         $query->setAttributeRight($this->getInternalKeyForAttribute($query->getAttributeRight()));
@@ -1593,10 +1592,9 @@ class Postgres extends SQL
         $alias = $this->quote($alias);
         $placeholder = ID::unique();
 
-        $attributeType = $this->getAttributeType($query->getAttribute(), $attributes);
         $operator = null;
 
-        if (in_array($attributeType, Database::SPATIAL_TYPES)) {
+        if ($query->isSpatialAttribute()) {
             return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
         }
 
@@ -1606,7 +1604,7 @@ class Postgres extends SQL
                 $conditions = [];
                 /* @var $q Query */
                 foreach ($query->getValue() as $q) {
-                    $conditions[] = $this->getSQLCondition($q, $binds, $attributes);
+                    $conditions[] = $this->getSQLCondition($q, $binds);
                 }
 
                 $method = strtoupper($query->getMethod());

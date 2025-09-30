@@ -1794,30 +1794,28 @@ var_dump($sql);
     /**
      * @param Query $query
      * @param array<string, mixed> $binds
-     * @param array<mixed> $attributes
      * @return string
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query, array &$binds, array $attributes = []): string;
+    abstract protected function getSQLCondition(Query $query, array &$binds): string;
 
     /**
      * @param array<Query> $queries
      * @param array<string, mixed> $binds
      * @param string $separator
-     * @param array<mixed> $attributes
      * @return string
      * @throws Exception
      */
-    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND', array $attributes = []): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
     {
         $queries = Query::getFilterQueries($queries);
 
         $conditions = [];
         foreach ($queries as $query) {
             if ($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod(), $attributes);
+                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
             } else {
-                $conditions[] = $this->getSQLCondition($query, $binds, $attributes);
+                $conditions[] = $this->getSQLCondition($query, $binds);
             }
         }
 
@@ -2333,27 +2331,6 @@ var_dump($sql);
     }
 
     /**
-     * Helper method to get attribute type from attributes array
-     *
-     * @param string $attributeName
-     * @param array<mixed> $attributes
-     * @return string|null
-     */
-    protected function getAttributeType(string $attributeName, array $attributes): ?string
-    {
-        foreach ($attributes as $attribute) {
-            if (isset($attribute['$id']) && $attribute['$id'] === $attributeName) {
-                return $attribute['type'] ?? null;
-            }
-            if (isset($attribute['key']) && $attribute['key'] === $attributeName) {
-                return $attribute['type'] ?? null;
-            }
-        }
-        return null;
-    }
-
-
-    /**
      * Find Documents
      *
      * @param QueryContext $context
@@ -2610,7 +2587,7 @@ var_dump($sql);
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $conditions = $this->getSQLConditions($queries, $binds, attributes:$attributes);
+        $conditions = $this->getSQLConditions($queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -2686,7 +2663,7 @@ var_dump($sql);
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
-        $conditions = $this->getSQLConditions($queries, $binds, attributes:$collectionAttributes);
+        $conditions = $this->getSQLConditions($queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }

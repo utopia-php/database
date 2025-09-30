@@ -437,17 +437,12 @@ trait GeneralTests
             return;
         }
 
-        try {
-            /**
-             * MirrorTest returning false $database->exists(__FUNCTION__)
-             */
-            $database->delete(__FUNCTION__);
-        } catch (\Throwable $e) {
-
+        if ($database->exists('sharedTablesTenantPerDocument')) {
+            $database->delete('sharedTablesTenantPerDocument');
         }
 
         $database
-            ->setDatabase(__FUNCTION__)
+            ->setDatabase('sharedTablesTenantPerDocument')
             ->setNamespace('')
             ->setSharedTables(true)
             ->setTenant(null)

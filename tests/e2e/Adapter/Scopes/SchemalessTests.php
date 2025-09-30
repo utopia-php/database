@@ -1187,5 +1187,4 @@ trait SchemalessTests
 
         $database->deleteCollection($col);
     }
-
 }

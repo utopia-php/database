@@ -260,10 +260,10 @@ trait IndexTests
 
         $this->assertFalse($validator->isValid($indexes[0]));
 
-        if (!$database->getAdapter()->getSupportForMultipleFulltextIndexes()) {
-            $this->assertEquals('There is already a fulltext index in the collection', $validator->getDescription());
-        } elseif ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->getSupportForAttributes()) {
             $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
+        } elseif (!$database->getAdapter()->getSupportForMultipleFulltextIndexes()) {
+            $this->assertEquals('There is already a fulltext index in the collection', $validator->getDescription());
         }
 
         try {

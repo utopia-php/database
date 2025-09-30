@@ -7113,6 +7113,7 @@ class Database
 
         if (!$attribute->isEmpty()) {
             $query->setOnArray($attribute->getAttribute('array', false));
+            $query->setAttributeType($attribute->getAttribute('type'));
 
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
                 $values = $query->getValues();

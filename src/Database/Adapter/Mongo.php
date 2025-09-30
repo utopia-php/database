@@ -3,7 +3,6 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
-use MongoDB\BSON\Int64;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;
@@ -12,8 +11,9 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\Timeout;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
@@ -50,10 +50,9 @@ class Mongo extends Adapter
      */
     private const DEFAULT_BATCH_SIZE = 1000;
 
-    //protected ?int $timeout = null;
-
     /**
      * Transaction/session state for MongoDB transactions
+     * @var array<string, mixed>|null $session
      */
     private ?array $session = null; // Store session array from startSession
     protected int $inTransaction = 0;
@@ -160,6 +159,14 @@ class Mongo extends Adapter
                 }
                 try {
                     $result = $this->client->commitTransaction($this->session);
+                } catch (MongoException $e) {
+                    // If there's no active transaction, it may have been auto-aborted due to an error.
+                    // This is not necessarily a failure, just return success since the transaction was already terminated.
+                    $e = $this->processException($e);
+                    if ($e instanceof TransactionException) {
+                        $this->session = null;
+                        return true;
+                    }
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
@@ -233,7 +240,10 @@ class Mongo extends Adapter
      */
     public function ping(): bool
     {
-        return $this->getClient()->query(['ping' => 1])->ok ?? false;
+        return $this->getClient()->query([
+            'ping' => 1,
+            'skipReadConcern' => true
+        ])->ok ?? false;
     }
 
     public function reconnect(): void
@@ -328,16 +338,22 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        if ($name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+        // For metadata collections outside transactions, check if exists first
+        if (!$this->inTransaction && $name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
 
         // Returns an array/object with the result document
         try {
-            $this->getClient()->createCollection($id);
+            $options = $this->getTransactionOptions();
+            $this->getClient()->createCollection($id, $options);
 
         } catch (MongoException $e) {
-            throw $this->processException($e);
+            $processed = $this->processException($e);
+            if ($processed instanceof DuplicateException) {
+                return true;
+            }
+            throw $processed;
         }
 
         $internalIndex = [
@@ -372,7 +388,8 @@ class Mongo extends Adapter
         }
 
         try {
-            $indexesCreated = $this->client->createIndexes($id, $internalIndex);
+            $options = $this->getTransactionOptions();
+            $indexesCreated = $this->client->createIndexes($id, $internalIndex, $options);
         } catch (\Exception $e) {
             throw $this->processException($e);
         }
@@ -461,7 +478,8 @@ class Mongo extends Adapter
 
 
             try {
-                $indexesCreated = $this->getClient()->createIndexes($id, $newIndexes);
+                $options = $this->getTransactionOptions();
+                $indexesCreated = $this->getClient()->createIndexes($id, $newIndexes, $options);
             } catch (\Exception $e) {
                 throw $this->processException($e);
             }
@@ -484,6 +502,8 @@ class Mongo extends Adapter
     {
         $list = [];
 
+        // Note: listCollections is a metadata operation that should not run in transactions
+        // to avoid transaction conflicts and readConcern issues
         foreach ((array)$this->getClient()->listCollectionNames() as $value) {
             $list[] = $value;
         }
@@ -1141,7 +1161,8 @@ class Mongo extends Adapter
      *
      * @return array<Document>
      *
-     * @throws Duplicate
+     * @throws DuplicateException
+     * @throws DatabaseException
      */
     public function createDocuments(Document $collection, array $documents): array
     {
@@ -1189,7 +1210,8 @@ class Mongo extends Adapter
      * @param array<string, mixed> $options
      *
      * @return array<string, mixed>
-     * @throws Duplicate
+     * @throws DuplicateException
+     * @throws Exception
      */
     private function insertDocument(string $name, array $document, array $options = []): array
     {
@@ -1226,8 +1248,8 @@ class Mongo extends Adapter
      * @param Document $document
      * @param bool $skipPermissions
      * @return Document
+     * @throws DuplicateException
      * @throws DatabaseException
-     * @throws Duplicate
      */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
@@ -1644,7 +1666,7 @@ class Mongo extends Adapter
     *
     * @return array<Document>
     * @throws Exception
-    * @throws Timeout
+    * @throws TimeoutException
     */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
@@ -2774,30 +2796,34 @@ class Mongo extends Adapter
 
     protected function processException(Exception $e): \Exception
     {
-
         // Timeout
         if ($e->getCode() === 50) {
-            return new Timeout('Query timed out', $e->getCode(), $e);
+            return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
-        // Duplicate key error (MongoDB error code 11000)
+        // Duplicate key error
         if ($e->getCode() === 11000) {
-            return new Duplicate('Document already exists', $e->getCode(), $e);
+            return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
-        // Duplicate key error for unique index (MongoDB error code 11001)
+        // Duplicate key error for unique index
         if ($e->getCode() === 11001) {
-            return new Duplicate('Document already exists', $e->getCode(), $e);
+            return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
-        // Collection already exists (MongoDB error code 48)
+        // Collection already exists
         if ($e->getCode() === 48) {
-            return new Duplicate('Collection already exists', $e->getCode(), $e);
+            return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
-        // Index already exists (MongoDB error code 85)
+        // Index already exists
         if ($e->getCode() === 85) {
-            return new Duplicate('Index already exists', $e->getCode(), $e);
+            return new DuplicateException('Index already exists', $e->getCode(), $e);
+        }
+
+        // No transaction
+        if ($e->getCode() === 251) {
+            return new TransactionException('No active transaction', $e->getCode(), $e);
         }
 
         return $e;

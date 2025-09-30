@@ -6,6 +6,7 @@
 //use Utopia\Database\Document;
 //use Utopia\Database\Query;
 //use Utopia\Database\Validator\Datetime as DatetimeValidator;
+//use Utopia\Database\Validator\Sequence;
 //use Utopia\Validator\Boolean;
 //use Utopia\Validator\FloatValidator;
 //use Utopia\Validator\Integer;
@@ -25,7 +26,8 @@
 //     * @param \DateTime $maxAllowedDate
 //     */
 //    public function __construct(
-//        array $attributes = [],
+//        array $attributes,
+//        private readonly string $idAttributeType,
 //        private readonly int $maxValuesCount = 100,
 //        private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
 //        private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
@@ -99,13 +101,23 @@
 //            return false;
 //        }
 //
-//        // Extract the type of desired attribute from collection $schema
 //        $attributeType = $attributeSchema['type'];
+//
+//        // If the query method is spatial-only, the attribute must be a spatial type
+//        $query = new Query($method);
+//        if ($query->isSpatialQuery() && !in_array($attributeType, Database::SPATIAL_TYPES, true)) {
+//            $this->message = 'Spatial query "' . $method . '" cannot be applied on non-spatial attribute: ' . $attribute;
+//            return false;
+//        }
 //
 //        foreach ($values as $value) {
 //            $validator = null;
 //
 //            switch ($attributeType) {
+//                case Database::VAR_ID:
+//                    $validator = new Sequence($this->idAttributeType, $attribute === '$sequence');
+//                    break;
+//
 //                case Database::VAR_STRING:
 //                    $validator = new Text(0, 0);
 //                    break;
@@ -132,6 +144,16 @@
 //                case Database::VAR_RELATIONSHIP:
 //                    $validator = new Text(255, 0); // The query is always on uid
 //                    break;
+//
+//                case Database::VAR_POINT:
+//                case Database::VAR_LINESTRING:
+//                case Database::VAR_POLYGON:
+//                    if (!is_array($value)) {
+//                        $this->message = 'Spatial data must be an array';
+//                        return false;
+//                    }
+//                    continue 2;
+//
 //                default:
 //                    $this->message = 'Unknown Data type';
 //                    return false;
@@ -175,16 +197,18 @@
 //
 //        if (
 //            !$array &&
-//            $method === Query::TYPE_CONTAINS &&
-//            $attributeSchema['type'] !==  Database::VAR_STRING
+//            in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
+//            $attributeSchema['type'] !== Database::VAR_STRING &&
+//            !in_array($attributeSchema['type'], Database::SPATIAL_TYPES)
 //        ) {
-//            $this->message = 'Cannot query contains on attribute "' . $attribute . '" because it is not an array or string.';
+//            $queryType = $method === Query::TYPE_NOT_CONTAINS ? 'notContains' : 'contains';
+//            $this->message = 'Cannot query ' . $queryType . ' on attribute "' . $attribute . '" because it is not an array or string.';
 //            return false;
 //        }
 //
 //        if (
 //            $array &&
-//            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
+//            !in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS, Query::TYPE_IS_NULL, Query::TYPE_IS_NOT_NULL])
 //        ) {
 //            $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
 //            return false;
@@ -227,11 +251,22 @@
 //        switch ($method) {
 //            case Query::TYPE_EQUAL:
 //            case Query::TYPE_CONTAINS:
+//            case Query::TYPE_NOT_CONTAINS:
 //                if ($this->isEmpty($value->getValues())) {
 //                    $this->message = \ucfirst($method) . ' queries require at least one value.';
 //                    return false;
 //                }
 //
+//                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+//
+//            case Query::TYPE_DISTANCE_EQUAL:
+//            case Query::TYPE_DISTANCE_NOT_EQUAL:
+//            case Query::TYPE_DISTANCE_GREATER_THAN:
+//            case Query::TYPE_DISTANCE_LESS_THAN:
+//                if (count($value->getValues()) !== 1 || !is_array($value->getValues()[0]) || count($value->getValues()[0]) !== 3) {
+//                    $this->message = 'Distance query requires [[geometry, distance]] parameters';
+//                    return false;
+//                }
 //                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 //
 //            case Query::TYPE_NOT_EQUAL:
@@ -240,8 +275,11 @@
 //            case Query::TYPE_GREATER:
 //            case Query::TYPE_GREATER_EQUAL:
 //            case Query::TYPE_SEARCH:
+//            case Query::TYPE_NOT_SEARCH:
 //            case Query::TYPE_STARTS_WITH:
+//            case Query::TYPE_NOT_STARTS_WITH:
 //            case Query::TYPE_ENDS_WITH:
+//            case Query::TYPE_NOT_ENDS_WITH:
 //                if (count($value->getValues()) != 1) {
 //                    $this->message = \ucfirst($method) . ' queries require exactly one value.';
 //                    return false;
@@ -250,6 +288,7 @@
 //                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 //
 //            case Query::TYPE_BETWEEN:
+//            case Query::TYPE_NOT_BETWEEN:
 //                if (count($value->getValues()) != 2) {
 //                    $this->message = \ucfirst($method) . ' queries require exactly two values.';
 //                    return false;
@@ -263,7 +302,7 @@
 //
 //            case Query::TYPE_OR:
 //            case Query::TYPE_AND:
-//                $filters = Query::getFilterQueries($value->getValues());
+//                $filters = Query::groupByType($value->getValues())['filters'];
 //
 //                if (count($value->getValues()) !== count($filters)) {
 //                    $this->message = \ucfirst($method) . ' queries can only contain filter queries';
@@ -278,6 +317,15 @@
 //                return true;
 //
 //            default:
+//                // Handle spatial query types and any other query types
+//                if ($value->isSpatialQuery()) {
+//                    if ($this->isEmpty($value->getValues())) {
+//                        $this->message = \ucfirst($method) . ' queries require at least one value.';
+//                        return false;
+//                    }
+//                    return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+//                }
+//
 //                return false;
 //        }
 //    }

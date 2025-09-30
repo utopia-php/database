@@ -1587,17 +1587,24 @@ trait SpatialTests
             $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
         }
 
-        $results = $database->find($collectionName, [Query::select(["name"])]);
+        $results = $database->find($collectionName, [
+            Query::select('name')
+        ]);
         foreach ($results as $document) {
             $this->assertNotEmpty($document->getAttribute('name'));
         }
 
-        $results = $database->find($collectionName, [Query::select(["location"])]);
+        $results = $database->find($collectionName, [
+            Query::select('location')
+        ]);
         foreach ($results as $document) {
             $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
         }
 
-        $results = $database->find($collectionName, [Query::select(["area","location"])]);
+        $results = $database->find($collectionName, [
+            Query::select('area'),
+            Query::select('location')
+        ]);
         foreach ($results as $document) {
             $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
             $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points

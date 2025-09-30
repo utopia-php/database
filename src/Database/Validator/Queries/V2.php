@@ -519,25 +519,34 @@ class V2 extends Validator
                         $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
 
                         break;
-                    case Query::TYPE_CROSSES:
-                    case Query::TYPE_NOT_CROSSES:
+
                     case Query::TYPE_DISTANCE_EQUAL:
                     case Query::TYPE_DISTANCE_NOT_EQUAL:
                     case Query::TYPE_DISTANCE_GREATER_THAN:
                     case Query::TYPE_DISTANCE_LESS_THAN:
+                        if (count($query->getValues()) !== 1 || !is_array($query->getValues()[0]) || count($query->getValues()[0]) !== 3) {
+                            throw new \Exception('Distance query requires [[geometry, distance]] parameters');
+                        }
+
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
+                        $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
+                    break;
+
+                    case Query::TYPE_CROSSES:
+                    case Query::TYPE_NOT_CROSSES:
                     case Query::TYPE_INTERSECTS:
                     case Query::TYPE_NOT_INTERSECTS:
                     case Query::TYPE_OVERLAPS:
                     case Query::TYPE_NOT_OVERLAPS:
                     case Query::TYPE_TOUCHES:
                     case Query::TYPE_NOT_TOUCHES :
-                        if (count($query->getValues()) !== 1 || !is_array($query->getValues()[0]) || count($query->getValues()[0]) !== 2) {
-                            $this->message = 'Distance query requires [[geometry, distance]] parameters';
-                            return false;
+                        if ($this->isEmpty($query->getValues())) {
+                            throw new \Exception('Invalid query: '.\ucfirst($method).' queries require at least one value.');
                         }
 
+                        $this->validateAttributeExist($query->getAttribute(), $query->getAlias());
                         $this->validateValues($query->getAttribute(), $query->getAlias(), $query->getValues(), $method);
-                    break;
+                        break;
 
                     case Query::TYPE_NOT_EQUAL:
                     case Query::TYPE_LESSER:

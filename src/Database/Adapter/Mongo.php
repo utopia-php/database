@@ -690,7 +690,8 @@ class Mongo extends Adapter
         string $side,
         ?string $newKey = null,
         ?string $newTwoWayKey = null
-    ): bool {
+    ): bool
+    {
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
         $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
 
@@ -766,7 +767,8 @@ class Mongo extends Adapter
         string $key,
         string $twoWayKey,
         string $side
-    ): bool {
+    ): bool
+    {
         $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection . '_' . $relatedCollection);
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
         $relatedCollection = $this->getNamespace() . '_' . $this->filter($relatedCollection);
@@ -2805,7 +2807,7 @@ class Mongo extends Adapter
     {
         if (!is_array($list)) {
             // make sure the input is an array
-            return array($list);
+            return array ($list);
         }
 
         $newArray = [];
@@ -2931,7 +2933,8 @@ class Mongo extends Adapter
     public function getTenantFilters(
         string $collection,
         array $tenants = [],
-    ): int|null|array {
+    ): int|null|array
+    {
         $values = [];
         if (!$this->sharedTables) {
             return $values;

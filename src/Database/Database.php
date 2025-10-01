@@ -3597,7 +3597,7 @@ class Database
             $side = $relationship['options']['side'];
 
             // Clone queries to avoid mutation affecting subsequent documents
-            $queries = array_map(fn($query) => clone $query, $selects[$key] ?? []);
+            $queries = array_map(fn ($query) => clone $query, $selects[$key] ?? []);
 
             if (!empty($value)) {
                 $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();

@@ -3700,16 +3700,10 @@ class Database
                         }
 
                         // Remove back-references for two-way relationships
-                        // Back-references should ALWAYS be removed unless explicitly selected
-
+                        // Back-references are ALWAYS removed to prevent circular references
                         if ($twoWay && !empty($relatedDocs)) {
-                            // Only keep back-reference if we're queuing for next depth AND back-ref is explicitly selected
-                            $backRefExplicitlySelected = $shouldQueue && isset($sels[$key]) && isset($sels[$key][$twoWayKey]);
-
-                            if (!$backRefExplicitlySelected) {
-                                foreach ($relatedDocs as $relatedDoc) {
-                                    $relatedDoc->removeAttribute($twoWayKey);
-                                }
+                            foreach ($relatedDocs as $relatedDoc) {
+                                $relatedDoc->removeAttribute($twoWayKey);
                             }
                         }
                     }

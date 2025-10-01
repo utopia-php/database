@@ -2580,4 +2580,223 @@ trait RelationshipTests
         $database->deleteCollection('products');
         $database->deleteCollection('appearance');
     }
+
+    /**
+     * Test that nested relationships are populated for all documents in a multi-document query
+     * Covers bug: https://github.com/appwrite/appwrite/issues/10552
+     */
+    public function testMultiDocumentNestedRelationships(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Create collections: car -> customer -> inspection
+        $database->createCollection('car');
+        $database->createAttribute('car', 'plate_number', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('customer');
+        $database->createAttribute('customer', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('inspection');
+        $database->createAttribute('inspection', 'type', Database::VAR_STRING, 255, true);
+
+        // Create relationships
+        // car -> customer (many to one, one-way to avoid circular references)
+        $database->createRelationship(
+            collection: 'car',
+            relatedCollection: 'customer',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: false,
+            id: 'customer',
+        );
+
+        // customer -> inspection (one to many, one-way)
+        $database->createRelationship(
+            collection: 'customer',
+            relatedCollection: 'inspection',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: false,
+            id: 'inspections',
+        );
+
+        // Create test data - customers with inspections first
+        $database->createDocument('inspection', new Document([
+            '$id' => 'inspection1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'type' => 'annual',
+        ]));
+        $database->createDocument('inspection', new Document([
+            '$id' => 'inspection2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'type' => 'safety',
+        ]));
+        $database->createDocument('inspection', new Document([
+            '$id' => 'inspection3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'type' => 'emissions',
+        ]));
+        $database->createDocument('inspection', new Document([
+            '$id' => 'inspection4',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'type' => 'annual',
+        ]));
+        $database->createDocument('inspection', new Document([
+            '$id' => 'inspection5',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'type' => 'safety',
+        ]));
+
+        $database->createDocument('customer', new Document([
+            '$id' => 'customer1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Customer 1',
+            'inspections' => ['inspection1', 'inspection2'],
+        ]));
+
+        $database->createDocument('customer', new Document([
+            '$id' => 'customer2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Customer 2',
+            'inspections' => ['inspection3', 'inspection4'],
+        ]));
+
+        $database->createDocument('customer', new Document([
+            '$id' => 'customer3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Customer 3',
+            'inspections' => ['inspection5'],
+        ]));
+
+        $car1 = $database->createDocument('car', new Document([
+            '$id' => 'car1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'plate_number' => 'ABC123',
+            'customer' => 'customer1',
+        ]));
+
+        $car2 = $database->createDocument('car', new Document([
+            '$id' => 'car2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'plate_number' => 'DEF456',
+            'customer' => 'customer2',
+        ]));
+
+        $car3 = $database->createDocument('car', new Document([
+            '$id' => 'car3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'plate_number' => 'GHI789',
+            'customer' => 'customer3',
+        ]));
+
+        // Query all cars with nested relationship selections
+        $cars = $database->find('car', [
+            Query::select([
+                '*',
+                'customer.*',
+                'customer.inspections.type',
+            ]),
+        ]);
+
+        $this->assertCount(3, $cars);
+
+        $this->assertEquals('ABC123', $cars[0]['plate_number']);
+        $this->assertEquals('Customer 1', $cars[0]['customer']['name']);
+        $this->assertCount(2, $cars[0]['customer']['inspections']);
+        $this->assertEquals('annual', $cars[0]['customer']['inspections'][0]['type']);
+        $this->assertEquals('safety', $cars[0]['customer']['inspections'][1]['type']);
+
+        $this->assertEquals('DEF456', $cars[1]['plate_number']);
+        $this->assertEquals('Customer 2', $cars[1]['customer']['name']);
+        $this->assertCount(2, $cars[1]['customer']['inspections']);
+        $this->assertEquals('emissions', $cars[1]['customer']['inspections'][0]['type']);
+        $this->assertEquals('annual', $cars[1]['customer']['inspections'][1]['type']);
+
+        $this->assertEquals('GHI789', $cars[2]['plate_number']);
+        $this->assertEquals('Customer 3', $cars[2]['customer']['name']);
+        $this->assertCount(1, $cars[2]['customer']['inspections']);
+        $this->assertEquals('safety', $cars[2]['customer']['inspections'][0]['type']);
+
+        // Test with createDocuments as well
+        $database->deleteDocument('car', 'car1');
+        $database->deleteDocument('car', 'car2');
+        $database->deleteDocument('car', 'car3');
+
+        $database->createDocuments('car', [
+            new Document([
+                '$id' => 'car1',
+                '$permissions' => [Permission::read(Role::any())],
+                'plate_number' => 'ABC123',
+                'customer' => 'customer1',
+            ]),
+            new Document([
+                '$id' => 'car2',
+                '$permissions' => [Permission::read(Role::any())],
+                'plate_number' => 'DEF456',
+                'customer' => 'customer2',
+            ]),
+            new Document([
+                '$id' => 'car3',
+                '$permissions' => [Permission::read(Role::any())],
+                'plate_number' => 'GHI789',
+                'customer' => 'customer3',
+            ]),
+        ]);
+
+        $cars = $database->find('car', [
+            Query::select([
+                '*',
+                'customer.*',
+                'customer.inspections.type',
+            ]),
+        ]);
+
+        // Verify all cars still have nested relationships after batch create
+        $this->assertCount(3, $cars);
+        $this->assertCount(2, $cars[0]['customer']['inspections']);
+        $this->assertCount(2, $cars[1]['customer']['inspections']);
+        $this->assertCount(1, $cars[2]['customer']['inspections']);
+
+        // Clean up
+        $database->deleteCollection('inspection');
+        $database->deleteCollection('car');
+        $database->deleteCollection('customer');
+    }
 }

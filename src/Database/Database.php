@@ -322,11 +322,6 @@ class Database
     protected string $cacheName = 'default';
 
     /**
-     * @var array<bool|string>
-     */
-    protected array $map = [];
-
-    /**
      * @var array<string, array{encode: callable, decode: callable}>
      */
     protected static array $filters = [];
@@ -3570,265 +3565,6 @@ class Database
     }
 
     /**
-     * @param Document $collection
-     * @param Document $document
-     * @param array<string, array<Query>> $selects
-     * @return Document
-     * @throws DatabaseException
-     */
-    private function populateDocumentRelationships(Document $collection, Document $document, array $selects = []): Document
-    {
-        $attributes = $collection->getAttribute('attributes', []);
-
-        $relationships = [];
-
-        foreach ($attributes as $attribute) {
-            if ($attribute['type'] === Database::VAR_RELATIONSHIP) {
-                if (empty($selects) || array_key_exists($attribute['key'], $selects)) {
-                    $relationships[] = $attribute;
-                }
-            }
-        }
-
-        foreach ($relationships as $relationship) {
-            $key = $relationship['key'];
-            $value = $document->getAttribute($key);
-            $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
-            $relationType = $relationship['options']['relationType'];
-            $twoWay = $relationship['options']['twoWay'];
-            $twoWayKey = $relationship['options']['twoWayKey'];
-            $side = $relationship['options']['side'];
-
-            // Clone queries to avoid mutation affecting subsequent documents
-            $queries = array_map(fn ($query) => clone $query, $selects[$key] ?? []);
-
-            if (!empty($value)) {
-                $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();
-                if ($relationType === Database::RELATION_ONE_TO_MANY) {
-                    $k = $collection->getId() . ':' . $document->getId() . '=>' . $relatedCollection->getId() . ':' . $value;
-                }
-                $this->map[$k] = true;
-            }
-
-            $relationship->setAttribute('collection', $collection->getId());
-            $relationship->setAttribute('document', $document->getId());
-
-            $skipFetch = false;
-            foreach ($this->relationshipFetchStack as $fetchedRelationship) {
-                $existingKey = $fetchedRelationship['key'];
-                $existingCollection = $fetchedRelationship['collection'];
-                $existingRelatedCollection = $fetchedRelationship['options']['relatedCollection'];
-                $existingTwoWayKey = $fetchedRelationship['options']['twoWayKey'];
-                $existingSide = $fetchedRelationship['options']['side'];
-
-                // If this relationship has already been fetched for this document, skip it
-                $reflexive = $fetchedRelationship == $relationship;
-
-                // If this relationship is the same as a previously fetched relationship, but on the other side, skip it
-                $symmetric = $existingKey === $twoWayKey
-                    && $existingTwoWayKey === $key
-                    && $existingRelatedCollection === $collection->getId()
-                    && $existingCollection === $relatedCollection->getId()
-                    && $existingSide !== $side;
-
-                // If this relationship is not directly related but relates across multiple collections, skip it.
-                //
-                // These conditions ensure that a relationship is considered transitive if it has the same
-                // two-way key and related collection, but is on the opposite side of the relationship (the first and second conditions).
-                //
-                // They also ensure that a relationship is considered transitive if it has the same key and related
-                // collection as an existing relationship, but a different two-way key (the third condition),
-                // or the same two-way key as an existing relationship, but a different key (the fourth condition).
-                $transitive = (($existingKey === $twoWayKey
-                        && $existingCollection === $relatedCollection->getId()
-                        && $existingSide !== $side)
-                    || ($existingTwoWayKey === $key
-                        && $existingRelatedCollection === $collection->getId()
-                        && $existingSide !== $side)
-                    || ($existingKey === $key
-                        && $existingTwoWayKey !== $twoWayKey
-                        && $existingRelatedCollection === $relatedCollection->getId()
-                        && $existingSide !== $side)
-                    || ($existingKey !== $key
-                        && $existingTwoWayKey === $twoWayKey
-                        && $existingRelatedCollection === $relatedCollection->getId()
-                        && $existingSide !== $side));
-
-                if ($reflexive || $symmetric || $transitive) {
-                    $skipFetch = true;
-                }
-            }
-
-            switch ($relationType) {
-                case Database::RELATION_ONE_TO_ONE:
-                    if ($skipFetch || $twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH)) {
-                        $document->removeAttribute($key);
-                        break;
-                    }
-
-                    if (\is_null($value)) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchStack[] = $relationship;
-
-                    $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchStack);
-
-                    $document->setAttribute($key, $related);
-                    break;
-                case Database::RELATION_ONE_TO_MANY:
-                    if ($side === Database::RELATION_SIDE_CHILD) {
-                        if (!$twoWay || $this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
-                            $document->removeAttribute($key);
-                            break;
-                        }
-                        if (!\is_null($value)) {
-                            $this->relationshipFetchDepth++;
-                            $this->relationshipFetchStack[] = $relationship;
-
-                            $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
-
-                            $this->relationshipFetchDepth--;
-                            \array_pop($this->relationshipFetchStack);
-
-                            $document->setAttribute($key, $related);
-                        }
-                        break;
-                    }
-
-                    if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchStack[] = $relationship;
-
-                    $relatedDocuments = $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX),
-                        ...$queries
-                    ]);
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchStack);
-
-                    foreach ($relatedDocuments as $related) {
-                        $related->removeAttribute($twoWayKey);
-                    }
-
-                    $document->setAttribute($key, $relatedDocuments);
-                    break;
-                case Database::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if ($skipFetch || $this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH) {
-                            $document->removeAttribute($key);
-                            break;
-                        }
-
-                        if (\is_null($value)) {
-                            break;
-                        }
-                        $this->relationshipFetchDepth++;
-                        $this->relationshipFetchStack[] = $relationship;
-
-                        $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
-
-                        $this->relationshipFetchDepth--;
-                        \array_pop($this->relationshipFetchStack);
-
-                        $document->setAttribute($key, $related);
-                        break;
-                    }
-
-                    if (!$twoWay) {
-                        $document->removeAttribute($key);
-                        break;
-                    }
-
-                    if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchStack[] = $relationship;
-
-                    $relatedDocuments = $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX),
-                        ...$queries
-                    ]);
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchStack);
-
-
-                    foreach ($relatedDocuments as $related) {
-                        $related->removeAttribute($twoWayKey);
-                    }
-
-                    $document->setAttribute($key, $relatedDocuments);
-                    break;
-                case Database::RELATION_MANY_TO_MANY:
-                    if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
-                        break;
-                    }
-
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchStack[] = $relationship;
-
-                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
-
-                    $junctions = $this->skipRelationships(fn () => $this->find($junction, [
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX)
-                    ]));
-
-                    $relatedIds = [];
-                    foreach ($junctions as $junction) {
-                        $relatedIds[] = $junction->getAttribute($key);
-                    }
-
-                    $related = [];
-                    if (!empty($relatedIds)) {
-                        $foundRelated = $this->find($relatedCollection->getId(), [
-                            Query::equal('$id', $relatedIds),
-                            Query::limit(PHP_INT_MAX),
-                            ...$queries
-                        ]);
-
-                        // Preserve the order of related documents to match the junction order
-                        $relatedById = [];
-                        foreach ($foundRelated as $doc) {
-                            $relatedById[$doc->getId()] = $doc;
-                        }
-
-                        foreach ($relatedIds as $relatedId) {
-                            if (isset($relatedById[$relatedId])) {
-                                $related[] = $relatedById[$relatedId];
-                            }
-                        }
-                    }
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchStack);
-
-                    $document->setAttribute($key, $related);
-                    break;
-            }
-        }
-
-        return $document;
-    }
-
-    /**
      * Populate relationships for an array of documents (TRUE breadth-first approach)
      * Completely separates fetching from relationship population for massive performance gains
      *
@@ -4209,29 +3945,7 @@ class Database
         }
 
         // Apply select filters to related documents if specified
-        if (!empty($selectQueries)) {
-            // Get the fields to keep from the select queries
-            $fieldsToKeep = [];
-            foreach ($selectQueries as $selectQuery) {
-                foreach ($selectQuery->getValues() as $value) {
-                    $fieldsToKeep[] = $value;
-                }
-            }
-
-            // Always keep internal attributes
-            $internalKeys = array_map(fn($attr) => $attr['$id'], self::getInternalAttributes());
-            $fieldsToKeep = array_merge($fieldsToKeep, $internalKeys);
-
-            // Filter each related document to only include selected fields
-            foreach ($relatedDocuments as $relatedDoc) {
-                $allKeys = array_keys($relatedDoc->getArrayCopy());
-                foreach ($allKeys as $attrKey) {
-                    if (!in_array('*', $fieldsToKeep) && !in_array($attrKey, $fieldsToKeep) && !str_starts_with($attrKey, '$')) {
-                        $relatedDoc->removeAttribute($attrKey);
-                    }
-                }
-            }
-        }
+        $this->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
 
         // Assign related documents to their parent documents
         foreach ($documents as $document) {
@@ -4325,29 +4039,7 @@ class Database
         }
 
         // Apply select filters to related documents if specified
-        if (!empty($selectQueries)) {
-            // Get the fields to keep from the select queries
-            $fieldsToKeep = [];
-            foreach ($selectQueries as $selectQuery) {
-                foreach ($selectQuery->getValues() as $value) {
-                    $fieldsToKeep[] = $value;
-                }
-            }
-
-            // Always keep internal attributes
-            $internalKeys = array_map(fn($attr) => $attr['$id'], self::getInternalAttributes());
-            $fieldsToKeep = array_merge($fieldsToKeep, $internalKeys);
-
-            // Filter each related document to only include selected fields
-            foreach ($relatedDocuments as $relatedDoc) {
-                $allKeys = array_keys($relatedDoc->getArrayCopy());
-                foreach ($allKeys as $attrKey) {
-                    if (!in_array('*', $fieldsToKeep) && !in_array($attrKey, $fieldsToKeep) && !str_starts_with($attrKey, '$')) {
-                        $relatedDoc->removeAttribute($attrKey);
-                    }
-                }
-            }
-        }
+        $this->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
 
         // Assign related documents to their child documents
         foreach ($documents as $document) {
@@ -4356,6 +4048,51 @@ class Database
         }
 
         return $relatedDocuments;
+    }
+
+    /**
+     * Apply select filters to documents after fetching
+     *
+     * Filters document attributes based on select queries while preserving internal attributes.
+     * This is used in batch relationship population to apply selects after grouping.
+     *
+     * @param array<Document> $documents Documents to filter
+     * @param array<Query> $selectQueries Select query objects
+     * @return void
+     */
+    private function applySelectFiltersToDocuments(array $documents, array $selectQueries): void
+    {
+        if (empty($selectQueries)) {
+            return;
+        }
+
+        // Collect all fields to keep from select queries
+        $fieldsToKeep = [];
+        foreach ($selectQueries as $selectQuery) {
+            foreach ($selectQuery->getValues() as $value) {
+                $fieldsToKeep[] = $value;
+            }
+        }
+
+        // Always preserve internal attributes
+        $internalKeys = array_map(fn($attr) => $attr['$id'], self::getInternalAttributes());
+        $fieldsToKeep = array_merge($fieldsToKeep, $internalKeys);
+
+        // Early return if wildcard selector present
+        if (in_array('*', $fieldsToKeep)) {
+            return;
+        }
+
+        // Filter each document to only include selected fields
+        foreach ($documents as $doc) {
+            $allKeys = array_keys($doc->getArrayCopy());
+            foreach ($allKeys as $attrKey) {
+                // Keep if: explicitly selected OR is internal attribute
+                if (!in_array($attrKey, $fieldsToKeep) && !str_starts_with($attrKey, '$')) {
+                    $doc->removeAttribute($attrKey);
+                }
+            }
+        }
     }
 
     /**

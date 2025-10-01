@@ -450,13 +450,7 @@ trait RelationshipTests
 
         // Test: fetch user with posts populated
         $fetchedUser = $database->getDocument('users_simple', 'user1');
-        
-        var_dump('=== SIMPLE TEST USER ===');
-        var_dump($fetchedUser);
-        
         $posts = $fetchedUser->getAttribute('posts', []);
-        var_dump('=== USER POSTS ===');
-        var_dump($posts);
         
         // Basic assertions
         $this->assertIsArray($posts, 'Posts should be an array');
@@ -470,16 +464,10 @@ trait RelationshipTests
         // Test: fetch posts with author populated  
         $fetchedPosts = $database->find('posts_simple');
         
-        var_dump('=== SIMPLE TEST POSTS ===');
-        var_dump($fetchedPosts);
-        
         $this->assertCount(2, $fetchedPosts, 'Should fetch 2 posts');
         
         if (!empty($fetchedPosts)) {
             $author = $fetchedPosts[0]->getAttribute('author');
-            var_dump('=== POST AUTHOR ===');
-            var_dump($author);
-            
             $this->assertInstanceOf(Document::class, $author, 'Author should be a Document object');
             $this->assertEquals('John Doe', $author->getAttribute('name'), 'Author name should be populated');
         }

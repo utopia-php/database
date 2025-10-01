@@ -3008,4 +3008,251 @@ trait RelationshipTests
         $database->deleteCollection('product_depth_test');
         $database->deleteCollection('store_depth_test');
     }
+
+    /**
+     * Test filtering by relationship fields using dot-path notation
+     */
+    public function testRelationshipFiltering(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Create Author -> Posts relationship
+        $database->createCollection('authors_filter');
+        $database->createCollection('posts_filter');
+
+        $database->createAttribute('authors_filter', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('authors_filter', 'age', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('posts_filter', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('posts_filter', 'published', Database::VAR_BOOLEAN, 0, true);
+
+        $database->createRelationship(
+            collection: 'authors_filter',
+            relatedCollection: 'posts_filter',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'posts',
+            twoWayKey: 'author'
+        );
+
+        // Create test data
+        $author1 = $database->createDocument('authors_filter', new Document([
+            '$id' => 'author1',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Alice',
+            'age' => 30,
+        ]));
+
+        $author2 = $database->createDocument('authors_filter', new Document([
+            '$id' => 'author2',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Bob',
+            'age' => 25,
+        ]));
+
+        // Create posts
+        $database->createDocument('posts_filter', new Document([
+            '$id' => 'post1',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Alice Post 1',
+            'published' => true,
+            'author' => 'author1',
+        ]));
+
+        $database->createDocument('posts_filter', new Document([
+            '$id' => 'post2',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Alice Post 2',
+            'published' => true,
+            'author' => 'author1',
+        ]));
+
+        $database->createDocument('posts_filter', new Document([
+            '$id' => 'post3',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Bob Post',
+            'published' => true,
+            'author' => 'author2',
+        ]));
+
+        // Test: Filter posts by author name
+        $posts = $database->find('posts_filter', [
+            Query::equal('author.name', ['Alice']),
+        ]);
+        $this->assertCount(2, $posts);
+        $this->assertEquals('post1', $posts[0]->getId());
+        $this->assertEquals('post2', $posts[1]->getId());
+
+        // Test: Filter posts by author age
+        $posts = $database->find('posts_filter', [
+            Query::lessThan('author.age', 30),
+        ]);
+        $this->assertCount(1, $posts);
+        $this->assertEquals('post3', $posts[0]->getId());
+
+        // Test: Filter authors by their posts' published status
+        $authors = $database->find('authors_filter', [
+            Query::equal('posts.published', [true]),
+        ]);
+        $this->assertCount(2, $authors); // Both authors have published posts
+
+        // Clean up ONE_TO_MANY test
+        $database->deleteCollection('authors_filter');
+        $database->deleteCollection('posts_filter');
+
+        // ==================== Test ONE_TO_ONE relationships ====================
+        $database->createCollection('users_oto');
+        $database->createCollection('profiles_oto');
+
+        $database->createAttribute('users_oto', 'username', Database::VAR_STRING, 255, true);
+        $database->createAttribute('profiles_oto', 'bio', Database::VAR_STRING, 255, true);
+
+        // ONE_TO_ONE with twoWay=true
+        $database->createRelationship(
+            collection: 'users_oto',
+            relatedCollection: 'profiles_oto',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'profile',
+            twoWayKey: 'user'
+        );
+
+        $user1 = $database->createDocument('users_oto', new Document([
+            '$id' => 'user1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'username' => 'alice',
+        ]));
+
+        $profile1 = $database->createDocument('profiles_oto', new Document([
+            '$id' => 'profile1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'bio' => 'Software Engineer',
+            'user' => 'user1',
+        ]));
+
+        // Test: Filter profiles by user username
+        $profiles = $database->find('profiles_oto', [
+            Query::equal('user.username', ['alice']),
+        ]);
+        $this->assertCount(1, $profiles);
+        $this->assertEquals('profile1', $profiles[0]->getId());
+
+        // Test: Filter users by profile bio
+        $users = $database->find('users_oto', [
+            Query::equal('profile.bio', ['Software Engineer']),
+        ]);
+        $this->assertCount(1, $users);
+        $this->assertEquals('user1', $users[0]->getId());
+
+        // Clean up ONE_TO_ONE test
+        $database->deleteCollection('users_oto');
+        $database->deleteCollection('profiles_oto');
+
+        // ==================== Test MANY_TO_ONE relationships ====================
+        $database->createCollection('comments_mto');
+        $database->createCollection('users_mto');
+
+        $database->createAttribute('comments_mto', 'content', Database::VAR_STRING, 255, true);
+        $database->createAttribute('users_mto', 'name', Database::VAR_STRING, 255, true);
+
+        // MANY_TO_ONE with twoWay=true
+        $database->createRelationship(
+            collection: 'comments_mto',
+            relatedCollection: 'users_mto',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'commenter',
+            twoWayKey: 'comments'
+        );
+
+        $userA = $database->createDocument('users_mto', new Document([
+            '$id' => 'userA',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Alice',
+        ]));
+
+        $comment1 = $database->createDocument('comments_mto', new Document([
+            '$id' => 'comment1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'content' => 'Great post!',
+            'commenter' => 'userA',
+        ]));
+
+        $comment2 = $database->createDocument('comments_mto', new Document([
+            '$id' => 'comment2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'content' => 'Nice work!',
+            'commenter' => 'userA',
+        ]));
+
+        // Test: Filter comments by commenter name
+        $comments = $database->find('comments_mto', [
+            Query::equal('commenter.name', ['Alice']),
+        ]);
+        $this->assertCount(2, $comments);
+
+        // Test: Filter users by their comments' content
+        $users = $database->find('users_mto', [
+            Query::equal('comments.content', ['Great post!']),
+        ]);
+        $this->assertCount(1, $users);
+        $this->assertEquals('userA', $users[0]->getId());
+
+        // Clean up MANY_TO_ONE test
+        $database->deleteCollection('comments_mto');
+        $database->deleteCollection('users_mto');
+
+        // ==================== Test MANY_TO_MANY relationships ====================
+        $database->createCollection('students_mtm');
+        $database->createCollection('courses_mtm');
+
+        $database->createAttribute('students_mtm', 'studentName', Database::VAR_STRING, 255, true);
+        $database->createAttribute('courses_mtm', 'courseName', Database::VAR_STRING, 255, true);
+
+        // MANY_TO_MANY
+        $database->createRelationship(
+            collection: 'students_mtm',
+            relatedCollection: 'courses_mtm',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'enrolledCourses',
+            twoWayKey: 'students'
+        );
+
+        $student1 = $database->createDocument('students_mtm', new Document([
+            '$id' => 'student1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'studentName' => 'John',
+        ]));
+
+        $course1 = $database->createDocument('courses_mtm', new Document([
+            '$id' => 'course1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'courseName' => 'Physics',
+            'students' => ['student1'],
+        ]));
+
+        // Test: Filter students by enrolled course name
+        $students = $database->find('students_mtm', [
+            Query::equal('enrolledCourses.courseName', ['Physics']),
+        ]);
+        $this->assertCount(1, $students);
+        $this->assertEquals('student1', $students[0]->getId());
+
+        // Test: Filter courses by student name
+        $courses = $database->find('courses_mtm', [
+            Query::equal('students.studentName', ['John']),
+        ]);
+        $this->assertCount(1, $courses);
+        $this->assertEquals('course1', $courses[0]->getId());
+
+        // Clean up MANY_TO_MANY test
+        $database->deleteCollection('students_mtm');
+        $database->deleteCollection('courses_mtm');
+    }
 }

@@ -6769,6 +6769,9 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
+        // Convert relationship filter queries to SQL-level subqueries
+        $queries = $this->convertRelationshipFiltersToSubqueries($collection, $relationships, $queries);
+
         $getResults = fn () => $this->adapter->find(
             $collection,
             $queries,
@@ -7640,6 +7643,144 @@ class Database
         }
 
         return $nestedSelections;
+    }
+
+    /**
+     * Convert relationship filter queries to SQL-safe subqueries.
+     * Queries like Query::equal('author.name', ['Alice']) are converted to
+     * Query::equal('author', [<matching author IDs>])
+     *
+     * @param Document $collection
+     * @param array<Document> $relationships
+     * @param array<Query> $queries
+     * @return array<Query>
+     */
+    private function convertRelationshipFiltersToSubqueries(
+        Document $collection,
+        array $relationships,
+        array $queries
+    ): array {
+        $additionalQueries = [];
+
+        foreach ($queries as $index => $query) {
+            $method = $query->getMethod();
+            $attribute = $query->getAttribute();
+
+            // Skip non-filter queries and non-relationship queries
+            if ($method === Query::TYPE_SELECT || $method === Query::TYPE_ORDER_ASC || $method === Query::TYPE_ORDER_DESC) {
+                continue;
+            }
+
+            if (!\str_contains($attribute, '.')) {
+                continue;
+            }
+
+            // Parse the relationship path
+            $parts = \explode('.', $attribute);
+            $relationshipKey = \array_shift($parts);
+            $nestedField = \implode('.', $parts);
+
+            // Find the relationship
+            $relationship = \array_values(\array_filter(
+                $relationships,
+                fn (Document $rel) => $rel->getAttribute('key') === $relationshipKey
+            ))[0] ?? null;
+
+            if (!$relationship) {
+                continue;
+            }
+
+            $relatedCollection = $relationship->getAttribute('options')['relatedCollection'];
+            $relationType = $relationship->getAttribute('options')['relationType'];
+            $side = $relationship->getAttribute('options')['side'];
+
+            // Build query for the related collection
+            $relatedQuery = new Query($method, $nestedField, $query->getValues());
+
+            try {
+                // For virtual parent relationships (where parent doesn't store child IDs),
+                // we need to find which parents have matching children
+                // - ONE_TO_MANY from parent side: parent doesn't store children
+                // - MANY_TO_ONE from child side: the "one" side doesn't store "many" IDs
+                // - MANY_TO_MANY: both sides are virtual, stored in junction table
+                $needsParentResolution = (
+                    ($relationType === self::RELATION_ONE_TO_MANY && $side === self::RELATION_SIDE_PARENT) ||
+                    ($relationType === self::RELATION_MANY_TO_ONE && $side === self::RELATION_SIDE_CHILD) ||
+                    ($relationType === self::RELATION_MANY_TO_MANY)
+                );
+
+                if ($needsParentResolution) {
+                    $matchingDocs = $this->silent(fn () => $this->find(
+                        $relatedCollection,
+                        [$relatedQuery, Query::limit(PHP_INT_MAX)],
+                        self::PERMISSION_READ
+                    ));
+                } else {
+                    $matchingDocs = $this->silent(fn () => $this->find(
+                        $relatedCollection,
+                        [$relatedQuery, Query::select(['$id']), Query::limit(PHP_INT_MAX)],
+                        self::PERMISSION_READ
+                    ));
+                }
+
+                $matchingIds = \array_map(fn($doc) => $doc->getId(), $matchingDocs);
+
+                // Use the same parent resolution logic as above
+                if ($needsParentResolution) {
+                    // Need to find which parents have these children
+                    $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+
+                    $parentIds = [];
+                    foreach ($matchingDocs as $doc) {
+                        $parentId = $doc->getAttribute($twoWayKey);
+
+                        // Handle MANY_TO_MANY: twoWayKey returns an array
+                        if (\is_array($parentId)) {
+                            foreach ($parentId as $id) {
+                                if ($id instanceof Document) {
+                                    $id = $id->getId();
+                                }
+                                if ($id && !\in_array($id, $parentIds)) {
+                                    $parentIds[] = $id;
+                                }
+                            }
+                        } else {
+                            // Handle ONE_TO_MANY/MANY_TO_ONE: single value
+                            if ($parentId instanceof Document) {
+                                $parentId = $parentId->getId();
+                            }
+                            if ($parentId && !\in_array($parentId, $parentIds)) {
+                                $parentIds[] = $parentId;
+                            }
+                        }
+                    }
+
+                    // Add filter on current collection's $id
+                    if (!empty($parentIds)) {
+                        $additionalQueries[] = Query::equal('$id', $parentIds);
+                    } else {
+                        $additionalQueries[] = Query::equal('$id', ['__impossible__']);
+                    }
+                } else {
+                    // For other types, filter by the relationship field
+                    if (!empty($matchingIds)) {
+                        $additionalQueries[] = Query::equal($relationshipKey, $matchingIds);
+                    } else {
+                        $additionalQueries[] = Query::equal($relationshipKey, ['__impossible__']);
+                    }
+                }
+
+                // Remove the original relationship query
+                unset($queries[$index]);
+            } catch (\Exception $e) {
+                // If subquery fails, add impossible filter
+                $additionalQueries[] = Query::equal('$id', ['__impossible__']);
+                unset($queries[$index]);
+            }
+        }
+
+        // Merge additional queries
+        return \array_merge(\array_values($queries), $additionalQueries);
     }
 
     /**

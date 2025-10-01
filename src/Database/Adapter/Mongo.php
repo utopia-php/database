@@ -580,7 +580,7 @@ class Mongo extends Adapter
     }
 
     /**
-   * Create Attribute
+     * Create Attribute
      *
      * @param string $collection
      * @param string $id
@@ -852,11 +852,10 @@ class Mongo extends Adapter
 
         /**
          * Collation
-         *  .1  Moved under $indexes.
-         *  .2  Updated format.
-         *  .3  Avoid adding collation to fulltext index
+         *  1.  Moved under $indexes.
+         *  2.  Updated format.
+         *  3.  Avoid adding collation to fulltext index
          */
-
         if (!empty($collation) &&
             $type !== Database::INDEX_FULLTEXT) {
             $indexes['collation'] = [
@@ -887,7 +886,40 @@ class Mongo extends Adapter
             }
         }
         try {
-            return $this->client->createIndexes($name, [$indexes], $options);
+            $result = $this->client->createIndexes($name, [$indexes], $options);
+
+            // Wait for unique index to be fully built before returning
+            // MongoDB builds indexes asynchronously, so we need to wait for completion
+            // to ensure unique constraints are enforced immediately
+            if ($type === Database::INDEX_UNIQUE) {
+                $maxWaitTime = 30;
+                $waited = 0;
+                $sleepInterval = 0.1;
+
+                while ($waited < $maxWaitTime) {
+                    try {
+                        $indexList = $this->client->query([
+                            'listIndexes' => $name
+                        ]);
+
+                        if (isset($indexList->cursor->firstBatch)) {
+                            foreach ($indexList->cursor->firstBatch as $existingIndex) {
+                                $indexArray = $this->client->toArray($existingIndex);
+                                if (isset($indexArray['name']) && $indexArray['name'] === $id) {
+                                    // Index found and ready
+                                    return $result;
+                                }
+                            }
+                        }
+                    } catch (\Exception) {
+                        // Index might not exist yet, continue waiting
+                    }
+                    \usleep((int)($sleepInterval * 1_000_000));
+                    $waited += $sleepInterval;
+                }
+            }
+
+            return $result;
         } catch (\Exception $e) {
             throw $this->processException($e);
         }
@@ -1663,24 +1695,24 @@ class Mongo extends Adapter
 
 
     /**
-    * Find Documents
-    *
-    * Find data sets using chosen queries
-    *
-    * @param Document $collection
-    * @param array<Query> $queries
-    * @param int|null $limit
-    * @param int|null $offset
-    * @param array<string> $orderAttributes
-    * @param array<string> $orderTypes
-    * @param array<string, mixed> $cursor
-    * @param string $cursorDirection
-    * @param string $forPermission
-    *
-    * @return array<Document>
-    * @throws Exception
-    * @throws TimeoutException
-    */
+     * Find Documents
+     *
+     * Find data sets using chosen queries
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
+     * @param string $cursorDirection
+     * @param string $forPermission
+     *
+     * @return array<Document>
+     * @throws Exception
+     * @throws TimeoutException
+     */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
@@ -1909,14 +1941,14 @@ class Mongo extends Adapter
 
 
     /**
-         * Count Documents
-         *
-         * @param Document $collection
-         * @param array<Query> $queries
-         * @param int|null $max
-         * @return int
-         * @throws Exception
-         */
+     * Count Documents
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @param int|null $max
+     * @return int
+     * @throws Exception
+     */
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
@@ -2665,6 +2697,7 @@ class Mongo extends Adapter
     {
         return true;
     }
+
     /**
      * Is spatial attributes supported?
      *
@@ -2684,6 +2717,7 @@ class Mongo extends Adapter
     {
         return false;
     }
+
     /**
      * Does the adapter includes boundary during spatial contains?
      *
@@ -2694,6 +2728,7 @@ class Mongo extends Adapter
     {
         return false;
     }
+
     /**
      * Does the adapter support order attribute in spatial indexes?
      *
@@ -2706,20 +2741,20 @@ class Mongo extends Adapter
 
 
     /**
-    * Does the adapter support spatial axis order specification?
-    *
-    * @return bool
-    */
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
     public function getSupportForSpatialAxisOrder(): bool
     {
         return false;
     }
 
     /**
-         * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-         *
-         * @return bool
-        */
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
     public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
     {
         return false;
@@ -2739,6 +2774,7 @@ class Mongo extends Adapter
     {
         return false;
     }
+
     /**
      * Does the adapter support identical indexes?
      *
@@ -2951,8 +2987,8 @@ class Mongo extends Adapter
     /**
      * Get the query to check for tenant when in shared tables mode
      *
-     * @param string $collection   The collection being queried
-     * @param string $alias  The alias of the parent collection if in a subquery
+     * @param string $collection The collection being queried
+     * @param string $alias The alias of the parent collection if in a subquery
      * @return string
      */
     public function getTenantQuery(string $collection, string $alias = ''): string

@@ -7661,7 +7661,10 @@ class Database
         array $queries
     ): array {
         $additionalQueries = [];
+        $groupedQueries = [];
+        $indicesToRemove = [];
 
+        // Group queries by relationship key
         foreach ($queries as $index => $query) {
             $method = $query->getMethod();
             $attribute = $query->getAttribute();
@@ -7690,12 +7693,40 @@ class Database
                 continue;
             }
 
+            // Group queries by relationship key
+            if (!isset($groupedQueries[$relationshipKey])) {
+                $groupedQueries[$relationshipKey] = [
+                    'relationship' => $relationship,
+                    'queries' => [],
+                    'indices' => []
+                ];
+            }
+
+            $groupedQueries[$relationshipKey]['queries'][] = [
+                'method' => $method,
+                'field' => $nestedField,
+                'values' => $query->getValues()
+            ];
+            $groupedQueries[$relationshipKey]['indices'][] = $index;
+        }
+
+        // Process each relationship group
+        foreach ($groupedQueries as $relationshipKey => $group) {
+            $relationship = $group['relationship'];
+
             $relatedCollection = $relationship->getAttribute('options')['relatedCollection'];
             $relationType = $relationship->getAttribute('options')['relationType'];
             $side = $relationship->getAttribute('options')['side'];
 
-            // Build query for the related collection
-            $relatedQuery = new Query($method, $nestedField, $query->getValues());
+            // Build combined queries for the related collection
+            $relatedQueries = [];
+            foreach ($group['queries'] as $queryData) {
+                $relatedQueries[] = new Query(
+                    $queryData['method'],
+                    $queryData['field'],
+                    $queryData['values']
+                );
+            }
 
             try {
                 // For virtual parent relationships (where parent doesn't store child IDs),
@@ -7712,13 +7743,13 @@ class Database
                 if ($needsParentResolution) {
                     $matchingDocs = $this->silent(fn () => $this->find(
                         $relatedCollection,
-                        [$relatedQuery, Query::limit(PHP_INT_MAX)],
+                        \array_merge($relatedQueries, [Query::limit(PHP_INT_MAX)]),
                         self::PERMISSION_READ
                     ));
                 } else {
                     $matchingDocs = $this->silent(fn () => $this->find(
                         $relatedCollection,
-                        [$relatedQuery, Query::select(['$id']), Query::limit(PHP_INT_MAX)],
+                        \array_merge($relatedQueries, [Query::select(['$id']), Query::limit(PHP_INT_MAX)]),
                         self::PERMISSION_READ
                     ));
                 }
@@ -7770,13 +7801,22 @@ class Database
                     }
                 }
 
-                // Remove the original relationship query
-                unset($queries[$index]);
+                // Remove all original relationship queries for this group
+                foreach ($group['indices'] as $index) {
+                    $indicesToRemove[] = $index;
+                }
             } catch (\Exception $e) {
                 // If subquery fails, add impossible filter
                 $additionalQueries[] = Query::equal('$id', ['__impossible__']);
-                unset($queries[$index]);
+                foreach ($group['indices'] as $index) {
+                    $indicesToRemove[] = $index;
+                }
             }
+        }
+
+        // Remove the original queries
+        foreach ($indicesToRemove as $index) {
+            unset($queries[$index]);
         }
 
         // Merge additional queries

@@ -2871,4 +2871,141 @@ trait RelationshipTests
         $database->deleteCollection('car');
         $database->deleteCollection('customer');
     }
+
+    /**
+     * Test that nested document creation properly populates relationships at all depths.
+     * This test verifies the fix for the depth handling bug where populateDocumentsRelationships()
+     * would early return for non-zero depth, causing nested documents to not have their relationships populated.
+     */
+    public function testNestedDocumentCreationWithDepthHandling(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Create three collections with chained relationships: Order -> Product -> Store
+        $database->createCollection('order_depth_test');
+        $database->createCollection('product_depth_test');
+        $database->createCollection('store_depth_test');
+
+        $database->createAttribute('order_depth_test', 'orderNumber', Database::VAR_STRING, 255, true);
+        $database->createAttribute('product_depth_test', 'productName', Database::VAR_STRING, 255, true);
+        $database->createAttribute('store_depth_test', 'storeName', Database::VAR_STRING, 255, true);
+
+        // Order -> Product (many-to-one)
+        $database->createRelationship(
+            collection: 'order_depth_test',
+            relatedCollection: 'product_depth_test',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'product',
+            twoWayKey: 'orders'
+        );
+
+        // Product -> Store (many-to-one)
+        $database->createRelationship(
+            collection: 'product_depth_test',
+            relatedCollection: 'store_depth_test',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'store',
+            twoWayKey: 'products'
+        );
+
+        // First, create a store that will be referenced by the nested product
+        $store = $database->createDocument('store_depth_test', new Document([
+            '$id' => 'store1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'storeName' => 'Main Store',
+        ]));
+
+        $this->assertEquals('store1', $store->getId());
+        $this->assertEquals('Main Store', $store->getAttribute('storeName'));
+
+        // Create an order with a nested product that references the existing store
+        // The nested product is created at depth 1
+        // With the bug, the product's relationships (including 'store') would not be populated
+        // With the fix, the product's 'store' relationship should be properly populated
+        $order = $database->createDocument('order_depth_test', new Document([
+            '$id' => 'order1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'orderNumber' => 'ORD-001',
+            'product' => [
+                '$id' => 'product1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'productName' => 'Widget',
+                'store' => 'store1', // Reference to existing store
+            ],
+        ]));
+
+        // Verify the order was created
+        $this->assertEquals('order1', $order->getId());
+        $this->assertEquals('ORD-001', $order->getAttribute('orderNumber'));
+
+        // Verify the nested product relationship is populated (depth 1)
+        $this->assertArrayHasKey('product', $order);
+        $product = $order->getAttribute('product');
+        $this->assertInstanceOf(Document::class, $product);
+        $this->assertEquals('product1', $product->getId());
+        $this->assertEquals('Widget', $product->getAttribute('productName'));
+
+        // CRITICAL: Verify the product's store relationship is populated (depth 2)
+        // This is the key assertion that would fail with the bug
+        $this->assertArrayHasKey('store', $product);
+        $productStore = $product->getAttribute('store');
+        $this->assertInstanceOf(Document::class, $productStore);
+        $this->assertEquals('store1', $productStore->getId());
+        $this->assertEquals('Main Store', $productStore->getAttribute('storeName'));
+
+        // Also test with update - create another order and update it with nested product
+        $order2 = $database->createDocument('order_depth_test', new Document([
+            '$id' => 'order2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'orderNumber' => 'ORD-002',
+        ]));
+
+        // Update order2 to add a nested product
+        $order2Updated = $database->updateDocument('order_depth_test', 'order2', $order2->setAttribute('product', [
+            '$id' => 'product2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'productName' => 'Gadget',
+            'store' => 'store1',
+        ]));
+
+        // Verify the updated order has the nested product with populated store
+        $this->assertEquals('order2', $order2Updated->getId());
+        $product2 = $order2Updated->getAttribute('product');
+        $this->assertInstanceOf(Document::class, $product2);
+        $this->assertEquals('product2', $product2->getId());
+
+        // Verify the product's store is populated after update
+        $this->assertArrayHasKey('store', $product2);
+        $product2Store = $product2->getAttribute('store');
+        $this->assertInstanceOf(Document::class, $product2Store);
+        $this->assertEquals('store1', $product2Store->getId());
+
+        // Clean up
+        $database->deleteCollection('order_depth_test');
+        $database->deleteCollection('product_depth_test');
+        $database->deleteCollection('store_depth_test');
+    }
 }

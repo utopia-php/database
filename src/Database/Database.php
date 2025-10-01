@@ -3578,11 +3578,6 @@ class Database
      */
     private function populateDocumentsRelationships(array $documents, Document $collection, int $relationshipFetchDepth = 0, array $relationshipFetchStack = [], array $selects = []): array
     {
-        // Only process at depth 0 (top level) - this is the entry point
-        if ($relationshipFetchDepth !== 0) {
-            return $documents;
-        }
-
         // Enable batch mode to prevent nested relationship population during fetches
         $this->inBatchRelationshipPopulation = true;
 
@@ -3592,14 +3587,14 @@ class Database
                 [
                     'documents' => $documents,
                     'collection' => $collection,
-                    'depth' => 0,
+                    'depth' => $relationshipFetchDepth,
                     'selects' => $selects,
                     'skipKey' => null, // No back-reference to skip at top level
                     'hasExplicitSelects' => !empty($selects) // Track if we're in explicit select mode
                 ]
             ];
 
-            $currentDepth = 0;
+            $currentDepth = $relationshipFetchDepth;
 
             // Process queue level by level (breadth-first)
             while (!empty($queue) && $currentDepth < self::RELATION_MAX_DEPTH) {
@@ -3659,7 +3654,6 @@ class Database
                         $relatedDocs = $this->populateSingleRelationshipBatch(
                             $docs,
                             $relationship,
-                            $coll,
                             $queries
                         );
 
@@ -3739,12 +3733,11 @@ class Database
      *
      * @param array<Document> $documents
      * @param Document $relationship
-     * @param Document $collection
      * @param array<Query> $queries
      * @return array<Document>
      * @throws DatabaseException
      */
-    private function populateSingleRelationshipBatch(array $documents, Document $relationship, Document $collection, array $queries): array
+    private function populateSingleRelationshipBatch(array $documents, Document $relationship, array $queries): array
     {
         $key = $relationship['key'];
         $relationType = $relationship['options']['relationType'];

@@ -442,7 +442,7 @@ trait RelationshipTests
         ]));
 
         $post2 = $database->createDocument('posts_simple', new Document([
-            '$id' => 'post2', 
+            '$id' => 'post2',
             '$permissions' => [Permission::read(Role::any())],
             'title' => 'Second Post',
             'author' => 'user1',
@@ -451,21 +451,21 @@ trait RelationshipTests
         // Test: fetch user with posts populated
         $fetchedUser = $database->getDocument('users_simple', 'user1');
         $posts = $fetchedUser->getAttribute('posts', []);
-        
+
         // Basic assertions
         $this->assertIsArray($posts, 'Posts should be an array');
         $this->assertCount(2, $posts, 'Should have 2 posts');
-        
+
         if (!empty($posts)) {
             $this->assertInstanceOf(Document::class, $posts[0], 'First post should be a Document object');
             $this->assertEquals('First Post', $posts[0]->getAttribute('title'), 'First post title should be populated');
         }
 
-        // Test: fetch posts with author populated  
+        // Test: fetch posts with author populated
         $fetchedPosts = $database->find('posts_simple');
-        
+
         $this->assertCount(2, $fetchedPosts, 'Should fetch 2 posts');
-        
+
         if (!empty($fetchedPosts)) {
             $author = $fetchedPosts[0]->getAttribute('author');
             $this->assertInstanceOf(Document::class, $author, 'Author should be a Document object');

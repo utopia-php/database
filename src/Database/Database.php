@@ -3571,8 +3571,8 @@ class Database
      * @param array<Document> $documents
      * @param Document $collection
      * @param int $relationshipFetchDepth
-     * @param array $relationshipFetchStack
-     * @param array $selects
+     * @param array<Document> $relationshipFetchStack
+     * @param array<string, array<Query>> $selects
      * @return array<Document>
      * @throws DatabaseException
      */
@@ -3611,7 +3611,7 @@ class Database
                     $coll = $item['collection'];
                     $sels = $item['selects'];
                     $skipKey = $item['skipKey'] ?? null;
-                    $parentHasExplicitSelects = $item['hasExplicitSelects'] ?? false;
+                    $parentHasExplicitSelects = $item['hasExplicitSelects'];
 
                     if (empty($docs)) {
                         continue;
@@ -3674,7 +3674,7 @@ class Database
 
                         if ($shouldQueue) {
                             $relatedCollectionId = $relationship['options']['relatedCollection'];
-                            $relatedCollection = $this->silent(fn() => $this->getCollection($relatedCollectionId));
+                            $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollectionId));
 
                             if (!$relatedCollection->isEmpty()) {
                                 // Get nested selections for this relationship
@@ -3685,7 +3685,7 @@ class Database
                                 $relatedCollectionRelationships = $relatedCollection->getAttribute('attributes', []);
                                 $relatedCollectionRelationships = array_filter(
                                     $relatedCollectionRelationships,
-                                    fn($attr) => $attr['type'] === Database::VAR_RELATIONSHIP
+                                    fn ($attr) => $attr['type'] === Database::VAR_RELATIONSHIP
                                 );
 
                                 $nextSelects = $this->processRelationshipQueries($relatedCollectionRelationships, $relationshipQueries);
@@ -3710,7 +3710,7 @@ class Database
 
                         if ($twoWay && !empty($relatedDocs)) {
                             // Only keep back-reference if we're queuing for next depth AND back-ref is explicitly selected
-                            $backRefExplicitlySelected = $shouldQueue && !$isAtMaxDepth && isset($sels[$key]) && isset($sels[$key][$twoWayKey]);
+                            $backRefExplicitlySelected = $shouldQueue && isset($sels[$key]) && isset($sels[$key][$twoWayKey]);
 
                             if (!$backRefExplicitlySelected) {
                                 foreach ($relatedDocs as $relatedDoc) {
@@ -3761,36 +3761,6 @@ class Database
             default:
                 return [];
         }
-    }
-
-    /**
-     * Check if a relationship should be skipped based on batch cycle detection
-     * 
-     * Simplified cycle detection for batch processing:
-     * - Respect max depth for any relationship type
-     * - Block exact duplicate relationships only
-     * - Less restrictive than depth-first approach to allow legitimate nested relationships
-     *
-     * @param Document $relationship
-     * @param Document $collection
-     * @return bool
-     */
-    private function shouldSkipRelationshipFetchBatch(Document $relationship, Document $collection): bool
-    {
-        $twoWay = $relationship['options']['twoWay'] ?? false;
-
-        // Respect max depth limit to prevent infinite recursion
-        if ($this->relationshipFetchDepth >= Database::RELATION_MAX_DEPTH) {
-            return true;
-        }
-
-        // For breadth-first batch processing, be more permissive
-        // Only block if we're at the very edge of max depth for two-way relationships
-        if ($twoWay && ($this->relationshipFetchDepth >= (Database::RELATION_MAX_DEPTH - 1))) {
-            return true;
-        }
-
-        return false;
     }
 
     /**
@@ -3962,10 +3932,8 @@ class Database
      *
      * @param array<Document> $documents
      * @param Document $relationship
-     * @param int $relationshipFetchDepth
-     * @param array $relationshipFetchStack
      * @param array<Query> $queries
-     * @return array
+     * @return array<Document>
      * @throws DatabaseException
      */
     private function populateManyToOneRelationshipsBatch(array $documents, Document $relationship, array $queries): array
@@ -4075,7 +4043,7 @@ class Database
         }
 
         // Always preserve internal attributes
-        $internalKeys = array_map(fn($attr) => $attr['$id'], self::getInternalAttributes());
+        $internalKeys = array_map(fn ($attr) => $attr['$id'], self::getInternalAttributes());
         $fieldsToKeep = array_merge($fieldsToKeep, $internalKeys);
 
         // Early return if wildcard selector present
@@ -4100,10 +4068,8 @@ class Database
      *
      * @param array<Document> $documents
      * @param Document $relationship
-     * @param int $relationshipFetchDepth
-     * @param array $relationshipFetchStack
      * @param array<Query> $queries
-     * @return array
+     * @return array<Document>
      * @throws DatabaseException
      */
     private function populateManyToManyRelationshipsBatch(array $documents, Document $relationship, array $queries): array

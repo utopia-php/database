@@ -3596,7 +3596,8 @@ class Database
             $twoWayKey = $relationship['options']['twoWayKey'];
             $side = $relationship['options']['side'];
 
-            $queries = $selects[$key] ?? [];
+            // Clone queries to avoid mutation affecting subsequent documents
+            $queries = array_map(fn($query) => clone $query, $selects[$key] ?? []);
 
             if (!empty($value)) {
                 $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();

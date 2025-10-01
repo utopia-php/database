@@ -110,6 +110,7 @@ class Query
 
     protected string $method = '';
     protected string $attribute = '';
+    protected string $attributeType = '';
     protected bool $onArray = false;
 
     /**
@@ -933,6 +934,30 @@ class Query
     public function setOnArray(bool $bool): void
     {
         $this->onArray = $bool;
+    }
+
+    /**
+     * @param string $type
+     * @return void
+     */
+    public function setAttributeType(string $type): void
+    {
+        $this->attributeType = $type;
+    }
+
+    /**
+     * @return string
+     */
+    public function getAttributeType(): string
+    {
+        return $this->attributeType;
+    }
+    /**
+     * @return bool
+     */
+    public function isSpatialAttribute(): bool
+    {
+        return in_array($this->attributeType, Database::SPATIAL_TYPES);
     }
 
     // Spatial query methods

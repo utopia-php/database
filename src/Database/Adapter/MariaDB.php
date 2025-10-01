@@ -1479,11 +1479,10 @@ class MariaDB extends SQL
      *
      * @param Query $query
      * @param array<string, mixed> $binds
-     * @param array<mixed> $attributes
      * @return string
      * @throws Exception
      */
-    protected function getSQLCondition(Query $query, array &$binds, array $attributes = []): string
+    protected function getSQLCondition(Query $query, array &$binds): string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
 
@@ -1493,10 +1492,8 @@ class MariaDB extends SQL
         $alias = $this->quote(Query::DEFAULT_ALIAS);
         $placeholder = ID::unique();
 
-        $attributeType = $this->getAttributeType($query->getAttribute(), $attributes);
-
-        if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-            return $this->handleSpatialQueries($query, $binds, $attribute, $attributeType, $alias, $placeholder);
+        if ($query->isSpatialAttribute()) {
+            return $this->handleSpatialQueries($query, $binds, $attribute, $query->getAttributeType(), $alias, $placeholder);
         }
 
         switch ($query->getMethod()) {
@@ -1505,7 +1502,7 @@ class MariaDB extends SQL
                 $conditions = [];
                 /* @var $q Query */
                 foreach ($query->getValue() as $q) {
-                    $conditions[] = $this->getSQLCondition($q, $binds, $attributes);
+                    $conditions[] = $this->getSQLCondition($q, $binds);
                 }
 
                 $method = strtoupper($query->getMethod());

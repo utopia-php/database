@@ -71,33 +71,29 @@ class MirrorTest extends Base
 
         $database = new Mirror(self::$source, self::$destination);
 
-        // Handle cases where the source and destination databases are not in sync because of previous tests
-        if ($database->getSource()->exists('schema1')) {
-            $database->getSource()->setDatabase('schema1')->delete();
-        }
-        if ($database->getDestination()->exists('schema1')) {
-            $database->getDestination()->setDatabase('schema1')->delete();
-        }
-        if ($database->getSource()->exists('schema2')) {
-            $database->getSource()->setDatabase('schema2')->delete();
-        }
-        if ($database->getDestination()->exists('schema2')) {
-            $database->getDestination()->setDatabase('schema2')->delete();
-        }
-        if ($database->getSource()->exists('sharedTables')) {
-            $database->getSource()->setDatabase('sharedTables')->delete();
-        }
-        if ($database->getDestination()->exists('sharedTables')) {
-            $database->getDestination()->setDatabase('sharedTables')->delete();
+        $schemas = [
+            'utopiaTests',
+            'schema1',
+            'schema2',
+            'sharedTables',
+            'sharedTablesTenantPerDocument'
+        ];
+
+        /**
+         * Handle cases where the source and destination databases are not in sync because of previous tests
+         */
+        foreach ($schemas as $schema) {
+            if ($database->getSource()->exists($schema)) {
+                $database->getSource()->setDatabase($schema)->delete();
+            }
+            if ($database->getDestination()->exists($schema)) {
+                $database->getDestination()->setDatabase($schema)->delete();
+            }
         }
 
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
-
-        if ($database->exists()) {
-            $database->delete();
-        }
 
         $database->create();
 

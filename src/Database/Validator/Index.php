@@ -411,10 +411,12 @@ class Index extends Validator
 
         $indexAttributes = $index->getAttribute('attributes', []);
         $indexOrders = $index->getAttribute('orders', []);
+        $indexType = $index->getAttribute('type', '');
 
         foreach ($this->indexes as $existingIndex) {
             $existingAttributes = $existingIndex->getAttribute('attributes', []);
             $existingOrders = $existingIndex->getAttribute('orders', []);
+            $existingType = $existingIndex->getAttribute('type', '');
 
             $attributesMatch = false;
             if (empty(array_diff($existingAttributes, $indexAttributes)) &&
@@ -429,8 +431,18 @@ class Index extends Validator
             }
 
             if ($attributesMatch && $ordersMatch) {
-                $this->message = 'There is already an index with the same attributes and orders';
-                return false;
+                // Allow fulltext + key/unique combinations (different purposes)
+                $regularTypes = [Database::INDEX_KEY, Database::INDEX_UNIQUE];
+                $isRegularIndex = in_array($indexType, $regularTypes);
+                $isRegularExisting = in_array($existingType, $regularTypes);
+
+                // Only reject if both are regular index types (key or unique)
+                if ($isRegularIndex && $isRegularExisting) {
+                    $this->message = 'There is already an index with the same attributes and orders';
+                    return false;
+                }
+
+                // Allow if one is fulltext/spatial and other is key/unique
             }
         }
 
@@ -441,7 +453,7 @@ class Index extends Validator
     /**
      * @param Document $index
      * @return bool
-    */
+     */
     public function checkSpatialIndex(Document $index): bool
     {
         $type = $index->getAttribute('type');

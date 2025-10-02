@@ -642,11 +642,16 @@ class Mongo extends Adapter
     {
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
 
+        $from    = $this->filter($this->getInternalKeyForAttribute($id));
+        $to      = $this->filter($this->getInternalKeyForAttribute($name));
+        $options = $this->getTransactionOptions();
+
         $this->getClient()->update(
             $collection,
             [],
-            ['$rename' => [$id => $name]],
-            multi: true
+            ['$rename' => [$from => $to]],
+            multi: true,
+            options: $options
         );
 
         return true;

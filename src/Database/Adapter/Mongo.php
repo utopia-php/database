@@ -621,6 +621,8 @@ class Mongo extends Adapter
      * @param string $id
      *
      * @return bool
+     * @throws DatabaseException
+     * @throws MongoException
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
@@ -643,6 +645,8 @@ class Mongo extends Adapter
      * @param string $id
      * @param string $name
      * @return bool
+     * @throws DatabaseException
+     * @throws MongoException
      */
     public function renameAttribute(string $collection, string $id, string $name): bool
     {
@@ -1018,8 +1022,9 @@ class Mongo extends Adapter
      * @param Document $collection
      * @param string $id
      * @param Query[] $queries
+     * @param bool $forUpdate
      * @return Document
-     * @throws MongoException
+     * @throws DatabaseException
      */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
@@ -1370,7 +1375,7 @@ class Mongo extends Adapter
         ];
 
         try {
-            $result = $this->client->update(
+            return $this->client->update(
                 $name,
                 $filters,
                 $updateQuery,
@@ -1380,15 +1385,6 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
-
-        // Support either int or result object
-        if (\is_int($result)) {
-            return $result;
-        }
-        if (\is_object($result) && property_exists($result, 'modifiedCount')) {
-            return (int) $result->modifiedCount;
-        }
-        return 0;
     }
 
     /**
@@ -1396,6 +1392,7 @@ class Mongo extends Adapter
      * @param string $attribute
      * @param array<Change> $changes
      * @return array<Document>
+     * @throws DatabaseException
      */
     public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
@@ -1645,6 +1642,7 @@ class Mongo extends Adapter
      * @param array<string> $sequences
      * @param array<string> $permissionIds
      * @return int
+     * @throws DatabaseException
      */
     public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
     {
@@ -1665,7 +1663,7 @@ class Mongo extends Adapter
         $options = $this->getTransactionOptions();
 
         try {
-            $count = $this->client->delete(
+            return $this->client->delete(
                 collection: $name,
                 filters: $filters,
                 limit: 0,
@@ -1674,7 +1672,6 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
-        return $count ?? 0;
     }
 
     /**

@@ -7783,7 +7783,7 @@ class Database
                     ));
                 }
 
-                $matchingIds = \array_map(fn($doc) => $doc->getId(), $matchingDocs);
+                $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
 
                 // Use the same parent resolution logic as above
                 if ($needsParentResolution) {

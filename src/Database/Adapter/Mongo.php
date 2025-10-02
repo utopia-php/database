@@ -1364,12 +1364,19 @@ class Mongo extends Adapter
         ];
 
         try {
-            $this->client->update($name, $filters, $updateQuery, multi: true, options: $options);
+            $result = $this->client->update($name, $filters, $updateQuery, multi: true, options: $options);
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
 
-        return 1;
+        // Support either int or result object
+        if (\is_int($result)) {
+            return $result;
+        }
+        if (\is_object($result) && property_exists($result, 'modifiedCount')) {
+            return (int) $result->modifiedCount;
+        }
+        return 0;
     }
 
     /**

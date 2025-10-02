@@ -4050,7 +4050,7 @@ class Database
         }
 
         // Always preserve internal attributes
-        $internalKeys = array_map(fn ($attr) => $attr['$id'], self::getInternalAttributes());
+        $internalKeys = array_map(fn ($attr) => $attr['$id'], $this->getInternalAttributes());
         $fieldsToKeep = array_merge($fieldsToKeep, $internalKeys);
 
         // Early return if wildcard selector present
@@ -7383,7 +7383,7 @@ class Database
         // Allow querying internal attributes
         $keys = \array_map(
             fn ($attribute) => $attribute['$id'],
-            self::getInternalAttributes()
+            $this->getInternalAttributes()
         );
 
         foreach ($collection->getAttribute('attributes', []) as $attribute) {

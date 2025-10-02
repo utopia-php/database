@@ -96,6 +96,12 @@ class Filter extends Base
         }
 
         if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
+            // First check maxValuesCount guard for any IN-style value arrays
+            if (count($values) > $this->maxValuesCount) {
+                $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
+                return false;
+            }
+
             return true;
         }
         $attributeSchema = $this->schema[$attribute];

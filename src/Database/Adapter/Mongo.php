@@ -648,11 +648,16 @@ class Mongo extends Adapter
     {
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
 
+        $from    = $this->filter($this->getInternalKeyForAttribute($id));
+        $to      = $this->filter($this->getInternalKeyForAttribute($name));
+        $options = $this->getTransactionOptions();
+
         $this->getClient()->update(
             $collection,
             [],
-            ['$rename' => [$id => $name]],
-            multi: true
+            ['$rename' => [$from => $to]],
+            multi: true,
+            options: $options
         );
 
         return true;
@@ -1365,12 +1370,19 @@ class Mongo extends Adapter
         ];
 
         try {
-            $this->client->update($name, $filters, $updateQuery, multi: true, options: $options);
+            $result = $this->client->update($name, $filters, $updateQuery, multi: true, options: $options);
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
 
-        return 1;
+        // Support either int or result object
+        if (\is_int($result)) {
+            return $result;
+        }
+        if (\is_object($result) && property_exists($result, 'modifiedCount')) {
+            return (int) $result->modifiedCount;
+        }
+        return 0;
     }
 
     /**
@@ -1654,9 +1666,8 @@ class Mongo extends Adapter
                 options: $options
             );
         } catch (MongoException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
-
         return $count ?? 0;
     }
 

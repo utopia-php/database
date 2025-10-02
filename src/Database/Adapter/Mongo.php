@@ -471,8 +471,14 @@ class Mongo extends Adapter
                                 break;
                             }
                         }
+
+                        $attr = $this->filter($this->getInternalKeyForAttribute($attr));
+
                         // Use both $exists: true and $type to exclude nulls and ensure correct type
-                        $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
+                        $partialFilter[$attr] = [
+                            '$exists' => true,
+                            '$type' => $attrType
+                        ];
                     }
                     if (!empty($partialFilter)) {
                         $newIndexes[$i]['partialFilterExpression'] = $partialFilter;

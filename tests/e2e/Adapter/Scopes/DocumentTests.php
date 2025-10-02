@@ -104,7 +104,7 @@ trait DocumentTests
             'id' => $sequence,
         ]));
 
-        $this->assertNotEmpty(true, $document->getId());
+        $this->assertNotEmpty($document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($document->getAttribute('integer_signed'));
@@ -166,7 +166,7 @@ trait DocumentTests
         ]));
 
         $this->assertEquals($sequence, $manualIdDocument->getSequence());
-        $this->assertNotEmpty(true, $manualIdDocument->getId());
+        $this->assertNotEmpty($manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
@@ -192,7 +192,7 @@ trait DocumentTests
         $manualIdDocument = $database->getDocument('documents', '56000');
 
         $this->assertEquals($sequence, $manualIdDocument->getSequence());
-        $this->assertNotEmpty(true, $manualIdDocument->getId());
+        $this->assertNotEmpty($manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
@@ -299,17 +299,17 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => '',
         ]));
-        $this->assertNotEmpty(true, $documentIdNull->getSequence());
+        $this->assertNotEmpty($documentIdNull->getSequence());
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $documentIdNull = $database->getDocument('documents', $documentIdNull->getId());
-        $this->assertNotEmpty(true, $documentIdNull->getId());
+        $this->assertNotEmpty($documentIdNull->getId());
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $documentIdNull = $database->findOne('documents', [
             query::isNull('id')
         ]);
-        $this->assertNotEmpty(true, $documentIdNull->getId());
+        $this->assertNotEmpty($documentIdNull->getId());
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $sequence = '0';
@@ -335,20 +335,20 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => '',
         ]));
-        $this->assertNotEmpty(true, $documentId0->getSequence());
+        $this->assertNotEmpty($documentId0->getSequence());
 
         $this->assertIsString($documentId0->getAttribute('id'));
         $this->assertEquals($sequence, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->getDocument('documents', $documentId0->getId());
-        $this->assertNotEmpty(true, $documentId0->getSequence());
+        $this->assertNotEmpty($documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
         $this->assertEquals($sequence, $documentId0->getAttribute('id'));
 
         $documentId0 = $database->findOne('documents', [
             query::equal('id', [$sequence])
         ]);
-        $this->assertNotEmpty(true, $documentId0->getSequence());
+        $this->assertNotEmpty($documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
         $this->assertEquals($sequence, $documentId0->getAttribute('id'));
 
@@ -396,7 +396,7 @@ trait DocumentTests
         $this->assertEquals($count, \count($results));
 
         foreach ($results as $document) {
-            $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty($document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -412,7 +412,7 @@ trait DocumentTests
         $this->assertEquals($count, \count($documents));
 
         foreach ($documents as $document) {
-            $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty($document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -465,7 +465,7 @@ trait DocumentTests
 
         foreach ($documents as $index => $document) {
             $this->assertEquals($hash[$index + $offset], $document->getSequence());
-            $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty($document->getId());
             $this->assertEquals('text', $document->getAttribute('string'));
         }
     }
@@ -666,8 +666,8 @@ trait DocumentTests
         $createdAt = [];
         foreach ($results as $index => $document) {
             $createdAt[$index] = $document->getCreatedAt();
-            $this->assertNotEmpty(true, $document->getId());
-            $this->assertNotEmpty(true, $document->getSequence());
+            $this->assertNotEmpty($document->getId());
+            $this->assertNotEmpty($document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -681,7 +681,7 @@ trait DocumentTests
         $this->assertEquals(2, count($documents));
 
         foreach ($documents as $document) {
-            $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty($document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -703,8 +703,8 @@ trait DocumentTests
         $this->assertEquals(2, $count);
 
         foreach ($results as $document) {
-            $this->assertNotEmpty(true, $document->getId());
-            $this->assertNotEmpty(true, $document->getSequence());
+            $this->assertNotEmpty($document->getId());
+            $this->assertNotEmpty($document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -719,7 +719,7 @@ trait DocumentTests
 
         foreach ($documents as $index => $document) {
             $this->assertEquals($createdAt[$index], $document->getCreatedAt());
-            $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty($document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -1135,7 +1135,7 @@ trait DocumentTests
             ],
         ]));
 
-        $this->assertNotEmpty(true, $document->getId());
+        $this->assertNotEmpty($document->getId());
         $this->assertNull($document->getAttribute('string'));
         $this->assertNull($document->getAttribute('integer'));
         $this->assertNull($document->getAttribute('bigint'));
@@ -1174,7 +1174,7 @@ trait DocumentTests
         $this->assertEquals('update("any")', $document2->getPermissions()[2]);
         $this->assertEquals('delete("any")', $document2->getPermissions()[3]);
 
-        $this->assertNotEmpty(true, $document->getId());
+        $this->assertNotEmpty($document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('default', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer'));
@@ -1336,7 +1336,7 @@ trait DocumentTests
 
         $document = $database->getDocument('documents', $document->getId());
 
-        $this->assertNotEmpty(true, $document->getId());
+        $this->assertNotEmpty($document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer_signed'));
@@ -4189,7 +4189,7 @@ trait DocumentTests
 
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
-        $this->assertNotEmpty(true, $new->getId());
+        $this->assertNotEmpty($new->getId());
         $this->assertIsString($new->getAttribute('string'));
         $this->assertEquals('text📝 updated', $new->getAttribute('string'));
         $this->assertIsInt($new->getAttribute('integer_signed'));

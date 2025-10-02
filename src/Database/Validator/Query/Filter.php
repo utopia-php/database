@@ -28,7 +28,7 @@ class Filter extends Base
     public function __construct(
         array $attributes,
         private readonly string $idAttributeType,
-        private readonly int $maxValuesCount = 100,
+        private readonly int $maxValuesCount = 5000,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
     ) {

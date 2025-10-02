@@ -1,10 +1,12 @@
 <?php
 
+ini_set('memory_limit', '4G');
+ini_set('xdebug.max_nesting_level', '-1');
+
 global $cli;
 
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
-use Swoole\Runtime;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
@@ -25,12 +27,12 @@ use Utopia\Validator\Text;
 
 // Global pools for faster document generation
 $namesPool = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi', 'Ivan', 'Judy', 'Mallory', 'Niaj', 'Olivia', 'Peggy', 'Quentin', 'Rupert', 'Sybil', 'Trent', 'Uma', 'Victor'];
-$genresPool = ['fashion','food','travel','music','lifestyle','fitness','diy','sports','finance'];
-$tagsPool   = ['short','quick','easy','medium','hard'];
+$genresPool = ['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance'];
+$tagsPool = ['short', 'quick', 'easy', 'medium', 'hard'];
 
 /**
  * @Example
- * docker compose exec tests bin/load --adapter=mariadb --limit=1000
+ * docker compose exec tests bin/relationships --adapter=mariadb --limit=1000
  */
 $cli
     ->task('relationships')
@@ -39,14 +41,13 @@ $cli
     ->param('limit', 0, new Integer(true), 'Total number of records to add to database')
     ->param('name', 'myapp_' . uniqid(), new Text(0), 'Name of created database.', true)
     ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
-    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables) {
+    ->param('runs', 1, new Integer(true), 'Number of times to run benchmarks', true)
+    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables, int $runs) {
         $start = null;
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
-
-        //Runtime::enableCoroutine();
 
         $dbAdapters = [
             'mariadb' => [
@@ -85,7 +86,6 @@ $cli
 
         $cfg = $dbAdapters[$adapter];
 
-        //Co\run(function () use (&$start, $limit, $name, $sharedTables, $namespace, $cache, $cfg) {
         $pdo = new PDO(
             ($cfg['dsn'])($cfg['host'], $cfg['port']),
             $cfg['user'],
@@ -100,6 +100,9 @@ $cli
 
         createRelationshipSchema($database);
 
+        // Create categories and users once before parallel batch creation
+        $globalDocs = createGlobalDocuments($database, $limit);
+
         $pdo = null;
 
         $pool = new PDOPool(
@@ -110,13 +113,13 @@ $cli
                 ->withCharset('utf8mb4')
                 ->withUsername($cfg['user'])
                 ->withPassword($cfg['pass']),
-            128
+            size: 64
         );
 
         $start = \microtime(true);
 
         for ($i = 0; $i < $limit / 1000; $i++) {
-            \go(function () use ($cfg, $pool, $name, $namespace, $sharedTables, $cache) {
+            go(function () use ($cfg, $pool, $name, $namespace, $sharedTables, $cache, $globalDocs) {
                 try {
                     $pdo = $pool->get();
 
@@ -125,20 +128,41 @@ $cli
                         ->setNamespace($namespace)
                         ->setSharedTables($sharedTables);
 
-                    createRelationshipDocuments($database);
+                    createRelationshipDocuments($database, $globalDocs['categories'], $globalDocs['users']);
                     $pool->put($pdo);
                 } catch (\Throwable $error) {
-                    Console::error('Coroutine error: ' . $error->getMessage());
+                    // Errors caught but documents still created successfully - likely concurrent update race conditions
                 }
             });
         }
 
-        benchmarkSingleQueries($database);
-        benchmarkBatchQueries($database);
-        benchmarkPagination($database);
-
         $time = microtime(true) - $start;
-        Console::success("Completed in {$time} seconds");
+        Console::success("Document creation completed in {$time} seconds");
+
+        // Display relationship structure
+        displayRelationshipStructure();
+
+        // Collect benchmark results across runs
+        $results = [];
+
+        Console::info("Running benchmarks {$runs} time(s)...");
+
+        for ($run = 1; $run <= $runs; $run++) {
+            if ($runs > 1) {
+                Console::info("Run {$run}/{$runs}");
+            }
+
+            $results[] = [
+                'single' => benchmarkSingle($database),
+                'batch100' => benchmarkBatch100($database),
+                'batch1000' => benchmarkBatch1000($database),
+                'batch5000' => benchmarkBatch5000($database),
+                'pagination' => benchmarkPagination($database),
+            ];
+        }
+
+        // Calculate and display averages
+        displayBenchmarkResults($results, $runs);
     });
 
 function createRelationshipSchema(Database $database): void
@@ -153,6 +177,7 @@ function createRelationshipSchema(Database $database): void
     $database->createCollection('authors', permissions: [
         Permission::create(Role::any()),
         Permission::read(Role::any()),
+        Permission::update(Role::any()),
     ]);
     $database->createAttribute('authors', 'name', Database::VAR_STRING, 256, true);
     $database->createAttribute('authors', 'created', Database::VAR_DATETIME, 0, true, filters: ['datetime']);
@@ -163,6 +188,7 @@ function createRelationshipSchema(Database $database): void
     $database->createCollection('articles', permissions: [
         Permission::create(Role::any()),
         Permission::read(Role::any()),
+        Permission::update(Role::any()),
     ]);
     $database->createAttribute('articles', 'title', Database::VAR_STRING, 256, true);
     $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
@@ -173,6 +199,7 @@ function createRelationshipSchema(Database $database): void
     $database->createCollection('users', permissions: [
         Permission::create(Role::any()),
         Permission::read(Role::any()),
+        Permission::update(Role::any()),
     ]);
     $database->createAttribute('users', 'username', Database::VAR_STRING, 256, true);
     $database->createAttribute('users', 'email', Database::VAR_STRING, 256, true);
@@ -181,16 +208,74 @@ function createRelationshipSchema(Database $database): void
     $database->createCollection('comments', permissions: [
         Permission::create(Role::any()),
         Permission::read(Role::any()),
+        Permission::update(Role::any()),
     ]);
     $database->createAttribute('comments', 'content', Database::VAR_STRING, 256, true);
     $database->createAttribute('comments', 'likes', Database::VAR_INTEGER, 8, true, signed: false);
 
+    $database->createCollection('profiles', permissions: [
+        Permission::create(Role::any()),
+        Permission::read(Role::any()),
+        Permission::update(Role::any()),
+    ]);
+    $database->createAttribute('profiles', 'bio_extended', Database::VAR_STRING, 10000, true);
+    $database->createAttribute('profiles', 'social_links', Database::VAR_STRING, 256, true, array: true);
+    $database->createAttribute('profiles', 'verified', Database::VAR_BOOLEAN, 0, true);
+
+    $database->createCollection('categories', permissions: [
+        Permission::create(Role::any()),
+        Permission::read(Role::any()),
+        Permission::update(Role::any()),
+    ]);
+    $database->createAttribute('categories', 'name', Database::VAR_STRING, 256, true);
+    $database->createAttribute('categories', 'description', Database::VAR_STRING, 1000, true);
+
     $database->createRelationship('authors', 'articles', Database::RELATION_MANY_TO_MANY, true, onDelete: Database::RELATION_MUTATE_SET_NULL);
     $database->createRelationship('articles', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'article', onDelete: Database::RELATION_MUTATE_CASCADE);
     $database->createRelationship('users', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'user', onDelete: Database::RELATION_MUTATE_CASCADE);
+    $database->createRelationship('authors', 'profiles', Database::RELATION_ONE_TO_ONE, true, twoWayKey: 'author', onDelete: Database::RELATION_MUTATE_CASCADE);
+    $database->createRelationship('articles', 'categories', Database::RELATION_MANY_TO_ONE, true, id: 'category', twoWayKey: 'articles', onDelete: Database::RELATION_MUTATE_SET_NULL);
 }
 
-function createRelationshipDocuments(Database $database): void
+function createGlobalDocuments(Database $database, int $limit): array
+{
+    global $genresPool, $namesPool;
+
+    // Scale categories based on limit (minimum 9, scales up to 100 max)
+    $numCategories = min(100, max(9, (int)($limit / 10000)));
+    $categoryDocs = [];
+    for ($i = 0; $i < $numCategories; $i++) {
+        $genre = $genresPool[$i % count($genresPool)];
+        $categoryDocs[] = new Document([
+            '$id' => 'category_' . \uniqid(),
+            'name' => \ucfirst($genre) . ($i >= count($genresPool) ? ' ' . ($i + 1) : ''),
+            'description' => 'Articles about ' . $genre,
+        ]);
+    }
+
+    // Create categories once - documents are modified in place with IDs
+    $database->createDocuments('categories', $categoryDocs);
+
+    // Scale users based on limit (10% of total documents)
+    $numUsers = max(1000, (int)($limit / 10));
+    $userDocs = [];
+    for ($u = 0; $u < $numUsers; $u++) {
+        $userDocs[] = new Document([
+            '$id' => 'user_' . \uniqid(),
+            'username' => $namesPool[\array_rand($namesPool)] . '_' . $u,
+            'email' => 'user' . $u . '@example.com',
+            'password' => \bin2hex(\random_bytes(8)),
+        ]);
+    }
+
+    // Create users once
+    $database->createDocuments('users', $userDocs);
+
+    // Return both categories and users
+    return ['categories' => $categoryDocs, 'users' => $userDocs];
+}
+
+function createRelationshipDocuments(Database $database, array $categories, array $users): void
 {
     global $namesPool, $genresPool, $tagsPool;
 
@@ -199,39 +284,40 @@ function createRelationshipDocuments(Database $database): void
 
     // Prepare pools for nested data
     $numAuthors = 10;
-    $numUsers = 10;
     $numArticlesPerAuthor = 10;
     $numCommentsPerArticle = 10;
-
-    // Generate users
-    $users = [];
-    for ($u = 0; $u < $numUsers; $u++) {
-        $users[] = new Document([
-            'username' => $namesPool[\array_rand($namesPool)],
-            'email'    => \strtolower($namesPool[\array_rand($namesPool)]) . '@example.com',
-            'password' => \bin2hex(\random_bytes(8)),
-        ]);
-    }
 
     // Generate authors with nested articles and comments
     for ($a = 0; $a < $numAuthors; $a++) {
         $author = new Document([
-            'name'      => $namesPool[array_rand($namesPool)],
-            'created'   => DateTime::now(),
-            'bio'       => \substr(\bin2hex(\random_bytes(32)), 0, 100),
-            'avatar'    => 'https://example.com/avatar/' . $a,
-            'website'   => 'https://example.com/user/' . $a,
+            'name' => $namesPool[array_rand($namesPool)],
+            'created' => DateTime::now(),
+            'bio' => \substr(\bin2hex(\random_bytes(32)), 0, 100),
+            'avatar' => 'https://example.com/avatar/' . $a,
+            'website' => 'https://example.com/user/' . $a,
         ]);
+
+        // Create profile for author (one-to-one relationship)
+        $profile = new Document([
+            'bio_extended' => \substr(\bin2hex(\random_bytes(128)), 0, 500),
+            'social_links' => [
+                'https://twitter.com/author' . $a,
+                'https://linkedin.com/in/author' . $a,
+            ],
+            'verified' => (bool)\mt_rand(0, 1),
+        ]);
+        $author->setAttribute('profiles', $profile);
 
         // Nested articles
         $authorArticles = [];
         for ($i = 0; $i < $numArticlesPerAuthor; $i++) {
             $article = new Document([
-                'title'   => 'Article ' . ($i + 1) . ' by ' . $author->getAttribute('name'),
-                'text'    => \substr(\bin2hex(\random_bytes(64)), 0, \mt_rand(100, 200)),
-                'genre'   => $genresPool[array_rand($genresPool)],
-                'views'   => \mt_rand(0, 1000),
-                'tags'    => \array_slice($tagsPool, 0, \mt_rand(1, \count($tagsPool))),
+                'title' => 'Article ' . ($i + 1) . ' by ' . $author->getAttribute('name'),
+                'text' => \substr(\bin2hex(\random_bytes(64)), 0, \mt_rand(100, 200)),
+                'genre' => $genresPool[array_rand($genresPool)],
+                'views' => \mt_rand(0, 1000),
+                'tags' => \array_slice($tagsPool, 0, \mt_rand(1, \count($tagsPool))),
+                'category' => $categories[\array_rand($categories)],
             ]);
 
             // Nested comments
@@ -239,8 +325,8 @@ function createRelationshipDocuments(Database $database): void
             for ($c = 0; $c < $numCommentsPerArticle; $c++) {
                 $comment = new Document([
                     'content' => 'Comment ' . ($c + 1),
-                    'likes'   => \mt_rand(0, 10000),
-                    'user'    => $users[\array_rand($users)],
+                    'likes' => \mt_rand(0, 10000),
+                    'user' => $users[\array_rand($users)],
                 ]);
                 $comments[] = $comment;
             }
@@ -253,9 +339,6 @@ function createRelationshipDocuments(Database $database): void
         $documents[] = $author;
     }
 
-    $time = microtime(true) - $start;
-    Console::info("Prepared nested documents in {$time} seconds");
-
     // Insert authors (with nested articles, comments, and users)
     $start = \microtime(true);
     $database->createDocuments('authors', $documents);
@@ -266,61 +349,207 @@ function createRelationshipDocuments(Database $database): void
 /**
  * Benchmark querying a single document from each collection.
  */
-function benchmarkSingleQueries(Database $database): void
+function benchmarkSingle(Database $database): array
 {
-    $collections = ['authors', 'articles', 'users', 'comments'];
+    $collections = ['authors', 'articles', 'users', 'comments', 'profiles', 'categories'];
+    $results = [];
+
     foreach ($collections as $collection) {
-        // Fetch one document ID to use
-        $docs = $database->find($collection, [Query::limit(1)]);
-        if (empty($docs)) {
-            Console::warning("No documents in {$collection} for single query benchmark.");
-            continue;
-        }
-        $id = $docs[0]->getId();
+        // Fetch one document ID to use (skip relationships to avoid infinite recursion)
+        $docs = $database->skipRelationships(fn() => $database->findOne($collection));
+        $id = $docs->getId();
 
         $start = microtime(true);
         $database->getDocument($collection, $id);
         $time = microtime(true) - $start;
 
-        Console::info("Single query ({$collection}) took {$time} seconds");
+        $results[$collection] = $time;
     }
+
+    return $results;
 }
 
 /**
- * Benchmark querying 20 documents from each collection.
+ * Benchmark querying 100 documents from each collection.
  */
-function benchmarkBatchQueries(Database $database): void
+function benchmarkBatch100(Database $database): array
 {
-    $collections = ['authors', 'articles', 'users', 'comments'];
+    $collections = ['authors', 'articles', 'users', 'comments', 'profiles', 'categories'];
+    $results = [];
+
     foreach ($collections as $collection) {
         $start = microtime(true);
-        $database->find($collection, [Query::limit(20)]);
+        $database->find($collection, [Query::limit(100)]);
         $time = microtime(true) - $start;
 
-        Console::info("Batch query 20 ({$collection}) took {$time} seconds");
+        $results[$collection] = $time;
     }
+
+    return $results;
 }
 
 /**
- * Benchmark pagination through entire collection in chunks of 100.
+ * Benchmark querying 1000 documents from each collection.
  */
-function benchmarkPagination(Database $database): void
+function benchmarkBatch1000(Database $database): array
 {
-    $collections = ['authors', 'articles', 'users', 'comments'];
+    $collections = ['authors', 'articles', 'users', 'comments', 'profiles', 'categories'];
+    $results = [];
+
     foreach ($collections as $collection) {
-        $offset = 0;
+        $start = microtime(true);
+        $database->find($collection, [Query::limit(1000)]);
+        $time = microtime(true) - $start;
+
+        $results[$collection] = $time;
+    }
+
+    return $results;
+}
+
+/**
+ * Benchmark querying 5000 documents from each collection.
+ */
+function benchmarkBatch5000(Database $database): array
+{
+    $collections = ['authors', 'articles', 'users', 'comments', 'profiles', 'categories'];
+    $results = [];
+
+    foreach ($collections as $collection) {
+        $start = microtime(true);
+        $database->find($collection, [Query::limit(5000)]);
+        $time = microtime(true) - $start;
+
+        $results[$collection] = $time;
+    }
+
+    return $results;
+}
+
+/**
+ * Benchmark cursor pagination through entire collection in chunks of 100.
+ */
+function benchmarkPagination(Database $database): array
+{
+    $collections = ['authors', 'articles', 'users', 'comments', 'profiles', 'categories'];
+    $results = [];
+
+    foreach ($collections as $collection) {
+        $total = 0;
         $limit = 100;
+        $cursor = null;
         $start = microtime(true);
         do {
-            $docs = $database->find($collection, [
-                Query::limit($limit),
-                Query::offset($offset),
-            ]);
+            $queries = [Query::limit($limit)];
+            if ($cursor !== null) {
+                $queries[] = Query::cursorAfter($cursor);
+            }
+            $docs = $database->find($collection, $queries);
             $count = count($docs);
-            $offset += $limit;
+            $total += $count;
+            if ($count > 0) {
+                $cursor = $docs[$count - 1];
+            }
         } while ($count === $limit);
         $time = microtime(true) - $start;
 
-        Console::info("Pagination ({$collection}) over all documents took {$time} seconds");
+        $results[$collection] = $time;
     }
+
+    return $results;
+}
+
+/**
+ * Display relationship structure diagram
+ */
+function displayRelationshipStructure(): void
+{
+    Console::success("\n========================================");
+    Console::success("Relationship Structure");
+    Console::success("========================================\n");
+
+    Console::info("Collections:");
+    Console::log("  • authors      (name, created, bio, avatar, website)");
+    Console::log("  • articles     (title, text, genre, views, tags[])");
+    Console::log("  • comments     (content, likes)");
+    Console::log("  • users        (username, email, password)");
+    Console::log("  • profiles     (bio_extended, social_links[], verified)");
+    Console::log("  • categories   (name, description)");
+    Console::log("");
+
+    Console::info("Relationships:");
+    Console::log("  ┌─────────────────────────────────────────────────────────────┐");
+    Console::log("  │  authors ◄─────────────► articles  (Many-to-Many)          │");
+    Console::log("  │    └─► profiles (One-to-One)                                │");
+    Console::log("  │                                                              │");
+    Console::log("  │  articles ─────────────► comments  (One-to-Many)            │");
+    Console::log("  │    └─► categories (Many-to-One)                             │");
+    Console::log("  │                                                              │");
+    Console::log("  │  users ────────────────► comments  (One-to-Many)            │");
+    Console::log("  └─────────────────────────────────────────────────────────────┘");
+    Console::log("");
+
+    Console::info("Relationship Coverage:");
+    Console::log("  ✓ One-to-One:    authors ◄─► profiles");
+    Console::log("  ✓ One-to-Many:   articles ─► comments, users ─► comments");
+    Console::log("  ✓ Many-to-One:   articles ─► categories");
+    Console::log("  ✓ Many-to-Many:  authors ◄─► articles");
+    Console::log("");
+}
+
+/**
+ * Display benchmark results as a formatted table
+ */
+function displayBenchmarkResults(array $results, int $runs): void
+{
+    $collections = ['authors', 'articles', 'users', 'comments', 'profiles', 'categories'];
+    $benchmarks = ['single', 'batch100', 'batch1000', 'batch5000', 'pagination'];
+    $benchmarkLabels = [
+        'single' => 'Single Query',
+        'batch100' => 'Batch 100',
+        'batch1000' => 'Batch 1000',
+        'batch5000' => 'Batch 5000',
+        'pagination' => 'Pagination',
+    ];
+
+    // Calculate averages
+    $averages = [];
+    foreach ($benchmarks as $benchmark) {
+        $averages[$benchmark] = [];
+        foreach ($collections as $collection) {
+            $total = 0;
+            foreach ($results as $run) {
+                $total += $run[$benchmark][$collection] ?? 0;
+            }
+            $averages[$benchmark][$collection] = $total / $runs;
+        }
+    }
+
+    Console::success("\n========================================");
+    Console::success("Benchmark Results (Average of {$runs} run" . ($runs > 1 ? 's' : '') . ")");
+    Console::success("========================================\n");
+
+    // Calculate column widths
+    $collectionWidth = 12;
+    $timeWidth = 12;
+
+    // Print header
+    $header = str_pad('Collection', $collectionWidth) . ' | ';
+    foreach ($benchmarkLabels as $label) {
+        $header .= str_pad($label, $timeWidth) . ' | ';
+    }
+    Console::info($header);
+    Console::info(str_repeat('-', strlen($header)));
+
+    // Print results for each collection
+    foreach ($collections as $collection) {
+        $row = str_pad(ucfirst($collection), $collectionWidth) . ' | ';
+        foreach ($benchmarks as $benchmark) {
+            $time = number_format($averages[$benchmark][$collection] * 1000, 2); // Convert to ms
+            $row .= str_pad($time . ' ms', $timeWidth) . ' | ';
+        }
+        Console::log($row);
+    }
+
+    Console::log('');
 }

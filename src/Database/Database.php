@@ -4127,7 +4127,7 @@ class Database
      */
     private function applySelectFiltersToDocuments(array $documents, array $selectQueries): void
     {
-        if (empty($selectQueries)) {
+        if (empty($selectQueries) || empty($documents)) {
             return;
         }
 
@@ -4135,25 +4135,26 @@ class Database
         $fieldsToKeep = [];
         foreach ($selectQueries as $selectQuery) {
             foreach ($selectQuery->getValues() as $value) {
-                $fieldsToKeep[] = $value;
+                $fieldsToKeep[$value] = true;
             }
         }
 
-        // Always preserve internal attributes
-        $internalKeys = \array_map(fn ($attr) => $attr['$id'], $this->getInternalAttributes());
-
-        \array_push($fieldsToKeep, ...$internalKeys);
-
         // Early return if wildcard selector present
-        if (in_array('*', $fieldsToKeep)) {
+        if (isset($fieldsToKeep['*'])) {
             return;
         }
 
+        // Always preserve internal attributes (use hashmap for O(1) lookup)
+        $internalKeys = \array_map(fn ($attr) => $attr['$id'], $this->getInternalAttributes());
+        foreach ($internalKeys as $key) {
+            $fieldsToKeep[$key] = true;
+        }
+
         foreach ($documents as $doc) {
-            $allKeys = array_keys($doc->getArrayCopy());
+            $allKeys = \array_keys($doc->getArrayCopy());
             foreach ($allKeys as $attrKey) {
-                // Keep if: explicitly selected OR is internal attribute
-                if (!in_array($attrKey, $fieldsToKeep) && !str_starts_with($attrKey, '$')) {
+                // Keep if: explicitly selected OR is internal attribute ($ prefix)
+                if (!isset($fieldsToKeep[$attrKey]) && !\str_starts_with($attrKey, '$')) {
                     $doc->removeAttribute($attrKey);
                 }
             }
@@ -4357,7 +4358,6 @@ class Database
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
-            // Use batch relationship population for better performance
             if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
                 $batch = $this->silent(fn () => $this->populateDocumentsRelationships($batch, $collection, $this->relationshipFetchDepth));
             }
@@ -5782,7 +5782,6 @@ class Database
                 }
             }
 
-            // Use batch relationship population for better performance
             if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
                 $batch = $this->silent(fn () => $this->populateDocumentsRelationships($batch, $collection, $this->relationshipFetchDepth));
             }
@@ -6781,27 +6780,31 @@ class Database
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
         // Convert relationship filter queries to SQL-level subqueries
-        $queries = $this->convertRelationshipFiltersToSubqueries($collection, $relationships, $queries);
+        $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
 
-        $getResults = fn () => $this->adapter->find(
-            $collection,
-            $queries,
-            $limit ?? 25,
-            $offset ?? 0,
-            $orderAttributes,
-            $orderTypes,
-            $cursor,
-            $cursorDirection,
-            $forPermission
-        );
+        // If conversion returns null, it means no documents can match (relationship filter found no matches)
+        if ($queriesOrNull === null) {
+            $results = [];
+        } else {
+            $queries = $queriesOrNull;
 
-        $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
+            $getResults = fn () => $this->adapter->find(
+                $collection,
+                $queries,
+                $limit ?? 25,
+                $offset ?? 0,
+                $orderAttributes,
+                $orderTypes,
+                $cursor,
+                $cursorDirection,
+                $forPermission
+            );
 
-        // Skip relationship population if we're in batch mode (relationships will be populated later)
-        // Use batch relationship population for better performance at all levels
+            $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
+        }
+
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             if (count($results) > 0) {
-                // Always use batch processing for all cases (single and multiple documents, nested or top-level)
                 $results = $this->silent(fn () => $this->populateDocumentsRelationships($results, $collection, $this->relationshipFetchDepth, $nestedSelections));
             }
         }
@@ -7661,16 +7664,14 @@ class Database
      * Queries like Query::equal('author.name', ['Alice']) are converted to
      * Query::equal('author', [<matching author IDs>])
      *
-     * @param Document $collection
      * @param array<Document> $relationships
      * @param array<Query> $queries
-     * @return array<Query>
+     * @return array<Query>|null Returns null if relationship filters cannot match any documents
      */
     private function convertRelationshipFiltersToSubqueries(
-        Document $collection,
         array $relationships,
-        array $queries
-    ): array {
+        array $queries,
+    ): ?array {
         // Early return if no dot-path queries exist
         $hasDotPath = false;
         foreach ($queries as $query) {
@@ -7685,19 +7686,19 @@ class Database
             return $queries;
         }
 
+        $relationshipsByKey = [];
+        foreach ($relationships as $relationship) {
+            $relationshipsByKey[$relationship->getAttribute('key')] = $relationship;
+        }
+
         $additionalQueries = [];
         $groupedQueries = [];
         $indicesToRemove = [];
 
         // Group queries by relationship key
-        foreach ($queries as $index => $query) {
+        foreach (Query::groupByType($queries)['filters'] as $index => $query) {
             $method = $query->getMethod();
             $attribute = $query->getAttribute();
-
-            // Skip non-filter queries and non-relationship queries
-            if ($method === Query::TYPE_SELECT || $method === Query::TYPE_ORDER_ASC || $method === Query::TYPE_ORDER_DESC) {
-                continue;
-            }
 
             if (!\str_contains($attribute, '.')) {
                 continue;
@@ -7707,12 +7708,7 @@ class Database
             $parts = \explode('.', $attribute);
             $relationshipKey = \array_shift($parts);
             $nestedField = \implode('.', $parts);
-
-            // Find the relationship
-            $relationship = \array_values(\array_filter(
-                $relationships,
-                fn (Document $rel) => $rel->getAttribute('key') === $relationshipKey
-            ))[0] ?? null;
+            $relationship = $relationshipsByKey[$relationshipKey] ?? null;
 
             if (!$relationship) {
                 continue;
@@ -7732,13 +7728,13 @@ class Database
                 'field' => $nestedField,
                 'values' => $query->getValues()
             ];
+
             $groupedQueries[$relationshipKey]['indices'][] = $index;
         }
 
         // Process each relationship group
         foreach ($groupedQueries as $relationshipKey => $group) {
             $relationship = $group['relationship'];
-
             $relatedCollection = $relationship->getAttribute('options')['relatedCollection'];
             $relationType = $relationship->getAttribute('options')['relationType'];
             $side = $relationship->getAttribute('options')['side'];
@@ -7768,20 +7764,22 @@ class Database
                 if ($needsParentResolution) {
                     $matchingDocs = $this->silent(fn () => $this->find(
                         $relatedCollection,
-                        \array_merge($relatedQueries, [Query::limit(PHP_INT_MAX)]),
-                        self::PERMISSION_READ
+                        \array_merge($relatedQueries, [
+                            Query::limit(PHP_INT_MAX),
+                        ])
                     ));
                 } else {
                     $matchingDocs = $this->silent(fn () => $this->find(
                         $relatedCollection,
-                        \array_merge($relatedQueries, [Query::select(['$id']), Query::limit(PHP_INT_MAX)]),
-                        self::PERMISSION_READ
+                        \array_merge($relatedQueries, [
+                            Query::select(['$id']),
+                            Query::limit(PHP_INT_MAX),
+                        ])
                     ));
                 }
 
                 $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
 
-                // Use the same parent resolution logic as above
                 if ($needsParentResolution) {
                     // Need to find which parents have these children
                     $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
@@ -7815,14 +7813,14 @@ class Database
                     if (!empty($parentIds)) {
                         $additionalQueries[] = Query::equal('$id', $parentIds);
                     } else {
-                        $additionalQueries[] = Query::equal('$id', ['__impossible__']);
+                        return null;
                     }
                 } else {
                     // For other types, filter by the relationship field
                     if (!empty($matchingIds)) {
                         $additionalQueries[] = Query::equal($relationshipKey, $matchingIds);
                     } else {
-                        $additionalQueries[] = Query::equal($relationshipKey, ['__impossible__']);
+                        return null;
                     }
                 }
 
@@ -7831,11 +7829,7 @@ class Database
                     $indicesToRemove[] = $index;
                 }
             } catch (\Exception $e) {
-                // If subquery fails, add impossible filter
-                $additionalQueries[] = Query::equal('$id', ['__impossible__']);
-                foreach ($group['indices'] as $index) {
-                    $indicesToRemove[] = $index;
-                }
+                return null;
             }
         }
 

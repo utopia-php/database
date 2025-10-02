@@ -1370,7 +1370,13 @@ class Mongo extends Adapter
         ];
 
         try {
-            $result = $this->client->update($name, $filters, $updateQuery, multi: true, options: $options);
+            $result = $this->client->update(
+                $name,
+                $filters,
+                $updateQuery,
+                options: $options,
+                multi: true,
+            );
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
@@ -1777,7 +1783,7 @@ class Mongo extends Adapter
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
             $direction = $orderType;
 
-            /** Get sort direction  ASC || DESC**/
+            /** Get sort direction  ASC || DESC **/
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $direction = ($direction === Database::ORDER_ASC)
                     ? Database::ORDER_DESC
@@ -1799,12 +1805,7 @@ class Mongo extends Adapter
                 for ($j = 0; $j < $i; $j++) {
                     $originalPrev = $orderAttributes[$j];
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
-
                     $tmp = $cursor[$originalPrev];
-                    if ($originalPrev === '$sequence') {
-                        $tmp = $tmp;
-                    }
-
                     $andConditions[] = [
                         $prevAttr => $tmp
                     ];
@@ -1860,11 +1861,6 @@ class Mongo extends Adapter
 
             // Continue fetching with getMore
             while ($cursorId && $cursorId !== 0) {
-                // Check if limit is reached
-                if (!\is_null($limit) && count($found) >= $limit) {
-                    break;
-                }
-
                 $moreResponse = $this->client->getMore((int)$cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 $moreResults = $moreResponse->cursor->nextBatch ?? [];
 
@@ -1875,11 +1871,6 @@ class Mongo extends Adapter
                 foreach ($moreResults as $result) {
                     $record = $this->replaceChars('_', '$', (array)$result);
                     $found[] = new Document($record);
-
-                    // Check limit again after each document
-                    if (!\is_null($limit) && count($found) >= $limit) {
-                        break 2; // Break both inner and outer loops
-                    }
                 }
 
                 $cursorId = (int)($moreResponse->cursor->id ?? 0);

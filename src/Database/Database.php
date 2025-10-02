@@ -3799,6 +3799,7 @@ class Database
         foreach (array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
             $chunkDocs = $this->find($relatedCollection->getId(), [
                 Query::equal('$id', $chunk),
+                Query::limit(PHP_INT_MAX),
                 ...$queries
             ]);
             array_push($relatedDocuments, ...$chunkDocs);
@@ -3892,6 +3893,7 @@ class Database
         foreach (array_chunk($parentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
             $chunkDocs = $this->find($relatedCollection->getId(), [
                 Query::equal($twoWayKey, $chunk),
+                Query::limit(PHP_INT_MAX),
                 ...$otherQueries
             ]);
             array_push($relatedDocuments, ...$chunkDocs);
@@ -3989,6 +3991,7 @@ class Database
         foreach (array_chunk($childIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
             $chunkDocs = $this->find($relatedCollection->getId(), [
                 Query::equal($twoWayKey, $chunk),
+                Query::limit(PHP_INT_MAX),
                 ...$otherQueries
             ]);
             array_push($relatedDocuments, ...$chunkDocs);
@@ -4111,7 +4114,8 @@ class Database
         // Process in chunks to avoid exceeding query value limits
         foreach (array_chunk($documentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
             $chunkJunctions = $this->skipRelationships(fn () => $this->find($junction, [
-                Query::equal($twoWayKey, $chunk)
+                Query::equal($twoWayKey, $chunk),
+                Query::limit(PHP_INT_MAX)
             ]));
             array_push($junctions, ...$chunkJunctions);
         }
@@ -4144,6 +4148,7 @@ class Database
             foreach (array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
                 $chunkDocs = $this->find($relatedCollection->getId(), [
                     Query::equal('$id', $chunk),
+                    Query::limit(PHP_INT_MAX),
                     ...$queries
                 ]);
                 array_push($foundRelated, ...$chunkDocs);

@@ -165,8 +165,10 @@ class Mongo extends Adapter
                     $e = $this->processException($e);
                     if ($e instanceof TransactionException) {
                         $this->session = null;
+                        $this->inTransaction = 0;  // Reset counter when transaction is already terminated
                         return true;
                     }
+                    throw $e;
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
@@ -277,17 +279,17 @@ class Mongo extends Adapter
     {
         if (!\is_null($collection)) {
             $collection = $this->getNamespace() . "_" . $collection;
-            $list = $this->flattenArray($this->listCollections())[0]->firstBatch;
-            foreach ($list as $obj) {
-                if (\is_object($obj)
-                    && isset($obj->name)
-                    && $obj->name === $collection
-                ) {
-                    return true;
-                }
-            }
+            try {
+                // Use listCollections command with filter for O(1) lookup
+                $result = $this->getClient()->query([
+                    'listCollections' => 1,
+                    'filter' => ['name' => $collection]
+                ]);
 
-            return false;
+                return !empty($result->cursor->firstBatch);
+            } catch (\Exception $e) {
+                return false;
+            }
         }
 
         return $this->getClient()->selectDatabase() != null;
@@ -422,12 +424,12 @@ class Mongo extends Adapter
                     $key['_tenant'] = $this->getOrder(Database::ORDER_ASC);
                 }
 
-                foreach ($attributes as $attribute) {
+                foreach ($attributes as $j => $attribute) {
                     $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
 
                     switch ($index->getAttribute('type')) {
                         case Database::INDEX_KEY:
-                            $order = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+                            $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
                             break;
                         case Database::INDEX_FULLTEXT:
                             // MongoDB fulltext index is just 'text'
@@ -435,7 +437,7 @@ class Mongo extends Adapter
                             $order = 'text';
                             break;
                         case Database::INDEX_UNIQUE:
-                            $order = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+                            $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
                             $unique = true;
                             break;
                         default:
@@ -1036,6 +1038,12 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
+        // Add permissions filter for document-level security
+        if (Authorization::$status) {
+            $roles = \implode('|', Authorization::getRoles());
+            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
+        }
+
         $options = [];
 
         $selections = $this->getAttributeSelections($queries);
@@ -1178,7 +1186,6 @@ class Mongo extends Adapter
         $attributes = \array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
 
         foreach ($attributes as $attribute) {
-
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -1522,7 +1529,7 @@ class Mongo extends Adapter
                 'batchSize' => self::DEFAULT_BATCH_SIZE
             ];
 
-            $options = $this->getTransactionOptions(['projection' => ['_uid' => 1, '_id' => 1]]);
+            $options = $this->getTransactionOptions($options);
             $response = $this->client->find($name, $filters, $options);
             $results = $response->cursor->firstBatch ?? [];
 
@@ -1981,7 +1988,7 @@ class Mongo extends Adapter
         // Add permissions filter if authorization is enabled
         if (Authorization::$status) {
             $roles = \implode('|', Authorization::getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
         /**
@@ -2071,7 +2078,7 @@ class Mongo extends Adapter
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
             $roles = \implode('|', Authorization::getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
         // using aggregation to get sum an attribute as described in
@@ -2236,13 +2243,15 @@ class Mongo extends Adapter
             $filter[$attribute]['$nin'] = $value;
         } elseif ($operator == '$in') {
             if ($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
-                $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
+                $escapedValue = preg_quote($value, '/');
+                $filter[$attribute]['$regex'] = new Regex(".*{$escapedValue}.*", 'i');
             } else {
                 $filter[$attribute]['$in'] = $query->getValues();
             }
         } elseif ($operator === 'notContains') {
             if (!$query->onArray()) {
-                $filter[$attribute] = ['$not' => new Regex(".*{$this->escapeWildcards($value)}.*", 'i')];
+                $escapedValue = preg_quote($value, '/');
+                $filter[$attribute] = ['$not' => new Regex(".*{$escapedValue}.*", 'i')];
             } else {
                 $filter[$attribute]['$nin'] = $query->getValues();
             }
@@ -2318,16 +2327,16 @@ class Mongo extends Adapter
     {
         switch ($method) {
             case Query::TYPE_STARTS_WITH:
-                $value = $this->escapeWildcards($value);
+                $value = preg_quote($value, '/');
                 return $value . '.*';
             case Query::TYPE_NOT_STARTS_WITH:
-                $value = $this->escapeWildcards($value);
+                $value = preg_quote($value, '/');
                 return $value . '.*';
             case Query::TYPE_ENDS_WITH:
-                $value = $this->escapeWildcards($value);
+                $value = preg_quote($value, '/');
                 return '.*' . $value;
             case Query::TYPE_NOT_ENDS_WITH:
-                $value = $this->escapeWildcards($value);
+                $value = preg_quote($value, '/');
                 return '.*' . $value;
             default:
                 return $value;

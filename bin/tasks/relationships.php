@@ -1,5 +1,8 @@
 <?php
 
+ini_set('memory_limit', '4G');
+ini_set('xdebug.max_nesting_level', '-1');
+
 global $cli;
 
 use Swoole\Database\PDOConfig;
@@ -98,7 +101,7 @@ $cli
         createRelationshipSchema($database);
 
         // Create categories and users once before parallel batch creation
-        $globalDocs = createGlobalDocuments($database);
+        $globalDocs = createGlobalDocuments($database, $limit);
 
         $pdo = null;
 
@@ -234,16 +237,18 @@ function createRelationshipSchema(Database $database): void
     $database->createRelationship('articles', 'categories', Database::RELATION_MANY_TO_ONE, true, id: 'category', twoWayKey: 'articles', onDelete: Database::RELATION_MUTATE_SET_NULL);
 }
 
-function createGlobalDocuments(Database $database): array
+function createGlobalDocuments(Database $database, int $limit): array
 {
     global $genresPool, $namesPool;
 
-    // Generate categories (for many-to-one relationship with articles)
+    // Scale categories based on limit (minimum 9, scales up to 100 max)
+    $numCategories = min(100, max(9, (int)($limit / 10000)));
     $categoryDocs = [];
-    foreach ($genresPool as $genre) {
+    for ($i = 0; $i < $numCategories; $i++) {
+        $genre = $genresPool[$i % count($genresPool)];
         $categoryDocs[] = new Document([
             '$id' => 'category_' . \uniqid(),
-            'name' => \ucfirst($genre),
+            'name' => \ucfirst($genre) . ($i >= count($genresPool) ? ' ' . ($i + 1) : ''),
             'description' => 'Articles about ' . $genre,
         ]);
     }
@@ -251,13 +256,14 @@ function createGlobalDocuments(Database $database): array
     // Create categories once - documents are modified in place with IDs
     $database->createDocuments('categories', $categoryDocs);
 
-    // Generate users globally (1000 users to share across all batches)
+    // Scale users based on limit (10% of total documents)
+    $numUsers = max(1000, (int)($limit / 10));
     $userDocs = [];
-    for ($u = 0; $u < 1000; $u++) {
+    for ($u = 0; $u < $numUsers; $u++) {
         $userDocs[] = new Document([
             '$id' => 'user_' . \uniqid(),
-            'username' => $namesPool[\array_rand($namesPool)],
-            'email' => \strtolower($namesPool[\array_rand($namesPool)]) . '@example.com',
+            'username' => $namesPool[\array_rand($namesPool)] . '_' . $u,
+            'email' => 'user' . $u . '@example.com',
             'password' => \bin2hex(\random_bytes(8)),
         ]);
     }
@@ -349,8 +355,8 @@ function benchmarkSingle(Database $database): array
     $results = [];
 
     foreach ($collections as $collection) {
-        // Fetch one document ID to use
-        $docs = $database->findOne($collection);
+        // Fetch one document ID to use (skip relationships to avoid infinite recursion)
+        $docs = $database->skipRelationships(fn() => $database->findOne($collection));
         $id = $docs->getId();
 
         $start = microtime(true);

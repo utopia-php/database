@@ -137,6 +137,7 @@ class Mongo extends Adapter
             $this->inTransaction++;
             return true;
         } catch (\Throwable $e) {
+            $this->session = null;
             throw new DatabaseException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
     }
@@ -168,7 +169,6 @@ class Mongo extends Adapter
                         $this->inTransaction = 0;  // Reset counter when transaction is already terminated
                         return true;
                     }
-                    throw $e;
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 }
@@ -488,7 +488,6 @@ class Mongo extends Adapter
                 }
             }
 
-
             try {
                 $options = $this->getTransactionOptions();
                 $indexesCreated = $this->getClient()->createIndexes($id, $newIndexes, $options);
@@ -746,6 +745,10 @@ class Mongo extends Adapter
                 $metadataCollection = new Document(['$id' => Database::METADATA]);
                 $collection = $this->getDocument($metadataCollection, $collection);
                 $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
+
+                if ($collection->isEmpty() || $relatedCollection->isEmpty()) {
+                    throw new DatabaseException('Collection or related collection not found');
+                }
 
                 $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
 
@@ -1038,11 +1041,6 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
-        // Add permissions filter for document-level security
-        if (Authorization::$status) {
-            $roles = \implode('|', Authorization::getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
-        }
 
         $options = [];
 
@@ -1078,7 +1076,6 @@ class Mongo extends Adapter
      */
     public function createDocument(Document $collection, Document $document): Document
     {
-
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $sequence = $document->getSequence();
@@ -1136,9 +1133,13 @@ class Mongo extends Adapter
             }
 
             if ($array) {
-                $value = !is_string($value)
-                    ? $value
-                    : json_decode($value, true);
+                if (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        throw new DatabaseException('Failed to decode JSON for attribute ' . $key . ': ' . json_last_error_msg());
+                    }
+                    $value = $decoded;
+                }
             } else {
                 $value = [$value];
             }
@@ -1196,9 +1197,13 @@ class Mongo extends Adapter
             }
 
             if ($array) {
-                $value = !is_string($value)
-                    ? $value
-                    : json_decode($value, true);
+                if (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        throw new DatabaseException('Failed to decode JSON for attribute ' . $key . ': ' . json_last_error_msg());
+                    }
+                    $value = $decoded;
+                }
             } else {
                 $value = [$value];
             }

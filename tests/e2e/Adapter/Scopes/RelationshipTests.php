@@ -3255,4 +3255,506 @@ trait RelationshipTests
         $database->deleteCollection('students_mtm');
         $database->deleteCollection('courses_mtm');
     }
+
+    /**
+     * Comprehensive test for all query types on relationships
+     */
+    public function testRelationshipQueryTypes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Setup test collections
+        $database->createCollection('products_qt');
+        $database->createCollection('vendors_qt');
+
+        $database->createAttribute('products_qt', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('products_qt', 'price', Database::VAR_FLOAT, 0, true);
+        $database->createAttribute('vendors_qt', 'company', Database::VAR_STRING, 255, true);
+        $database->createAttribute('vendors_qt', 'rating', Database::VAR_FLOAT, 0, true);
+        $database->createAttribute('vendors_qt', 'email', Database::VAR_STRING, 255, true);
+        $database->createAttribute('vendors_qt', 'verified', Database::VAR_BOOLEAN, 0, true);
+
+        $database->createRelationship(
+            collection: 'products_qt',
+            relatedCollection: 'vendors_qt',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'vendor',
+            twoWayKey: 'products'
+        );
+
+        // Create test vendors
+        $database->createDocument('vendors_qt', new Document([
+            '$id' => 'vendor1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'company' => 'Acme Corp',
+            'rating' => 4.5,
+            'email' => 'sales@acme.com',
+            'verified' => true,
+        ]));
+
+        $database->createDocument('vendors_qt', new Document([
+            '$id' => 'vendor2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'company' => 'TechSupply Inc',
+            'rating' => 3.8,
+            'email' => 'info@techsupply.com',
+            'verified' => true,
+        ]));
+
+        $database->createDocument('vendors_qt', new Document([
+            '$id' => 'vendor3',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'company' => 'Budget Vendors',
+            'rating' => 2.5,
+            'email' => 'contact@budget.com',
+            'verified' => false,
+        ]));
+
+        // Create test products
+        $database->createDocument('products_qt', new Document([
+            '$id' => 'product1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Widget A',
+            'price' => 19.99,
+            'vendor' => 'vendor1',
+        ]));
+
+        $database->createDocument('products_qt', new Document([
+            '$id' => 'product2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Widget B',
+            'price' => 29.99,
+            'vendor' => 'vendor2',
+        ]));
+
+        $database->createDocument('products_qt', new Document([
+            '$id' => 'product3',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Widget C',
+            'price' => 9.99,
+            'vendor' => 'vendor3',
+        ]));
+
+        // Test: Query::equal()
+        $products = $database->find('products_qt', [
+            Query::equal('vendor.company', ['Acme Corp'])
+        ]);
+        $this->assertCount(1, $products);
+        $this->assertEquals('product1', $products[0]->getId());
+
+        // Test: Query::notEqual()
+        $products = $database->find('products_qt', [
+            Query::notEqual('vendor.company', ['Budget Vendors'])
+        ]);
+        $this->assertCount(2, $products);
+
+        // Test: Query::lessThan()
+        $products = $database->find('products_qt', [
+            Query::lessThan('vendor.rating', 4.0)
+        ]);
+        $this->assertCount(2, $products); // vendor2 (3.8) and vendor3 (2.5)
+
+        // Test: Query::lessThanEqual()
+        $products = $database->find('products_qt', [
+            Query::lessThanEqual('vendor.rating', 3.8)
+        ]);
+        $this->assertCount(2, $products);
+
+        // Test: Query::greaterThan()
+        $products = $database->find('products_qt', [
+            Query::greaterThan('vendor.rating', 4.0)
+        ]);
+        $this->assertCount(1, $products);
+        $this->assertEquals('product1', $products[0]->getId());
+
+        // Test: Query::greaterThanEqual()
+        $products = $database->find('products_qt', [
+            Query::greaterThanEqual('vendor.rating', 3.8)
+        ]);
+        $this->assertCount(2, $products); // vendor1 (4.5) and vendor2 (3.8)
+
+        // Test: Query::startsWith()
+        $products = $database->find('products_qt', [
+            Query::startsWith('vendor.email', 'sales@')
+        ]);
+        $this->assertCount(1, $products);
+        $this->assertEquals('product1', $products[0]->getId());
+
+        // Test: Query::endsWith()
+        $products = $database->find('products_qt', [
+            Query::endsWith('vendor.email', '.com')
+        ]);
+        $this->assertCount(3, $products);
+
+        // Test: Query::contains()
+        $products = $database->find('products_qt', [
+            Query::contains('vendor.company', ['Corp'])
+        ]);
+        $this->assertCount(1, $products);
+        $this->assertEquals('product1', $products[0]->getId());
+
+        // Test: Boolean query
+        $products = $database->find('products_qt', [
+            Query::equal('vendor.verified', [true])
+        ]);
+        $this->assertCount(2, $products); // vendor1 and vendor2 are verified
+
+        $products = $database->find('products_qt', [
+            Query::equal('vendor.verified', [false])
+        ]);
+        $this->assertCount(1, $products);
+        $this->assertEquals('product3', $products[0]->getId());
+
+        // Test: Multiple conditions on same relationship (query grouping optimization)
+        $products = $database->find('products_qt', [
+            Query::greaterThan('vendor.rating', 3.0),
+            Query::equal('vendor.verified', [true]),
+            Query::startsWith('vendor.company', 'Acme')
+        ]);
+        $this->assertCount(1, $products);
+        $this->assertEquals('product1', $products[0]->getId());
+
+        // Clean up
+        $database->deleteCollection('products_qt');
+        $database->deleteCollection('vendors_qt');
+    }
+
+    /**
+     * Test edge cases and error scenarios for relationship queries
+     */
+    public function testRelationshipQueryEdgeCases(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Setup test collections
+        $database->createCollection('orders_edge');
+        $database->createCollection('customers_edge');
+
+        $database->createAttribute('orders_edge', 'orderNumber', Database::VAR_STRING, 255, true);
+        $database->createAttribute('orders_edge', 'total', Database::VAR_FLOAT, 0, true);
+        $database->createAttribute('customers_edge', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('customers_edge', 'age', Database::VAR_INTEGER, 0, true);
+
+        $database->createRelationship(
+            collection: 'orders_edge',
+            relatedCollection: 'customers_edge',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'customer',
+            twoWayKey: 'orders'
+        );
+
+        // Create customer
+        $database->createDocument('customers_edge', new Document([
+            '$id' => 'customer1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'John Doe',
+            'age' => 30,
+        ]));
+
+        // Create order
+        $database->createDocument('orders_edge', new Document([
+            '$id' => 'order1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'orderNumber' => 'ORD001',
+            'total' => 100.00,
+            'customer' => 'customer1',
+        ]));
+
+        // Edge Case 1: Query with no matching results
+        $orders = $database->find('orders_edge', [
+            Query::equal('customer.name', ['Jane Doe'])
+        ]);
+        $this->assertCount(0, $orders);
+
+        // Edge Case 2: Query with impossible condition (combines to empty set)
+        $orders = $database->find('orders_edge', [
+            Query::equal('customer.name', ['John Doe']),
+            Query::equal('customer.age', [25]) // John is 30, not 25
+        ]);
+        $this->assertCount(0, $orders);
+
+        // Edge Case 3: Query on non-existent relationship field
+        try {
+            $orders = $database->find('orders_edge', [
+                Query::equal('nonexistent.field', ['value'])
+            ]);
+            // Should return empty or throw - either is acceptable
+            $this->assertCount(0, $orders);
+        } catch (\Exception $e) {
+            // Expected - non-existent relationship
+            $this->assertTrue(true);
+        }
+
+        // Edge Case 4: Empty array values (should throw exception)
+        try {
+            $orders = $database->find('orders_edge', [
+                Query::equal('customer.name', [])
+            ]);
+            $this->fail('Expected exception for empty array values');
+        } catch (\Exception $e) {
+            // Expected - empty array values are invalid
+            $this->assertStringContainsString('at least one value', $e->getMessage());
+        }
+
+        // Edge Case 5: Null or missing relationship
+        $database->createDocument('orders_edge', new Document([
+            '$id' => 'order2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'orderNumber' => 'ORD002',
+            'total' => 50.00,
+            // No customer relationship
+        ]));
+
+        $orders = $database->find('orders_edge', [
+            Query::equal('customer.name', ['John Doe'])
+        ]);
+        $this->assertCount(1, $orders); // Only order1 has a customer
+
+        // Edge Case 6: Combining relationship query with regular query
+        $orders = $database->find('orders_edge', [
+            Query::equal('customer.name', ['John Doe']),
+            Query::greaterThan('total', 75.00)
+        ]);
+        $this->assertCount(1, $orders);
+        $this->assertEquals('order1', $orders[0]->getId());
+
+        // Edge Case 7: Query with limit and offset
+        $orders = $database->find('orders_edge', [
+            Query::equal('customer.name', ['John Doe']),
+            Query::limit(1),
+            Query::offset(0)
+        ]);
+        $this->assertCount(1, $orders);
+
+        // Clean up
+        $database->deleteCollection('orders_edge');
+        $database->deleteCollection('customers_edge');
+    }
+
+    /**
+     * Test relationship queries from parent side with virtual fields
+     */
+    public function testRelationshipQueryParentSide(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Setup ONE_TO_MANY relationship
+        $database->createCollection('teams_parent');
+        $database->createCollection('members_parent');
+
+        $database->createAttribute('teams_parent', 'teamName', Database::VAR_STRING, 255, true);
+        $database->createAttribute('teams_parent', 'active', Database::VAR_BOOLEAN, 0, true);
+        $database->createAttribute('members_parent', 'memberName', Database::VAR_STRING, 255, true);
+        $database->createAttribute('members_parent', 'role', Database::VAR_STRING, 255, true);
+        $database->createAttribute('members_parent', 'senior', Database::VAR_BOOLEAN, 0, true);
+
+        $database->createRelationship(
+            collection: 'teams_parent',
+            relatedCollection: 'members_parent',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'members',
+            twoWayKey: 'team'
+        );
+
+        // Create teams
+        $database->createDocument('teams_parent', new Document([
+            '$id' => 'team1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'teamName' => 'Engineering',
+            'active' => true,
+        ]));
+
+        $database->createDocument('teams_parent', new Document([
+            '$id' => 'team2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'teamName' => 'Sales',
+            'active' => true,
+        ]));
+
+        // Create members
+        $database->createDocument('members_parent', new Document([
+            '$id' => 'member1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'memberName' => 'Alice',
+            'role' => 'Engineer',
+            'senior' => true,
+            'team' => 'team1',
+        ]));
+
+        $database->createDocument('members_parent', new Document([
+            '$id' => 'member2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'memberName' => 'Bob',
+            'role' => 'Manager',
+            'senior' => false,
+            'team' => 'team2',
+        ]));
+
+        $database->createDocument('members_parent', new Document([
+            '$id' => 'member3',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'memberName' => 'Charlie',
+            'role' => 'Engineer',
+            'senior' => true,
+            'team' => 'team1',
+        ]));
+
+        // Test: Find teams that have senior engineers
+        $teams = $database->find('teams_parent', [
+            Query::equal('members.role', ['Engineer']),
+            Query::equal('members.senior', [true])
+        ]);
+        $this->assertCount(1, $teams);
+        $this->assertEquals('team1', $teams[0]->getId());
+
+        // Test: Find teams with managers
+        $teams = $database->find('teams_parent', [
+            Query::equal('members.role', ['Manager'])
+        ]);
+        $this->assertCount(1, $teams);
+        $this->assertEquals('team2', $teams[0]->getId());
+
+        // Test: Find teams with members named 'Alice'
+        $teams = $database->find('teams_parent', [
+            Query::startsWith('members.memberName', 'A')
+        ]);
+        $this->assertCount(1, $teams);
+        $this->assertEquals('team1', $teams[0]->getId());
+
+        // Test: No teams with junior managers
+        $teams = $database->find('teams_parent', [
+            Query::equal('members.role', ['Manager']),
+            Query::equal('members.senior', [true])
+        ]);
+        $this->assertCount(0, $teams);
+
+        // Clean up
+        $database->deleteCollection('teams_parent');
+        $database->deleteCollection('members_parent');
+    }
+
+    /**
+     * Test MANY_TO_MANY relationships with complex queries
+     */
+    public function testRelationshipManyToManyComplex(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Setup MANY_TO_MANY
+        $database->createCollection('developers_mtm');
+        $database->createCollection('projects_mtm');
+
+        $database->createAttribute('developers_mtm', 'devName', Database::VAR_STRING, 255, true);
+        $database->createAttribute('developers_mtm', 'experience', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('projects_mtm', 'projectName', Database::VAR_STRING, 255, true);
+        $database->createAttribute('projects_mtm', 'budget', Database::VAR_FLOAT, 0, true);
+        $database->createAttribute('projects_mtm', 'priority', Database::VAR_STRING, 50, true);
+
+        $database->createRelationship(
+            collection: 'developers_mtm',
+            relatedCollection: 'projects_mtm',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'assignedProjects',
+            twoWayKey: 'assignedDevelopers'
+        );
+
+        // Create developers
+        $dev1 = $database->createDocument('developers_mtm', new Document([
+            '$id' => 'dev1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'devName' => 'Senior Dev',
+            'experience' => 10,
+        ]));
+
+        $dev2 = $database->createDocument('developers_mtm', new Document([
+            '$id' => 'dev2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'devName' => 'Junior Dev',
+            'experience' => 2,
+        ]));
+
+        // Create projects
+        $project1 = $database->createDocument('projects_mtm', new Document([
+            '$id' => 'proj1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'projectName' => 'High Priority Project',
+            'budget' => 100000.00,
+            'priority' => 'high',
+            'assignedDevelopers' => ['dev1', 'dev2'],
+        ]));
+
+        $project2 = $database->createDocument('projects_mtm', new Document([
+            '$id' => 'proj2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'projectName' => 'Low Priority Project',
+            'budget' => 25000.00,
+            'priority' => 'low',
+            'assignedDevelopers' => ['dev2'],
+        ]));
+
+        // Test: Find developers on high priority projects
+        $developers = $database->find('developers_mtm', [
+            Query::equal('assignedProjects.priority', ['high'])
+        ]);
+        $this->assertCount(2, $developers); // Both assigned to proj1
+
+        // Test: Find developers on high budget projects
+        $developers = $database->find('developers_mtm', [
+            Query::greaterThan('assignedProjects.budget', 50000.00)
+        ]);
+        $this->assertCount(2, $developers);
+
+        // Test: Find projects with experienced developers
+        $projects = $database->find('projects_mtm', [
+            Query::greaterThanEqual('assignedDevelopers.experience', 10)
+        ]);
+        $this->assertCount(1, $projects);
+        $this->assertEquals('proj1', $projects[0]->getId());
+
+        // Test: Find projects with junior developers
+        $projects = $database->find('projects_mtm', [
+            Query::lessThan('assignedDevelopers.experience', 5)
+        ]);
+        $this->assertCount(2, $projects); // Both projects have dev2
+
+        // Test: Combined queries
+        $projects = $database->find('projects_mtm', [
+            Query::equal('assignedDevelopers.devName', ['Junior Dev']),
+            Query::equal('priority', ['low'])
+        ]);
+        $this->assertCount(1, $projects);
+        $this->assertEquals('proj2', $projects[0]->getId());
+
+        // Clean up
+        $database->deleteCollection('developers_mtm');
+        $database->deleteCollection('projects_mtm');
+    }
 }

@@ -389,6 +389,9 @@ class Index extends Validator
 
         if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
             foreach ($this->indexes as $existingIndex) {
+                if ($existingIndex->getId() === $index->getId()) {
+                    continue;
+                }
                 if ($existingIndex->getAttribute('type') === Database::INDEX_FULLTEXT) {
                     $this->message = 'There is already a fulltext index in the collection';
                     return false;
@@ -494,7 +497,6 @@ class Index extends Validator
                 return false;
             }
         }
-
 
         return true;
     }

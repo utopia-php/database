@@ -6,12 +6,11 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Filter;
 
 class FilterTest extends TestCase
 {
-    protected Base|null $validator = null;
+    protected Filter|null $validator = null;
 
     /**
      * @throws \Utopia\Database\Exception
@@ -45,7 +44,10 @@ class FilterTest extends TestCase
             ]),
         ];
 
-        $this->validator = new Filter($attributes, Database::VAR_INTEGER);
+        $this->validator = new Filter(
+            $attributes,
+            Database::VAR_INTEGER
+        );
     }
 
     public function testSuccess(): void
@@ -106,13 +108,14 @@ class FilterTest extends TestCase
 
     public function testMaxValuesCount(): void
     {
+        $max = $this->validator->getMaxValuesCount();
         $values = [];
-        for ($i = 1; $i <= 200; $i++) {
+        for ($i = 1; $i <= $max + 1; $i++) {
             $values[] = $i;
         }
 
         $this->assertFalse($this->validator->isValid(Query::equal('integer', $values)));
-        $this->assertEquals('Query on attribute has greater than 100 values: integer', $this->validator->getDescription());
+        $this->assertEquals('Query on attribute has greater than '.$max.' values: integer', $this->validator->getDescription());
     }
 
     public function testNotContains(): void

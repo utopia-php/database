@@ -332,6 +332,11 @@ class Filter extends Base
         }
     }
 
+    public function getMaxValuesCount(): int
+    {
+        return $this->maxValuesCount;
+    }
+
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_FILTER;

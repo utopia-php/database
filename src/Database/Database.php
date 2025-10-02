@@ -86,6 +86,7 @@ class Database
     public const RELATION_SIDE_CHILD = 'child';
 
     public const RELATION_MAX_DEPTH = 3;
+    public const RELATION_QUERY_CHUNK_SIZE = 5000;
 
     // Orders
     public const ORDER_ASC = 'ASC';
@@ -368,7 +369,7 @@ class Database
 
     protected bool $preserveDates = false;
 
-    protected int $maxQueryValues = 100;
+    protected int $maxQueryValues = 5000;
 
     protected bool $migrating = false;
 
@@ -3790,12 +3791,18 @@ class Database
             return [];
         }
 
-        // Fetch all related documents in a single query
-        $relatedDocuments = $this->find($relatedCollection->getId(), [
-            Query::equal('$id', array_unique($relatedIds)),
-            Query::limit(PHP_INT_MAX),
-            ...$queries
-        ]);
+        // Fetch all related documents, chunking to stay within query limits
+        $uniqueRelatedIds = array_unique($relatedIds);
+        $relatedDocuments = [];
+
+        // Process in chunks to avoid exceeding query value limits
+        foreach (array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+            $chunkDocs = $this->find($relatedCollection->getId(), [
+                Query::equal('$id', $chunk),
+                ...$queries
+            ]);
+            array_push($relatedDocuments, ...$chunkDocs);
+        }
 
         // Index related documents by ID for quick lookup
         $relatedById = [];
@@ -3877,13 +3884,18 @@ class Database
             }
         }
 
-        // Fetch all related documents for all parents in a single query
+        // Fetch all related documents for all parents, chunking to stay within query limits
         // Don't apply selects yet - we need the back-reference for grouping
-        $relatedDocuments = $this->find($relatedCollection->getId(), [
-            Query::equal($twoWayKey, $parentIds),
-            Query::limit(PHP_INT_MAX),
-            ...$otherQueries
-        ]);
+        $relatedDocuments = [];
+
+        // Process in chunks to avoid exceeding query value limits
+        foreach (array_chunk($parentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+            $chunkDocs = $this->find($relatedCollection->getId(), [
+                Query::equal($twoWayKey, $chunk),
+                ...$otherQueries
+            ]);
+            array_push($relatedDocuments, ...$chunkDocs);
+        }
 
         // Group related documents by parent ID
         $relatedByParentId = [];
@@ -3969,13 +3981,18 @@ class Database
             }
         }
 
-        // Fetch all related documents for all children in a single query
+        // Fetch all related documents for all children, chunking to stay within query limits
         // Don't apply selects yet - we need the back-reference for grouping
-        $relatedDocuments = $this->find($relatedCollection->getId(), [
-            Query::equal($twoWayKey, $childIds),
-            Query::limit(PHP_INT_MAX),
-            ...$otherQueries
-        ]);
+        $relatedDocuments = [];
+
+        // Process in chunks to avoid exceeding query value limits
+        foreach (array_chunk($childIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+            $chunkDocs = $this->find($relatedCollection->getId(), [
+                Query::equal($twoWayKey, $chunk),
+                ...$otherQueries
+            ]);
+            array_push($relatedDocuments, ...$chunkDocs);
+        }
 
         // Group related documents by child ID
         $relatedByChildId = [];
@@ -4088,11 +4105,16 @@ class Database
 
         $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-        // Fetch all junction records for all documents in a single query
-        $junctions = $this->skipRelationships(fn () => $this->find($junction, [
-            Query::equal($twoWayKey, $documentIds),
-            Query::limit(PHP_INT_MAX)
-        ]));
+        // Fetch all junction records for all documents, chunking to stay within query limits
+        $junctions = [];
+
+        // Process in chunks to avoid exceeding query value limits
+        foreach (array_chunk($documentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+            $chunkJunctions = $this->skipRelationships(fn () => $this->find($junction, [
+                Query::equal($twoWayKey, $chunk)
+            ]));
+            array_push($junctions, ...$chunkJunctions);
+        }
 
         // Collect all related IDs from junctions
         $relatedIds = [];
@@ -4111,15 +4133,22 @@ class Database
             }
         }
 
-        // Fetch all related documents in a single query
+        // Fetch all related documents, chunking to stay within query limits
         $related = [];
         $allRelatedDocs = [];
         if (!empty($relatedIds)) {
-            $foundRelated = $this->find($relatedCollection->getId(), [
-                Query::equal('$id', array_unique($relatedIds)),
-                Query::limit(PHP_INT_MAX),
-                ...$queries
-            ]);
+            $uniqueRelatedIds = array_unique($relatedIds);
+            $foundRelated = [];
+
+            // Process in chunks to avoid exceeding query value limits
+            foreach (array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                $chunkDocs = $this->find($relatedCollection->getId(), [
+                    Query::equal('$id', $chunk),
+                    ...$queries
+                ]);
+                array_push($foundRelated, ...$chunkDocs);
+            }
+
             $allRelatedDocs = $foundRelated;
 
             // Index related documents by ID for quick lookup

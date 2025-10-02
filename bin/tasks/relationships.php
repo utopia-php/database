@@ -356,7 +356,7 @@ function benchmarkSingle(Database $database): array
 
     foreach ($collections as $collection) {
         // Fetch one document ID to use (skip relationships to avoid infinite recursion)
-        $docs = $database->skipRelationships(fn() => $database->findOne($collection));
+        $docs = $database->skipRelationships(fn () => $database->findOne($collection));
         $id = $docs->getId();
 
         $start = microtime(true);

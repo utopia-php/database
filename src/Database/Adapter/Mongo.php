@@ -1660,9 +1660,8 @@ class Mongo extends Adapter
                 options: $options
             );
         } catch (MongoException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
-
         return $count ?? 0;
     }
 

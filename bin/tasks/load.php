@@ -79,6 +79,7 @@ $cli
                     'adapter' => Postgres::class,
                     'attrs' => Postgres::getPDOAttributes(),
                 ],
+            ],
         ];
 
         if (!isset($dbAdapters[$adapter])) {

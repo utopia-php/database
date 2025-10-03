@@ -3,6 +3,8 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+use MongoDB\BSON\Decimal128;
+use MongoDB\BSON\Int64;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;
@@ -113,9 +115,12 @@ class Mongo extends Adapter
                 // Throw the original exception, not the rollback one
                 // Since if it's a duplicate key error, the rollback will fail,
                 // and we want to throw the original exception.
+            } finally {
+                // Ensure state is cleaned up even if rollback fails
+                $this->inTransaction = 0;
+                $this->session = null;
             }
 
-            $this->inTransaction = 0;
             throw $action;
         }
     }
@@ -138,6 +143,7 @@ class Mongo extends Adapter
             return true;
         } catch (\Throwable $e) {
             $this->session = null;
+            $this->inTransaction = 0;
             throw new DatabaseException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
     }
@@ -169,17 +175,20 @@ class Mongo extends Adapter
                         $this->inTransaction = 0;  // Reset counter when transaction is already terminated
                         return true;
                     }
+                    throw $e;
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                } finally {
+                    $this->session = null;
                 }
-
-                // Session is now closed by the client using endSessions,  state is reset
-                $this->session = null;
 
                 return true;
             }
             return true;
         } catch (\Throwable $e) {
+            // Ensure cleanup on any failure
+            $this->session = null;
+            $this->inTransaction = 0;
             throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
     }
@@ -205,32 +214,60 @@ class Mongo extends Adapter
                     $result = $this->client->abortTransaction($this->session);
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                } finally {
+                    $this->session = null;
                 }
-
-                // Session is now closed by the client using endSessions, reset our state
-                $this->session = null;
 
                 return true;
             }
             return true;
         } catch (\Throwable $e) {
+            $this->session = null;
+            $this->inTransaction = 0;
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
     }
 
     /**
      * Helper to add transaction/session context to command options if in transaction
+     * Includes defensive check to ensure session is valid
      *
      * @param array<string, mixed> $options
      * @return array<string, mixed>
      */
     private function getTransactionOptions(array $options = []): array
     {
-        if ($this->inTransaction && $this->session) {
+        if ($this->inTransaction > 0 && $this->session !== null) {
             // Pass the session array directly - the client will handle the transaction state internally
             $options['session'] = $this->session;
         }
         return $options;
+    }
+
+
+    /**
+     * Create a safe MongoDB regex pattern by escaping special characters
+     *
+     * @param string $value The user input to escape
+     * @param string $pattern The pattern template (e.g., ".*%s.*" for contains)
+     * @return Regex
+     * @throws DatabaseException
+     */
+    private function createSafeRegex(string $value, string $pattern = '%s', string $flags = 'i'): Regex
+    {
+        $escaped = preg_quote($value, '/');
+
+        // Additional MongoDB-specific escaping for $ and \ to prevent injection
+        $escaped = str_replace(['\\', '$'], ['\\\\', '\\$'], $escaped);
+
+        // Validate that the pattern doesn't contain injection vectors
+        if (preg_match('/\$[a-z]+/i', $escaped)) {
+            throw new DatabaseException('Invalid regex pattern: potential injection detected');
+        }
+
+        $finalPattern = sprintf($pattern, $escaped);
+
+        return new Regex($finalPattern, $flags);
     }
 
     /**
@@ -912,11 +949,12 @@ class Mongo extends Adapter
             // MongoDB builds indexes asynchronously, so we need to wait for completion
             // to ensure unique constraints are enforced immediately
             if ($type === Database::INDEX_UNIQUE) {
-                $maxWaitTime = 30;
-                $waited = 0;
-                $sleepInterval = 0.1;
+                $maxRetries = 10;
+                $retryCount = 0;
+                $baseDelay = 50000; // 50ms
+                $maxDelay = 500000; // 500ms
 
-                while ($waited < $maxWaitTime) {
+                while ($retryCount < $maxRetries) {
                     try {
                         $indexList = $this->client->query([
                             'listIndexes' => $name
@@ -925,18 +963,31 @@ class Mongo extends Adapter
                         if (isset($indexList->cursor->firstBatch)) {
                             foreach ($indexList->cursor->firstBatch as $existingIndex) {
                                 $indexArray = $this->client->toArray($existingIndex);
-                                if (isset($indexArray['name']) && $indexArray['name'] === $id) {
-                                    // Index found and ready
+
+                                if (
+                                    (isset($indexArray['name']) && $indexArray['name'] === $id) &&
+                                    (!isset($indexArray['buildState']) || $indexArray['buildState'] === 'ready')
+                                ) {
                                     return $result;
                                 }
                             }
                         }
-                    } catch (\Exception) {
-                        // Index might not exist yet, continue waiting
+                    } catch (\Exception $e) {
+                        if ($retryCount >= $maxRetries - 1) {
+                            throw new DatabaseException(
+                                'Timeout waiting for index creation: ' . $e->getMessage(),
+                                $e->getCode(),
+                                $e
+                            );
+                        }
                     }
-                    \usleep((int)($sleepInterval * 1_000_000));
-                    $waited += $sleepInterval;
+
+                    $delay = \min($baseDelay * (2 ** $retryCount), $maxDelay);
+                    \usleep((int)$delay);
+                    $retryCount++;
                 }
+
+                throw new DatabaseException("Index {$id} creation timed out after {$maxRetries} retries");
             }
 
             return $result;
@@ -1264,6 +1315,8 @@ class Mongo extends Adapter
             $records[] = $record;
         }
         try {
+            // Use ordered: false for better performance and partial failure handling
+            $options['ordered'] = false;
             $documents = $this->client->insertMany($name, $records, $options);
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -1365,7 +1418,6 @@ class Mongo extends Adapter
      */
     public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
-        ;
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $options = $this->getTransactionOptions();
@@ -2140,43 +2192,54 @@ class Mongo extends Adapter
             'collection'
         ];
 
-        $result = [];
-        foreach ($array as $k => $v) {
+        // Process in-place with references to avoid array copies
+        foreach ($array as $k => &$v) {
+            if (is_array($v)) {
+                $v = $this->replaceChars($from, $to, $v);
+            }
+
+            // Handle key replacement for filtered attributes
             $clean_key = str_replace($from, "", $k);
-            $key = in_array($clean_key, $filter) ? str_replace($from, $to, $k) : $k;
-
-            $result[$key] = is_array($v) ? $this->replaceChars($from, $to, $v) : $v;
+            if (in_array($clean_key, $filter)) {
+                $new_key = str_replace($from, $to, $k);
+                if ($new_key !== $k) {
+                    $array[$new_key] = $v;
+                    unset($array[$k]);
+                }
+            }
         }
+        unset($v); // Break reference
 
+        // Handle special attribute mappings
         if ($from === '_') {
-            if (array_key_exists('_id', $array)) {
-                $result['$sequence'] = (string)$array['_id'];
-                unset($result['_id']);
+            if (isset($array['_id'])) {
+                $array['$sequence'] = (string)$array['_id'];
+                unset($array['_id']);
             }
-            if (array_key_exists('_uid', $array)) {
-                $result['$id'] = $array['_uid'];
-                unset($result['_uid']);
+            if (isset($array['_uid'])) {
+                $array['$id'] = $array['_uid'];
+                unset($array['_uid']);
             }
-            if (array_key_exists('_tenant', $array)) {
-                $result['$tenant'] = $array['_tenant'];
-                unset($result['_tenant']);
+            if (isset($array['_tenant'])) {
+                $array['$tenant'] = $array['_tenant'];
+                unset($array['_tenant']);
             }
         } elseif ($from === '$') {
-            if (array_key_exists('$id', $array)) {
-                $result['_uid'] = $array['$id'];
-                unset($result['$id']);
+            if (isset($array['$id'])) {
+                $array['_uid'] = $array['$id'];
+                unset($array['$id']);
             }
-            if (array_key_exists('$sequence', $array)) {
-                $result['_id'] = $array['$sequence'];
-                unset($result['$sequence']);
+            if (isset($array['$sequence'])) {
+                $array['_id'] = $array['$sequence'];
+                unset($array['$sequence']);
             }
-            if (array_key_exists('$tenant', $array)) {
-                $result['_tenant'] = $array['$tenant'];
-                unset($result['$tenant']);
+            if (isset($array['$tenant'])) {
+                $array['_tenant'] = $array['$tenant'];
+                unset($array['$tenant']);
             }
         }
 
-        return $result;
+        return $array;
     }
 
     /**
@@ -2248,15 +2311,13 @@ class Mongo extends Adapter
             $filter[$attribute]['$nin'] = $value;
         } elseif ($operator == '$in') {
             if ($query->getMethod() === Query::TYPE_CONTAINS && !$query->onArray()) {
-                $escapedValue = preg_quote($value, '/');
-                $filter[$attribute]['$regex'] = new Regex(".*{$escapedValue}.*", 'i');
+                $filter[$attribute]['$regex'] = $this->createSafeRegex($value, '.*%s.*');
             } else {
                 $filter[$attribute]['$in'] = $query->getValues();
             }
         } elseif ($operator === 'notContains') {
             if (!$query->onArray()) {
-                $escapedValue = preg_quote($value, '/');
-                $filter[$attribute] = ['$not' => new Regex(".*{$escapedValue}.*", 'i')];
+                $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '.*%s.*')];
             } else {
                 $filter[$attribute]['$nin'] = $query->getValues();
             }
@@ -2267,9 +2328,7 @@ class Mongo extends Adapter
                 if (empty($value)) {
                     // If value is not passed, don't add any filter - this will match all documents
                 } else {
-                    // Escape special regex characters and create a pattern that matches the search term as substring
-                    $escapedValue = preg_quote($value, '/');
-                    $filter[$attribute] = ['$not' => new Regex(".*{$escapedValue}.*", 'i')];
+                    $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '.*%s.*')];
                 }
             } else {
                 $filter['$text'][$operator] = $value;
@@ -2283,9 +2342,9 @@ class Mongo extends Adapter
                 [$attribute => ['$gt' => $value[1]]]
             ];
         } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_STARTS_WITH) {
-            $filter[$attribute] = ['$not' => new Regex('^' . $value, 'i')];
+            $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '^%s')];
         } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_ENDS_WITH) {
-            $filter[$attribute] = ['$not' => new Regex($value . '$', 'i')];
+            $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '%s$')];
         } else {
             $filter[$attribute][$operator] = $value;
         }
@@ -2333,16 +2392,16 @@ class Mongo extends Adapter
         switch ($method) {
             case Query::TYPE_STARTS_WITH:
                 $value = preg_quote($value, '/');
+                $value = str_replace(['\\', '$'], ['\\\\', '\\$'], $value);
                 return $value . '.*';
             case Query::TYPE_NOT_STARTS_WITH:
-                $value = preg_quote($value, '/');
-                return $value . '.*';
+                return $value;
             case Query::TYPE_ENDS_WITH:
                 $value = preg_quote($value, '/');
+                $value = str_replace(['\\', '$'], ['\\\\', '\\$'], $value);
                 return '.*' . $value;
             case Query::TYPE_NOT_ENDS_WITH:
-                $value = preg_quote($value, '/');
-                return '.*' . $value;
+                return $value;
             default:
                 return $value;
         }

@@ -3757,4 +3757,264 @@ trait RelationshipTests
         $database->deleteCollection('developers_mtm');
         $database->deleteCollection('projects_mtm');
     }
+
+    public function testNestedRelationshipQueriesMultipleDepths(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Create 3-level nested structure:
+        // Companies -> Employees -> Projects -> Tasks
+        // Also: Employees -> Department (MANY_TO_ONE)
+
+        // Level 0: Companies
+        $database->createCollection('companies_nested');
+        $database->createAttribute('companies_nested', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('companies_nested', 'industry', Database::VAR_STRING, 255, true);
+
+        // Level 1: Employees
+        $database->createCollection('employees_nested');
+        $database->createAttribute('employees_nested', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('employees_nested', 'role', Database::VAR_STRING, 255, true);
+
+        // Level 1b: Departments (for MANY_TO_ONE)
+        $database->createCollection('departments_nested');
+        $database->createAttribute('departments_nested', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('departments_nested', 'budget', Database::VAR_INTEGER, 0, true);
+
+        // Level 2: Projects
+        $database->createCollection('projects_nested');
+        $database->createAttribute('projects_nested', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('projects_nested', 'status', Database::VAR_STRING, 255, true);
+
+        // Level 3: Tasks
+        $database->createCollection('tasks_nested');
+        $database->createAttribute('tasks_nested', 'description', Database::VAR_STRING, 255, true);
+        $database->createAttribute('tasks_nested', 'priority', Database::VAR_STRING, 255, true);
+        $database->createAttribute('tasks_nested', 'completed', Database::VAR_BOOLEAN, 0, true);
+
+        // Create relationships
+        // Companies -> Employees (ONE_TO_MANY)
+        $database->createRelationship(
+            collection: 'companies_nested',
+            relatedCollection: 'employees_nested',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'employees',
+            twoWayKey: 'company'
+        );
+
+        // Employees -> Department (MANY_TO_ONE)
+        $database->createRelationship(
+            collection: 'employees_nested',
+            relatedCollection: 'departments_nested',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'department',
+            twoWayKey: 'employees'
+        );
+
+        // Employees -> Projects (ONE_TO_MANY)
+        $database->createRelationship(
+            collection: 'employees_nested',
+            relatedCollection: 'projects_nested',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'projects',
+            twoWayKey: 'employee'
+        );
+
+        // Projects -> Tasks (ONE_TO_MANY)
+        $database->createRelationship(
+            collection: 'projects_nested',
+            relatedCollection: 'tasks_nested',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'tasks',
+            twoWayKey: 'project'
+        );
+
+        // Create test data
+        $dept1 = $database->createDocument('departments_nested', new Document([
+            '$id' => 'dept1',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Engineering',
+            'budget' => 100000,
+        ]));
+
+        $dept2 = $database->createDocument('departments_nested', new Document([
+            '$id' => 'dept2',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Marketing',
+            'budget' => 50000,
+        ]));
+
+        $company1 = $database->createDocument('companies_nested', new Document([
+            '$id' => 'company1',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'TechCorp',
+            'industry' => 'Technology',
+        ]));
+
+        $company2 = $database->createDocument('companies_nested', new Document([
+            '$id' => 'company2',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'MarketCo',
+            'industry' => 'Marketing',
+        ]));
+
+        $employee1 = $database->createDocument('employees_nested', new Document([
+            '$id' => 'emp1',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Alice Johnson',
+            'role' => 'Developer',
+            'company' => 'company1',
+            'department' => 'dept1',
+        ]));
+
+        $employee2 = $database->createDocument('employees_nested', new Document([
+            '$id' => 'emp2',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Bob Smith',
+            'role' => 'Marketer',
+            'company' => 'company2',
+            'department' => 'dept2',
+        ]));
+
+        $project1 = $database->createDocument('projects_nested', new Document([
+            '$id' => 'proj1',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Website Redesign',
+            'status' => 'active',
+            'employee' => 'emp1',
+        ]));
+
+        $project2 = $database->createDocument('projects_nested', new Document([
+            '$id' => 'proj2',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Campaign Launch',
+            'status' => 'planning',
+            'employee' => 'emp2',
+        ]));
+
+        $task1 = $database->createDocument('tasks_nested', new Document([
+            '$id' => 'task1',
+            '$permissions' => [Permission::read(Role::any())],
+            'description' => 'Design homepage',
+            'priority' => 'high',
+            'completed' => false,
+            'project' => 'proj1',
+        ]));
+
+        $task2 = $database->createDocument('tasks_nested', new Document([
+            '$id' => 'task2',
+            '$permissions' => [Permission::read(Role::any())],
+            'description' => 'Write copy',
+            'priority' => 'medium',
+            'completed' => true,
+            'project' => 'proj2',
+        ]));
+
+        $task3 = $database->createDocument('tasks_nested', new Document([
+            '$id' => 'task3',
+            '$permissions' => [Permission::read(Role::any())],
+            'description' => 'Implement backend',
+            'priority' => 'high',
+            'completed' => false,
+            'project' => 'proj1',
+        ]));
+
+        // ==================== DEPTH 1 TESTS ====================
+        // Test: Query employees by company name (1 level deep)
+        $employees = $database->find('employees_nested', [
+            Query::equal('company.name', ['TechCorp']),
+        ]);
+        $this->assertCount(1, $employees);
+        $this->assertEquals('emp1', $employees[0]->getId());
+
+        // Test: Query employees by department name (1 level deep MANY_TO_ONE)
+        $employees = $database->find('employees_nested', [
+            Query::equal('department.name', ['Engineering']),
+        ]);
+        $this->assertCount(1, $employees);
+        $this->assertEquals('emp1', $employees[0]->getId());
+
+        // Test: Query projects by employee name (1 level deep)
+        $projects = $database->find('projects_nested', [
+            Query::equal('employee.name', ['Alice Johnson']),
+        ]);
+        $this->assertCount(1, $projects);
+        $this->assertEquals('proj1', $projects[0]->getId());
+
+        // ==================== DEPTH 2 TESTS ====================
+        // Test: Query projects by employee's company name (2 levels deep)
+        $projects = $database->find('projects_nested', [
+            Query::equal('employee.company.name', ['TechCorp']),
+        ]);
+        $this->assertCount(1, $projects);
+        $this->assertEquals('proj1', $projects[0]->getId());
+
+        // Test: Query projects by employee's department name (2 levels deep, MANY_TO_ONE)
+        $projects = $database->find('projects_nested', [
+            Query::equal('employee.department.name', ['Engineering']),
+        ]);
+        $this->assertCount(1, $projects);
+        $this->assertEquals('proj1', $projects[0]->getId());
+
+        // Test: Query tasks by project employee name (2 levels deep)
+        $tasks = $database->find('tasks_nested', [
+            Query::equal('project.employee.name', ['Alice Johnson']),
+        ]);
+        $this->assertCount(2, $tasks);
+
+        // ==================== DEPTH 3 TESTS ====================
+        // Test: Query tasks by project->employee->company name (3 levels deep)
+        $tasks = $database->find('tasks_nested', [
+            Query::equal('project.employee.company.name', ['TechCorp']),
+        ]);
+        $this->assertCount(2, $tasks);
+        $this->assertEquals('task1', $tasks[0]->getId());
+        $this->assertEquals('task3', $tasks[1]->getId());
+
+        // Test: Query tasks by project->employee->department budget (3 levels deep with MANY_TO_ONE)
+        $tasks = $database->find('tasks_nested', [
+            Query::greaterThan('project.employee.department.budget', 75000),
+        ]);
+        $this->assertCount(2, $tasks); // Both tasks are in projects by employees in Engineering dept
+
+        // Test: Query tasks by project->employee->company industry (3 levels deep)
+        $tasks = $database->find('tasks_nested', [
+            Query::equal('project.employee.company.industry', ['Marketing']),
+        ]);
+        $this->assertCount(1, $tasks);
+        $this->assertEquals('task2', $tasks[0]->getId());
+
+        // ==================== COMBINED DEPTH TESTS ====================
+        // Test: Combine depth 1 and depth 3 queries
+        $tasks = $database->find('tasks_nested', [
+            Query::equal('priority', ['high']),
+            Query::equal('project.employee.company.name', ['TechCorp']),
+        ]);
+        $this->assertCount(2, $tasks);
+
+        // Test: Multiple depth 2 queries combined
+        $projects = $database->find('projects_nested', [
+            Query::equal('employee.company.industry', ['Technology']),
+            Query::equal('employee.department.name', ['Engineering']),
+        ]);
+        $this->assertCount(1, $projects);
+        $this->assertEquals('proj1', $projects[0]->getId());
+
+        // Clean up
+        $database->deleteCollection('tasks_nested');
+        $database->deleteCollection('projects_nested');
+        $database->deleteCollection('employees_nested');
+        $database->deleteCollection('departments_nested');
+        $database->deleteCollection('companies_nested');
+    }
 }

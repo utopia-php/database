@@ -7660,9 +7660,196 @@ class Database
     }
 
     /**
-     * Convert relationship filter queries to SQL-safe subqueries.
+     * Process nested relationship path iteratively
+     *
+     * Instead of recursive calls, this method processes multi-level queries in a single loop
+     * working from the deepest level up to minimize database queries.
+     *
+     * Example: For "project.employee.company.name":
+     * 1. Query companies matching name filter -> IDs [c1, c2]
+     * 2. Query employees with company IN [c1, c2] -> IDs [e1, e2, e3]
+     * 3. Query projects with employee IN [e1, e2, e3] -> IDs [p1, p2]
+     * 4. Return [p1, p2]
+     *
+     * @param string $startCollection The starting collection for the path
+     * @param array<Query> $queries Queries with nested paths
+     * @return array|null Array of matching IDs or null if no matches
+     */
+    private function processNestedRelationshipPath(string $startCollection, array $queries): ?array
+    {
+        // Cache collection metadata to avoid redundant getCollection calls
+        static $collectionCache = [];
+
+        // Build a map of all nested paths and their queries
+        $pathGroups = [];
+        foreach ($queries as $query) {
+            $attribute = $query->getAttribute();
+            if (\str_contains($attribute, '.')) {
+                $parts = \explode('.', $attribute);
+                $pathKey = \implode('.', \array_slice($parts, 0, -1)); // Everything except the last part
+                if (!isset($pathGroups[$pathKey])) {
+                    $pathGroups[$pathKey] = [];
+                }
+                $pathGroups[$pathKey][] = [
+                    'method' => $query->getMethod(),
+                    'field' => \end($parts), // The actual field to query
+                    'values' => $query->getValues(),
+                ];
+            }
+        }
+
+        $allMatchingIds = [];
+        foreach ($pathGroups as $path => $queryGroup) {
+            $pathParts = \explode('.', $path);
+            $currentCollection = $startCollection;
+            $relationshipChain = [];
+
+            foreach ($pathParts as $relationshipKey) {
+                if (!isset($collectionCache[$currentCollection])) {
+                    $collectionDoc = $this->silent(fn () => $this->getCollection($currentCollection));
+                    $collectionCache[$currentCollection] = [
+                        'doc' => $collectionDoc,
+                        'relationships' => \array_filter(
+                            $collectionDoc->getAttribute('attributes', []),
+                            fn ($attr) => $attr['type'] === self::VAR_RELATIONSHIP
+                        )
+                    ];
+                }
+
+                $relationships = $collectionCache[$currentCollection]['relationships'];
+
+                $relationship = null;
+                foreach ($relationships as $rel) {
+                    if ($rel['key'] === $relationshipKey) {
+                        $relationship = $rel;
+                        break;
+                    }
+                }
+
+                if (!$relationship) {
+                    return null;
+                }
+
+                $relationshipChain[] = [
+                    'key' => $relationshipKey,
+                    'fromCollection' => $currentCollection,
+                    'toCollection' => $relationship['options']['relatedCollection'],
+                    'relationType' => $relationship['options']['relationType'],
+                    'side' => $relationship['options']['side'],
+                    'twoWayKey' => $relationship['options']['twoWayKey'],
+                ];
+
+                $currentCollection = $relationship['options']['relatedCollection'];
+            }
+
+            // Now walk backwards from the deepest collection to the starting collection
+            $leafQueries = [];
+            foreach ($queryGroup as $q) {
+                $leafQueries[] = new Query($q['method'], $q['field'], $q['values']);
+            }
+
+            // Query the deepest collection
+            $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                $currentCollection,
+                \array_merge($leafQueries, [
+                    Query::select(['$id']),
+                    Query::limit(PHP_INT_MAX),
+                ])
+            )));
+
+            $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
+
+            if (empty($matchingIds)) {
+                return null;
+            }
+
+            // Walk back up the chain
+            for ($i = \count($relationshipChain) - 1; $i >= 0; $i--) {
+                $link = $relationshipChain[$i];
+                $relationType = $link['relationType'];
+                $side = $link['side'];
+
+                // Determine how to query the parent collection
+                $needsReverseLookup = (
+                    ($relationType === self::RELATION_ONE_TO_MANY && $side === self::RELATION_SIDE_PARENT) ||
+                    ($relationType === self::RELATION_MANY_TO_ONE && $side === self::RELATION_SIDE_CHILD) ||
+                    ($relationType === self::RELATION_MANY_TO_MANY)
+                );
+
+                if ($needsReverseLookup) {
+                    // Need to find parents by querying children and extracting parent IDs
+                    $childDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                        $link['toCollection'],
+                        [
+                            Query::equal('$id', $matchingIds),
+                            Query::select(['$id', $link['twoWayKey']]),
+                            Query::limit(PHP_INT_MAX),
+                        ]
+                    )));
+
+                    $parentIds = [];
+                    foreach ($childDocs as $doc) {
+                        $parentValue = $doc->getAttribute($link['twoWayKey']);
+                        if (\is_array($parentValue)) {
+                            foreach ($parentValue as $pId) {
+                                if ($pId instanceof Document) {
+                                    $pId = $pId->getId();
+                                }
+                                if ($pId && !\in_array($pId, $parentIds)) {
+                                    $parentIds[] = $pId;
+                                }
+                            }
+                        } else {
+                            if ($parentValue instanceof Document) {
+                                $parentValue = $parentValue->getId();
+                            }
+                            if ($parentValue && !\in_array($parentValue, $parentIds)) {
+                                $parentIds[] = $parentValue;
+                            }
+                        }
+                    }
+                    $matchingIds = $parentIds;
+                } else {
+                    // Can directly filter parent by the relationship key
+                    $parentDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                        $link['fromCollection'],
+                        [
+                            Query::equal($link['key'], $matchingIds),
+                            Query::select(['$id']),
+                            Query::limit(PHP_INT_MAX),
+                        ]
+                    )));
+                    $matchingIds = \array_map(fn ($doc) => $doc->getId(), $parentDocs);
+                }
+
+                if (empty($matchingIds)) {
+                    return null;
+                }
+            }
+
+            $allMatchingIds = \array_merge($allMatchingIds, $matchingIds);
+        }
+
+        return \array_unique($allMatchingIds);
+    }
+
+    /**
+     * Convert relationship filter queries to SQL-safe subqueries recursively
+     *
      * Queries like Query::equal('author.name', ['Alice']) are converted to
      * Query::equal('author', [<matching author IDs>])
+     *
+     * This method supports multi-level nested relationship queries:
+     * - Depth 1: employee.name
+     * - Depth 2: employee.company.name
+     * - Depth 3: project.employee.company.name
+     *
+     * The method works by:
+     * 1. Parsing dot-path queries (e.g., "project.employee.company.name")
+     * 2. Extracting the first relationship (e.g., "project")
+     * 3. If the nested field still contains dots, using iterative processing
+     * 4. Finding matching documents in the related collection
+     * 5. Converting to filters on the parent collection
      *
      * @param array<Document> $relationships
      * @param array<Query> $queries
@@ -7750,6 +7937,38 @@ class Database
             }
 
             try {
+                // Process multi-level queries by walking the relationship chain from deepest to shallowest
+                // For example: project.employee.company.name
+                // 1. Find companies matching name -> company IDs
+                // 2. Find employees with those company IDs -> employee IDs
+                // 3. Find projects with those employee IDs -> project IDs
+
+                // Check if we have nested relationships (depth 2+)
+                $hasNestedPaths = false;
+                $deepestQuery = null;
+                foreach ($relatedQueries as $relatedQuery) {
+                    if (\str_contains($relatedQuery->getAttribute(), '.')) {
+                        $hasNestedPaths = true;
+                        $deepestQuery = $relatedQuery;
+                        break;
+                    }
+                }
+
+                if ($hasNestedPaths) {
+                    // Process the nested path iteratively from deepest to shallowest
+                    $matchingIds = $this->processNestedRelationshipPath(
+                        $relatedCollection,
+                        $relatedQueries
+                    );
+
+                    if ($matchingIds === null || empty($matchingIds)) {
+                        return null;
+                    }
+
+                    // Convert to simple ID filter for the current level
+                    $relatedQueries = [Query::equal('$id', $matchingIds)];
+                }
+
                 // For virtual parent relationships (where parent doesn't store child IDs),
                 // we need to find which parents have matching children
                 // - ONE_TO_MANY from parent side: parent doesn't store children
@@ -7762,20 +7981,20 @@ class Database
                 );
 
                 if ($needsParentResolution) {
-                    $matchingDocs = $this->silent(fn () => $this->find(
+                    $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
                         $relatedCollection,
                         \array_merge($relatedQueries, [
                             Query::limit(PHP_INT_MAX),
                         ])
-                    ));
+                    )));
                 } else {
-                    $matchingDocs = $this->silent(fn () => $this->find(
+                    $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
                         $relatedCollection,
                         \array_merge($relatedQueries, [
                             Query::select(['$id']),
                             Query::limit(PHP_INT_MAX),
                         ])
-                    ));
+                    )));
                 }
 
                 $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);

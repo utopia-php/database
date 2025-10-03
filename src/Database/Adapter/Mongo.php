@@ -1312,13 +1312,13 @@ class Mongo extends Adapter
 
             $records[] = $record;
         }
+
         try {
-            // Use ordered: false for better performance and partial failure handling
-            $options['ordered'] = false;
             $documents = $this->client->insertMany($name, $records, $options);
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
+
         foreach ($documents as $index => $document) {
             $documents[$index] = $this->replaceChars('_', '$', $this->client->toArray($document));
             $documents[$index] = new Document($documents[$index]);
@@ -1902,6 +1902,7 @@ class Mongo extends Adapter
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
         $found = [];
+        $cursorId = null;
 
         try {
             // Use proper cursor iteration with reasonable batch size
@@ -1937,6 +1938,18 @@ class Mongo extends Adapter
 
         } catch (MongoException $e) {
             throw $this->processException($e);
+        } finally {
+            // Ensure cursor is killed if still active to prevent resource leak
+            if (isset($cursorId) && $cursorId !== 0) {
+                try {
+                    $this->client->query([
+                        'killCursors' => $name,
+                        'cursors' => [(int)$cursorId]
+                    ]);
+                } catch (\Exception $e) {
+                    // Ignore errors during cursor cleanup
+                }
+            }
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {

@@ -69,15 +69,16 @@ $cli
                 'attrs' => MySQL::getPDOAttributes(),
             ],
             'postgres' => [
-                'host' => 'postgres',
-                'port' => 5432,
-                'user' => 'root',
-                'pass' => 'password',
-                'dsn' => static fn (string $host, int $port) => "pgsql:host={$host};port={$port}",
-                'driver' => 'pgsql',
-                'adapter' => Postgres::class,
-                'attrs' => Postgres::getPDOAttributes(),
-            ],
+                'postgres' => [
+                    'host' => 'postgres',
+                    'port' => 5432,
+                    'user' => 'postgres',
+                    'pass' => 'password',
+                    'dsn' => static fn (string $host, int $port) => "pgsql:host={$host};port={$port}",
+                    'driver' => 'pgsql',
+                    'adapter' => Postgres::class,
+                    'attrs' => Postgres::getPDOAttributes(),
+                ],
         ];
 
         if (!isset($dbAdapters[$adapter])) {

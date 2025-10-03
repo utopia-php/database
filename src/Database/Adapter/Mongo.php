@@ -255,9 +255,6 @@ class Mongo extends Adapter
     {
         $escaped = preg_quote($value, '/');
 
-        // Additional MongoDB-specific escaping for $ and \ to prevent injection
-        $escaped = str_replace(['\\', '$'], ['\\\\', '\\$'], $escaped);
-
         // Validate that the pattern doesn't contain injection vectors
         if (preg_match('/\$[a-z]+/i', $escaped)) {
             throw new DatabaseException('Invalid regex pattern: potential injection detected');
@@ -2203,23 +2200,27 @@ class Mongo extends Adapter
             'collection'
         ];
 
-        // Process in-place with references to avoid array copies
-        foreach ($array as $k => &$v) {
+        // First pass: recursively process array values and collect keys to rename
+        $keysToRename = [];
+        foreach ($array as $k => $v) {
             if (is_array($v)) {
-                $v = $this->replaceChars($from, $to, $v);
+                $array[$k] = $this->replaceChars($from, $to, $v);
             }
 
             // Handle key replacement for filtered attributes
             $clean_key = str_replace($from, "", $k);
             if (in_array($clean_key, $filter)) {
-                $new_key = str_replace($from, $to, $k);
-                if ($new_key !== $k) {
-                    $array[$new_key] = $v;
-                    unset($array[$k]);
+                $newKey = str_replace($from, $to, $k);
+                if ($newKey !== $k) {
+                    $keysToRename[$k] = $newKey;
                 }
             }
         }
-        unset($v); // Break reference
+
+        foreach ($keysToRename as $oldKey => $newKey) {
+            $array[$newKey] = $array[$oldKey];
+            unset($array[$oldKey]);
+        }
 
         // Handle special attribute mappings
         if ($from === '_') {
@@ -3084,6 +3085,4 @@ class Mongo extends Adapter
     {
         return '';
     }
-
-
 }

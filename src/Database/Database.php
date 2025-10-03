@@ -4793,8 +4793,8 @@ class Database
                     if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
-                    $batch[$index] = $this->encode($collection, $document);
-                    $batch[$index] = $this->adapter->castingBefore($collection, $document);
+                    $encoded = $this->encode($collection, $document);
+                    $batch[$index] = $this->adapter->castingBefore($collection, $encoded);
                 }
 
                 $this->adapter->updateDocuments(

@@ -7673,13 +7673,10 @@ class Database
      *
      * @param string $startCollection The starting collection for the path
      * @param array<Query> $queries Queries with nested paths
-     * @return array|null Array of matching IDs or null if no matches
+     * @return array<string>|null Array of matching IDs or null if no matches
      */
     private function processNestedRelationshipPath(string $startCollection, array $queries): ?array
     {
-        // Cache collection metadata to avoid redundant getCollection calls
-        static $collectionCache = [];
-
         // Build a map of all nested paths and their queries
         $pathGroups = [];
         foreach ($queries as $query) {
@@ -7705,18 +7702,11 @@ class Database
             $relationshipChain = [];
 
             foreach ($pathParts as $relationshipKey) {
-                if (!isset($collectionCache[$currentCollection])) {
-                    $collectionDoc = $this->silent(fn () => $this->getCollection($currentCollection));
-                    $collectionCache[$currentCollection] = [
-                        'doc' => $collectionDoc,
-                        'relationships' => \array_filter(
-                            $collectionDoc->getAttribute('attributes', []),
-                            fn ($attr) => $attr['type'] === self::VAR_RELATIONSHIP
-                        )
-                    ];
-                }
-
-                $relationships = $collectionCache[$currentCollection]['relationships'];
+                $collectionDoc = $this->silent(fn () => $this->getCollection($currentCollection));
+                $relationships = \array_filter(
+                    $collectionDoc->getAttribute('attributes', []),
+                    fn ($attr) => $attr['type'] === self::VAR_RELATIONSHIP
+                );
 
                 $relationship = null;
                 foreach ($relationships as $rel) {

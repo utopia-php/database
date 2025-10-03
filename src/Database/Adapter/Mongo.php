@@ -3,8 +3,6 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
-use MongoDB\BSON\Decimal128;
-use MongoDB\BSON\Int64;
 use MongoDB\BSON\Regex;
 use MongoDB\BSON\UTCDateTime;
 use Utopia\Database\Adapter;

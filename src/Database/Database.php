@@ -7981,12 +7981,12 @@ class Database
                 );
 
                 if ($needsParentResolution) {
-                    $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                    $matchingDocs = $this->silent(fn () => $this->find(
                         $relatedCollection,
                         \array_merge($relatedQueries, [
                             Query::limit(PHP_INT_MAX),
                         ])
-                    )));
+                    ));
                 } else {
                     $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
                         $relatedCollection,

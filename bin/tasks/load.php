@@ -4,7 +4,6 @@ global $cli;
 
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
-use Swoole\Runtime;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\CLI\Console;
@@ -24,8 +23,8 @@ use Utopia\Validator\Text;
 
 // Global pools for faster document generation
 $namesPool = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi', 'Ivan', 'Judy', 'Mallory', 'Niaj', 'Olivia', 'Peggy', 'Quentin', 'Rupert', 'Sybil', 'Trent', 'Uma', 'Victor'];
-$genresPool = ['fashion','food','travel','music','lifestyle','fitness','diy','sports','finance'];
-$tagsPool   = ['short','quick','easy','medium','hard'];
+$genresPool = ['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance'];
+$tagsPool = ['short', 'quick', 'easy', 'medium', 'hard'];
 
 /**
  * @Example
@@ -69,16 +68,14 @@ $cli
                 'attrs' => MySQL::getPDOAttributes(),
             ],
             'postgres' => [
-                'postgres' => [
-                    'host' => 'postgres',
-                    'port' => 5432,
-                    'user' => 'postgres',
-                    'pass' => 'password',
-                    'dsn' => static fn (string $host, int $port) => "pgsql:host={$host};port={$port}",
-                    'driver' => 'pgsql',
-                    'adapter' => Postgres::class,
-                    'attrs' => Postgres::getPDOAttributes(),
-                ],
+                'host' => 'postgres',
+                'port' => 5432,
+                'user' => 'postgres',
+                'pass' => 'password',
+                'dsn' => static fn (string $host, int $port) => "pgsql:host={$host};port={$port}",
+                'driver' => 'pgsql',
+                'adapter' => Postgres::class,
+                'attrs' => Postgres::getPDOAttributes(),
             ],
         ];
 
@@ -175,7 +172,7 @@ function createDocuments(Database $database): void
         $bytes = \random_bytes(intdiv($length + 1, 2));
         $text = \substr(\bin2hex($bytes), 0, $length);
         $tagCount = \mt_rand(1, count($tagsPool));
-        $tagKeys = (array) \array_rand($tagsPool, $tagCount);
+        $tagKeys = (array)\array_rand($tagsPool, $tagCount);
         $tags = \array_map(fn ($k) => $tagsPool[$k], $tagKeys);
 
         $documents[] = new Document([
@@ -186,12 +183,12 @@ function createDocuments(Database $database): void
                 ...array_map(fn () => Permission::update(Role::user(mt_rand(0, 999999999))), range(1, 3)),
                 ...array_map(fn () => Permission::delete(Role::user(mt_rand(0, 999999999))), range(1, 3)),
             ],
-            'author'  => $namesPool[\array_rand($namesPool)],
+            'author' => $namesPool[\array_rand($namesPool)],
             'created' => DateTime::now(),
-            'text'    => $text,
-            'genre'   => $genresPool[\array_rand($genresPool)],
-            'views'   => \mt_rand(0, 999999),
-            'tags'    => $tags,
+            'text' => $text,
+            'genre' => $genresPool[\array_rand($genresPool)],
+            'views' => \mt_rand(0, 999999),
+            'tags' => $tags,
         ]);
     }
     $time = \microtime(true) - $start;

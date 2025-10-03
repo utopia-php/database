@@ -7873,7 +7873,10 @@ class Database
         $indicesToRemove = [];
 
         // Group queries by relationship key
-        foreach (Query::groupByType($queries)['filters'] as $index => $query) {
+        foreach ($queries as $index => $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
             $method = $query->getMethod();
             $attribute = $query->getAttribute();
 
@@ -8034,8 +8037,8 @@ class Database
                 }
 
                 // Remove all original relationship queries for this group
-                foreach ($group['indices'] as $index) {
-                    $indicesToRemove[] = $index;
+                foreach ($group['indices'] as $originalIndex) {
+                    $indicesToRemove[] = $originalIndex;
                 }
             } catch (\Exception $e) {
                 return null;

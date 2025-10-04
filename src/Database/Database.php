@@ -5834,7 +5834,7 @@ class Database
             }
 
             foreach ($batch as $index => $doc) {
-				$doc = $this->adapter->castingAfter($collection, $doc);
+                $doc = $this->adapter->castingAfter($collection, $doc);
                 $doc = $this->decode($collection, $doc);
 
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
@@ -6865,7 +6865,7 @@ class Database
         }
 
         foreach ($results as $index => $node) {
-			$node = $this->adapter->castingAfter($collection, $node);
+            $node = $this->adapter->castingAfter($collection, $node);
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
 

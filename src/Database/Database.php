@@ -4284,7 +4284,7 @@ class Database
             // Use the write stack depth for proper MAX_DEPTH enforcement during creation
             $fetchDepth = count($this->relationshipWriteStack);
             $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $fetchDepth));
-            $document = $this->adapter->castingAfter($documents[0]);
+            $document = $this->adapter->castingAfter($collection, $documents[0]);
         }
 
         $document = $this->casting($collection, $document);

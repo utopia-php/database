@@ -14,8 +14,9 @@ class Order extends Base
 
     /**
      * @param array<Document> $attributes
+     * @param bool $supportForAttributes
      */
-    public function __construct(array $attributes = [])
+    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
     {
         foreach ($attributes as $attribute) {
             $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
@@ -40,7 +41,7 @@ class Order extends Base
         }
 
         // Search for attribute in schema
-        if (!isset($this->schema[$attribute])) {
+        if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
             $this->message = 'Attribute not found in schema: ' . $attribute;
             return false;
         }

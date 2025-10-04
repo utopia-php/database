@@ -1,231 +1,142 @@
 <?php
 
-/**
- * @var CLI
- */
 global $cli;
 
-use Faker\Factory;
-use Faker\Generator;
 use Swoole\Database\PDOConfig;
 use Swoole\Database\PDOPool;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
-use Utopia\CLI\CLI;
 use Utopia\CLI\Console;
 use Utopia\Database\Adapter\MariaDB;
-use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Mongo\Client;
-use Utopia\Validator\Numeric;
+use Utopia\Validator\Boolean;
+use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
+
+// Global pools for faster document generation
+$namesPool = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi', 'Ivan', 'Judy', 'Mallory', 'Niaj', 'Olivia', 'Peggy', 'Quentin', 'Rupert', 'Sybil', 'Trent', 'Uma', 'Victor'];
+$genresPool = ['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance'];
+$tagsPool = ['short', 'quick', 'easy', 'medium', 'hard'];
 
 /**
  * @Example
- * docker compose exec tests bin/load --adapter=mariadb --limit=1000 --name=testing
+ * docker compose exec tests bin/load --adapter=mariadb --limit=1000
  */
-
 $cli
     ->task('load')
     ->desc('Load database with mock data for testing')
-    ->param('adapter', '', new Text(0), 'Database adapter', false)
-    ->param('limit', '', new Numeric(), 'Total number of records to add to database', false)
-    ->param('name', 'myapp_'.uniqid(), new Text(0), 'Name of created database.', true)
-    ->action(function ($adapter, $limit, $name) {
+    ->param('adapter', '', new Text(0), 'Database adapter')
+    ->param('limit', 0, new Integer(true), 'Total number of records to add to database')
+    ->param('name', 'myapp_' . uniqid(), new Text(0), 'Name of created database.', true)
+    ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
+    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables) {
         $start = null;
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
-        Swoole\Runtime::enableCoroutine();
+        //Runtime::enableCoroutine();
 
-        switch ($adapter) {
-            case 'mariadb':
-                Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
-                    // can't use PDO pool to act above the database level e.g. creating schemas
-                    $dbHost = 'mariadb';
-                    $dbPort = '3306';
-                    $dbUser = 'root';
-                    $dbPass = 'password';
+        $dbAdapters = [
+            'mariadb' => [
+                'host' => 'mariadb',
+                'port' => 3306,
+                'user' => 'root',
+                'pass' => 'password',
+                'dsn' => static fn (string $host, int $port) => "mysql:host={$host};port={$port};charset=utf8mb4",
+                'driver' => 'mysql',
+                'adapter' => MariaDB::class,
+                'attrs' => MariaDB::getPDOAttributes(),
+            ],
+            'mysql' => [
+                'host' => 'mysql',
+                'port' => 3307,
+                'user' => 'root',
+                'pass' => 'password',
+                'dsn' => static fn (string $host, int $port) => "mysql:host={$host};port={$port};charset=utf8mb4",
+                'driver' => 'mysql',
+                'adapter' => MySQL::class,
+                'attrs' => MySQL::getPDOAttributes(),
+            ],
+            'postgres' => [
+                'host' => 'postgres',
+                'port' => 5432,
+                'user' => 'postgres',
+                'pass' => 'password',
+                'dsn' => static fn (string $host, int $port) => "pgsql:host={$host};port={$port}",
+                'driver' => 'pgsql',
+                'adapter' => Postgres::class,
+                'attrs' => Postgres::getPDOAttributes(),
+            ],
+        ];
 
-                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MariaDB::getPDOAttributes());
+        if (!isset($dbAdapters[$adapter])) {
+            Console::error("Adapter '{$adapter}' not supported");
+            return;
+        }
 
-                    $database = new Database(new MariaDB($pdo), $cache);
-                    $database->setDatabase($name);
-                    $database->setNamespace($namespace);
+        $cfg = $dbAdapters[$adapter];
+        $dsn = ($cfg['dsn'])($cfg['host'], $cfg['port']);
 
-                    // Outline collection schema
-                    createSchema($database);
+        //Co\run(function () use (&$start, $limit, $name, $sharedTables, $namespace, $cache, $cfg) {
+        $pdo = new PDO(
+            $dsn,
+            $cfg['user'],
+            $cfg['pass'],
+            $cfg['attrs']
+        );
 
-                    // reclaim resources
-                    $database = null;
-                    $pdo = null;
+        createSchema(
+            (new Database(new ($cfg['adapter'])($pdo), $cache))
+                ->setDatabase($name)
+                ->setNamespace($namespace)
+                ->setSharedTables($sharedTables)
+        );
 
-                    // Init Faker
-                    $faker = Factory::create();
+        $pool = new PDOPool(
+            (new PDOConfig())
+                ->withDriver($cfg['driver'])
+                ->withHost($cfg['host'])
+                ->withPort($cfg['port'])
+                ->withDbName($name)
+                //->withCharset('utf8mb4')
+                ->withUsername($cfg['user'])
+                ->withPassword($cfg['pass']),
+            128
+        );
 
-                    $start = microtime(true);
+        $start = \microtime(true);
 
-                    // create PDO pool for coroutines
-                    $pool = new PDOPool(
-                        (new PDOConfig())
-                            ->withHost('mariadb')
-                            ->withPort(3306)
-                            ->withDbName($name)
-                            ->withCharset('utf8mb4')
-                            ->withUsername('root')
-                            ->withPassword('password'),
-                        128
-                    );
+        for ($i = 0; $i < $limit / 1000; $i++) {
+            //\go(function () use ($cfg, $pool, $name, $namespace, $sharedTables, $cache) {
+            try {
+                //$pdo = $pool->get();
 
-                    // A coroutine is assigned per 1000 documents
-                    for ($i = 0; $i < $limit / 1000; $i++) {
-                        \go(function () use ($pool, $faker, $name, $cache, $namespace) {
-                            $pdo = $pool->get();
+                $database = (new Database(new ($cfg['adapter'])($pdo), $cache))
+                    ->setDatabase($name)
+                    ->setNamespace($namespace)
+                    ->setSharedTables($sharedTables);
 
-                            $database = new Database(new MariaDB($pdo), $cache);
-                            $database->setDatabase($name);
-                            $database->setNamespace($namespace);
-
-                            // Each coroutine loads 1000 documents
-                            for ($i = 0; $i < 1000; $i++) {
-                                createDocument($database, $faker);
-                            }
-
-                            // Reclaim resources
-                            $pool->put($pdo);
-                            $database = null;
-                        });
-                    }
-                });
-                break;
-
-            case 'mysql':
-                Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
-                    // can't use PDO pool to act above the database level e.g. creating schemas
-                    $dbHost = 'mysql';
-                    $dbPort = '3307';
-                    $dbUser = 'root';
-                    $dbPass = 'password';
-
-                    $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, MySQL::getPDOAttributes());
-
-                    $database = new Database(new MySQL($pdo), $cache);
-                    $database->setDatabase($name);
-                    $database->setNamespace($namespace);
-
-                    // Outline collection schema
-                    createSchema($database);
-
-                    // reclaim resources
-                    $database = null;
-                    $pdo = null;
-
-                    // Init Faker
-                    $faker = Factory::create();
-
-                    $start = microtime(true);
-
-                    // create PDO pool for coroutines
-                    $pool = new PDOPool(
-                        (new PDOConfig())
-                            ->withHost('mysql')
-                            ->withPort(3307)
-                            // ->withUnixSocket('/tmp/mysql.sock')
-                            ->withDbName($name)
-                            ->withCharset('utf8mb4')
-                            ->withUsername('root')
-                            ->withPassword('password'),
-                        128
-                    );
-
-                    // A coroutine is assigned per 1000 documents
-                    for ($i = 0; $i < $limit / 1000; $i++) {
-                        \go(function () use ($pool, $faker, $name, $cache, $namespace) {
-                            $pdo = $pool->get();
-
-                            $database = new Database(new MySQL($pdo), $cache);
-                            $database->setDatabase($name);
-                            $database->setNamespace($namespace);
-
-                            // Each coroutine loads 1000 documents
-                            for ($i = 0; $i < 1000; $i++) {
-                                createDocument($database, $faker);
-                            }
-
-                            // Reclaim resources
-                            $pool->put($pdo);
-                            $database = null;
-                        });
-                    }
-                });
-                break;
-
-            case 'mongodb':
-                Co\run(function () use (&$start, $limit, $name, $namespace, $cache) {
-                    $client = new Client(
-                        $name,
-                        'mongo',
-                        27017,
-                        'root',
-                        'example',
-                        false
-                    );
-
-                    $database = new Database(new Mongo($client), $cache);
-                    $database->setDatabase($name);
-                    $database->setNamespace($namespace);
-
-                    // Outline collection schema
-                    createSchema($database);
-
-                    // Fill DB
-                    $faker = Factory::create();
-
-                    $start = microtime(true);
-
-                    for ($i = 0; $i < $limit / 1000; $i++) {
-                        go(function () use ($client, $faker, $name, $namespace, $cache) {
-                            $database = new Database(new Mongo($client), $cache);
-                            $database->setDatabase($name);
-                            $database->setNamespace($namespace);
-
-                            // Each coroutine loads 1000 documents
-                            for ($i = 0; $i < 1000; $i++) {
-                                createDocument($database, $faker);
-                            }
-
-                            $database = null;
-                        });
-                    }
-                });
-                break;
-
-            default:
-                echo 'Adapter not supported';
-                return;
+                createDocuments($database);
+                //$pool->put($pdo);
+            } catch (\Throwable $error) {
+                Console::error('Coroutine error: ' . $error->getMessage());
+            }
+            //});
         }
 
         $time = microtime(true) - $start;
         Console::success("Completed in {$time} seconds");
     });
-
-
-
-$cli
-    ->error()
-    ->inject('error')
-    ->action(function (Exception $error) {
-        Console::error($error->getMessage());
-    });
-
 
 function createSchema(Database $database): void
 {
@@ -247,35 +158,43 @@ function createSchema(Database $database): void
     $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
     $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
     $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
-    $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
 }
 
-function createDocument($database, Generator $faker): void
+function createDocuments(Database $database): void
 {
-    $database->createDocument('articles', new Document([
-        // Five random users out of 10,000 get read access
-        // Three random users out of 10,000 get mutate access
-        '$permissions' => [
-            Permission::read(Role::any()),
-            Permission::read(Role::user($faker->randomNumber(9))),
-            Permission::read(Role::user($faker->randomNumber(9))),
-            Permission::read(Role::user($faker->randomNumber(9))),
-            Permission::read(Role::user($faker->randomNumber(9))),
-            Permission::create(Role::user($faker->randomNumber(9))),
-            Permission::create(Role::user($faker->randomNumber(9))),
-            Permission::create(Role::user($faker->randomNumber(9))),
-            Permission::update(Role::user($faker->randomNumber(9))),
-            Permission::update(Role::user($faker->randomNumber(9))),
-            Permission::update(Role::user($faker->randomNumber(9))),
-            Permission::delete(Role::user($faker->randomNumber(9))),
-            Permission::delete(Role::user($faker->randomNumber(9))),
-            Permission::delete(Role::user($faker->randomNumber(9))),
-        ],
-        'author' => $faker->name(),
-        'created' => \Utopia\Database\DateTime::format($faker->dateTime()),
-        'text' => $faker->realTextBetween(1000, 4000),
-        'genre' => $faker->randomElement(['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance']),
-        'views' => $faker->randomNumber(6),
-        'tags' => $faker->randomElements(['short', 'quick', 'easy', 'medium', 'hard'], $faker->numberBetween(1, 5)),
-    ]));
+    global $namesPool, $genresPool, $tagsPool;
+
+    $documents = [];
+
+    $start = \microtime(true);
+    for ($i = 0; $i < 1000; $i++) {
+        $length = \mt_rand(1000, 4000);
+        $bytes = \random_bytes(intdiv($length + 1, 2));
+        $text = \substr(\bin2hex($bytes), 0, $length);
+        $tagCount = \mt_rand(1, count($tagsPool));
+        $tagKeys = (array)\array_rand($tagsPool, $tagCount);
+        $tags = \array_map(fn ($k) => $tagsPool[$k], $tagKeys);
+
+        $documents[] = new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                ...array_map(fn () => Permission::read(Role::user(mt_rand(0, 999999999))), range(1, 4)),
+                ...array_map(fn () => Permission::create(Role::user(mt_rand(0, 999999999))), range(1, 3)),
+                ...array_map(fn () => Permission::update(Role::user(mt_rand(0, 999999999))), range(1, 3)),
+                ...array_map(fn () => Permission::delete(Role::user(mt_rand(0, 999999999))), range(1, 3)),
+            ],
+            'author' => $namesPool[\array_rand($namesPool)],
+            'created' => DateTime::now(),
+            'text' => $text,
+            'genre' => $genresPool[\array_rand($genresPool)],
+            'views' => \mt_rand(0, 999999),
+            'tags' => $tags,
+        ]);
+    }
+    $time = \microtime(true) - $start;
+    Console::info("Prepared 1000 documents in {$time} seconds");
+    $start = \microtime(true);
+    $database->createDocuments('articles', $documents, 1000);
+    $time = \microtime(true) - $start;
+    Console::success("Inserted 1000 documents in {$time} seconds");
 }

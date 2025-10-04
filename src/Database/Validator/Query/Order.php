@@ -29,6 +29,17 @@ class Order extends Base
      */
     protected function isValidAttribute(string $attribute): bool
     {
+        if (\str_contains($attribute, '.')) {
+            // Check for special symbol `.`
+            if (isset($this->schema[$attribute])) {
+                return true;
+            }
+
+            // For relationships, just validate the top level.
+            // Will validate each nested level during the recursive calls.
+            $attribute = \explode('.', $attribute)[0];
+        }
+
         // Search for attribute in schema
         if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
             $this->message = 'Attribute not found in schema: ' . $attribute;

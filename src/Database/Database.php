@@ -6947,8 +6947,21 @@ class Database
             $skipAuth = true;
         }
 
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+        );
+
         $queries = Query::groupByType($queries)['filters'];
         $queries = $this->convertQueries($collection, $queries);
+
+        $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
+
+        if ($queriesOrNull === null) {
+            return 0;
+        }
+
+        $queries = $queriesOrNull;
 
         $getCount = fn () => $this->adapter->count($collection, $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
@@ -6993,7 +7006,21 @@ class Database
             }
         }
 
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+        );
+
         $queries = $this->convertQueries($collection, $queries);
+
+        $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
+
+        // If conversion returns null, it means no documents can match (relationship filter found no matches)
+        if ($queriesOrNull === null) {
+            return 0;
+        }
+
+        $queries = $queriesOrNull;
 
         $sum = $this->adapter->sum($collection, $attribute, $queries, $max);
 

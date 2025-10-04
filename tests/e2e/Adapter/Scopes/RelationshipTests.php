@@ -4017,4 +4017,156 @@ trait RelationshipTests
         $database->deleteCollection('departments_nested');
         $database->deleteCollection('companies_nested');
     }
+
+    public function testCountAndSumWithRelationshipQueries(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Create Author -> Posts relationship with view count
+        $database->createCollection('authors_count');
+        $database->createCollection('posts_count');
+
+        $database->createAttribute('authors_count', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('authors_count', 'age', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('posts_count', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('posts_count', 'views', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute('posts_count', 'published', Database::VAR_BOOLEAN, 0, true);
+
+        $database->createRelationship(
+            collection: 'authors_count',
+            relatedCollection: 'posts_count',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'posts',
+            twoWayKey: 'author'
+        );
+
+        // Create test data
+        $author1 = $database->createDocument('authors_count', new Document([
+            '$id' => 'author1',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Alice',
+            'age' => 30,
+        ]));
+
+        $author2 = $database->createDocument('authors_count', new Document([
+            '$id' => 'author2',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Bob',
+            'age' => 25,
+        ]));
+
+        $author3 = $database->createDocument('authors_count', new Document([
+            '$id' => 'author3',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'Charlie',
+            'age' => 35,
+        ]));
+
+        // Create posts
+        $database->createDocument('posts_count', new Document([
+            '$id' => 'post1',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Alice Post 1',
+            'views' => 100,
+            'published' => true,
+            'author' => 'author1',
+        ]));
+
+        $database->createDocument('posts_count', new Document([
+            '$id' => 'post2',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Alice Post 2',
+            'views' => 200,
+            'published' => true,
+            'author' => 'author1',
+        ]));
+
+        $database->createDocument('posts_count', new Document([
+            '$id' => 'post3',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Alice Draft',
+            'views' => 50,
+            'published' => false,
+            'author' => 'author1',
+        ]));
+
+        $database->createDocument('posts_count', new Document([
+            '$id' => 'post4',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Bob Post',
+            'views' => 150,
+            'published' => true,
+            'author' => 'author2',
+        ]));
+
+        $database->createDocument('posts_count', new Document([
+            '$id' => 'post5',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Bob Draft',
+            'views' => 75,
+            'published' => false,
+            'author' => 'author2',
+        ]));
+
+        // Test: Count posts by author name
+        $count = $database->count('posts_count', [
+            Query::equal('author.name', ['Alice']),
+        ]);
+        $this->assertEquals(3, $count);
+
+        // Test: Count published posts by author age filter
+        $count = $database->count('posts_count', [
+            Query::lessThan('author.age', 30),
+            Query::equal('published', [true]),
+        ]);
+        $this->assertEquals(1, $count); // Only Bob's published post
+
+        // Test: Count posts by author name (different author)
+        $count = $database->count('posts_count', [
+            Query::equal('author.name', ['Bob']),
+        ]);
+        $this->assertEquals(2, $count);
+
+        // Test: Count with no matches (author with no posts)
+        $count = $database->count('posts_count', [
+            Query::equal('author.name', ['Charlie']),
+        ]);
+        $this->assertEquals(0, $count);
+
+        // Test: Sum views for posts by author name
+        $sum = $database->sum('posts_count', 'views', [
+            Query::equal('author.name', ['Alice']),
+        ]);
+        $this->assertEquals(350, $sum); // 100 + 200 + 50
+
+        // Test: Sum views for published posts by author age
+        $sum = $database->sum('posts_count', 'views', [
+            Query::lessThan('author.age', 30),
+            Query::equal('published', [true]),
+        ]);
+        $this->assertEquals(150, $sum); // Only Bob's published post
+
+        // Test: Sum views for Bob's posts
+        $sum = $database->sum('posts_count', 'views', [
+            Query::equal('author.name', ['Bob']),
+        ]);
+        $this->assertEquals(225, $sum); // 150 + 75
+
+        // Test: Sum with no matches
+        $sum = $database->sum('posts_count', 'views', [
+            Query::equal('author.name', ['Charlie']),
+        ]);
+        $this->assertEquals(0, $sum);
+
+        // Clean up
+        $database->deleteCollection('authors_count');
+        $database->deleteCollection('posts_count');
+    }
 }

@@ -950,6 +950,7 @@ trait CollectionTests
             return;
         }
 
+        $database->createCollection('testers');
         $database->createCollection('devices');
 
         $database->createRelationship(

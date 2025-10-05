@@ -3859,7 +3859,7 @@ class Database
             return [];
         }
 
-        // For batch relationship population, we need to fetch documents with all fields
+        // For batch relationship population, we need to fetch documents with all attributes
         // to enable proper grouping by back-reference, then apply selects afterward
         $selectQueries = [];
         $otherQueries = [];
@@ -4131,30 +4131,30 @@ class Database
             return;
         }
 
-        // Collect all fields to keep from select queries
-        $fieldsToKeep = [];
+        // Collect all attributes to keep from select queries
+        $attributesToKeep = [];
         foreach ($selectQueries as $selectQuery) {
             foreach ($selectQuery->getValues() as $value) {
-                $fieldsToKeep[$value] = true;
+                $attributesToKeep[$value] = true;
             }
         }
 
         // Early return if wildcard selector present
-        if (isset($fieldsToKeep['*'])) {
+        if (isset($attributesToKeep['*'])) {
             return;
         }
 
         // Always preserve internal attributes (use hashmap for O(1) lookup)
         $internalKeys = \array_map(fn ($attr) => $attr['$id'], $this->getInternalAttributes());
         foreach ($internalKeys as $key) {
-            $fieldsToKeep[$key] = true;
+            $attributesToKeep[$key] = true;
         }
 
         foreach ($documents as $doc) {
             $allKeys = \array_keys($doc->getArrayCopy());
             foreach ($allKeys as $attrKey) {
                 // Keep if: explicitly selected OR is internal attribute ($ prefix)
-                if (!isset($fieldsToKeep[$attrKey]) && !\str_starts_with($attrKey, '$')) {
+                if (!isset($attributesToKeep[$attrKey]) && !\str_starts_with($attrKey, '$')) {
                     $doc->removeAttribute($attrKey);
                 }
             }
@@ -7640,7 +7640,7 @@ class Database
 
                 $nestingPath = \implode('.', $nesting);
 
-                // If nestingPath is empty, it means we want all fields (*) for this relationship
+                // If nestingPath is empty, it means we want all attributes (*) for this relationship
                 if (empty($nestingPath)) {
                     $nestedSelections[$selectedKey][] = Query::select(['*']);
                 } else {
@@ -7716,7 +7716,7 @@ class Database
                 }
                 $pathGroups[$pathKey][] = [
                     'method' => $query->getMethod(),
-                    'field' => \end($parts), // The actual field to query
+                    'attribute' => \end($parts), // The actual attribute to query
                     'values' => $query->getValues(),
                 ];
             }
@@ -7762,7 +7762,7 @@ class Database
             // Now walk backwards from the deepest collection to the starting collection
             $leafQueries = [];
             foreach ($queryGroup as $q) {
-                $leafQueries[] = new Query($q['method'], $q['field'], $q['values']);
+                $leafQueries[] = new Query($q['method'], $q['attribute'], $q['values']);
             }
 
             // Query the deepest collection
@@ -7864,7 +7864,7 @@ class Database
      * The method works by:
      * 1. Parsing dot-path queries (e.g., "project.employee.company.name")
      * 2. Extracting the first relationship (e.g., "project")
-     * 3. If the nested field still contains dots, using iterative processing
+     * 3. If the nested attribute still contains dots, using iterative processing
      * 4. Finding matching documents in the related collection
      * 5. Converting to filters on the parent collection
      *
@@ -7914,7 +7914,7 @@ class Database
             // Parse the relationship path
             $parts = \explode('.', $attribute);
             $relationshipKey = \array_shift($parts);
-            $nestedField = \implode('.', $parts);
+            $nestedAttribute = \implode('.', $parts);
             $relationship = $relationshipsByKey[$relationshipKey] ?? null;
 
             if (!$relationship) {
@@ -7932,7 +7932,7 @@ class Database
 
             $groupedQueries[$relationshipKey]['queries'][] = [
                 'method' => $method,
-                'field' => $nestedField,
+                'attribute' => $nestedAttribute,
                 'values' => $query->getValues()
             ];
 
@@ -7951,7 +7951,7 @@ class Database
             foreach ($group['queries'] as $queryData) {
                 $relatedQueries[] = new Query(
                     $queryData['method'],
-                    $queryData['field'],
+                    $queryData['attribute'],
                     $queryData['values']
                 );
             }
@@ -8055,7 +8055,7 @@ class Database
                         return null;
                     }
                 } else {
-                    // For other types, filter by the relationship field
+                    // For other types, filter by the relationship attribute
                     if (!empty($matchingIds)) {
                         $additionalQueries[] = Query::equal($relationshipKey, $matchingIds);
                     } else {

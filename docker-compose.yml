@@ -86,33 +86,23 @@ services:
   mongo:
     image: mongo:8.0.14
     container_name: utopia-mongo
-    entrypoint: ["/entrypoint.sh"]
+    command: mongod --bind_ip_all --auth
     networks:
       - database
     ports:
       - "9706:27017"
     volumes:
       - mongo-data:/data/db
-      - ./tests/resources/mongo/mongo-keyfile:/tmp/keyfile:ro
-      - ./tests/resources/mongo/entrypoint.sh:/entrypoint.sh:ro
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: password
       MONGO_INITDB_DATABASE: utopia_testing
     healthcheck:
       test: |
-        bash -c "
-          if mongosh -u root -p password --authenticationDatabase admin --quiet --eval 'rs.status().ok' 2>/dev/null; then
-            exit 0
-          else
-            mongosh -u root -p password --authenticationDatabase admin --quiet --eval \"
-              rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]})
-            \" 2>/dev/null || exit 1
-          fi
-        "
+        mongosh -u root -p password --authenticationDatabase admin --quiet --eval "db.adminCommand('ping')"
       interval: 10s
       timeout: 10s
-      retries: 10
+      retries: 5
       start_period: 30s
 
   mongo-express:
@@ -184,7 +174,4 @@ volumes:
 networks:
   database:
 
-secrets:
-  mongo_keyfile:
-    file: ./tests/resources/mongo/mongo-keyfile
 

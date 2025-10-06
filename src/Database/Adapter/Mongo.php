@@ -114,9 +114,12 @@ class Mongo extends Adapter
                 // Throw the original exception, not the rollback one
                 // Since if it's a duplicate key error, the rollback will fail,
                 // and we want to throw the original exception.
+            } finally {
+                // Ensure state is cleaned up even if rollback fails
+                $this->inTransaction = 0;
+                $this->session = null;
             }
 
-            $this->inTransaction = 0;
             throw $action;
         }
     }
@@ -138,6 +141,8 @@ class Mongo extends Adapter
             $this->inTransaction++;
             return true;
         } catch (\Throwable $e) {
+            $this->session = null;
+            $this->inTransaction = 0;
             throw new DatabaseException('Failed to start transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
     }
@@ -166,19 +171,23 @@ class Mongo extends Adapter
                     $e = $this->processException($e);
                     if ($e instanceof TransactionException) {
                         $this->session = null;
+                        $this->inTransaction = 0;  // Reset counter when transaction is already terminated
                         return true;
                     }
+                    throw $e;
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                } finally {
+                    $this->session = null;
                 }
-
-                // Session is now closed by the client using endSessions,  state is reset
-                $this->session = null;
 
                 return true;
             }
             return true;
         } catch (\Throwable $e) {
+            // Ensure cleanup on any failure
+            $this->session = null;
+            $this->inTransaction = 0;
             throw new DatabaseException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
     }
@@ -204,32 +213,57 @@ class Mongo extends Adapter
                     $result = $this->client->abortTransaction($this->session);
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                } finally {
+                    $this->session = null;
                 }
-
-                // Session is now closed by the client using endSessions, reset our state
-                $this->session = null;
 
                 return true;
             }
             return true;
         } catch (\Throwable $e) {
+            $this->session = null;
+            $this->inTransaction = 0;
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
     }
 
     /**
      * Helper to add transaction/session context to command options if in transaction
+     * Includes defensive check to ensure session is valid
      *
      * @param array<string, mixed> $options
      * @return array<string, mixed>
      */
     private function getTransactionOptions(array $options = []): array
     {
-        if ($this->inTransaction && $this->session) {
+        if ($this->inTransaction > 0 && $this->session !== null) {
             // Pass the session array directly - the client will handle the transaction state internally
             $options['session'] = $this->session;
         }
         return $options;
+    }
+
+
+    /**
+     * Create a safe MongoDB regex pattern by escaping special characters
+     *
+     * @param string $value The user input to escape
+     * @param string $pattern The pattern template (e.g., ".*%s.*" for contains)
+     * @return Regex
+     * @throws DatabaseException
+     */
+    private function createSafeRegex(string $value, string $pattern = '%s', string $flags = 'i'): Regex
+    {
+        $escaped = preg_quote($value, '/');
+
+        // Validate that the pattern doesn't contain injection vectors
+        if (preg_match('/\$[a-z]+/i', $escaped)) {
+            throw new DatabaseException('Invalid regex pattern: potential injection detected');
+        }
+
+        $finalPattern = sprintf($pattern, $escaped);
+
+        return new Regex($finalPattern, $flags);
     }
 
     /**
@@ -278,17 +312,17 @@ class Mongo extends Adapter
     {
         if (!\is_null($collection)) {
             $collection = $this->getNamespace() . "_" . $collection;
-            $list = $this->flattenArray($this->listCollections())[0]->firstBatch;
-            foreach ($list as $obj) {
-                if (\is_object($obj)
-                    && isset($obj->name)
-                    && $obj->name === $collection
-                ) {
-                    return true;
-                }
-            }
+            try {
+                // Use listCollections command with filter for O(1) lookup
+                $result = $this->getClient()->query([
+                    'listCollections' => 1,
+                    'filter' => ['name' => $collection]
+                ]);
 
-            return false;
+                return !empty($result->cursor->firstBatch);
+            } catch (\Exception $e) {
+                return false;
+            }
         }
 
         return $this->getClient()->selectDatabase() != null;
@@ -423,12 +457,12 @@ class Mongo extends Adapter
                     $key['_tenant'] = $this->getOrder(Database::ORDER_ASC);
                 }
 
-                foreach ($attributes as $attribute) {
+                foreach ($attributes as $j => $attribute) {
                     $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
 
                     switch ($index->getAttribute('type')) {
                         case Database::INDEX_KEY:
-                            $order = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+                            $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
                             break;
                         case Database::INDEX_FULLTEXT:
                             // MongoDB fulltext index is just 'text'
@@ -436,7 +470,7 @@ class Mongo extends Adapter
                             $order = 'text';
                             break;
                         case Database::INDEX_UNIQUE:
-                            $order = $this->getOrder($this->filter($orders[$i] ?? Database::ORDER_ASC));
+                            $order = $this->getOrder($this->filter($orders[$j] ?? Database::ORDER_ASC));
                             $unique = true;
                             break;
                         default:
@@ -453,6 +487,10 @@ class Mongo extends Adapter
                     'unique' => $unique
                 ];
 
+                if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
+                    $newIndexes[$i]['default_language'] = 'none';
+                }
+
                 // Add partial filter for indexes to avoid indexing null values
                 if (in_array($index->getAttribute('type'), [
                     Database::INDEX_UNIQUE,
@@ -468,15 +506,20 @@ class Mongo extends Adapter
                                 break;
                             }
                         }
+
+                        $attr = $this->filter($this->getInternalKeyForAttribute($attr));
+
                         // Use both $exists: true and $type to exclude nulls and ensure correct type
-                        $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
+                        $partialFilter[$attr] = [
+                            '$exists' => true,
+                            '$type' => $attrType
+                        ];
                     }
                     if (!empty($partialFilter)) {
                         $newIndexes[$i]['partialFilterExpression'] = $partialFilter;
                     }
                 }
             }
-
 
             try {
                 $options = $this->getTransactionOptions();
@@ -577,7 +620,7 @@ class Mongo extends Adapter
     }
 
     /**
-   * Create Attribute
+     * Create Attribute
      *
      * @param string $collection
      * @param string $id
@@ -612,6 +655,8 @@ class Mongo extends Adapter
      * @param string $id
      *
      * @return bool
+     * @throws DatabaseException
+     * @throws MongoException
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
@@ -634,16 +679,23 @@ class Mongo extends Adapter
      * @param string $id
      * @param string $name
      * @return bool
+     * @throws DatabaseException
+     * @throws MongoException
      */
     public function renameAttribute(string $collection, string $id, string $name): bool
     {
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
 
+        $from    = $this->filter($this->getInternalKeyForAttribute($id));
+        $to      = $this->filter($this->getInternalKeyForAttribute($name));
+        $options = $this->getTransactionOptions();
+
         $this->getClient()->update(
             $collection,
             [],
-            ['$rename' => [$id => $name]],
-            multi: true
+            ['$rename' => [$from => $to]],
+            multi: true,
+            options: $options
         );
 
         return true;
@@ -726,6 +778,10 @@ class Mongo extends Adapter
                 $metadataCollection = new Document(['$id' => Database::METADATA]);
                 $collection = $this->getDocument($metadataCollection, $collection);
                 $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
+
+                if ($collection->isEmpty() || $relatedCollection->isEmpty()) {
+                    throw new DatabaseException('Collection or related collection not found');
+                }
 
                 $junction = $this->getNamespace() . '_' . $this->filter('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence());
 
@@ -849,17 +905,25 @@ class Mongo extends Adapter
 
         /**
          * Collation
-         *  .1  Moved under $indexes.
-         *  .2  Updated format.
-         *  .3  Avoid adding collation to fulltext index
+         *  1.  Moved under $indexes.
+         *  2.  Updated format.
+         *  3.  Avoid adding collation to fulltext index
          */
-
         if (!empty($collation) &&
             $type !== Database::INDEX_FULLTEXT) {
             $indexes['collation'] = [
                 'locale' => 'en',
                 'strength' => 1,
             ];
+        }
+
+        /**
+         * Text index language configuration
+         * Set to 'none' to disable stop words (words like 'other', 'the', 'a', etc.)
+         * This ensures all words are indexed and searchable
+         */
+        if ($type === Database::INDEX_FULLTEXT) {
+            $indexes['default_language'] = 'none';
         }
 
         // Add partial filter for indexes to avoid indexing null values
@@ -875,7 +939,54 @@ class Mongo extends Adapter
             }
         }
         try {
-            return $this->client->createIndexes($name, [$indexes], $options);
+            $result = $this->client->createIndexes($name, [$indexes], $options);
+
+            // Wait for unique index to be fully built before returning
+            // MongoDB builds indexes asynchronously, so we need to wait for completion
+            // to ensure unique constraints are enforced immediately
+            if ($type === Database::INDEX_UNIQUE) {
+                $maxRetries = 10;
+                $retryCount = 0;
+                $baseDelay = 50000; // 50ms
+                $maxDelay = 500000; // 500ms
+
+                while ($retryCount < $maxRetries) {
+                    try {
+                        $indexList = $this->client->query([
+                            'listIndexes' => $name
+                        ]);
+
+                        if (isset($indexList->cursor->firstBatch)) {
+                            foreach ($indexList->cursor->firstBatch as $existingIndex) {
+                                $indexArray = $this->client->toArray($existingIndex);
+
+                                if (
+                                    (isset($indexArray['name']) && $indexArray['name'] === $id) &&
+                                    (!isset($indexArray['buildState']) || $indexArray['buildState'] === 'ready')
+                                ) {
+                                    return $result;
+                                }
+                            }
+                        }
+                    } catch (\Exception $e) {
+                        if ($retryCount >= $maxRetries - 1) {
+                            throw new DatabaseException(
+                                'Timeout waiting for index creation: ' . $e->getMessage(),
+                                $e->getCode(),
+                                $e
+                            );
+                        }
+                    }
+
+                    $delay = \min($baseDelay * (2 ** $retryCount), $maxDelay);
+                    \usleep((int)$delay);
+                    $retryCount++;
+                }
+
+                throw new DatabaseException("Index {$id} creation timed out after {$maxRetries} retries");
+            }
+
+            return $result;
         } catch (\Exception $e) {
             throw $this->processException($e);
         }
@@ -963,8 +1074,9 @@ class Mongo extends Adapter
      * @param Document $collection
      * @param string $id
      * @param Query[] $queries
+     * @param bool $forUpdate
      * @return Document
-     * @throws MongoException
+     * @throws DatabaseException
      */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
@@ -975,6 +1087,7 @@ class Mongo extends Adapter
         if ($this->sharedTables) {
             $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
+
 
         $options = [];
 
@@ -1010,7 +1123,6 @@ class Mongo extends Adapter
      */
     public function createDocument(Document $collection, Document $document): Document
     {
-
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $sequence = $document->getSequence();
@@ -1068,9 +1180,13 @@ class Mongo extends Adapter
             }
 
             if ($array) {
-                $value = !is_string($value)
-                    ? $value
-                    : json_decode($value, true);
+                if (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        throw new DatabaseException('Failed to decode JSON for attribute ' . $key . ': ' . json_last_error_msg());
+                    }
+                    $value = $decoded;
+                }
             } else {
                 $value = [$value];
             }
@@ -1118,7 +1234,6 @@ class Mongo extends Adapter
         $attributes = \array_merge($attributes, Database::INTERNAL_ATTRIBUTES);
 
         foreach ($attributes as $attribute) {
-
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -1129,9 +1244,13 @@ class Mongo extends Adapter
             }
 
             if ($array) {
-                $value = !is_string($value)
-                    ? $value
-                    : json_decode($value, true);
+                if (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        throw new DatabaseException('Failed to decode JSON for attribute ' . $key . ': ' . json_last_error_msg());
+                    }
+                    $value = $decoded;
+                }
             } else {
                 $value = [$value];
             }
@@ -1191,11 +1310,13 @@ class Mongo extends Adapter
 
             $records[] = $record;
         }
+
         try {
             $documents = $this->client->insertMany($name, $records, $options);
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
+
         foreach ($documents as $index => $document) {
             $documents[$index] = $this->replaceChars('_', '$', $this->client->toArray($document));
             $documents[$index] = new Document($documents[$index]);
@@ -1293,7 +1414,6 @@ class Mongo extends Adapter
      */
     public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
-        ;
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
         $options = $this->getTransactionOptions();
@@ -1315,12 +1435,16 @@ class Mongo extends Adapter
         ];
 
         try {
-            $this->client->update($name, $filters, $updateQuery, multi: true, options: $options);
+            return $this->client->update(
+                $name,
+                $filters,
+                $updateQuery,
+                options: $options,
+                multi: true,
+            );
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
-
-        return 1;
     }
 
     /**
@@ -1328,6 +1452,7 @@ class Mongo extends Adapter
      * @param string $attribute
      * @param array<Change> $changes
      * @return array<Document>
+     * @throws DatabaseException
      */
     public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
@@ -1457,7 +1582,7 @@ class Mongo extends Adapter
                 'batchSize' => self::DEFAULT_BATCH_SIZE
             ];
 
-            $options = $this->getTransactionOptions(['projection' => ['_uid' => 1, '_id' => 1]]);
+            $options = $this->getTransactionOptions($options);
             $response = $this->client->find($name, $filters, $options);
             $results = $response->cursor->firstBatch ?? [];
 
@@ -1581,6 +1706,7 @@ class Mongo extends Adapter
      * @param array<string> $sequences
      * @param array<string> $permissionIds
      * @return int
+     * @throws DatabaseException
      */
     public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
     {
@@ -1601,17 +1727,15 @@ class Mongo extends Adapter
         $options = $this->getTransactionOptions();
 
         try {
-            $count = $this->client->delete(
+            return $this->client->delete(
                 collection: $name,
                 filters: $filters,
                 limit: 0,
                 options: $options
             );
         } catch (MongoException $e) {
-            $this->processException($e);
+            throw $this->processException($e);
         }
-
-        return $count ?? 0;
     }
 
     /**
@@ -1655,24 +1779,24 @@ class Mongo extends Adapter
 
 
     /**
-    * Find Documents
-    *
-    * Find data sets using chosen queries
-    *
-    * @param Document $collection
-    * @param array<Query> $queries
-    * @param int|null $limit
-    * @param int|null $offset
-    * @param array<string> $orderAttributes
-    * @param array<string> $orderTypes
-    * @param array<string, mixed> $cursor
-    * @param string $cursorDirection
-    * @param string $forPermission
-    *
-    * @return array<Document>
-    * @throws Exception
-    * @throws TimeoutException
-    */
+     * Find Documents
+     *
+     * Find data sets using chosen queries
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @param int|null $limit
+     * @param int|null $offset
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @param array<string, mixed> $cursor
+     * @param string $cursorDirection
+     * @param string $forPermission
+     *
+     * @return array<Document>
+     * @throws Exception
+     * @throws TimeoutException
+     */
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
@@ -1720,7 +1844,7 @@ class Mongo extends Adapter
             $orderType = $this->filter($orderTypes[$i] ?? Database::ORDER_ASC);
             $direction = $orderType;
 
-            /** Get sort direction  ASC || DESC**/
+            /** Get sort direction  ASC || DESC **/
             if ($cursorDirection === Database::CURSOR_BEFORE) {
                 $direction = ($direction === Database::ORDER_ASC)
                     ? Database::ORDER_DESC
@@ -1742,12 +1866,7 @@ class Mongo extends Adapter
                 for ($j = 0; $j < $i; $j++) {
                     $originalPrev = $orderAttributes[$j];
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
-
                     $tmp = $cursor[$originalPrev];
-                    if ($originalPrev === '$sequence') {
-                        $tmp = $tmp;
-                    }
-
                     $andConditions[] = [
                         $prevAttr => $tmp
                     ];
@@ -1785,6 +1904,7 @@ class Mongo extends Adapter
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
         $found = [];
+        $cursorId = null;
 
         try {
             // Use proper cursor iteration with reasonable batch size
@@ -1803,11 +1923,6 @@ class Mongo extends Adapter
 
             // Continue fetching with getMore
             while ($cursorId && $cursorId !== 0) {
-                // Check if limit is reached
-                if (!\is_null($limit) && count($found) >= $limit) {
-                    break;
-                }
-
                 $moreResponse = $this->client->getMore((int)$cursorId, $name, self::DEFAULT_BATCH_SIZE);
                 $moreResults = $moreResponse->cursor->nextBatch ?? [];
 
@@ -1818,11 +1933,6 @@ class Mongo extends Adapter
                 foreach ($moreResults as $result) {
                     $record = $this->replaceChars('_', '$', (array)$result);
                     $found[] = new Document($record);
-
-                    // Check limit again after each document
-                    if (!\is_null($limit) && count($found) >= $limit) {
-                        break 2; // Break both inner and outer loops
-                    }
                 }
 
                 $cursorId = (int)($moreResponse->cursor->id ?? 0);
@@ -1830,6 +1940,18 @@ class Mongo extends Adapter
 
         } catch (MongoException $e) {
             throw $this->processException($e);
+        } finally {
+            // Ensure cursor is killed if still active to prevent resource leak
+            if (isset($cursorId) && $cursorId !== 0) {
+                try {
+                    $this->client->query([
+                        'killCursors' => $name,
+                        'cursors' => [(int)$cursorId]
+                    ]);
+                } catch (\Exception $e) {
+                    // Ignore errors during cursor cleanup
+                }
+            }
         }
 
         if ($cursorDirection === Database::CURSOR_BEFORE) {
@@ -1901,14 +2023,14 @@ class Mongo extends Adapter
 
 
     /**
-         * Count Documents
-         *
-         * @param Document $collection
-         * @param array<Query> $queries
-         * @param int|null $max
-         * @return int
-         * @throws Exception
-         */
+     * Count Documents
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @param int|null $max
+     * @return int
+     * @throws Exception
+     */
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
@@ -1936,7 +2058,7 @@ class Mongo extends Adapter
         // Add permissions filter if authorization is enabled
         if (Authorization::$status) {
             $roles = \implode('|', Authorization::getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
         /**
@@ -2026,7 +2148,7 @@ class Mongo extends Adapter
         // permissions
         if (Authorization::$status) { // skip if authorization is disabled
             $roles = \implode('|', Authorization::getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\(\".*(?:{$roles}).*\"\)", 'i')];
+            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
         // using aggregation to get sum an attribute as described in
@@ -2083,43 +2205,58 @@ class Mongo extends Adapter
             'collection'
         ];
 
-        $result = [];
+        // First pass: recursively process array values and collect keys to rename
+        $keysToRename = [];
         foreach ($array as $k => $v) {
-            $clean_key = str_replace($from, "", $k);
-            $key = in_array($clean_key, $filter) ? str_replace($from, $to, $k) : $k;
+            if (is_array($v)) {
+                $array[$k] = $this->replaceChars($from, $to, $v);
+            }
 
-            $result[$key] = is_array($v) ? $this->replaceChars($from, $to, $v) : $v;
+            // Handle key replacement for filtered attributes
+            $clean_key = str_replace($from, "", $k);
+            if (in_array($clean_key, $filter)) {
+                $newKey = str_replace($from, $to, $k);
+                if ($newKey !== $k) {
+                    $keysToRename[$k] = $newKey;
+                }
+            }
         }
 
+        foreach ($keysToRename as $oldKey => $newKey) {
+            $array[$newKey] = $array[$oldKey];
+            unset($array[$oldKey]);
+        }
+
+        // Handle special attribute mappings
         if ($from === '_') {
-            if (array_key_exists('_id', $array)) {
-                $result['$sequence'] = (string)$array['_id'];
-                unset($result['_id']);
+            if (isset($array['_id'])) {
+                $array['$sequence'] = (string)$array['_id'];
+                unset($array['_id']);
             }
-            if (array_key_exists('_uid', $array)) {
-                $result['$id'] = $array['_uid'];
-                unset($result['_uid']);
+            if (isset($array['_uid'])) {
+                $array['$id'] = $array['_uid'];
+                unset($array['_uid']);
             }
-            if (array_key_exists('_tenant', $array)) {
-                $result['$tenant'] = $array['_tenant'];
-                unset($result['_tenant']);
+            if (isset($array['_tenant'])) {
+                $array['$tenant'] = $array['_tenant'];
+                unset($array['_tenant']);
             }
         } elseif ($from === '$') {
-            if (array_key_exists('$id', $array)) {
-                $result['_uid'] = $array['$id'];
-                unset($result['$id']);
+            if (isset($array['$id'])) {
+                $array['_uid'] = $array['$id'];
+                unset($array['$id']);
             }
-            if (array_key_exists('$sequence', $array)) {
-                $result['_id'] = $array['$sequence'];
-                unset($result['$sequence']);
+            if (isset($array['$sequence'])) {
+                $array['_id'] = $array['$sequence'];
+                unset($array['$sequence']);
             }
-            if (array_key_exists('$tenant', $array)) {
-                $result['_tenant'] = $array['$tenant'];
-                unset($result['$tenant']);
+            if (isset($array['$tenant'])) {
+                $array['_tenant'] = $array['$tenant'];
+                unset($array['$tenant']);
             }
         }
 
-        return $result;
+        return $array;
     }
 
     /**
@@ -2201,14 +2338,14 @@ class Mongo extends Adapter
                         ];
                     }, $value);
                 } else {
-                    $filter[$attribute]['$regex'] = new Regex(".*{$this->escapeWildcards($value)}.*", 'i');
+                    $filter[$attribute]['$regex'] = $this->createSafeRegex($value, '.*%s.*');
                 }
             } else {
                 $filter[$attribute]['$in'] = $query->getValues();
             }
         } elseif ($operator === 'notContains') {
             if (!$query->onArray()) {
-                $filter[$attribute] = ['$not' => new Regex(".*{$this->escapeWildcards($value)}.*", 'i')];
+                $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '.*%s.*')];
             } else {
                 $filter[$attribute]['$nin'] = $query->getValues();
             }
@@ -2219,9 +2356,7 @@ class Mongo extends Adapter
                 if (empty($value)) {
                     // If value is not passed, don't add any filter - this will match all documents
                 } else {
-                    // Escape special regex characters and create a pattern that matches the search term as substring
-                    $escapedValue = preg_quote($value, '/');
-                    $filter[$attribute] = ['$not' => new Regex(".*{$escapedValue}.*", 'i')];
+                    $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '.*%s.*')];
                 }
             } else {
                 $filter['$text'][$operator] = $value;
@@ -2235,9 +2370,9 @@ class Mongo extends Adapter
                 [$attribute => ['$gt' => $value[1]]]
             ];
         } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_STARTS_WITH) {
-            $filter[$attribute] = ['$not' => new Regex('^' . $value, 'i')];
+            $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '^%s')];
         } elseif ($operator === '$regex' && $query->getMethod() === Query::TYPE_NOT_ENDS_WITH) {
-            $filter[$attribute] = ['$not' => new Regex($value . '$', 'i')];
+            $filter[$attribute] = ['$not' => $this->createSafeRegex($value, '%s$')];
         } else {
             $filter[$attribute][$operator] = $value;
         }
@@ -2284,17 +2419,17 @@ class Mongo extends Adapter
     {
         switch ($method) {
             case Query::TYPE_STARTS_WITH:
-                $value = $this->escapeWildcards($value);
+                $value = preg_quote($value, '/');
+                $value = str_replace(['\\', '$'], ['\\\\', '\\$'], $value);
                 return $value . '.*';
             case Query::TYPE_NOT_STARTS_WITH:
-                $value = $this->escapeWildcards($value);
-                return $value . '.*';
+                return $value;
             case Query::TYPE_ENDS_WITH:
-                $value = $this->escapeWildcards($value);
+                $value = preg_quote($value, '/');
+                $value = str_replace(['\\', '$'], ['\\\\', '\\$'], $value);
                 return '.*' . $value;
             case Query::TYPE_NOT_ENDS_WITH:
-                $value = $this->escapeWildcards($value);
-                return '.*' . $value;
+                return $value;
             default:
                 return $value;
         }
@@ -2450,7 +2585,7 @@ class Mongo extends Adapter
      */
     public function getSupportForAttributes(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -2668,6 +2803,7 @@ class Mongo extends Adapter
     {
         return true;
     }
+
     /**
      * Is spatial attributes supported?
      *
@@ -2687,6 +2823,7 @@ class Mongo extends Adapter
     {
         return false;
     }
+
     /**
      * Does the adapter includes boundary during spatial contains?
      *
@@ -2697,6 +2834,7 @@ class Mongo extends Adapter
     {
         return false;
     }
+
     /**
      * Does the adapter support order attribute in spatial indexes?
      *
@@ -2709,20 +2847,20 @@ class Mongo extends Adapter
 
 
     /**
-    * Does the adapter support spatial axis order specification?
-    *
-    * @return bool
-    */
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
     public function getSupportForSpatialAxisOrder(): bool
     {
         return false;
     }
 
     /**
-         * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-         *
-         * @return bool
-        */
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
     public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
     {
         return false;
@@ -2742,6 +2880,7 @@ class Mongo extends Adapter
     {
         return false;
     }
+
     /**
      * Does the adapter support identical indexes?
      *
@@ -2959,14 +3098,12 @@ class Mongo extends Adapter
     /**
      * Get the query to check for tenant when in shared tables mode
      *
-     * @param string $collection   The collection being queried
-     * @param string $alias  The alias of the parent collection if in a subquery
+     * @param string $collection The collection being queried
+     * @param string $alias The alias of the parent collection if in a subquery
      * @return string
      */
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
         return '';
     }
-
-
 }

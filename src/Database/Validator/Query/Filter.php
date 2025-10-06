@@ -28,7 +28,7 @@ class Filter extends Base
     public function __construct(
         array $attributes,
         private readonly string $idAttributeType,
-        private readonly int $maxValuesCount = 100,
+        private readonly int $maxValuesCount = 5000,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
         private bool $supportForAttributes = true
@@ -60,11 +60,6 @@ class Filter extends Base
             // For relationships, just validate the top level.
             // will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];
-
-            if (isset($this->schema[$attribute])) {
-                $this->message = 'Cannot query nested attribute on: ' . $attribute;
-                return false;
-            }
         }
 
         // Search for attribute in schema
@@ -88,11 +83,29 @@ class Filter extends Base
             return false;
         }
 
+        $originalAttribute = $attribute;
         // isset check if for special symbols "." in the attribute name
         if (\str_contains($attribute, '.') && !isset($this->schema[$attribute])) {
             // For relationships, just validate the top level.
             // Utopia will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];
+        }
+
+        if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
+            // First check maxValuesCount guard for any IN-style value arrays
+            if (count($values) > $this->maxValuesCount) {
+                $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
+                return false;
+            }
+
+            return true;
+        }
+        $attributeSchema = $this->schema[$attribute];
+
+        // Skip value validation for nested relationship queries (e.g., author.age)
+        // The values will be validated when querying the related collection
+        if ($attributeSchema['type'] === Database::VAR_RELATIONSHIP && $originalAttribute !== $attribute) {
+            return true;
         }
 
         if (count($values) > $this->maxValuesCount) {
@@ -332,6 +345,11 @@ class Filter extends Base
 
                 return false;
         }
+    }
+
+    public function getMaxValuesCount(): int
+    {
+        return $this->maxValuesCount;
     }
 
     public function getMethodType(): string

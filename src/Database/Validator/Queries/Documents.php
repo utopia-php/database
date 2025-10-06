@@ -27,7 +27,7 @@ class Documents extends IndexedQueries
         array $attributes,
         array $indexes,
         string $idAttributeType,
-        int $maxValuesCount = 100,
+        int $maxValuesCount = 5000,
         \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
         bool $supportForAttributes = true

@@ -1513,66 +1513,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-    * Is internal casting supported?
-    *
-    * @return bool
-    */
-    public function getSupportForInternalCasting(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Does the adapter support multiple fulltext indexes?
-     *
-     * @return bool
-     */
-    public function getSupportForMultipleFulltextIndexes(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Does the adapter support identical indexes?
-     *
-     * @return bool
-     */
-    public function getSupportForIdenticalIndexes(): bool
-    {
-        return true;
-    }
-
-    /**
-     * Does the adapter support random order for queries?
-     *
-     * @return bool
-     */
-    public function getSupportForOrderRandom(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForUTCCasting(): bool
-    {
-        return false;
-    }
-
-    public function setUTCDatetime(string $value): mixed
-    {
-        return $value;
-    }
-
-    public function castingBefore(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
-    public function castingAfter(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
-    /**
      * Does the adapter support spatial axis order specification?
      *
      * @return bool
@@ -1941,10 +1881,10 @@ abstract class SQL extends Adapter
      *
      * @param array<string> $selections
      * @param string $prefix
-     * @return mixed
+     * @return string
      * @throws Exception
      */
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
+    protected function getAttributeProjection(array $selections, string $prefix): string
     {
         if (empty($selections) || \in_array('*', $selections)) {
             return "{$this->quote($prefix)}.*";

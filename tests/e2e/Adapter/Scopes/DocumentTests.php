@@ -30,9 +30,6 @@ trait DocumentTests
         $database->createCollection(__FUNCTION__);
 
         $sequence = 5_000_000_000_000_000;
-        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
-            $sequence = '01995753-881b-78cf-9506-2cffecf8f227';
-        }
 
         $document = $database->createDocument(__FUNCTION__, new Document([
             '$sequence' => (string)$sequence,
@@ -70,11 +67,6 @@ trait DocumentTests
         $this->assertEquals(true, $database->createAttribute('documents', 'with-dash', Database::VAR_STRING, 128, false, null));
         $this->assertEquals(true, $database->createAttribute('documents', 'id', Database::VAR_ID, 0, false, null));
 
-        $sequence = '1000000';
-        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
-            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc' ;
-        }
-
         $document = $database->createDocument('documents', new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -101,10 +93,10 @@ trait DocumentTests
             'colors' => ['pink', 'green', 'blue'],
             'empty' => [],
             'with-dash' => 'Works',
-            'id' => $sequence,
+            'id' => '1000000',
         ]));
 
-        $this->assertNotEmpty($document->getId());
+        $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($document->getAttribute('integer_signed'));
@@ -126,18 +118,12 @@ trait DocumentTests
         $this->assertEquals([], $document->getAttribute('empty'));
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
         $this->assertIsString($document->getAttribute('id'));
-        $this->assertEquals($sequence, $document->getAttribute('id'));
-
-
-        $sequence = '56000';
-        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
-            $sequence = '01890dd5-7331-7f3a-9c1b-123456789def' ;
-        }
+        $this->assertEquals('1000000', $document->getAttribute('id'));
 
         // Test create document with manual internal id
         $manualIdDocument = $database->createDocument('documents', new Document([
             '$id' => '56000',
-            '$sequence' => $sequence,
+            '$sequence' => '56000',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::read(Role::user(ID::custom('1'))),
@@ -165,8 +151,8 @@ trait DocumentTests
             'with-dash' => 'Works',
         ]));
 
-        $this->assertEquals($sequence, $manualIdDocument->getSequence());
-        $this->assertNotEmpty($manualIdDocument->getId());
+        $this->assertEquals('56000', $manualIdDocument->getSequence());
+        $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
@@ -191,8 +177,8 @@ trait DocumentTests
 
         $manualIdDocument = $database->getDocument('documents', '56000');
 
-        $this->assertEquals($sequence, $manualIdDocument->getSequence());
-        $this->assertNotEmpty($manualIdDocument->getId());
+        $this->assertEquals('56000', $manualIdDocument->getSequence());
+        $this->assertNotEmpty(true, $manualIdDocument->getId());
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
@@ -229,10 +215,8 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertTrue($e instanceof StructureException);
-                $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
-            }
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertStringContainsString('Invalid document structure: Attribute "float_unsigned" has invalid type. Value must be a valid range between 0 and', $e->getMessage());
         }
 
         try {
@@ -250,10 +234,8 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertTrue($e instanceof StructureException);
-                $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
-            }
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid range between 0 and 9,223,372,036,854,775,807', $e->getMessage());
         }
 
         try {
@@ -274,10 +256,8 @@ trait DocumentTests
             ]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertTrue($e instanceof StructureException);
-                $this->assertEquals('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
-            }
+            $this->assertTrue($e instanceof StructureException);
+            $this->assertEquals('Invalid document structure: Attribute "$sequence" has invalid type. Invalid sequence value', $e->getMessage());
         }
 
         /**
@@ -299,29 +279,24 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => '',
         ]));
-        $this->assertNotEmpty($documentIdNull->getSequence());
+        $this->assertNotEmpty(true, $documentIdNull->getSequence());
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $documentIdNull = $database->getDocument('documents', $documentIdNull->getId());
-        $this->assertNotEmpty($documentIdNull->getId());
+        $this->assertNotEmpty(true, $documentIdNull->getId());
         $this->assertNull($documentIdNull->getAttribute('id'));
 
         $documentIdNull = $database->findOne('documents', [
             query::isNull('id')
         ]);
-        $this->assertNotEmpty($documentIdNull->getId());
+        $this->assertNotEmpty(true, $documentIdNull->getId());
         $this->assertNull($documentIdNull->getAttribute('id'));
-
-        $sequence = '0';
-        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
-            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc';
-        }
 
         /**
          * Insert ID attribute with '0'
          */
         $documentId0 = $database->createDocument('documents', new Document([
-            'id' => $sequence,
+            'id' => '0',
             '$permissions' => [Permission::read(Role::any())],
             'string' => '',
             'integer_signed' => 1,
@@ -335,22 +310,21 @@ trait DocumentTests
             'empty' => [],
             'with-dash' => '',
         ]));
-        $this->assertNotEmpty($documentId0->getSequence());
-
+        $this->assertNotEmpty(true, $documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
+        $this->assertEquals('0', $documentId0->getAttribute('id'));
 
         $documentId0 = $database->getDocument('documents', $documentId0->getId());
-        $this->assertNotEmpty($documentId0->getSequence());
+        $this->assertNotEmpty(true, $documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
+        $this->assertEquals('0', $documentId0->getAttribute('id'));
 
         $documentId0 = $database->findOne('documents', [
-            query::equal('id', [$sequence])
+            query::equal('id', ['0'])
         ]);
-        $this->assertNotEmpty($documentId0->getSequence());
+        $this->assertNotEmpty(true, $documentId0->getSequence());
         $this->assertIsString($documentId0->getAttribute('id'));
-        $this->assertEquals($sequence, $documentId0->getAttribute('id'));
+        $this->assertEquals('0', $documentId0->getAttribute('id'));
 
 
         return $document;
@@ -425,7 +399,7 @@ trait DocumentTests
         $this->assertEquals($count, \count($results));
 
         foreach ($results as $document) {
-            $this->assertNotEmpty($document->getId());
+            $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -441,7 +415,7 @@ trait DocumentTests
         $this->assertEquals($count, \count($documents));
 
         foreach ($documents as $document) {
-            $this->assertNotEmpty($document->getId());
+            $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -462,19 +436,12 @@ trait DocumentTests
 
         /** @var array<Document> $documents */
         $documents = [];
-        $offset = 1000000;
-        for ($i = $offset; $i <= ($offset + 10); $i++) {
-            $sequence = (string)$i;
-            if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
-                // Replace last 6 digits with $i to make it unique
-                $suffix = str_pad(substr((string)$i, -6), 6, '0', STR_PAD_LEFT);
-                $sequence = '01890dd5-7331-7f3a-9c1b-123456' . $suffix;
-            }
+        $count = 10;
+        $sequence = 1_000_000;
 
-            $hash[$i] = $sequence;
-
+        for ($i = $sequence; $i <= ($sequence + $count); $i++) {
             $documents[] = new Document([
-                '$sequence' => $sequence,
+                '$sequence' => (string)$i,
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::create(Role::any()),
@@ -491,10 +458,9 @@ trait DocumentTests
         $documents = $database->find(__FUNCTION__, [
             Query::orderAsc()
         ]);
-
         foreach ($documents as $index => $document) {
-            $this->assertEquals($hash[$index + $offset], $document->getSequence());
-            $this->assertNotEmpty($document->getId());
+            $this->assertEquals($sequence + $index, $document->getSequence());
+            $this->assertNotEmpty(true, $document->getId());
             $this->assertEquals('text', $document->getAttribute('string'));
         }
     }
@@ -695,8 +661,8 @@ trait DocumentTests
         $createdAt = [];
         foreach ($results as $index => $document) {
             $createdAt[$index] = $document->getCreatedAt();
-            $this->assertNotEmpty($document->getId());
-            $this->assertNotEmpty($document->getSequence());
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty(true, $document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -710,7 +676,7 @@ trait DocumentTests
         $this->assertEquals(2, count($documents));
 
         foreach ($documents as $document) {
-            $this->assertNotEmpty($document->getId());
+            $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -732,8 +698,8 @@ trait DocumentTests
         $this->assertEquals(2, $count);
 
         foreach ($results as $document) {
-            $this->assertNotEmpty($document->getId());
-            $this->assertNotEmpty($document->getSequence());
+            $this->assertNotEmpty(true, $document->getId());
+            $this->assertNotEmpty(true, $document->getSequence());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -748,7 +714,7 @@ trait DocumentTests
 
         foreach ($documents as $index => $document) {
             $this->assertEquals($createdAt[$index], $document->getCreatedAt());
-            $this->assertNotEmpty($document->getId());
+            $this->assertNotEmpty(true, $document->getId());
             $this->assertIsString($document->getAttribute('string'));
             $this->assertEquals('new text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
             $this->assertIsInt($document->getAttribute('integer'));
@@ -968,9 +934,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            if ($database->getAdapter()->getSupportForAttributes()) {
-                $this->assertTrue($e instanceof StructureException, $e->getMessage());
-            }
+            $this->assertTrue($e instanceof StructureException, $e->getMessage());
         }
 
         // Ensure missing optionals on existing document is allowed
@@ -1164,7 +1128,7 @@ trait DocumentTests
             ],
         ]));
 
-        $this->assertNotEmpty($document->getId());
+        $this->assertNotEmpty(true, $document->getId());
         $this->assertNull($document->getAttribute('string'));
         $this->assertNull($document->getAttribute('integer'));
         $this->assertNull($document->getAttribute('bigint'));
@@ -1203,7 +1167,7 @@ trait DocumentTests
         $this->assertEquals('update("any")', $document2->getPermissions()[2]);
         $this->assertEquals('delete("any")', $document2->getPermissions()[3]);
 
-        $this->assertNotEmpty($document->getId());
+        $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('default', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer'));
@@ -1365,7 +1329,7 @@ trait DocumentTests
 
         $document = $database->getDocument('documents', $document->getId());
 
-        $this->assertNotEmpty($document->getId());
+        $this->assertNotEmpty(true, $document->getId());
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer_signed'));
@@ -3554,11 +3518,6 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForOrderRandom()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
         // Test orderRandom with default limit
         $documents = $database->find('movies', [
             Query::orderRandom(),
@@ -4218,7 +4177,7 @@ trait DocumentTests
 
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
-        $this->assertNotEmpty($new->getId());
+        $this->assertNotEmpty(true, $new->getId());
         $this->assertIsString($new->getAttribute('string'));
         $this->assertEquals('text📝 updated', $new->getAttribute('string'));
         $this->assertIsInt($new->getAttribute('integer_signed'));
@@ -5259,19 +5218,16 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-        if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->expectException(Exception::class);
-            if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
-                $this->expectExceptionMessage('Fulltext index is not supported');
-            } else {
-                $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a fulltext index, must be of type string');
-            }
 
-            $database->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
+        $this->expectException(Exception::class);
+
+        if (!$this->getDatabase()->getAdapter()->getSupportForFulltextIndex()) {
+            $this->expectExceptionMessage('Fulltext index is not supported');
         } else {
-            $this->expectNotToPerformAssertions();
-            return;
+            $this->expectExceptionMessage('Attribute "integer_signed" cannot be part of a FULLTEXT index, must be of type string');
         }
+
+        $database->createIndex('documents', 'fulltext_integer', Database::INDEX_FULLTEXT, ['string','integer_signed']);
     }
 
     public function testEnableDisableValidation(): void
@@ -5355,13 +5311,8 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        $sequence = '200';
-        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
-            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc' ;
-        }
-
         $document->setAttribute('$id', 'caseSensitive');
-        $document->setAttribute('$sequence', $sequence);
+        $document->setAttribute('$sequence', '200');
         $database->createDocument($document->getCollection(), $document);
 
         $document->setAttribute('$id', 'CaseSensitive');
@@ -6164,106 +6115,6 @@ trait DocumentTests
         }
         $database->deleteCollection($colName);
     }
-
-    public function testSchemalessDocumentOperation(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $colName = uniqid("schemaless");
-        $database->createCollection($colName);
-        $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
-        $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false, 'value');
-
-        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
-
-        // Valid documents without any predefined attributes
-        $docs = [
-            new Document(['$id' => 'doc1', '$permissions' => $permissions, 'freeA' => 'doc1']),
-            new Document(['$id' => 'doc2', '$permissions' => $permissions, 'freeB' => 'test']),
-            new Document(['$id' => 'doc3', '$permissions' => $permissions]),
-        ];
-        $this->assertEquals(3, $database->createDocuments($colName, $docs));
-
-        // Any extra attributes should be allowed (fully schemaless)
-        $docs = [
-            new Document(['$id' => 'doc11', 'title' => 'doc1', '$permissions' => $permissions]),
-            new Document(['$id' => 'doc21', 'moviename' => 'doc2', 'moviedescription' => 'test', '$permissions' => $permissions]),
-            new Document(['$id' => 'doc31', '$permissions' => $permissions]),
-        ];
-
-        $createdDocs = $database->createDocuments($colName, $docs);
-        $this->assertEquals(3, $createdDocs);
-
-        // Create a single document with extra attribute as well
-        $single = $database->createDocument($colName, new Document(['$id' => 'docS', 'extra' => 'yes', '$permissions' => $permissions]));
-        $this->assertEquals('docS', $single->getId());
-        $this->assertEquals('yes', $single->getAttribute('extra'));
-
-        $found = $database->find($colName);
-        $this->assertCount(7, $found);
-        $doc11 = $database->getDocument($colName, 'doc11');
-        $this->assertEquals('doc1', $doc11->getAttribute('title'));
-
-        $doc21 = $database->getDocument($colName, 'doc21');
-        $this->assertEquals('doc2', $doc21->getAttribute('moviename'));
-        $this->assertEquals('test', $doc21->getAttribute('moviedescription'));
-
-        $updated = $database->updateDocument($colName, 'doc31', new Document(['moviename' => 'updated']))
-        ;
-        $this->assertEquals('updated', $updated->getAttribute('moviename'));
-
-        $this->assertTrue($database->deleteDocument($colName, 'doc21'));
-        $deleted = $database->getDocument($colName, 'doc21');
-        $this->assertTrue($deleted->isEmpty());
-        $remaining = $database->find($colName);
-        $this->assertCount(6, $remaining);
-
-        // Bulk update: set a new extra attribute on all remaining docs
-        $modified = $database->updateDocuments($colName, new Document(['bulkExtra' => 'yes']));
-        $this->assertEquals(6, $modified);
-        $all = $database->find($colName);
-        foreach ($all as $doc) {
-            $this->assertEquals('yes', $doc->getAttribute('bulkExtra'));
-        }
-
-        // Upsert: create new and update existing with extra attributes preserved
-        $upserts = [
-            new Document(['$id' => 'docU1', 'extraU' => 1, '$permissions' => $permissions]),
-            new Document(['$id' => 'doc1', 'extraU' => 2, '$permissions' => $permissions]),
-        ];
-        $countUpserts = $database->upsertDocuments($colName, $upserts);
-        $this->assertEquals(2, $countUpserts);
-        $docU1 = $database->getDocument($colName, 'docU1');
-        $this->assertEquals(1, $docU1->getAttribute('extraU'));
-        $doc1AfterUpsert = $database->getDocument($colName, 'doc1');
-        $this->assertEquals(2, $doc1AfterUpsert->getAttribute('extraU'));
-
-        // Increase/Decrease numeric attribute: add numeric attribute and mutate it
-        $database->createAttribute($colName, 'counter', Database::VAR_INTEGER, 0, false, 0);
-        $docS = $database->getDocument($colName, 'docS');
-        $this->assertEquals(0, $docS->getAttribute('counter'));
-        $docS = $database->increaseDocumentAttribute($colName, 'docS', 'counter', 5);
-        $this->assertEquals(5, $docS->getAttribute('counter'));
-        $docS = $database->decreaseDocumentAttribute($colName, 'docS', 'counter', 3);
-        $this->assertEquals(2, $docS->getAttribute('counter'));
-
-        $deletedByCounter = $database->deleteDocuments($colName, [Query::equal('counter', [2])]);
-        $this->assertEquals(1, $deletedByCounter);
-
-        $deletedCount = $database->deleteDocuments($colName, [Query::startsWith('$id', 'doc')]);
-        $this->assertEquals(6, $deletedCount);
-        $postDelete = $database->find($colName);
-        $this->assertCount(0, $postDelete);
-
-        $database->deleteCollection($colName);
-    }
-
     public function testDecodeWithDifferentSelectionTypes(): void
     {
         /** @var Database $database */
@@ -6273,7 +6124,6 @@ trait DocumentTests
             $this->expectNotToPerformAssertions();
             return;
         }
-
 
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -6432,45 +6282,6 @@ trait DocumentTests
         $database->deleteCollection($storesId);
     }
 
-    public function testSchemalessDocumentInvalidInteralAttributeValidation(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        // test to ensure internal attributes are checked during creating schemaless document
-        if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $colName = uniqid("schemaless");
-        $database->createCollection($colName);
-        try {
-            $docs = [
-                new Document(['$id' => true, 'freeA' => 'doc1']),
-                new Document(['$id' => true, 'freeB' => 'test']),
-                new Document(['$id' => true]),
-            ];
-            $database->createDocuments($colName, $docs);
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
-
-        try {
-            $docs = [
-                new Document(['$createdAt' => true, 'freeA' => 'doc1']),
-                new Document(['$updatedAt' => true, 'freeB' => 'test']),
-                new Document(['$permissions' => 12]),
-            ];
-            $database->createDocuments($colName, $docs);
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
-
-        $database->deleteCollection($colName);
-
-    }
-
     public function testDecodeWithoutRelationships(): void
     {
         /** @var Database $database */
@@ -6480,7 +6291,6 @@ trait DocumentTests
             $this->expectNotToPerformAssertions();
             return;
         }
-
 
         $database->addFilter(
             'encryptTest',
@@ -6573,41 +6383,10 @@ trait DocumentTests
         $database->deleteCollection($collectionId);
     }
 
-    public function testSchemaEnforcedDocumentCreation(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $colName = uniqid("schema");
-        $database->createCollection($colName);
-        $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
-        $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false, 'value');
-
-        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
-
-        // Extra attributes should fail
-        $docs = [
-            new Document(['$id' => 'doc11', 'key' => 'doc1', 'title' => 'doc1', '$permissions' => $permissions]),
-            new Document(['$id' => 'doc21', 'key' => 'doc2', 'moviename' => 'doc2', 'moviedescription' => 'test', '$permissions' => $permissions]),
-            new Document(['$id' => 'doc31', 'key' => 'doc3', '$permissions' => $permissions]),
-        ];
-
-        $this->expectException(StructureException::class);
-        $database->createDocuments($colName, $docs);
-
-        $database->deleteCollection($colName);
-    }
-
     public function testDecodeWithMultipleFilters(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();
-
 
         $database->addFilter(
             'upperCase',

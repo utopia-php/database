@@ -16,11 +16,13 @@ FROM php:8.3.19-cli-alpine3.21 AS compile
 
 ENV PHP_REDIS_VERSION="6.0.2" \
     PHP_SWOOLE_VERSION="v5.1.7" \
-    PHP_XDEBUG_VERSION="3.4.2" \
-    PHP_MONGODB_VERSION="2.1.1"
+    PHP_XDEBUG_VERSION="3.4.2"
+
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-RUN apk update && apk add --no-cache \
+RUN \
+  apk update \
+  && apk add --no-cache \
     postgresql-libs \
     postgresql-dev \
     make \
@@ -33,11 +35,9 @@ RUN apk update && apk add --no-cache \
     linux-headers \
     docker-cli \
     docker-cli-compose \
- && pecl install mongodb-$PHP_MONGODB_VERSION \
- && docker-php-ext-enable mongodb \
- && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
- && apk del postgresql-dev \
- && rm -rf /var/cache/apk/*
+  && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
+  && apk del postgresql-dev \
+  && rm -rf /var/cache/apk/*
 
 # Redis Extension
 FROM compile AS redis

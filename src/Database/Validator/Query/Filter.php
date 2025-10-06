@@ -31,7 +31,6 @@ class Filter extends Base
         private readonly int $maxValuesCount = 5000,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
-        private bool $supportForAttributes = true
     ) {
         foreach ($attributes as $attribute) {
             $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
@@ -63,7 +62,7 @@ class Filter extends Base
         }
 
         // Search for attribute in schema
-        if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
+        if (!isset($this->schema[$attribute])) {
             $this->message = 'Attribute not found in schema: ' . $attribute;
             return false;
         }
@@ -91,15 +90,6 @@ class Filter extends Base
             $attribute = \explode('.', $attribute)[0];
         }
 
-        if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
-            // First check maxValuesCount guard for any IN-style value arrays
-            if (count($values) > $this->maxValuesCount) {
-                $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
-                return false;
-            }
-
-            return true;
-        }
         $attributeSchema = $this->schema[$attribute];
 
         // Skip value validation for nested relationship queries (e.g., author.age)

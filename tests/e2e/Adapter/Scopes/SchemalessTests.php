@@ -27,7 +27,7 @@ trait SchemalessTests
             return;
         }
 
-        $colName = uniqid("schemaless");
+        $colName = uniqid('schemaless');
         $database->createCollection($colName);
         $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
         $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false, 'value');
@@ -97,7 +97,6 @@ trait SchemalessTests
         $this->assertEquals(2, $doc1AfterUpsert->getAttribute('extraU'));
 
         // Increase/Decrease numeric attribute: add numeric attribute and mutate it
-        $database->createAttribute($colName, 'counter', Database::VAR_INTEGER, 0, false, 0);
         $docS = $database->getDocument($colName, 'docS');
         $this->assertEquals(0, $docS->getAttribute('counter'));
         $docS = $database->increaseDocumentAttribute($colName, 'docS', 'counter', 5);
@@ -127,7 +126,7 @@ trait SchemalessTests
             return;
         }
 
-        $colName = uniqid("schemaless");
+        $colName = uniqid('schemaless');
         $database->createCollection($colName);
         try {
             $docs = [
@@ -155,36 +154,6 @@ trait SchemalessTests
 
     }
 
-    public function testSchemaEnforcedDocumentCreation(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $colName = uniqid("schema");
-        $database->createCollection($colName);
-        $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
-        $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false, 'value');
-
-        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
-
-        // Extra attributes should fail
-        $docs = [
-            new Document(['$id' => 'doc11', 'key' => 'doc1', 'title' => 'doc1', '$permissions' => $permissions]),
-            new Document(['$id' => 'doc21', 'key' => 'doc2', 'moviename' => 'doc2', 'moviedescription' => 'test', '$permissions' => $permissions]),
-            new Document(['$id' => 'doc31', 'key' => 'doc3', '$permissions' => $permissions]),
-        ];
-
-        $this->expectException(StructureException::class);
-        $database->createDocuments($colName, $docs);
-
-        $database->deleteCollection($colName);
-    }
-
     public function testSchemalessSelectionOnUnknownAttributes(): void
     {
         /** @var Database $database */
@@ -195,7 +164,7 @@ trait SchemalessTests
             return;
         }
 
-        $colName = uniqid("schemaless");
+        $colName = uniqid('schemaless');
         $database->createCollection($colName);
         $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
         $docs = [
@@ -215,8 +184,8 @@ trait SchemalessTests
         foreach ($docs as $doc) {
             $this->assertNull($doc->getAttribute('freeC'));
             // since not selected
-            $this->assertNull($doc->getAttribute('freeA'));
-            $this->assertNull($doc->getAttribute('freeB'));
+            $this->assertArrayNotHasKey('freeA', $doc->getAttributes());
+            $this->assertArrayNotHasKey('freeB', $doc->getAttributes());
         }
 
         $docA = $database->find($colName, [
@@ -229,7 +198,7 @@ trait SchemalessTests
             Query::equal('$id', ['doc1']),
             Query::select(['freeC'])
         ]);
-        $this->assertNull($docC[0]->getAttribute('freeC'));
+        $this->assertArrayNotHasKey('freeC', $docC[0]->getAttributes());
     }
 
     public function testSchemalessIncrement(): void

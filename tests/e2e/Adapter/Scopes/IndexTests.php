@@ -175,13 +175,10 @@ trait IndexTests
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
             $database->getAdapter()->getSupportForIdenticalIndexes()
         );
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->getSupportForIdenticalIndexes()) {
             $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
-        }
-
-        if ($database->getAdapter()->getSupportForAttributes()) {
             try {
                 $database->createCollection($collection->getId(), $attributes, $indexes, [
                     Permission::read(Role::any()),

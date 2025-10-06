@@ -2333,7 +2333,7 @@ class Mongo extends Adapter
                     $filter['$or'] = array_map(function ($val) use ($attribute) {
                         return [
                             $attribute => [
-                                '$regex' => new Regex(".*{$this->escapeWildcards($val)}.*", 'i')
+                                '$regex' => $this->createSafeRegex($val, '.*%s.*', 'i')
                             ]
                         ];
                     }, $value);

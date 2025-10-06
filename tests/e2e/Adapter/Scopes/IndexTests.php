@@ -244,6 +244,15 @@ trait IndexTests
             'indexes' => $indexes
         ]);
 
+        // not using $indexes[0] as the index validator skips indexes with same id
+        $newIndex = new Document([
+            '$id' => ID::custom('newIndex1'),
+            'type' => Database::INDEX_FULLTEXT,
+            'attributes' => ['title1', 'integer'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+
         $validator = new Index(
             $attributes,
             $indexes,
@@ -258,7 +267,7 @@ trait IndexTests
             $database->getAdapter()->getSupportForIdenticalIndexes()
         );
 
-        $this->assertFalse($validator->isValid($indexes[0]));
+        $this->assertFalse($validator->isValid($newIndex));
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());

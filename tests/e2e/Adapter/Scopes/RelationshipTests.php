@@ -4400,7 +4400,7 @@ trait RelationshipTests
     }
 
     /**
-     // and cursor queries properly reject relationship (dot-path) attributes.
+     * Test that order and cursor queries properly reject relationship (dot-path) attributes.
      *
      * Relationship attributes like 'author.name' are NOT supported for ordering because:
      * 1. Only filter queries go through convertRelationshipFiltersToSubqueries()

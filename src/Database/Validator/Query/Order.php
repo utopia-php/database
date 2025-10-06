@@ -37,6 +37,11 @@ class Order extends Base
             // For relationships, just validate the top level.
             // Will validate each nested level during the recursive calls.
             $attribute = \explode('.', $attribute)[0];
+
+            if (isset($this->schema[$attribute])) {
+                $this->message = 'Cannot order by nested attribute: ' . $attribute;
+                return false;
+            }
         }
 
         // Search for attribute in schema

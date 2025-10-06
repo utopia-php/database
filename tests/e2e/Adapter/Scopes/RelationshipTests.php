@@ -4344,51 +4344,51 @@ trait RelationshipTests
             'author' => 'author2',
         ]));
 
-        // Test 1: Count posts by author name
+        // Count posts by author name
         $count = $database->count('postsCount', [
             Query::equal('author.name', ['Alice']),
         ]);
         $this->assertEquals(3, $count);
 
-        // Test 2: Count published posts by author age filter
+        // Count published posts by author age filter
         $count = $database->count('postsCount', [
             Query::lessThan('author.age', 30),
             Query::equal('published', [true]),
         ]);
         $this->assertEquals(1, $count); // Only Bob's published post
 
-        // Test 3: Count posts by author name (different author)
+        // Count posts by author name (different author)
         $count = $database->count('postsCount', [
             Query::equal('author.name', ['Bob']),
         ]);
         $this->assertEquals(2, $count);
 
-        // Test 4: Count with no matches (author with no posts)
+        // Count with no matches (author with no posts)
         $count = $database->count('postsCount', [
             Query::equal('author.name', ['Charlie']),
         ]);
         $this->assertEquals(0, $count);
 
-        // Test 5: Sum views for posts by author name
+        // Sum views for posts by author name
         $sum = $database->sum('postsCount', 'views', [
             Query::equal('author.name', ['Alice']),
         ]);
         $this->assertEquals(350, $sum); // 100 + 200 + 50
 
-        // Test 6: Sum views for published posts by author age
+        // Sum views for published posts by author age
         $sum = $database->sum('postsCount', 'views', [
             Query::lessThan('author.age', 30),
             Query::equal('published', [true]),
         ]);
         $this->assertEquals(150, $sum); // Only Bob's published post
 
-        // Test 7: Sum views for Bob's posts
+        // Sum views for Bob's posts
         $sum = $database->sum('postsCount', 'views', [
             Query::equal('author.name', ['Bob']),
         ]);
         $this->assertEquals(225, $sum); // 150 + 75
 
-        // Test 8: Sum with no matches
+        // Sum with no matches
         $sum = $database->sum('postsCount', 'views', [
             Query::equal('author.name', ['Charlie']),
         ]);
@@ -4397,5 +4397,111 @@ trait RelationshipTests
         // Clean up
         $database->deleteCollection('authorsCount');
         $database->deleteCollection('postsCount');
+    }
+
+    /**
+     // and cursor queries properly reject relationship (dot-path) attributes.
+     *
+     * Relationship attributes like 'author.name' are NOT supported for ordering because:
+     * 1. Only filter queries go through convertRelationshipFiltersToSubqueries()
+     * 2. Order attributes are passed directly to the adapter without relationship resolution
+     * 3. The Order validator now catches dot-path attributes and rejects them with a clear error
+     * 4. Cursor validation doesn't need separate dot-path checks since order validation runs first
+     */
+    public function testOrderAndCursorWithRelationshipQueries(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection('authorsOrder');
+        $database->createCollection('postsOrder');
+
+        $database->createAttribute('authorsOrder', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('authorsOrder', 'age', Database::VAR_INTEGER, 0, true);
+
+        $database->createAttribute('postsOrder', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('postsOrder', 'views', Database::VAR_INTEGER, 0, true);
+
+        $database->createRelationship(
+            collection: 'postsOrder',
+            relatedCollection: 'authorsOrder',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'author',
+            twoWayKey: 'postsOrder'
+        );
+
+        // Create authors
+        $alice = $database->createDocument('authorsOrder', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Alice',
+            'age' => 30,
+        ]));
+
+        $bob = $database->createDocument('authorsOrder', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Bob',
+            'age' => 25,
+        ]));
+
+        // Create posts
+        $database->createDocument('postsOrder', new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Post 1',
+            'views' => 100,
+            'author' => $alice->getId(),
+        ]));
+
+        $database->createDocument('postsOrder', new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Post 2',
+            'views' => 200,
+            'author' => $bob->getId(),
+        ]));
+
+        $database->createDocument('postsOrder', new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Post 3',
+            'views' => 150,
+            'author' => $alice->getId(),
+        ]));
+
+        // Order by relationship attribute should fail with validation error
+        $caught = false;
+        try {
+            $database->find('postsOrder', [
+                Query::orderAsc('author.name')
+            ]);
+        } catch (\Throwable $e) {
+            $caught = true;
+            $this->assertStringContainsString('Cannot order by nested attribute', $e->getMessage());
+        }
+        $this->assertTrue($caught, 'Should throw exception for nested order attribute');
+
+        // Cursor with relationship order attribute should fail with same validation error
+        $caught = false;
+        try {
+            $firstPost = $database->findOne('postsOrder', [
+                Query::orderAsc('title')
+            ]);
+
+            $database->find('postsOrder', [
+                Query::orderAsc('author.name'),
+                Query::cursorAfter($firstPost)
+            ]);
+        } catch (\Throwable $e) {
+            $caught = true;
+            $this->assertStringContainsString('Cannot order by nested attribute', $e->getMessage());
+        }
+        $this->assertTrue($caught, 'Should throw exception for nested order attribute with cursor');
+
+
+        // Clean up
+        $database->deleteCollection('authorsOrder');
+        $database->deleteCollection('postsOrder');
     }
 }

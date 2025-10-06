@@ -9,9 +9,14 @@ class Key extends Validator
     protected bool $allowInternal = false; // If true, you keys starting with $ are allowed
 
     /**
+     * Maximum length for Key validation
+     */
+    protected const KEY_MAX_LENGTH = 255;
+
+    /**
      * @var string
      */
-    protected string $message = 'Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char';
+    protected string $message = 'Parameter must contain at most ' . self::KEY_MAX_LENGTH . ' chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char';
 
     /**
      * Get Description.
@@ -76,8 +81,8 @@ class Key extends Validator
         if (\preg_match('/[^A-Za-z0-9\_\-\.]/', $value)) {
             return false;
         }
-
-        if (\mb_strlen($value) > 36) {
+        // At most KEY_MAX_LENGTH chars
+        if (\mb_strlen($value) > self::KEY_MAX_LENGTH) {
             return false;
         }
 

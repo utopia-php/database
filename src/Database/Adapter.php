@@ -1099,6 +1099,28 @@ abstract class Adapter
     abstract public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool;
 
     /**
+     * Does the adapter support multiple fulltext indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForMultipleFulltextIndexes(): bool;
+
+
+    /**
+     * Does the adapter support identical indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForIdenticalIndexes(): bool;
+
+    /**
+     * Does the adapter support random order by?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOrderRandom(): bool;
+
+    /**
      * Get current attribute count from collection document
      *
      * @param Document $collection
@@ -1159,9 +1181,9 @@ abstract class Adapter
      *
      * @param array<string> $selections
      * @param string $prefix
-     * @return string
+     * @return mixed
      */
-    abstract protected function getAttributeProjection(array $selections, string $prefix): string;
+    abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
 
     /**
      * Get all selected attributes from queries
@@ -1315,4 +1337,43 @@ abstract class Adapter
      * @return float[][][] Array of rings, each ring is an array of points [x, y]
      */
     abstract public function decodePolygon(string $wkb): array;
+
+    /**
+        * Returns the document after casting
+        * @param Document $collection
+        * @param Document $document
+        * @return Document
+        */
+    abstract public function castingBefore(Document $collection, Document $document): Document;
+
+    /**
+     * Returns the document after casting
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     */
+    abstract public function castingAfter(Document $collection, Document $document): Document;
+
+    /**
+     * Is internal casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForInternalCasting(): bool;
+
+    /**
+     * Is UTC casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUTCCasting(): bool;
+
+    /**
+    * Set UTC Datetime
+    *
+    * @param string $value
+    * @return mixed
+    */
+    abstract public function setUTCDatetime(string $value): mixed;
+
 }

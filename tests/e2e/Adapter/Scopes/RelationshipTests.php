@@ -4504,4 +4504,350 @@ trait RelationshipTests
         $database->deleteCollection('authorsOrder');
         $database->deleteCollection('postsOrder');
     }
+
+    /**
+     * Tests that pagination (limit/offset) works correctly with deep relationship queries.
+     *
+     * Creates a 3-level relationship chain: Articles -> Authors -> Companies
+     * Verifies that filtering by deep relationships combined with pagination returns correct results.
+     */
+    public function testPaginationWithDeepRelationshipQueries(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Create collections for 3-level relationship
+        $database->createCollection('companies');
+        $database->createCollection('authorsPagination');
+        $database->createCollection('articlesPagination');
+
+        // Create attributes
+        $database->createAttribute('companies', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('companies', 'country', Database::VAR_STRING, 255, true);
+
+        $database->createAttribute('authorsPagination', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('authorsPagination', 'age', Database::VAR_INTEGER, 0, true);
+
+        $database->createAttribute('articlesPagination', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('articlesPagination', 'views', Database::VAR_INTEGER, 0, true);
+
+        // Create 3-level relationships: Articles -> Authors -> Companies
+        $database->createRelationship(
+            collection: 'authorsPagination',
+            relatedCollection: 'companies',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'company',
+            twoWayKey: 'authors'
+        );
+
+        $database->createRelationship(
+            collection: 'articlesPagination',
+            relatedCollection: 'authorsPagination',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'author',
+            twoWayKey: 'articles'
+        );
+
+        // Create companies using bulk creation
+        $companies = [];
+        $database->createDocuments('companies', [
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'TechCorp',
+                'country' => 'USA',
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'Innovate Ltd',
+                'country' => 'UK',
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'Startup Inc',
+                'country' => 'USA',
+            ]),
+        ], onNext: function ($doc) use (&$companies) {
+            $companies[] = $doc;
+        });
+
+        $techCorp = $companies[0];
+        $innovateLtd = $companies[1];
+        $startupInc = $companies[2];
+
+        // Create authors using bulk creation
+        $authors = [];
+        $database->createDocuments('authorsPagination', [
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'Alice',
+                'age' => 30,
+                'company' => $techCorp->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'Bob',
+                'age' => 25,
+                'company' => $innovateLtd->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'Charlie',
+                'age' => 35,
+                'company' => $techCorp->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'Diana',
+                'age' => 28,
+                'company' => $startupInc->getId(),
+            ]),
+        ], onNext: function ($doc) use (&$authors) {
+            $authors[] = $doc;
+        });
+
+        $alice = $authors[0];
+        $bob = $authors[1];
+        $charlie = $authors[2];
+        $diana = $authors[3];
+
+        // Create 10 articles using bulk creation
+        $articles = [];
+        $database->createDocuments('articlesPagination', [
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Article 1',
+                'views' => 100,
+                'author' => $alice->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Article 2',
+                'views' => 200,
+                'author' => $alice->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Article 3',
+                'views' => 150,
+                'author' => $charlie->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Article 4',
+                'views' => 300,
+                'author' => $alice->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Article 5',
+                'views' => 250,
+                'author' => $charlie->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Article 6',
+                'views' => 180,
+                'author' => $bob->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Article 7',
+                'views' => 220,
+                'author' => $diana->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Article 8',
+                'views' => 190,
+                'author' => $charlie->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Article 9',
+                'views' => 280,
+                'author' => $diana->getId(),
+            ]),
+            new Document([
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Article 10',
+                'views' => 170,
+                'author' => $alice->getId(),
+            ]),
+        ], onNext: function ($doc) use (&$articles) {
+            $articles[] = $doc;
+        });
+
+        // Test 1: Filter by 2-level deep relationship + pagination
+        // Get articles by authors from TechCorp, with limit
+        $result = $database->find('articlesPagination', [
+            Query::equal('author.company.name', ['TechCorp']),
+            Query::limit(3)
+        ]);
+        $this->assertCount(3, $result);
+        // All should be from Alice or Charlie (both work at TechCorp)
+        foreach ($result as $article) {
+            $author = $article->getAttribute('author');
+            // Author could be either an ID string or a populated Document
+            $authorId = $author instanceof Document ? $author->getId() : $author;
+            $this->assertContains($authorId, [$alice->getId(), $charlie->getId()]);
+        }
+
+        // Test 2: Verify total count without limit
+        $allTechCorpArticles = $database->find('articlesPagination', [
+            Query::equal('author.company.name', ['TechCorp']),
+        ]);
+        $totalTechCorpArticles = count($allTechCorpArticles);
+        $this->assertEquals(7, $totalTechCorpArticles); // Alice (4) + Charlie (3)
+
+        // Test 3: Use offset to get next page
+        $firstPage = $database->find('articlesPagination', [
+            Query::equal('author.company.name', ['TechCorp']),
+            Query::limit(3),
+            Query::offset(0)
+        ]);
+        $this->assertCount(3, $firstPage);
+
+        $secondPage = $database->find('articlesPagination', [
+            Query::equal('author.company.name', ['TechCorp']),
+            Query::limit(3),
+            Query::offset(3)
+        ]);
+        $this->assertCount(3, $secondPage);
+
+        $thirdPage = $database->find('articlesPagination', [
+            Query::equal('author.company.name', ['TechCorp']),
+            Query::limit(3),
+            Query::offset(6)
+        ]);
+        $this->assertCount(1, $thirdPage); // Only 1 remaining
+
+        // Verify no overlap between pages
+        $firstPageIds = array_map(fn($doc) => $doc->getId(), $firstPage);
+        $secondPageIds = array_map(fn($doc) => $doc->getId(), $secondPage);
+        $thirdPageIds = array_map(fn($doc) => $doc->getId(), $thirdPage);
+
+        $this->assertEmpty(array_intersect($firstPageIds, $secondPageIds));
+        $this->assertEmpty(array_intersect($firstPageIds, $thirdPageIds));
+        $this->assertEmpty(array_intersect($secondPageIds, $thirdPageIds));
+
+        // Test 4: Filter by 2-level deep relationship with country + pagination
+        $usaArticles = $database->find('articlesPagination', [
+            Query::equal('author.company.country', ['USA']),
+            Query::limit(5)
+        ]);
+        $this->assertCount(5, $usaArticles);
+
+        // Test 5: Combine multiple deep filters + pagination
+        $complexQuery = $database->find('articlesPagination', [
+            Query::equal('author.company.country', ['USA']),
+            Query::greaterThan('views', 150),
+            Query::limit(4)
+        ]);
+        $this->assertLessThanOrEqual(4, count($complexQuery));
+        foreach ($complexQuery as $article) {
+            $this->assertGreaterThan(150, $article->getAttribute('views'));
+        }
+
+        // Test 6: Verify count() works with deep relationship queries
+        $count = $database->count('articlesPagination', [
+            Query::equal('author.company.name', ['TechCorp']),
+        ]);
+        $this->assertEquals(7, $count);
+
+        // Test 7: Verify sum() works with deep relationship queries
+        $sum = $database->sum('articlesPagination', 'views', [
+            Query::equal('author.company.name', ['TechCorp']),
+        ]);
+        // Alice articles: 100 + 200 + 300 + 170 = 770
+        // Charlie articles: 150 + 250 + 190 = 590
+        // Total: 1360
+        $this->assertEquals(1360, $sum);
+
+        // Test 8: Cursor pagination with deep relationship filters
+        // Order by local attribute (views), filter by deep relationship
+        $firstPage = $database->find('articlesPagination', [
+            Query::equal('author.company.name', ['TechCorp']),
+            Query::orderAsc('views'),
+            Query::limit(3)
+        ]);
+        $this->assertCount(3, $firstPage);
+
+        // Get cursor from last item of first page
+        $lastItemFirstPage = end($firstPage);
+
+        // Get second page using cursor
+        $secondPage = $database->find('articlesPagination', [
+            Query::equal('author.company.name', ['TechCorp']),
+            Query::orderAsc('views'),
+            Query::cursorAfter($lastItemFirstPage),
+            Query::limit(3)
+        ]);
+        $this->assertCount(3, $secondPage);
+
+        // Get third page using cursor
+        $lastItemSecondPage = end($secondPage);
+        $thirdPage = $database->find('articlesPagination', [
+            Query::equal('author.company.name', ['TechCorp']),
+            Query::orderAsc('views'),
+            Query::cursorAfter($lastItemSecondPage),
+            Query::limit(3)
+        ]);
+        $this->assertCount(1, $thirdPage); // Only 1 remaining
+
+        // Verify no overlap between cursor pages
+        $firstPageCursorIds = array_map(fn($doc) => $doc->getId(), $firstPage);
+        $secondPageCursorIds = array_map(fn($doc) => $doc->getId(), $secondPage);
+        $thirdPageCursorIds = array_map(fn($doc) => $doc->getId(), $thirdPage);
+
+        $this->assertEmpty(array_intersect($firstPageCursorIds, $secondPageCursorIds));
+        $this->assertEmpty(array_intersect($firstPageCursorIds, $thirdPageCursorIds));
+        $this->assertEmpty(array_intersect($secondPageCursorIds, $thirdPageCursorIds));
+
+        // Verify ordering is correct (ascending by views)
+        $allCursorPages = array_merge($firstPage, $secondPage, $thirdPage);
+        $this->assertCount(7, $allCursorPages);
+
+        for ($i = 0; $i < count($allCursorPages) - 1; $i++) {
+            $currentViews = $allCursorPages[$i]->getAttribute('views');
+            $nextViews = $allCursorPages[$i + 1]->getAttribute('views');
+            $this->assertLessThanOrEqual($nextViews, $currentViews, 'Cursor pagination should maintain order');
+        }
+
+        // Test 9: Cursor pagination with multiple deep filters
+        $complexFirstPage = $database->find('articlesPagination', [
+            Query::equal('author.company.country', ['USA']),
+            Query::greaterThan('views', 150),
+            Query::orderDesc('views'),
+            Query::limit(2)
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($complexFirstPage));
+
+        if (count($complexFirstPage) > 0) {
+            $lastItem = end($complexFirstPage);
+            $complexSecondPage = $database->find('articlesPagination', [
+                Query::equal('author.company.country', ['USA']),
+                Query::greaterThan('views', 150),
+                Query::orderDesc('views'),
+                Query::cursorAfter($lastItem),
+                Query::limit(2)
+            ]);
+
+            // Verify no overlap
+            $firstIds = array_map(fn($doc) => $doc->getId(), $complexFirstPage);
+            $secondIds = array_map(fn($doc) => $doc->getId(), $complexSecondPage);
+            $this->assertEmpty(array_intersect($firstIds, $secondIds));
+
+            // Verify all results match filters
+            foreach (array_merge($complexFirstPage, $complexSecondPage) as $article) {
+                $this->assertGreaterThan(150, $article->getAttribute('views'));
+            }
+        }
+
+        // Clean up
+        $database->deleteCollection('companies');
+        $database->deleteCollection('authorsPagination');
+        $database->deleteCollection('articlesPagination');
+    }
 }

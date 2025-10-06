@@ -382,11 +382,11 @@ class IndexTest extends TestCase
             ],
         ]);
 
-        $validator = new Index(attributes:$collection->getAttribute('attributes'), indexes:$collection->getAttribute('indexes'), maxLength:768);
+        $validator = new Index(attributes: $collection->getAttribute('attributes'), indexes: $collection->getAttribute('indexes'), maxLength: 768);
         $index = $collection->getAttribute('indexes')[0];
         $this->assertFalse($validator->isValid($index));
 
-        $validator = new Index(attributes: $collection->getAttribute('attributes'), indexes:$collection->getAttribute('indexes'), maxLength: 768, supportForAttributes:false);
+        $validator = new Index(attributes: $collection->getAttribute('attributes'), indexes: $collection->getAttribute('indexes'), maxLength: 768, supportForAttributes: false);
         $index = $collection->getAttribute('indexes')[0];
         $this->assertTrue($validator->isValid($index));
     }

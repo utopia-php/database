@@ -66,8 +66,7 @@ trait SchemalessTests
         $this->assertEquals('doc2', $doc21->getAttribute('moviename'));
         $this->assertEquals('test', $doc21->getAttribute('moviedescription'));
 
-        $updated = $database->updateDocument($colName, 'doc31', new Document(['moviename' => 'updated']))
-        ;
+        $updated = $database->updateDocument($colName, 'doc31', new Document(['moviename' => 'updated']));
         $this->assertEquals('updated', $updated->getAttribute('moviename'));
 
         $this->assertTrue($database->deleteDocument($colName, 'doc21'));

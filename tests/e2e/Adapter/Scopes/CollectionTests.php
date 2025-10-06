@@ -949,7 +949,7 @@ trait CollectionTests
             $this->expectNotToPerformAssertions();
             return;
         }
-        
+
         $database->createCollection('devices');
 
         $database->createRelationship(

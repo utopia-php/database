@@ -5013,7 +5013,6 @@ class Database
         $updatedAt = $updates->getUpdatedAt();
         $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
 
-        $updates = $this->encode($collection, $updates);
         // Check new document structure
         $validator = new PartialStructure(
             $collection,

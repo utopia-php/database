@@ -310,6 +310,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getMaxUIDLength(): int
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getMinDateTime(): \DateTime
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

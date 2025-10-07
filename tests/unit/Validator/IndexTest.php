@@ -349,4 +349,45 @@ class IndexTest extends TestCase
         $index = $collection->getAttribute('indexes')[0];
         $this->assertFalse($validator->isValid($index));
     }
+
+    /**
+     * @throws Exception
+    */
+    public function testIndexWithNoAttributeSupport(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('test'),
+            'name' => 'test',
+            'attributes' => [
+                new Document([
+                    '$id' => ID::custom('title'),
+                    'type' => Database::VAR_STRING,
+                    'format' => '',
+                    'size' => 769,
+                    'signed' => true,
+                    'required' => false,
+                    'default' => null,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => ID::custom('index1'),
+                    'type' => Database::INDEX_KEY,
+                    'attributes' => ['new'],
+                    'lengths' => [],
+                    'orders' => [],
+                ]),
+            ],
+        ]);
+
+        $validator = new Index(attributes: $collection->getAttribute('attributes'), indexes: $collection->getAttribute('indexes'), maxLength: 768);
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertFalse($validator->isValid($index));
+
+        $validator = new Index(attributes: $collection->getAttribute('attributes'), indexes: $collection->getAttribute('indexes'), maxLength: 768, supportForAttributes: false);
+        $index = $collection->getAttribute('indexes')[0];
+        $this->assertTrue($validator->isValid($index));
+    }
 }

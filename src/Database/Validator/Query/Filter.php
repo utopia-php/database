@@ -113,6 +113,11 @@ class Filter extends Base
             return false;
         }
 
+        if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
+            return true;
+        }
+        $attributeSchema = $this->schema[$attribute];
+
         $attributeType = $attributeSchema['type'];
 
         // If the query method is spatial-only, the attribute must be a spatial type

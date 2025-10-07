@@ -3487,7 +3487,7 @@ class Database
         $this->checkQueriesType($queries);
 
         if ($this->validate) {
-            $validator = new DocumentValidator($attributes);
+            $validator = new DocumentValidator($attributes, $this->adapter->getSupportForAttributes());
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }
@@ -5019,6 +5019,7 @@ class Database
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
 
             if (!$validator->isValid($queries)) {
@@ -5892,24 +5893,25 @@ class Database
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        if ($this->adapter->getSupportForAttributes()) {
+            $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
+                return $a['$id'] === $attribute;
+            });
 
-        $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
-            return $a['$id'] === $attribute;
-        });
+            if (empty($attr)) {
+                throw new NotFoundException('Attribute not found');
+            }
 
-        if (empty($attr)) {
-            throw new NotFoundException('Attribute not found');
-        }
+            $whiteList = [
+                self::VAR_INTEGER,
+                self::VAR_FLOAT
+            ];
 
-        $whiteList = [
-            self::VAR_INTEGER,
-            self::VAR_FLOAT
-        ];
-
-        /** @var Document $attr */
-        $attr = \end($attr);
-        if (!\in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
-            throw new TypeException('Attribute must be an integer or float and can not be an array.');
+            /** @var Document $attr */
+            $attr = \end($attr);
+            if (!\in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
+                throw new TypeException('Attribute must be an integer or float and can not be an array.');
+            }
         }
 
         $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $max) {
@@ -5990,25 +5992,27 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
-            return $a['$id'] === $attribute;
-        });
+        if ($this->adapter->getSupportForAttributes()) {
+            $attr = \array_filter($collection->getAttribute('attributes', []), function ($a) use ($attribute) {
+                return $a['$id'] === $attribute;
+            });
 
-        if (empty($attr)) {
-            throw new NotFoundException('Attribute not found');
-        }
+            if (empty($attr)) {
+                throw new NotFoundException('Attribute not found');
+            }
 
-        $whiteList = [
-            self::VAR_INTEGER,
-            self::VAR_FLOAT
-        ];
+            $whiteList = [
+                self::VAR_INTEGER,
+                self::VAR_FLOAT
+            ];
 
-        /**
-         * @var Document $attr
-         */
-        $attr = \end($attr);
-        if (!\in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
-            throw new TypeException('Attribute must be an integer or float and can not be an array.');
+            /**
+             * @var Document $attr
+             */
+            $attr = \end($attr);
+            if (!\in_array($attr->getAttribute('type'), $whiteList) || $attr->getAttribute('array')) {
+                throw new TypeException('Attribute must be an integer or float and can not be an array.');
+            }
         }
 
         $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $min) {
@@ -6563,7 +6567,8 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime()
+                $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
 
             if (!$validator->isValid($queries)) {
@@ -6992,6 +6997,7 @@ class Database
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -7056,6 +7062,7 @@ class Database
                 $this->maxQueryValues,
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -7460,10 +7467,11 @@ class Database
                 $keys[] = $attribute['key'] ?? $attribute['$id'];
             }
         }
-
-        $invalid = \array_diff($selections, $keys);
-        if (!empty($invalid) && !\in_array('*', $invalid)) {
-            throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
+        if ($this->adapter->getSupportForAttributes()) {
+            $invalid = \array_diff($selections, $keys);
+            if (!empty($invalid) && !\in_array('*', $invalid)) {
+                throw new QueryException('Cannot select attributes: ' . \implode(', ', $invalid));
+            }
         }
 
         $selections = \array_merge($selections, $relationshipSelections);

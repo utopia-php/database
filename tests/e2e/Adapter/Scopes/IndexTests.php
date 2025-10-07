@@ -175,19 +175,19 @@ trait IndexTests
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
             $database->getAdapter()->getSupportForIdenticalIndexes()
         );
-
-        $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
-        $this->assertFalse($validator->isValid($indexes[0]));
-        $this->assertEquals($errorMessage, $validator->getDescription());
-
-        try {
-            $database->createCollection($collection->getId(), $attributes, $indexes, [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertEquals($errorMessage, $e->getMessage());
+        if ($database->getAdapter()->getSupportForIdenticalIndexes()) {
+            $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
+            $this->assertFalse($validator->isValid($indexes[0]));
+            $this->assertEquals($errorMessage, $validator->getDescription());
+            try {
+                $database->createCollection($collection->getId(), $attributes, $indexes, [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ]);
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertEquals($errorMessage, $e->getMessage());
+            }
         }
 
         $indexes = [
@@ -202,7 +202,7 @@ trait IndexTests
 
         $collection->setAttribute('indexes', $indexes);
 
-        if ($database->getAdapter()->getMaxIndexLength() > 0) {
+        if ($database->getAdapter()->getSupportForAttributes() && $database->getAdapter()->getMaxIndexLength() > 0) {
             $errorMessage = 'Index length is longer than the maximum: ' . $database->getAdapter()->getMaxIndexLength();
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertEquals($errorMessage, $validator->getDescription());
@@ -244,6 +244,15 @@ trait IndexTests
             'indexes' => $indexes
         ]);
 
+        // not using $indexes[0] as the index validator skips indexes with same id
+        $newIndex = new Document([
+            '$id' => ID::custom('newIndex1'),
+            'type' => Database::INDEX_FULLTEXT,
+            'attributes' => ['title1', 'integer'],
+            'lengths' => [],
+            'orders' => [],
+        ]);
+
         $validator = new Index(
             $attributes,
             $indexes,
@@ -258,7 +267,7 @@ trait IndexTests
             $database->getAdapter()->getSupportForIdenticalIndexes()
         );
 
-        $this->assertFalse($validator->isValid($indexes[0]));
+        $this->assertFalse($validator->isValid($newIndex));
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
@@ -285,37 +294,37 @@ trait IndexTests
                 'orders' => [],
             ]),
         ];
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $errorMessage = 'Negative index length provided for title1';
+            $this->assertFalse($validator->isValid($indexes[0]));
+            $this->assertEquals($errorMessage, $validator->getDescription());
 
-        $errorMessage = 'Negative index length provided for title1';
-        $this->assertFalse($validator->isValid($indexes[0]));
-        $this->assertEquals($errorMessage, $validator->getDescription());
+            try {
+                $database->createCollection(ID::unique(), $attributes, $indexes);
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertEquals($errorMessage, $e->getMessage());
+            }
 
-        try {
-            $database->createCollection(ID::unique(), $attributes, $indexes);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertEquals($errorMessage, $e->getMessage());
-        }
+            $indexes = [
+                new Document([
+                    '$id' => ID::custom('index_extra_lengths'),
+                    'type' => Database::INDEX_KEY,
+                    'attributes' => ['title1', 'title2'],
+                    'lengths' => [100, 100, 100],
+                    'orders' => [],
+                ]),
+            ];
+            $errorMessage = 'Invalid index lengths. Count of lengths must be equal or less than the number of attributes.';
+            $this->assertFalse($validator->isValid($indexes[0]));
+            $this->assertEquals($errorMessage, $validator->getDescription());
 
-        $indexes = [
-            new Document([
-                '$id' => ID::custom('index_extra_lengths'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['title1', 'title2'],
-                'lengths' => [100, 100, 100],
-                'orders' => [],
-            ]),
-        ];
-
-        $errorMessage = 'Invalid index lengths. Count of lengths must be equal or less than the number of attributes.';
-        $this->assertFalse($validator->isValid($indexes[0]));
-        $this->assertEquals($errorMessage, $validator->getDescription());
-
-        try {
-            $database->createCollection(ID::unique(), $attributes, $indexes);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertEquals($errorMessage, $e->getMessage());
+            try {
+                $database->createCollection(ID::unique(), $attributes, $indexes);
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertEquals($errorMessage, $e->getMessage());
+            }
         }
     }
 
@@ -323,6 +332,10 @@ trait IndexTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $database->createCollection(__FUNCTION__);
 

@@ -5013,6 +5013,12 @@ class Database
         $updatedAt = $updates->getUpdatedAt();
         $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
 
+        $updates = $this->encode(
+            $collection,
+            $updates,
+            applyDefaults: false
+        );
+
         // Check new document structure
         $validator = new PartialStructure(
             $collection,
@@ -7050,11 +7056,12 @@ class Database
      *
      * @param Document $collection
      * @param Document $document
+     * @param bool $applyDefaults Whether to apply default values to null attributes
      *
      * @return Document
      * @throws DatabaseException
      */
-    public function encode(Document $collection, Document $document): Document
+    public function encode(Document $collection, Document $document, bool $applyDefaults = true): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
         $internalDateAttributes = ['$createdAt', '$updatedAt'];
@@ -7087,6 +7094,10 @@ class Database
             // False positive "Call to function is_null() with mixed will always evaluate to false"
             // @phpstan-ignore-next-line
             if (is_null($value) && !is_null($default)) {
+                // Skip applying defaults during updates to avoid resetting unspecified attributes
+                if (!$applyDefaults) {
+                    continue;
+                }
                 $value = ($array) ? $default : [$default];
             } else {
                 $value = ($array) ? $value : [$value];

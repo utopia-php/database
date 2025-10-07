@@ -3019,6 +3019,14 @@ class Mongo extends Adapter
         return 1024;
     }
 
+    /**
+     * @return int
+     */
+    public function getMaxUIDLength(): int
+    {
+        return 255;
+    }
+
     public function getConnectionId(): string
     {
         return '0';

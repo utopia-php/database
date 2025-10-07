@@ -2585,7 +2585,7 @@ class Mongo extends Adapter
      */
     public function getSupportForAttributes(): bool
     {
-        return true;
+        return false;
     }
 
     /**

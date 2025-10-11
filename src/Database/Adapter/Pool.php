@@ -245,6 +245,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function updateManyByIds(Document $collection, array $ids, array $attributes): int
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

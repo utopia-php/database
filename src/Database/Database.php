@@ -7334,7 +7334,7 @@ class Database
 
         // Internal attributes allowed if within supported filters
         foreach (Database::INTERNAL_ATTRIBUTES as $internal) {
-            $filters = $internal['filters'] ?? [];
+            $filters = $internal['filters'];
             foreach ($filters as $filter) {
                 if (!in_array($filter, $supported, true)) {
                     return false;

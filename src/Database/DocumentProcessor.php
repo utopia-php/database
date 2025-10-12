@@ -117,6 +117,9 @@ class DocumentProcessor
      *
      * @param Document $collection
      * @param Document $document
+     * @param callable|null $keyMapper
+     * @param array<string> $selections
+     * @param bool $skipCasting
      * @return Document
      */
     public function processRead(
@@ -219,11 +222,11 @@ class DocumentProcessor
         }
 
         // Apply internal attributes at the end to keep behavior consistent
+        // Note: All internal attributes have array=false, so no array handling needed
         foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
-            $key = $attribute['$id'] ?? "";
-            $type = $attribute["type"] ?? "";
-            $array = $attribute["array"] ?? false;
-            $filters = $attribute["filters"] ?? [];
+            $key = $attribute['$id'];
+            $type = $attribute["type"];
+            $filters = $attribute["filters"];
 
             if ($key === '$permissions') {
                 continue;
@@ -240,35 +243,14 @@ class DocumentProcessor
                 }
             }
 
-            if ($array) {
-                if (is_string($value)) {
-                    $decoded = json_decode($value, true);
-                    $value = \is_array($decoded) ? $decoded : $value;
+            if (!empty($filters)) {
+                foreach (array_reverse($filters) as $filter) {
+                    $value = $this->decodeAttribute($filter, $value);
                 }
-                if (!\is_array($value)) {
-                    $value = $value === null ? [] : [$value];
-                }
-
-                $revFilters = empty($filters) ? [] : array_reverse($filters);
-                foreach ($value as $i => $node) {
-                    foreach ($revFilters as $filter) {
-                        $node = $this->decodeAttribute($filter, $node);
-                    }
-                    $value[$i] = $skipCasting ? $node : $this->castNode($type, $node);
-                }
-                if (empty($selections) || \in_array($key, $selections, true) || \in_array('*', $selections, true)) {
-                    $document->setAttribute($key, $value);
-                }
-            } else {
-                if (!empty($filters)) {
-                    foreach (array_reverse($filters) as $filter) {
-                        $value = $this->decodeAttribute($filter, $value);
-                    }
-                }
-                $final = $skipCasting ? $value : $this->castNode($type, $value);
-                if (empty($selections) || \in_array($key, $selections, true) || \in_array('*', $selections, true)) {
-                    $document->setAttribute($key, $final);
-                }
+            }
+            $final = $skipCasting ? $value : $this->castNode($type, $value);
+            if (empty($selections) || \in_array($key, $selections, true) || \in_array('*', $selections, true)) {
+                $document->setAttribute($key, $final);
             }
         }
 
@@ -301,11 +283,16 @@ class DocumentProcessor
     /**
      * Prepare a per-collection plan for batch processing.
      *
+     * @param Document $collection
+     * @param callable|null $keyMapper
+     * @param array<string> $selections
+     * @param bool $skipCasting
      * @return array{
      *   relationships: array<int, array{key:string, mapped:?string}>,
      *   attrs: array<int, array{key:string, mapped:?string, type:string, array:bool, filters:array<int,string>, selected:bool}>,
      *   internals: array<int, array{key:string, type:string, array:bool, filters:array<int,string>, selected:bool}>,
-     *   skipCasting: bool
+     *   skipCasting: bool,
+     *   hasRelSelects: bool
      * }
      */
     private function preparePlan(Document $collection, ?callable $keyMapper, array $selections, bool $skipCasting): array
@@ -338,15 +325,15 @@ class DocumentProcessor
 
         $internals = [];
         foreach (Database::INTERNAL_ATTRIBUTES as $attr) {
-            $key = $attr['$id'] ?? '';
+            $key = $attr['$id'];
             if ($key === '$permissions') {
                 continue;
             }
             $internals[] = [
                 'key' => $key,
-                'type' => $attr['type'] ?? '',
-                'array' => (bool)($attr['array'] ?? false),
-                'filters' => array_reverse($attr['filters'] ?? []),
+                'type' => $attr['type'],
+                'array' => (bool)$attr['array'],
+                'filters' => array_reverse($attr['filters']),
                 'selected' => empty($selections) || in_array($key, $selections, true) || in_array('*', $selections, true),
             ];
         }
@@ -374,7 +361,11 @@ class DocumentProcessor
     /**
      * Batch version of processRead preserving parity semantics.
      *
+     * @param Document $collection
      * @param array<int, Document> $documents
+     * @param callable|null $keyMapper
+     * @param array<string> $selections
+     * @param bool $skipCasting
      * @return array<int, Document>
      */
     public function processReadBatch(
@@ -494,7 +485,7 @@ class DocumentProcessor
             }
 
             // Relationship selection semantic adjustment
-            if (!empty($plan['hasRelSelects'])) {
+            if ($plan['hasRelSelects']) {
                 foreach ($plan['attrs'] as $a) {
                     if ($a['selected']) {
                         continue;

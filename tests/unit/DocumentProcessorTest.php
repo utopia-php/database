@@ -13,7 +13,6 @@ use Utopia\Database\DocumentProcessor;
  */
 class DocumentProcessorTest extends TestCase
 {
-    private Database $database;
     private Document $collection;
     private DocumentProcessor $processor;
 
@@ -90,9 +89,6 @@ class DocumentProcessorTest extends TestCase
         ]);
 
         $this->processor = new DocumentProcessor();
-
-        // Use reflection to access private methods for comparison
-        $this->database = $this->createPartialMock(Database::class, []);
     }
 
     public function testStringAttributeEquivalence(): void
@@ -264,6 +260,10 @@ class DocumentProcessorTest extends TestCase
 
     /**
      * Simulate legacy decode + casting process
+     *
+     * @param Document $doc
+     * @param array<string> $selections
+     * @return Document
      */
     private function legacyProcess(Document $doc, array $selections = []): Document
     {

@@ -107,6 +107,9 @@ function makeDoc(int $i, int $arraySize, bool $spatial = false): Document
 
 $collection = buildCollection((bool)($cfg['spatial'] ?? false));
 
+/**
+ * @return array<int, float>
+ */
 function measure(callable $fn, int $repeat = 1, int $warmup = 0): array
 {
     for ($w = 0; $w < $warmup; $w++) {
@@ -194,6 +197,9 @@ echo "+---------+----------+----------+--------+\n\n";
  */
 class DocumentProcessorWithFilters
 {
+    /**
+     * @var array<string, array{decode: callable}>
+     */
     private static array $filters = [];
 
     public function __construct()
@@ -325,6 +331,9 @@ class DocumentProcessorWithFilters
  */
 class BaselineProcessor
 {
+    /**
+     * @var array<string, array{decode: callable}>
+     */
     private static array $filters = [];
 
     public function __construct()

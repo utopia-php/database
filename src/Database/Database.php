@@ -4763,6 +4763,7 @@ class Database
 
     /**
      * Batch insert junction links for M2M relationships
+     * @param array<string> $relationIds
      */
     private function batchCreateJunctionLinks(
         Document $collection,
@@ -4809,6 +4810,7 @@ class Database
 
     /**
      * Batch update back-references for O2M/M2O relationships when IDs are provided
+     * @param array<string|Document> $relationIds
      */
     private function batchUpdateBackReferences(
         Document $collection,
@@ -4835,7 +4837,7 @@ class Database
                     $relatedCollection,
                     $key,
                     $documentId,
-                    (string)$rid,
+                    $rid instanceof Document ? $rid->getId() : (string)$rid,
                     $relationType,
                     true,
                     $twoWayKey,
@@ -4844,6 +4846,9 @@ class Database
             }
             return;
         }
+
+        /** @var array<string> $stringIds */
+        $relationIds = array_map(fn ($rid) => $rid instanceof Document ? $rid->getId() : $rid, $relationIds);
 
         $this->skipRelationships(function () use ($relatedCollection, $twoWayKey, $documentId, $relationIds) {
             // Prefilter allowed IDs when documentSecurity is enabled by issuing a single authorized find
@@ -4996,6 +5001,26 @@ class Database
         string $twoWayKey,
         string $side
     ): string {
+        // Set back-reference attribute on the relation document BEFORE create/update
+        // This is critical for documents that only have READ permission (not UPDATE)
+        switch ($relationType) {
+            case Database::RELATION_ONE_TO_ONE:
+                if ($twoWay) {
+                    $relation->setAttribute($twoWayKey, $parent->getId());
+                }
+                break;
+            case Database::RELATION_ONE_TO_MANY:
+                if ($side === Database::RELATION_SIDE_PARENT) {
+                    $relation->setAttribute($twoWayKey, $parent->getId());
+                }
+                break;
+            case Database::RELATION_MANY_TO_ONE:
+                if ($side === Database::RELATION_SIDE_CHILD) {
+                    $relation->setAttribute($twoWayKey, $parent->getId());
+                }
+                break;
+        }
+
         // Try to get the related document
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relation->getId()));
 

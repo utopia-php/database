@@ -3,9 +3,9 @@
 require_once __DIR__ . "/../../vendor/autoload.php";
 
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\DocumentProcessor;
-use Utopia\Database\DateTime;
 
 // LEVEL: LIGHT | MEDIUM | HEAVY
 $level = strtoupper($argv[1] ?? "MEDIUM");
@@ -51,7 +51,8 @@ $docs = $cfg["docs"];
 $arraySize = $cfg["array_size"];
 
 // Build a realistic collection schema with filters (optionally spatial)
-function buildCollection(bool $spatial = false): Document {
+function buildCollection(bool $spatial = false): Document
+{
     $attributes = [];
     for ($i = 1; $i <= 3; $i++) {
         $attributes[] = ['$id' => "s{$i}", "type" => Database::VAR_STRING, "array" => false, "filters" => []];
@@ -89,12 +90,13 @@ function makeDoc(int $i, int $arraySize, bool $spatial = false): Document
         "b1" => $i % 2 === 0,
         "d1" => "2024-01-15 10:30:00",
         "d2" => "2024-01-15 15:45:30",
-        "arr" => array_map(fn($k) => "it{$k}", range(1, $arraySize)),
+        "arr" => array_map(fn ($k) => "it{$k}", range(1, $arraySize)),
     ]);
 
     if ($spatial) {
         // Encode spatial as JSON strings to simulate adapter-encoded values
-        $lon = ($i % 180) - 90; $lat = (($i * 2) % 180) - 90;
+        $lon = ($i % 180) - 90;
+        $lat = (($i * 2) % 180) - 90;
         $d->setAttribute('p1', json_encode(['type' => 'Point', 'coordinates' => [$lon, $lat]]));
         $d->setAttribute('ls1', json_encode(['type' => 'LineString', 'coordinates' => [[$lon, $lat], [$lon + 1, $lat + 1], [$lon + 2, $lat + 2]]]));
         $d->setAttribute('pg1', json_encode(['type' => 'Polygon', 'coordinates' => [[[$lon, $lat], [$lon + 1, $lat], [$lon + 1, $lat + 1], [$lon, $lat + 1], [$lon, $lat]]]]));
@@ -105,8 +107,11 @@ function makeDoc(int $i, int $arraySize, bool $spatial = false): Document
 
 $collection = buildCollection((bool)($cfg['spatial'] ?? false));
 
-function measure(callable $fn, int $repeat = 1, int $warmup = 0): array {
-    for ($w = 0; $w < $warmup; $w++) { $fn(); }
+function measure(callable $fn, int $repeat = 1, int $warmup = 0): array
+{
+    for ($w = 0; $w < $warmup; $w++) {
+        $fn();
+    }
     $times = [];
     for ($r = 0; $r < $repeat; $r++) {
         $start = microtime(true);
@@ -138,8 +143,8 @@ $optimizedTimes = measure(function () use ($processor, $collection, $docs, $arra
     }
 }, $repeat, $warmup);
 
-$baselineMs = (int) round($baselineTimes[(int) floor((count($baselineTimes)-1)/2)]);
-$optMs = (int) round($optimizedTimes[(int) floor((count($optimizedTimes)-1)/2)]);
+$baselineMs = (int) round($baselineTimes[(int) floor((count($baselineTimes) - 1) / 2)]);
+$optMs = (int) round($optimizedTimes[(int) floor((count($optimizedTimes) - 1) / 2)]);
 
 $gain = $baselineMs > 0 ? (($baselineMs - $optMs) / $baselineMs) * 100 : 0;
 
@@ -242,7 +247,7 @@ class DocumentProcessorWithFilters
     {
         $attributes = \array_filter(
             $collection->getAttribute("attributes", []),
-            fn($attribute) => $attribute["type"] !== Database::VAR_RELATIONSHIP,
+            fn ($attribute) => $attribute["type"] !== Database::VAR_RELATIONSHIP,
         );
 
         foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
@@ -373,7 +378,7 @@ class BaselineProcessor
     {
         $attributes = \array_filter(
             $collection->getAttribute("attributes", []),
-            fn($attribute) => $attribute["type"] !== Database::VAR_RELATIONSHIP,
+            fn ($attribute) => $attribute["type"] !== Database::VAR_RELATIONSHIP,
         );
         foreach (Database::INTERNAL_ATTRIBUTES as $attribute) {
             $attributes[] = $attribute;

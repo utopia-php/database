@@ -125,14 +125,13 @@ class DocumentProcessor
         ?callable $keyMapper = null,
         array $selections = [],
         bool $skipCasting = false
-    ): Document
-    {
+    ): Document {
         $attributes = $collection->getAttribute("attributes", []);
 
         // Pre-normalize relationship keys like Database::decode
         $relationships = \array_filter(
             $attributes,
-            fn($attribute) => ($attribute['type'] ?? '') === Database::VAR_RELATIONSHIP
+            fn ($attribute) => ($attribute['type'] ?? '') === Database::VAR_RELATIONSHIP
         );
         if (!empty($relationships) && $keyMapper !== null) {
             foreach ($relationships as $relationship) {
@@ -278,7 +277,10 @@ class DocumentProcessor
         $hasRelationshipSelections = false;
         if (!empty($selections)) {
             foreach ($selections as $sel) {
-                if (\str_contains($sel, '.')) { $hasRelationshipSelections = true; break; }
+                if (\str_contains($sel, '.')) {
+                    $hasRelationshipSelections = true;
+                    break;
+                }
             }
         }
         if ($hasRelationshipSelections && !empty($selections) && !\in_array('*', $selections, true)) {
@@ -353,7 +355,10 @@ class DocumentProcessor
         $hasRelationshipSelections = false;
         if (!empty($selections)) {
             foreach ($selections as $sel) {
-                if (\str_contains($sel, '.')) { $hasRelationshipSelections = true; break; }
+                if (\str_contains($sel, '.')) {
+                    $hasRelationshipSelections = true;
+                    break;
+                }
             }
         }
 
@@ -491,7 +496,9 @@ class DocumentProcessor
             // Relationship selection semantic adjustment
             if (!empty($plan['hasRelSelects'])) {
                 foreach ($plan['attrs'] as $a) {
-                    if ($a['selected']) { continue; }
+                    if ($a['selected']) {
+                        continue;
+                    }
                     $key = $a['key'];
                     if (\array_key_exists($key, $filteredValues)) {
                         $document->setAttribute($key, $filteredValues[$key]);

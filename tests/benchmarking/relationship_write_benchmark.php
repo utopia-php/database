@@ -59,6 +59,10 @@ if (!isset($levels[$level])) {
     exit(1);
 }
 
+/**
+ * @param array<string, int> $config
+ * @return array<string, mixed>
+ */
 function bench(array $config, string $shape): array
 {
     Authorization::setRole('any');

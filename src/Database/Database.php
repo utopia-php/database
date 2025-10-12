@@ -4512,7 +4512,7 @@ class Database
                                     $twoWayKey,
                                     $side
                                 );
-                            } else if ($this->isIdOnlyDocument($objRel)) {
+                            } elseif ($this->isIdOnlyDocument($objRel)) {
                                 $idOnlyDocs[] = $objRel;
                             } else {
                                 $richDocsNoNesting[] = $objRel;
@@ -4878,7 +4878,7 @@ class Database
      * @param string $key Relationship attribute key
      * @param string $twoWayKey Two-way relationship key
      * @param string $documentId Parent document ID
-     * @param array<string> $relationIds Array of related document IDs to update
+     * @param array<string|Document> $relationIds Array of related document IDs to update
      * @return void
      */
     private function batchUpdateBackReferences(
@@ -4906,7 +4906,7 @@ class Database
                     $relatedCollection,
                     $key,
                     $documentId,
-                    (string)$rid,
+                    $rid instanceof Document ? $rid->getId() : (string)$rid,
                     $relationType,
                     true,
                     $twoWayKey,
@@ -4916,15 +4916,19 @@ class Database
             return;
         }
 
-        $this->skipRelationships(function () use ($relatedCollection, $twoWayKey, $documentId, $relationIds) {
+        // At this point, all elements are confirmed to be strings
+        /** @var array<string> $stringIds */
+        $stringIds = $relationIds;
+
+        $this->skipRelationships(function () use ($relatedCollection, $twoWayKey, $documentId, $stringIds) {
             // Prefilter allowed IDs when documentSecurity is enabled by issuing a single authorized find
             $relatedDocSecurity = $relatedCollection->getAttribute('documentSecurity', false);
-            $idsAllowed = $relationIds;
+            $idsAllowed = $stringIds;
             if ($relatedDocSecurity) {
                 // Skip authorization to match original relateDocumentsById behavior
                 $allowedDocs = Authorization::skip(fn () => $this->silent(fn () => $this->find(
                     $relatedCollection->getId(),
-                    [Query::select(['$id', '$updatedAt']), Query::equal('$id', $relationIds), Query::limit(count($relationIds))]
+                    [Query::select(['$id', '$updatedAt']), Query::equal('$id', $stringIds), Query::limit(count($stringIds))]
                 )));
                 $idsAllowed = array_map(fn ($d) => $d->getId(), $allowedDocs);
                 if (empty($idsAllowed)) {
@@ -4943,7 +4947,7 @@ class Database
                 // Skip authorization to match original relateDocumentsById behavior
                 $found = Authorization::skip(fn () => $this->silent(fn () => $this->find(
                     $relatedCollection->getId(),
-                    [Query::select(['$id', '$updatedAt']), Query::equal('$id', $relationIds), Query::limit(count($relationIds))]
+                    [Query::select(['$id', '$updatedAt']), Query::equal('$id', $stringIds), Query::limit(count($stringIds))]
                 )));
                 // Conflict check vs request timestamp
                 if (!\is_null($this->timestamp)) {

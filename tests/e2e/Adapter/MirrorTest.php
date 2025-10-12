@@ -76,7 +76,8 @@ class MirrorTest extends Base
             'schema1',
             'schema2',
             'sharedTables',
-            'sharedTablesTenantPerDocument'
+            'sharedTablesTenantPerDocument',
+            'hellodb'
         ];
 
         /**

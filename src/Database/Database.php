@@ -6988,17 +6988,8 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $this->checkQueriesType($queries);
-
-        if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
         $context = new QueryContext();
         $context->add($collection);
-
-        $queries = Query::getFilterQueries($queries);
-        $queries = self::convertQueries($context, $queries);
 
         $this->checkQueriesType($queries);
 
@@ -7026,7 +7017,7 @@ class Database
         );
 
         $queries = Query::groupByType($queries)['filters'];
-        $queries = $this->convertQueries($collection, $queries);
+        $queries = $this->convertQueries($context, $queries);
 
         $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
 
@@ -7060,21 +7051,8 @@ class Database
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($collection->isEmpty()) {
-            throw new NotFoundException('Collection not found');
-        }
-
         $context = new QueryContext();
         $context->add($collection);
-
-        $authorization = new Authorization(self::PERMISSION_READ);
-        if ($authorization->isValid($collection->getRead())) {
-            $skipAuth = true;
-        }
-
-        $queries = Query::getFilterQueries($queries);
-        $queries = self::convertQueries($context, $queries);
 
         $this->checkQueriesType($queries);
 
@@ -7096,7 +7074,7 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $queries = $this->convertQueries($collection, $queries);
+        $queries = $this->convertQueries($context, $queries);
 
         $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
 

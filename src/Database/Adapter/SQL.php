@@ -1851,6 +1851,14 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * @return int
+     */
+    public function getMaxUIDLength(): int
+    {
+        return 36;
+    }
+
+    /**
      * @param Query $query
      * @param array<string, mixed> $binds
      * @return string

@@ -876,6 +876,13 @@ abstract class Adapter
     abstract public function getMaxIndexLength(): int;
 
     /**
+     * Get the maximum UID length for this adapter
+     *
+     * @return int
+     */
+    abstract public function getMaxUIDLength(): int;
+
+    /**
      * Get the minimum supported DateTime value
      *
      * @return \DateTime

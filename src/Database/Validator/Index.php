@@ -326,6 +326,10 @@ class Index extends Validator
             return false;
         }
 
+        if (!$this->checkMultipleFulltextIndex($value)) {
+            return false;
+        }
+
         if (!$this->checkFulltextIndexNonString($value)) {
             return false;
         }
@@ -343,10 +347,6 @@ class Index extends Validator
         }
 
         if (!$this->checkSpatialIndex($value)) {
-            return false;
-        }
-
-        if (!$this->checkMultipleFulltextIndex($value)) {
             return false;
         }
 

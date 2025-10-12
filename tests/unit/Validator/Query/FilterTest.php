@@ -122,13 +122,14 @@ class FilterTest extends TestCase
 
     public function testMaxValuesCount(): void
     {
+        $max = $this->validator->getMaxValuesCount();
         $values = [];
-        for ($i = 1; $i <= 200; $i++) {
+        for ($i = 1; $i <= $max + 1; $i++) {
             $values[] = $i;
         }
 
-        $this->assertFalse($this->validator->isValid([Query::equal('integer', $values)]));
-        $this->assertEquals('Invalid query: Query on attribute has greater than 100 values: integer', $this->validator->getDescription());
+        $this->assertFalse($this->validator->isValid(Query::equal('integer', $values)));
+        $this->assertEquals('Query on attribute has greater than '.$max.' values: integer', $this->validator->getDescription());
     }
 
     public function testNotContains(): void

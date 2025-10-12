@@ -331,6 +331,35 @@ trait DocumentTests
         return $document;
     }
 
+    public function testCreateDocumentNumericalId(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection('numericalIds');
+
+        $this->assertEquals(true, $database->createAttribute('numericalIds', 'name', Database::VAR_STRING, 128, true));
+
+        // Test creating a document with an entirely numerical ID
+        $numericalIdDocument = $database->createDocument('numericalIds', new Document([
+            '$id' => '123456789',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Test Document with Numerical ID',
+        ]));
+
+        $this->assertIsString($numericalIdDocument->getId());
+        $this->assertEquals('123456789', $numericalIdDocument->getId());
+        $this->assertEquals('Test Document with Numerical ID', $numericalIdDocument->getAttribute('name'));
+
+        // Verify we can retrieve the document
+        $retrievedDocument = $database->getDocument('numericalIds', '123456789');
+        $this->assertIsString($retrievedDocument->getId());
+        $this->assertEquals('123456789', $retrievedDocument->getId());
+        $this->assertEquals('Test Document with Numerical ID', $retrievedDocument->getAttribute('name'));
+    }
+
     public function testCreateDocuments(): void
     {
         $count = 3;
@@ -6439,6 +6468,111 @@ trait DocumentTests
 
         $this->assertEquals('Test Name', $nullSelected->getAttribute('name'));
         $this->assertNull($nullSelected->getAttribute('nullableField'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testUpdateDocumentsSuccessiveCallsDoNotResetDefaults(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'successive_updates';
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        // Create collection with two attributes that have default values
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'attrA', Database::VAR_STRING, 50, false, 'defaultA');
+        $database->createAttribute($collectionId, 'attrB', Database::VAR_STRING, 50, false, 'defaultB');
+
+        // Create a document without setting attrA or attrB (should use defaults)
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'testdoc',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+
+        // Verify initial defaults
+        $this->assertEquals('defaultA', $doc->getAttribute('attrA'));
+        $this->assertEquals('defaultB', $doc->getAttribute('attrB'));
+
+        // First update: set attrA to a new value
+        $count = $database->updateDocuments($collectionId, new Document([
+            'attrA' => 'updatedA',
+        ]));
+        $this->assertEquals(1, $count);
+
+        // Verify attrA was updated
+        $doc = $database->getDocument($collectionId, 'testdoc');
+        $this->assertEquals('updatedA', $doc->getAttribute('attrA'));
+        $this->assertEquals('defaultB', $doc->getAttribute('attrB'));
+
+        // Second update: set attrB to a new value
+        $count = $database->updateDocuments($collectionId, new Document([
+            'attrB' => 'updatedB',
+        ]));
+        $this->assertEquals(1, $count);
+
+        // Verify attrB was updated AND attrA is still 'updatedA' (not reset to 'defaultA')
+        $doc = $database->getDocument($collectionId, 'testdoc');
+        $this->assertEquals('updatedA', $doc->getAttribute('attrA'), 'attrA should not be reset to default');
+        $this->assertEquals('updatedB', $doc->getAttribute('attrB'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testUpdateDocumentSuccessiveCallsDoNotResetDefaults(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'successive_update_single';
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        // Create collection with two attributes that have default values
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'attrA', Database::VAR_STRING, 50, false, 'defaultA');
+        $database->createAttribute($collectionId, 'attrB', Database::VAR_STRING, 50, false, 'defaultB');
+
+        // Create a document without setting attrA or attrB (should use defaults)
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'testdoc',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+
+        // Verify initial defaults
+        $this->assertEquals('defaultA', $doc->getAttribute('attrA'));
+        $this->assertEquals('defaultB', $doc->getAttribute('attrB'));
+
+        // First update: set attrA to a new value
+        $doc = $database->updateDocument($collectionId, 'testdoc', new Document([
+            '$id' => 'testdoc',
+            'attrA' => 'updatedA',
+        ]));
+        $this->assertEquals('updatedA', $doc->getAttribute('attrA'));
+        $this->assertEquals('defaultB', $doc->getAttribute('attrB'));
+
+        // Second update: set attrB to a new value
+        $doc = $database->updateDocument($collectionId, 'testdoc', new Document([
+            '$id' => 'testdoc',
+            'attrB' => 'updatedB',
+        ]));
+
+        // Verify attrB was updated AND attrA is still 'updatedA' (not reset to 'defaultA')
+        $this->assertEquals('updatedA', $doc->getAttribute('attrA'), 'attrA should not be reset to default');
+        $this->assertEquals('updatedB', $doc->getAttribute('attrB'));
 
         $database->deleteCollection($collectionId);
     }

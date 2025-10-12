@@ -4,6 +4,7 @@ require_once __DIR__ . "/../../vendor/autoload.php";
 
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
+use Utopia\CLI\Console;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -55,7 +56,7 @@ $levels = [
 ];
 
 if (!isset($levels[$level])) {
-    fwrite(STDERR, "Invalid level: {$level}\n");
+    Console::error("Invalid level: {$level}");
     exit(1);
 }
 
@@ -271,18 +272,18 @@ if ($kv !== false && $kv !== '') {
     exit(0);
 }
 
-echo "\nRunning relationship write benchmark at level {$level} (shape={$shape})\n\n";
+Console::info("\nRunning relationship write benchmark at level {$level} (shape={$shape})\n");
 
-echo "\nResults (Time)\n";
-printf("%-10s | %8dms\n", 'M2M', (int)$res['m2m_time_ms']);
-printf("%-10s | %8dms\n", 'O2M', (int)$res['o2m_time_ms']);
-printf("%-10s | %8dms\n", 'O2O', (int)$res['o2o_time_ms']);
-printf("%-10s | %8dms\n", 'M2O', (int)$res['m2o_time_ms']);
-echo str_repeat('-', 24) . "\n";
-printf("%-10s | %8dms\n", 'TOTAL', (int)$res['total_time_ms']);
+Console::log("\nResults (Time)");
+Console::log(sprintf("%-10s | %8dms", 'M2M', (int)$res['m2m_time_ms']));
+Console::log(sprintf("%-10s | %8dms", 'O2M', (int)$res['o2m_time_ms']));
+Console::log(sprintf("%-10s | %8dms", 'O2O', (int)$res['o2o_time_ms']));
+Console::log(sprintf("%-10s | %8dms", 'M2O', (int)$res['m2o_time_ms']));
+Console::log(str_repeat('-', 24));
+Console::success(sprintf("%-10s | %8dms", 'TOTAL', (int)$res['total_time_ms']));
 
-echo "\nQueries (total): {$res['queries']['total']}\n";
-echo "Select: {$res['queries']['select']} | " .
+Console::log("\nQueries (total): {$res['queries']['total']}");
+Console::log("Select: {$res['queries']['select']} | " .
      "Insert: {$res['queries']['insert']} | " .
      "Update: {$res['queries']['update']} | " .
-     "Delete: {$res['queries']['delete']}\n";
+     "Delete: {$res['queries']['delete']}");

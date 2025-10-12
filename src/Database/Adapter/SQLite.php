@@ -619,10 +619,7 @@ class SQLite extends MariaDB
                 $stmtPermissions->execute();
             }
         } catch (PDOException $e) {
-            throw match ($e->getCode()) {
-                "1062", "23000" => new Duplicate('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            throw $this->processException($e);
         }
 
 
@@ -841,11 +838,7 @@ class SQLite extends MariaDB
                 $stmtAddPermissions->execute();
             }
         } catch (PDOException $e) {
-            throw match ($e->getCode()) {
-                '1062',
-                '23000' => new Duplicate('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            throw $this->processException($e);
         }
 
         return $document;
@@ -1243,13 +1236,16 @@ class SQLite extends MariaDB
 
     protected function processException(PDOException $e): \Exception
     {
+        var_dump('processException');
+        var_dump($e->getCode());
+        var_dump($e->errorInfo[1]);
         // Timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
-        // Duplicate
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1) {
+        // Duplicate row
+        if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 19) {
             return new UniqueException('Document already exists', $e->getCode(), $e);
         }
 

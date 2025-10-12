@@ -9,7 +9,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -1250,7 +1250,7 @@ class SQLite extends MariaDB
 
         // Duplicate
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1) {
-            return new DuplicateException('Document already exists', $e->getCode(), $e);
+            return new UniqueException('Document already exists', $e->getCode(), $e);
         }
 
         return $e;

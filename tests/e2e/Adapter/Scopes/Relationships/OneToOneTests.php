@@ -10,6 +10,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -292,7 +293,7 @@ trait OneToOneTests
             );
             $this->fail('Failed to throw duplicate exception');
         } catch (Exception $e) {
-            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
 
         // Create new document
@@ -802,7 +803,7 @@ trait OneToOneTests
             );
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
 
         $city1 = $database->getDocument('city', 'city1');

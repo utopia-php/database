@@ -12,6 +12,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 
@@ -1795,7 +1796,7 @@ class MariaDB extends SQL
 
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
-            return new DuplicateException('Document already exists', $e->getCode(), $e);
+            return new UniqueException('Document already exists', $e->getCode(), $e);
         }
 
         // Data is too big for column resize

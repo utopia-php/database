@@ -14,6 +14,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -4729,7 +4730,7 @@ trait DocumentTests
      */
     public function testUniqueIndexDuplicate(): void
     {
-        $this->expectException(DuplicateException::class);
+        $this->expectException(UniqueException::class);
 
         /** @var Database $database */
         $database = static::getDatabase();
@@ -4794,7 +4795,7 @@ trait DocumentTests
             'with-dash' => 'Works4'
         ]));
 
-        $this->expectException(DuplicateException::class);
+        $this->expectException(UniqueException::class);
 
         $database->updateDocument('movies', $document->getId(), $document->setAttribute('name', 'Frozen'));
     }
@@ -5299,7 +5300,7 @@ trait DocumentTests
 
         $document->setAttribute('$id', 'duplicated');
         $database->createDocument($document->getCollection(), $document);
-        $this->expectException(DuplicateException::class);
+        $this->expectException(UniqueException::class);
         $database->createDocument($document->getCollection(), $document);
     }
 
@@ -5317,7 +5318,7 @@ trait DocumentTests
 
         $document->setAttribute('$id', 'CaseSensitive');
 
-        $this->expectException(DuplicateException::class);
+        $this->expectException(UniqueException::class);
         $database->createDocument($document->getCollection(), $document);
 
         return $document;

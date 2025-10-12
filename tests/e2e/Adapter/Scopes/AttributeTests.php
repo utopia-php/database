@@ -59,7 +59,7 @@ trait AttributeTests
     public function testCreateDeleteAttribute(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('attributes');
 
@@ -181,7 +181,7 @@ trait AttributeTests
     public function testInvalidDefaultValues(string $type, mixed $default): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $this->expectException(\Exception::class);
         $this->assertEquals(false, $database->createAttribute('attributes', 'bad_default', $type, 256, true, $default));
@@ -192,7 +192,7 @@ trait AttributeTests
     public function testAttributeCaseInsensitivity(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $this->assertEquals(true, $database->createAttribute('attributes', 'caseSensitive', Database::VAR_STRING, 128, true));
         $this->expectException(DuplicateException::class);
@@ -202,7 +202,7 @@ trait AttributeTests
     public function testAttributeKeyWithSymbols(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('attributesWithKeys');
 
@@ -225,7 +225,7 @@ trait AttributeTests
     public function testAttributeNamesWithDots(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('dots.parent');
 
@@ -289,7 +289,7 @@ trait AttributeTests
     public function testUpdateAttributeDefault(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $flowers = $database->createCollection('flowers');
         $database->createAttribute('flowers', 'name', Database::VAR_STRING, 128, true);
@@ -343,7 +343,7 @@ trait AttributeTests
     public function testRenameAttribute(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $colors = $database->createCollection('colors');
         $database->createAttribute('colors', 'name', Database::VAR_STRING, 128, true);
@@ -390,7 +390,7 @@ trait AttributeTests
     public function testUpdateAttributeRequired(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->updateAttributeRequired('flowers', 'inStock', true);
 
@@ -413,7 +413,7 @@ trait AttributeTests
     public function testUpdateAttributeFilter(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createAttribute('flowers', 'cartModel', Database::VAR_STRING, 2000, false);
 
@@ -447,7 +447,7 @@ trait AttributeTests
     public function testUpdateAttributeFormat(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createAttribute('flowers', 'price', Database::VAR_INTEGER, 0, false);
 
@@ -509,7 +509,7 @@ trait AttributeTests
         }, Database::VAR_INTEGER);
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         // price attribute
         $collection = $database->getCollection('flowers');
@@ -647,7 +647,7 @@ trait AttributeTests
     public function testUpdateAttributeRename(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('rename_test');
 
@@ -771,7 +771,7 @@ trait AttributeTests
     public function textRenameAttributeMissing(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $this->expectExceptionMessage('Attribute not found');
         $database->renameAttribute('colors', 'name2', 'name3');
@@ -784,7 +784,7 @@ trait AttributeTests
     public function testRenameAttributeExisting(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $this->expectExceptionMessage('Attribute name already used');
         $database->renameAttribute('colors', 'verbose', 'hex');
@@ -793,7 +793,7 @@ trait AttributeTests
     public function testWidthLimit(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getDocumentSizeLimit() === 0) {
             $this->expectNotToPerformAssertions();
@@ -874,7 +874,7 @@ trait AttributeTests
     public function testExceptionAttributeLimit(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getLimitForAttributes() === 0) {
             $this->expectNotToPerformAssertions();
@@ -945,7 +945,7 @@ trait AttributeTests
     public function testExceptionWidthLimit(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getDocumentSizeLimit() === 0) {
             $this->expectNotToPerformAssertions();
@@ -1023,7 +1023,7 @@ trait AttributeTests
     public function testUpdateAttributeSize(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForAttributeResizing()) {
             $this->expectNotToPerformAssertions();
@@ -1134,7 +1134,7 @@ trait AttributeTests
     public function testEncryptAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         // Add custom encrypt filter
         $database->addFilter(
@@ -1185,7 +1185,7 @@ trait AttributeTests
     public function updateStringAttributeSize(int $size, Document $document): Document
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->updateAttribute('resize_test', 'resize_me', Database::VAR_STRING, $size, true);
 
@@ -1206,7 +1206,7 @@ trait AttributeTests
     public function testIndexCaseInsensitivity(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $this->assertEquals(true, $database->createIndex('attributes', 'key_caseSensitive', Database::INDEX_KEY, ['caseSensitive'], [128]));
 
@@ -1225,7 +1225,7 @@ trait AttributeTests
     public function testCleanupAttributeTests(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->deleteCollection('attributes');
         $this->assertEquals(1, 1);
@@ -1243,7 +1243,7 @@ trait AttributeTests
         Authorization::setRole(Role::any()->toString());
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $collection = 'json';
         $permissions = [Permission::read(Role::any())];
@@ -1562,7 +1562,7 @@ trait AttributeTests
     public function testCreateDatetime(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('datetime');
 
@@ -1694,7 +1694,7 @@ trait AttributeTests
     public function testCreateDateTimeAttributeFailure(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('datetime_fail');
 
@@ -1709,7 +1709,7 @@ trait AttributeTests
     public function testUnknownFormat(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $this->expectException(\Exception::class);
         $this->assertEquals(false, $database->createAttribute('attributes', 'bad_format', Database::VAR_STRING, 256, true, null, true, false, 'url'));
@@ -1720,7 +1720,7 @@ trait AttributeTests
     public function testCreateAttributesEmpty(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1740,7 +1740,7 @@ trait AttributeTests
     public function testCreateAttributesMissingId(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1765,7 +1765,7 @@ trait AttributeTests
     public function testCreateAttributesMissingType(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1790,7 +1790,7 @@ trait AttributeTests
     public function testCreateAttributesMissingSize(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1815,7 +1815,7 @@ trait AttributeTests
     public function testCreateAttributesMissingRequired(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1840,7 +1840,7 @@ trait AttributeTests
     public function testCreateAttributesDuplicateMetadata(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1868,7 +1868,7 @@ trait AttributeTests
     public function testCreateAttributesInvalidFilter(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1895,7 +1895,7 @@ trait AttributeTests
     public function testCreateAttributesInvalidFormat(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1923,7 +1923,7 @@ trait AttributeTests
     public function testCreateAttributesDefaultOnRequired(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1951,7 +1951,7 @@ trait AttributeTests
     public function testCreateAttributesUnknownType(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -1978,7 +1978,7 @@ trait AttributeTests
     public function testCreateAttributesStringSizeLimit(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -2007,7 +2007,7 @@ trait AttributeTests
     public function testCreateAttributesIntegerSizeLimit(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -2036,7 +2036,7 @@ trait AttributeTests
     public function testCreateAttributesSuccessMultiple(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -2081,7 +2081,7 @@ trait AttributeTests
     public function testCreateAttributesDelete(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
             $this->expectNotToPerformAssertions();

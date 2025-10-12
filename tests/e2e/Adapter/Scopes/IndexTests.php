@@ -56,7 +56,7 @@ trait IndexTests
     public function testCreateDeleteIndex(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('indexes');
 
@@ -160,7 +160,7 @@ trait IndexTests
         ]);
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $validator = new Index(
             $attributes,
@@ -301,7 +301,7 @@ trait IndexTests
     public function testIndexLengthZero(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection(__FUNCTION__);
 
@@ -328,7 +328,7 @@ trait IndexTests
 
     public function testRenameIndex(): void
     {
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $numbers = $database->createCollection('numbers');
         $database->createAttribute('numbers', 'verbose', Database::VAR_STRING, 128, true);
@@ -355,7 +355,7 @@ trait IndexTests
     */
     public function testRenameIndexMissing(): void
     {
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $this->expectExceptionMessage('Index not found');
         $index = $database->renameIndex('numbers', 'index1', 'index4');
     }
@@ -366,7 +366,7 @@ trait IndexTests
     */
     public function testRenameIndexExisting(): void
     {
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $this->expectExceptionMessage('Index name already used');
         $index = $database->renameIndex('numbers', 'index3', 'index2');
     }
@@ -375,7 +375,7 @@ trait IndexTests
     public function testExceptionIndexLimit(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('indexLimit');
 
@@ -404,7 +404,7 @@ trait IndexTests
         }
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
         $database->createDocument('documents', new Document([
@@ -439,7 +439,7 @@ trait IndexTests
     public function testMaxQueriesValues(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $max = $database->getMaxQueryValues();
 
@@ -468,7 +468,7 @@ trait IndexTests
         }
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $documents = $database->find('documents', [
             Query::search('string', ''),

@@ -25,10 +25,7 @@ trait GeneralTests
 {
     public function testPing(): void
     {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        $this->assertEquals(true, $database->ping());
+        $this->assertEquals(true, $this->getDatabase()->ping());
     }
 
     /**
@@ -47,7 +44,7 @@ trait GeneralTests
         }
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('global-timeouts');
 
@@ -94,7 +91,7 @@ trait GeneralTests
         Authorization::disable();
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->setPreserveDates(true);
 
@@ -189,7 +186,7 @@ trait GeneralTests
         Authorization::disable();
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->setPreserveDates(true);
 
@@ -311,7 +308,7 @@ trait GeneralTests
 
     public function testSharedTablesUpdateTenant(): void
     {
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
@@ -370,7 +367,7 @@ trait GeneralTests
         $this->expectException(Exception::class);
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->find('movies', [
             Query::limit(2),
@@ -425,7 +422,7 @@ trait GeneralTests
     public function testSharedTablesTenantPerDocument(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $sharedTables = $database->getSharedTables();
         $tenantPerDocument = $database->getTenantPerDocument();
@@ -625,7 +622,7 @@ trait GeneralTests
     public function testCacheFallback(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForCacheSkipOnFailure()) {
             $this->expectNotToPerformAssertions();
@@ -634,7 +631,7 @@ trait GeneralTests
 
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         // Write mock data
         $database->createCollection('testRedisFallback', attributes: [

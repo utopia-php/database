@@ -23,7 +23,7 @@ trait CollectionTests
     public function testCreateExistsDelete(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForSchemas()) {
             $this->expectNotToPerformAssertions();
@@ -42,7 +42,7 @@ trait CollectionTests
     public function testCreateListExistsDeleteCollection(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('actors', permissions: [
             Permission::create(Role::any()),
@@ -77,7 +77,7 @@ trait CollectionTests
     public function testCreateCollectionWithSchema(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $attributes = [
             new Document([
@@ -309,7 +309,7 @@ trait CollectionTests
         ];
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         foreach ($collections as $id) {
             $collection = $database->createCollection($id, $attributes, $indexes);
@@ -347,7 +347,7 @@ trait CollectionTests
     public function testCollectionNotFound(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         try {
             $database->find('not_exist', []);
@@ -360,7 +360,7 @@ trait CollectionTests
     public function testSizeCollection(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('sizeTest1');
         $database->createCollection('sizeTest2');
@@ -452,7 +452,7 @@ trait CollectionTests
     public function testSizeFullText(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         // SQLite does not support fulltext indexes
         if (!$database->getAdapter()->getSupportForFulltextIndex()) {
@@ -493,7 +493,7 @@ trait CollectionTests
     public function testPurgeCollectionCache(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('redis');
 
@@ -535,7 +535,7 @@ trait CollectionTests
         }
 
         $collection = 'schema_attributes';
-        $db = static::getDatabase();
+        $db = $this->getDatabase();
 
         $this->assertEmpty($db->getSchemaAttributes('no_such_collection'));
 
@@ -594,7 +594,7 @@ trait CollectionTests
     public function testRowSizeToLarge(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getDocumentSizeLimit() === 0) {
             $this->expectNotToPerformAssertions();
@@ -650,7 +650,7 @@ trait CollectionTests
     public function testCreateCollectionWithSchemaIndexes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $attributes = [
             new Document([
@@ -724,7 +724,7 @@ trait CollectionTests
     public function testCollectionUpdate(): Document
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $collection = $database->createCollection('collectionUpdate', permissions: [
             Permission::create(Role::users()),
@@ -759,7 +759,7 @@ trait CollectionTests
     public function testUpdateDeleteCollectionNotFound(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         try {
             $database->deleteCollection('not_found');
@@ -779,7 +779,7 @@ trait CollectionTests
     public function testGetCollectionId(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForGetConnectionId()) {
             $this->expectNotToPerformAssertions();
@@ -791,7 +791,7 @@ trait CollectionTests
 
     public function testKeywords(): void
     {
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $keywords = $database->getKeywords();
 
         // Collection name tests
@@ -898,7 +898,7 @@ trait CollectionTests
     public function testLabels(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection(
             'labels_test',
@@ -927,7 +927,7 @@ trait CollectionTests
     public function testMetadata(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->setMetadata('key', 'value');
 
@@ -943,7 +943,7 @@ trait CollectionTests
     public function testDeleteCollectionDeletesRelationships(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -981,7 +981,7 @@ trait CollectionTests
     public function testCascadeMultiDelete(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1061,7 +1061,7 @@ trait CollectionTests
          * Default mode already tested, we'll test 'schema' and 'table' isolation here
          */
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
@@ -1245,7 +1245,7 @@ trait CollectionTests
     public function testCreateDuplicates(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('duplicates', permissions: [
             Permission::read(Role::any())
@@ -1265,7 +1265,7 @@ trait CollectionTests
     public function testSharedTablesDuplicates(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
@@ -1330,7 +1330,7 @@ trait CollectionTests
     public function testEvents(): void
     {
         Authorization::skip(function () {
-            $database = static::getDatabase();
+            $database = $this->getDatabase();
 
             $events = [
                 Database::EVENT_DATABASE_CREATE,
@@ -1460,7 +1460,7 @@ trait CollectionTests
     public function testCreatedAtUpdatedAt(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('created_at'));
         $database->createAttribute('created_at', 'title', Database::VAR_STRING, 100, false);
@@ -1485,7 +1485,7 @@ trait CollectionTests
     public function testCreatedAtUpdatedAtAssert(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $document = $database->getDocument('created_at', 'uid123');
         $this->assertEquals(true, !$document->isEmpty());
@@ -1504,7 +1504,7 @@ trait CollectionTests
     public function testTransformations(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('docs', attributes: [
             new Document([
@@ -1531,7 +1531,7 @@ trait CollectionTests
 
     public function testSetGlobalCollection(): void
     {
-        $db = static::getDatabase();
+        $db = $this->getDatabase();
 
         $collectionId = 'globalCollection';
 

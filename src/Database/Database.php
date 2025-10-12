@@ -6849,12 +6849,15 @@ class Database
         // If conversion returns null, it means no documents can match (relationship filter found no matches)
         if ($queriesOrNull === null) {
             $results = [];
-        }else {
+        } else {
             $queries = $queriesOrNull;
+
+            $filters = Query::getFilterQueries($queries);
+            $selects = Query::getSelectQueries($queries);
 
             $results = $this->adapter->find(
                 $context,
-                $queries,
+                [],
                 $limit ?? 25,
                 $offset ?? 0,
                 $cursor,

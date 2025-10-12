@@ -12,6 +12,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\QueryContext;
 
 trait SpatialTests
 {
@@ -1602,6 +1603,7 @@ trait SpatialTests
         }
 
         $results = $database->find($collectionName, [
+            Query::select('$sequence'),
             Query::select('area'),
             Query::select('location')
         ]);
@@ -2469,20 +2471,23 @@ trait SpatialTests
         $this->assertEquals($result->getAttribute('line'), $line);
         $this->assertEquals($result->getAttribute('poly'), $poly);
 
+        $context = new QueryContext();
+        $context->add($collection);
 
-        $result = $database->decode($collection, $doc);
+        $result = $database->decode($context, $doc);
         $this->assertEquals($result->getAttribute('point'), $pointArr);
         $this->assertEquals($result->getAttribute('line'), $lineArr);
         $this->assertEquals($result->getAttribute('poly'), $polyArr);
 
         $stringDoc = new Document(['point' => $point,'line' => $line, 'poly' => $poly]);
-        $result = $database->decode($collection, $stringDoc);
+        $result = $database->decode($context, $stringDoc);
         $this->assertEquals($result->getAttribute('point'), $pointArr);
         $this->assertEquals($result->getAttribute('line'), $lineArr);
         $this->assertEquals($result->getAttribute('poly'), $polyArr);
 
         $nullDoc = new Document(['point' => null,'line' => null, 'poly' => null]);
-        $result = $database->decode($collection, $nullDoc);
+        $result = $database->decode($context, $nullDoc);
+
         $this->assertEquals($result->getAttribute('point'), null);
         $this->assertEquals($result->getAttribute('line'), null);
         $this->assertEquals($result->getAttribute('poly'), null);

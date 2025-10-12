@@ -18,7 +18,7 @@ class MariaDBTest extends Base
     /**
      * @return Database
      */
-    public static function getDatabase(bool $fresh = false): Database
+    public  function getDatabase(bool $fresh = false): Database
     {
         if (!is_null(self::$database) && !$fresh) {
             return self::$database;
@@ -38,6 +38,7 @@ class MariaDBTest extends Base
 
         $database = new Database(new MariaDB($pdo), $cache);
         $database
+            ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 

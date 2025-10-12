@@ -33,7 +33,7 @@ class MirrorTest extends Base
      * @throws \RedisException
      * @throws Exception
      */
-    protected static function getDatabase(bool $fresh = false): Mirror
+    protected  function getDatabase(bool $fresh = false): Mirror
     {
         if (!is_null(self::$database) && !$fresh) {
             return self::$database;
@@ -84,9 +84,11 @@ class MirrorTest extends Base
          */
         foreach ($schemas as $schema) {
             if ($database->getSource()->exists($schema)) {
+                $database->getSource()->setAuthorization(self::$authorization);
                 $database->getSource()->setDatabase($schema)->delete();
             }
             if ($database->getDestination()->exists($schema)) {
+                $database->getDestination()->setAuthorization(self::$authorization);
                 $database->getDestination()->setDatabase($schema)->delete();
             }
         }

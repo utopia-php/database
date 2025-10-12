@@ -32,7 +32,7 @@ class PoolTest extends Base
      * @throws Duplicate
      * @throws Limit
      */
-    public static function getDatabase(): Database
+    public  function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -60,6 +60,7 @@ class PoolTest extends Base
         $database = new Database(new Pool($pool), $cache);
 
         $database
+            ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 

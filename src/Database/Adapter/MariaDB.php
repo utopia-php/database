@@ -817,7 +817,7 @@ class MariaDB extends SQL
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws DuplicateException
+     * @throws UniqueException
      * @throws \Throwable
      */
     public function createDocument(Document $collection, Document $document): Document
@@ -943,7 +943,7 @@ class MariaDB extends SQL
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws DuplicateException
+     * @throws UniqueException
      * @throws \Throwable
      */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document

@@ -8,7 +8,6 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -517,7 +516,7 @@ class SQLite extends MariaDB
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws UniqueException
      */
     public function createDocument(Document $collection, Document $document): Document
     {
@@ -636,7 +635,7 @@ class SQLite extends MariaDB
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws UniqueException
      */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
@@ -1236,9 +1235,6 @@ class SQLite extends MariaDB
 
     protected function processException(PDOException $e): \Exception
     {
-        var_dump('processException');
-        var_dump($e->getCode());
-        var_dump($e->errorInfo[1]);
         // Timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);

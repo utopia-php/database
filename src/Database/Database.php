@@ -4847,7 +4847,7 @@ class Database
             return;
         }
 
-        /** @var array<string> $stringIds */
+        /** @var array<string> $relationIds */
         $relationIds = array_map(fn ($rid) => $rid instanceof Document ? $rid->getId() : $rid, $relationIds);
 
         $this->skipRelationships(function () use ($relatedCollection, $twoWayKey, $documentId, $relationIds) {

@@ -21,6 +21,7 @@ class Connection
      */
     public static function hasError(\Throwable $e): bool
     {
+        /** @phpstan-ignore-next-line can't find static method */
         if (DetectsLostConnections::causedByLostConnection($e)) {
             return true;
         }

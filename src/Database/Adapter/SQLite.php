@@ -9,10 +9,10 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate;
-use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 
 /**

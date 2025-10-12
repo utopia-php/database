@@ -413,6 +413,11 @@ class Database
     protected array $relationshipDeleteStack = [];
 
     /**
+     * Reusable instance of single-pass DocumentProcessor
+     */
+    private ?DocumentProcessor $singlePassProcessor = null;
+    private bool $adapterFiltersRegistered = false;
+    /**
      * @param Adapter $adapter
      * @param Cache $cache
      * @param array<string, array{encode: callable, decode: callable}> $filters
@@ -3552,8 +3557,19 @@ class Database
             }
         }
 
-        $document = $this->casting($collection, $document);
-        $document = $this->decode($collection, $document, $selections);
+        if ($this->shouldUseSinglePassProcessor() && $this->canUseSinglePass($collection)) {
+            $this->singlePassProcessor ??= new DocumentProcessor();
+            $document = $this->singlePassProcessor->processRead(
+                $collection,
+                $document,
+                fn (string $k) => $this->adapter->filter($k),
+                $selections,
+                $this->adapter->getSupportForCasting()
+            );
+        } else {
+            $document = $this->casting($collection, $document);
+            $document = $this->decode($collection, $document, $selections);
+        }
 
         // Skip relationship population if we're in batch mode (relationships will be populated later)
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
@@ -7227,20 +7243,104 @@ class Database
             }
         }
 
-        foreach ($results as $index => $node) {
-            $node = $this->casting($collection, $node);
-            $node = $this->decode($collection, $node, $selections);
+        if ($this->shouldUseSinglePassProcessor() && $this->canUseSinglePass($collection)) {
+            $this->singlePassProcessor ??= new DocumentProcessor();
+            $results = $this->singlePassProcessor->processReadBatch(
+                $collection,
+                $results,
+                fn (string $k) => $this->adapter->filter($k),
+                $selections,
+                $this->adapter->getSupportForCasting()
+            );
+        } else {
+            foreach ($results as $index => $node) {
+                $node = $this->casting($collection, $node);
+                $node = $this->decode($collection, $node, $selections);
+                $results[$index] = $node;
+            }
+        }
 
+        foreach ($results as $index => $node) {
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
             }
-
-            $results[$index] = $node;
         }
 
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
         return $results;
+    }
+
+    private function shouldUseSinglePassProcessor(): bool
+    {
+        $val = getenv('DB_SINGLE_PASS_PROCESSOR');
+        if ($val === false || $val === '') {
+            return false;
+        }
+        $val = strtolower((string)$val);
+        if (in_array($val, ['0', 'false', 'off'], true)) {
+            return false;
+        }
+        // Do not use single-pass when relationship resolution is disabled
+        if (!$this->resolveRelationships) {
+            return false;
+        }
+        return true;
+    }
+
+    private function canUseSinglePass(Document $collection): bool
+    {
+        // Register adapter-aware filters (spatial) once so support list is complete
+        if (!$this->adapterFiltersRegistered) {
+            DocumentProcessor::registerAdapterFilters($this->adapter);
+            $this->adapterFiltersRegistered = true;
+        }
+
+        // Safe if: no relationships AND all filters are within DocumentProcessor supported set
+        $supported = DocumentProcessor::getSupportedFilters();
+        $instanceFilterNames = \array_keys($this->getInstanceFilters());
+
+        // Guard against disabled relationship handling
+        if (!$this->resolveRelationships) {
+            return false;
+        }
+
+        // Respect runtime filter flags to preserve decode semantics
+        if ($this->filter === false) {
+            return false;
+        }
+
+        if (!empty($this->disabledFilters)) {
+            return false;
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attr) {
+            $filters = $attr['filters'] ?? [];
+            foreach ($filters as $filter) {
+                if (!in_array($filter, $supported, true)) {
+                    return false;
+                }
+                // If an instance filter overrides behavior, skip single-pass to keep parity
+                if (in_array($filter, $instanceFilterNames, true)) {
+                    return false;
+                }
+            }
+        }
+
+        // Internal attributes allowed if within supported filters
+        foreach (Database::INTERNAL_ATTRIBUTES as $internal) {
+            $filters = $internal['filters'] ?? [];
+            foreach ($filters as $filter) {
+                if (!in_array($filter, $supported, true)) {
+                    return false;
+                }
+                if (in_array($filter, $instanceFilterNames, true)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**

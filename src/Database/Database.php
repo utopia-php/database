@@ -3483,8 +3483,6 @@ class Database
 
         $selects = Query::getSelectQueries($queries);
 
-        //$selects = $this->validateSelections($collection, $selects);
-
         [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
 
         [$selects, $permissionsAdded] = Query::addSelect($selects, Query::select('$permissions',  system: true));
@@ -4145,10 +4143,9 @@ class Database
 
         // Collect all attributes to keep from select queries
         $attributesToKeep = [];
+
         foreach ($selectQueries as $selectQuery) {
-            foreach ($selectQuery->getValues() as $value) {
-                $attributesToKeep[$value] = true;
-            }
+            $attributesToKeep[$selectQuery->getAttribute()] = true;
         }
 
         // Early return if wildcard selector present
@@ -6853,7 +6850,7 @@ class Database
             $queries = $queriesOrNull;
 
             $filters = Query::getFilterQueries($queries);
-            $selects = Query::getSelectQueries($queries);
+            //$selects = Query::getSelectQueries($selects);
 
             $results = $this->adapter->find(
                 $context,
@@ -7602,7 +7599,6 @@ class Database
 
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
                 $values = $query->getValues();
-                var_dump($values);
                 foreach ($values as $valueIndex => $value) {
                     try {
                         $values[$valueIndex] = DateTime::setTimezone($value);

@@ -268,12 +268,7 @@ trait IndexTests
         );
 
         $this->assertFalse($validator->isValid($newIndex));
-
-        if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->assertEquals('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
-        } elseif (!$database->getAdapter()->getSupportForMultipleFulltextIndexes()) {
-            $this->assertEquals('There is already a fulltext index in the collection', $validator->getDescription());
-        }
+        $this->assertEquals('There is already a fulltext index in the collection', $validator->getDescription());
 
         try {
             $database->createCollection($collection->getId(), $attributes, $indexes);

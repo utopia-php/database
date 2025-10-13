@@ -1119,7 +1119,7 @@ class Mongo extends Adapter
         }
 
 
-        $options = [];
+        $options = $this->getTransactionOptions();
 
         $selections = $this->getAttributeSelections($queries);
 
@@ -1421,7 +1421,10 @@ class Mongo extends Adapter
             unset($record['_id']); // Don't update _id
 
             $options = $this->getTransactionOptions();
-            $this->client->update($name, $filters, $record, $options);
+            $updateQuery = [
+                '$set' => $record,
+            ];
+            $this->client->update($name, $filters, $updateQuery, $options);
         } catch (MongoException $e) {
             throw $this->processException($e);
         }

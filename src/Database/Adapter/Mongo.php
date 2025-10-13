@@ -57,6 +57,7 @@ class Mongo extends Adapter
      */
     private ?array $session = null; // Store session array from startSession
     protected int $inTransaction = 0;
+    protected bool $supportForAttributes = true;
 
     /**
      * Constructor.
@@ -2611,7 +2612,13 @@ class Mongo extends Adapter
      */
     public function getSupportForAttributes(): bool
     {
-        return true;
+        return $this->supportForAttributes;
+    }
+
+    public function setSupportForAttributes(bool $support): bool
+    {
+        $this->supportForAttributes = $support;
+        return $this->supportForAttributes;
     }
 
     /**

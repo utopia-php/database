@@ -51,7 +51,7 @@ class MongoDBTest extends Base
         );
 
         $database = new Database(new Mongo($client), $cache);
-        $database->getAdapter()->setSupportForAttributes(true);
+        $database->getAdapter()->setSupportForAttributes(false);
         $database
             ->setDatabase($schema)
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
@@ -59,6 +59,7 @@ class MongoDBTest extends Base
         if ($database->exists()) {
             $database->delete();
         }
+
 
         $database->create();
 

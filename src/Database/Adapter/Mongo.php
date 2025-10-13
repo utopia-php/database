@@ -177,9 +177,7 @@ class Mongo extends Adapter
                     // This is not necessarily a failure, just return success since the transaction was already terminated.
                     $e = $this->processException($e);
                     if ($e instanceof TransactionException) {
-                        if ($this->session) {
-                            $this->client->endSessions([$this->session]);
-                        }
+                        $this->client->endSessions([$this->session]);
                         $this->session = null;
                         $this->inTransaction = 0;  // Reset counter when transaction is already terminated
                         return true;
@@ -199,12 +197,10 @@ class Mongo extends Adapter
             return true;
         } catch (\Throwable $e) {
             // Ensure cleanup on any failure
-            if ($this->session) {
-                try {
-                    $this->client->endSessions([$this->session]);
-                } catch (\Throwable $endSessionError) {
-                    // Ignore errors when ending session during error cleanup
-                }
+            try {
+                $this->client->endSessions([$this->session]);
+            } catch (\Throwable $endSessionError) {
+                // Ignore errors when ending session during error cleanup
             }
             $this->session = null;
             $this->inTransaction = 0;
@@ -234,9 +230,7 @@ class Mongo extends Adapter
                 } catch (\Throwable $e) {
                     throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
                 } finally {
-                    if ($this->session) {
-                        $this->client->endSessions([$this->session]);
-                    }
+                    $this->client->endSessions([$this->session]);
                     $this->session = null;
                 }
 
@@ -244,15 +238,14 @@ class Mongo extends Adapter
             }
             return true;
         } catch (\Throwable $e) {
-            if ($this->session) {
-                try {
-                    $this->client->endSessions([$this->session]);
-                } catch (\Throwable $endSessionError) {
-                    // Ignore errors when ending session during error cleanup
-                }
+            try {
+                $this->client->endSessions([$this->session]);
+            } catch (\Throwable) {
+                // Ignore errors when ending session during error cleanup
             }
             $this->session = null;
             $this->inTransaction = 0;
+
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
     }

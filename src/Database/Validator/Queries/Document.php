@@ -14,7 +14,7 @@ class Document extends Queries
      * @param bool $supportForAttributes
      * @throws Exception
      */
-    public function __construct(array $attributes, $supportForAttributes = true)
+    public function __construct(array $attributes, bool $supportForAttributes = true)
     {
         $attributes[] = new \Utopia\Database\Document([
             '$id' => '$id',

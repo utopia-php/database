@@ -5853,6 +5853,11 @@ class Database
 
                 $old = $chunk[$index]->getOld();
 
+                if (!$old->isEmpty()) {
+                    $old = $this->adapter->castingAfter($collection, $old);
+                    $old = $this->decode($collection, $old);
+                }
+
                 try {
                     $onNext && $onNext($doc, $old->isEmpty() ? null : $old);
                 } catch (\Throwable $th) {

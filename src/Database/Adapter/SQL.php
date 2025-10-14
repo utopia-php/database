@@ -2930,4 +2930,9 @@ abstract class SQL extends Adapter
 
         return $rings;
     }
+
+    public function setSupportForAttributes(bool $support): bool
+    {
+        return true;
+    }
 }

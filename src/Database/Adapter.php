@@ -1383,4 +1383,12 @@ abstract class Adapter
     */
     abstract public function setUTCDatetime(string $value): mixed;
 
+    /**
+    * Set support for attributes
+    *
+    * @param bool $support
+    * @return bool
+    */
+    abstract public function setSupportForAttributes(bool $support): bool;
+
 }

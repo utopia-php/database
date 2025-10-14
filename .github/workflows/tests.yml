@@ -84,6 +84,7 @@ jobs:
             SharedTables/MySQL,
             SharedTables/Postgres,
             SharedTables/SQLite,
+            Schemaless/MongoDB,
           ]
 
     steps:

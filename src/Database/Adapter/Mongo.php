@@ -57,6 +57,7 @@ class Mongo extends Adapter
      */
     private ?array $session = null; // Store session array from startSession
     protected int $inTransaction = 0;
+    protected bool $supportForAttributes = true;
 
     /**
      * Constructor.
@@ -226,9 +227,17 @@ class Mongo extends Adapter
                 }
 
                 try {
-                    $result = $this->client->abortTransaction($this->session);
+                    $this->client->abortTransaction($this->session);
                 } catch (\Throwable $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                    $e = $this->processException($e);
+
+                    if ($e instanceof TransactionException) {
+                        // If there's no active transaction, it may have been auto-aborted due to an error.
+                        // Just return success since the transaction was already terminated.
+                        return true;
+                    }
+
+                    throw $e;
                 } finally {
                     $this->client->endSessions([$this->session]);
                     $this->session = null;
@@ -407,11 +416,11 @@ class Mongo extends Adapter
             $this->getClient()->createCollection($id, $options);
 
         } catch (MongoException $e) {
-            $processed = $this->processException($e);
-            if ($processed instanceof DuplicateException) {
+            $e = $this->processException($e);
+            if ($e instanceof DuplicateException) {
                 return true;
             }
-            throw $processed;
+            throw $e;
         }
 
         $internalIndex = [
@@ -422,7 +431,7 @@ class Mongo extends Adapter
                 'collation' => [
                     'locale' => 'en',
                     'strength' => 1,
-                ]
+                ],
             ],
             [
                 'key' => ['_createdAt' => $this->getOrder(Database::ORDER_ASC)],
@@ -1130,9 +1139,12 @@ class Mongo extends Adapter
             return new Document([]);
         }
 
-        $result = $this->replaceChars('_', '$', (array)$result[0]);
+        $resultArray = $this->client->toArray($result[0]);
+        $result = $this->replaceChars('_', '$', $resultArray);
+        $document = new Document($result);
+        $document = $this->castingAfter($collection, $document);
 
-        return new Document($result);
+        return $document;
     }
 
     /**
@@ -1221,7 +1233,28 @@ class Mongo extends Adapter
                         break;
                     case Database::VAR_DATETIME :
                         if ($node instanceof UTCDateTime) {
+                            // Handle UTCDateTime objects
                             $node = DateTime::format($node->toDateTime());
+                        } elseif (is_array($node) && isset($node['$date'])) {
+                            // Handle Extended JSON format from (array) cast
+                            // Format: {"$date":{"$numberLong":"1760405478290"}}
+                            if (is_array($node['$date']) && isset($node['$date']['$numberLong'])) {
+                                $milliseconds = (int)$node['$date']['$numberLong'];
+                                $seconds = intdiv($milliseconds, 1000);
+                                $microseconds = ($milliseconds % 1000) * 1000;
+                                $dateTime = \DateTime::createFromFormat('U.u', $seconds . '.' . str_pad((string)$microseconds, 6, '0'));
+                                if ($dateTime) {
+                                    $dateTime->setTimezone(new \DateTimeZone('UTC'));
+                                    $node = DateTime::format($dateTime);
+                                }
+                            }
+                        } elseif (is_string($node)) {
+                            // Already a string, validate and pass through
+                            try {
+                                new \DateTime($node);
+                            } catch (\Exception $e) {
+                                // Invalid date string, skip
+                            }
                         }
                         break;
                     default:
@@ -2611,7 +2644,13 @@ class Mongo extends Adapter
      */
     public function getSupportForAttributes(): bool
     {
-        return true;
+        return $this->supportForAttributes;
+    }
+
+    public function setSupportForAttributes(bool $support): bool
+    {
+        $this->supportForAttributes = $support;
+        return $this->supportForAttributes;
     }
 
     /**
@@ -2975,7 +3014,7 @@ class Mongo extends Adapter
         return [];
     }
 
-    protected function processException(Exception $e): \Exception
+    protected function processException(\Throwable $e): \Throwable
     {
         // Timeout
         if ($e->getCode() === 50) {
@@ -3007,7 +3046,12 @@ class Mongo extends Adapter
             return new TransactionException('No active transaction', $e->getCode(), $e);
         }
 
-        // Invalid operation(MongoDB error code 14)
+        // Aborted transaction
+        if ($e->getCode() === 112) {
+            return new TransactionException('Transaction aborted', $e->getCode(), $e);
+        }
+
+        // Invalid operation (MongoDB error code 14)
         if ($e->getCode() === 14) {
             return new TypeException('Invalid operation', $e->getCode(), $e);
         }

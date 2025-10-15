@@ -24,6 +24,31 @@ use Utopia\Database\Validator\Authorization;
 
 trait DocumentTests
 {
+    public function testBigintSequence(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+
+        $sequence = 5_000_000_000_000_000;
+
+        $document = $database->createDocument(__FUNCTION__, new Document([
+            '$sequence' => (string)$sequence,
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+        ]));
+
+        $this->assertEquals((string)$sequence, $document->getSequence());
+
+        $document = $database->getDocument(__FUNCTION__, $document->getId());
+        $this->assertEquals((string)$sequence, $document->getSequence());
+
+        $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string)$sequence])]);
+        $this->assertEquals((string)$sequence, $document->getSequence());
+    }
+
     public function testCreateDocument(): Document
     {
         /** @var Database $database */
@@ -307,6 +332,35 @@ trait DocumentTests
         return $document;
     }
 
+    public function testCreateDocumentNumericalId(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $database->createCollection('numericalIds');
+
+        $this->assertEquals(true, $database->createAttribute('numericalIds', 'name', Database::VAR_STRING, 128, true));
+
+        // Test creating a document with an entirely numerical ID
+        $numericalIdDocument = $database->createDocument('numericalIds', new Document([
+            '$id' => '123456789',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Test Document with Numerical ID',
+        ]));
+
+        $this->assertIsString($numericalIdDocument->getId());
+        $this->assertEquals('123456789', $numericalIdDocument->getId());
+        $this->assertEquals('Test Document with Numerical ID', $numericalIdDocument->getAttribute('name'));
+
+        // Verify we can retrieve the document
+        $retrievedDocument = $database->getDocument('numericalIds', '123456789');
+        $this->assertIsString($retrievedDocument->getId());
+        $this->assertEquals('123456789', $retrievedDocument->getId());
+        $this->assertEquals('Test Document with Numerical ID', $retrievedDocument->getAttribute('name'));
+    }
+
     public function testCreateDocuments(): void
     {
         $count = 3;
@@ -534,7 +588,7 @@ trait DocumentTests
         Authorization::disable();
 
         $results = [];
-        $count = $database->createOrUpdateDocuments(
+        $count = $database->upsertDocuments(
             __FUNCTION__,
             $documents,
             onNext: function ($doc) use (&$results) {
@@ -596,7 +650,7 @@ trait DocumentTests
         ];
 
         $results = [];
-        $count = $database->createOrUpdateDocuments(
+        $count = $database->upsertDocuments(
             __FUNCTION__,
             $documents,
             onNext: function ($doc) use (&$results) {
@@ -639,7 +693,7 @@ trait DocumentTests
         $documents[1]->setAttribute('integer', 10);
 
         $results = [];
-        $count = $database->createOrUpdateDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
+        $count = $database->upsertDocuments(__FUNCTION__, $documents, onNext: function ($doc) use (&$results) {
             $results[] = $doc;
         });
 
@@ -716,7 +770,7 @@ trait DocumentTests
         $documents[0]->setAttribute('integer', 1);
         $documents[1]->setAttribute('integer', 1);
 
-        $database->createOrUpdateDocumentsWithIncrease(
+        $database->upsertDocumentsWithIncrease(
             collection: __FUNCTION__,
             attribute: 'integer',
             documents: $documents
@@ -731,7 +785,7 @@ trait DocumentTests
         $documents[0]->setAttribute('integer', -1);
         $documents[1]->setAttribute('integer', -1);
 
-        $database->createOrUpdateDocumentsWithIncrease(
+        $database->upsertDocumentsWithIncrease(
             collection: __FUNCTION__,
             attribute: 'integer',
             documents: $documents
@@ -766,10 +820,10 @@ trait DocumentTests
             ],
         ]);
 
-        $database->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $database->upsertDocuments(__FUNCTION__, [$document]);
 
         try {
-            $database->createOrUpdateDocuments(__FUNCTION__, [$document->setAttribute('string', 'updated')]);
+            $database->upsertDocuments(__FUNCTION__, [$document->setAttribute('string', 'updated')]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(AuthorizationException::class, $e);
@@ -784,10 +838,10 @@ trait DocumentTests
             ],
         ]);
 
-        $database->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $database->upsertDocuments(__FUNCTION__, [$document]);
 
         $results = [];
-        $count = $database->createOrUpdateDocuments(
+        $count = $database->upsertDocuments(
             __FUNCTION__,
             [$document->setAttribute('string', 'updated')],
             onNext: function ($doc) use (&$results) {
@@ -808,7 +862,7 @@ trait DocumentTests
             ],
         ]);
 
-        $database->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $database->upsertDocuments(__FUNCTION__, [$document]);
 
         $newPermissions = [
             Permission::read(Role::any()),
@@ -817,7 +871,7 @@ trait DocumentTests
         ];
 
         $results = [];
-        $count = $database->createOrUpdateDocuments(
+        $count = $database->upsertDocuments(
             __FUNCTION__,
             [$document->setAttribute('$permissions', $newPermissions)],
             onNext: function ($doc) use (&$results) {
@@ -864,7 +918,7 @@ trait DocumentTests
         ]);
 
         // Ensure missing optionals on new document is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments(__FUNCTION__, [
             $existingDocument->setAttribute('first', 'updated'),
             $newDocument,
         ]);
@@ -876,7 +930,7 @@ trait DocumentTests
         $this->assertEquals('', $newDocument->getAttribute('last'));
 
         try {
-            $database->createOrUpdateDocuments(__FUNCTION__, [
+            $database->upsertDocuments(__FUNCTION__, [
                 $existingDocument->removeAttribute('first'),
                 $newDocument
             ]);
@@ -886,7 +940,7 @@ trait DocumentTests
         }
 
         // Ensure missing optionals on existing document is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments(__FUNCTION__, [
             $existingDocument
                 ->setAttribute('first', 'first')
                 ->removeAttribute('last'),
@@ -901,7 +955,7 @@ trait DocumentTests
         $this->assertEquals('last', $newDocument->getAttribute('last'));
 
         // Ensure set null on existing document is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments(__FUNCTION__, [
             $existingDocument
                 ->setAttribute('first', 'first')
                 ->setAttribute('last', null),
@@ -928,7 +982,7 @@ trait DocumentTests
         ]);
 
         // Ensure mismatch of attribute orders is allowed
-        $docs = $database->createOrUpdateDocuments(__FUNCTION__, [
+        $docs = $database->upsertDocuments(__FUNCTION__, [
             $doc3,
             $doc4
         ]);
@@ -969,11 +1023,11 @@ trait DocumentTests
             ],
         ]);
 
-        $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $count = static::getDatabase()->upsertDocuments(__FUNCTION__, [$document]);
         $this->assertEquals(1, $count);
 
         // No changes, should return 0
-        $count = static::getDatabase()->createOrUpdateDocuments(__FUNCTION__, [$document]);
+        $count = static::getDatabase()->upsertDocuments(__FUNCTION__, [$document]);
         $this->assertEquals(0, $count);
     }
 
@@ -992,7 +1046,7 @@ trait DocumentTests
         $doc2 = new Document(['$id' => 'dup', 'num' => 2]);
 
         try {
-            $db->createOrUpdateDocuments(__FUNCTION__, [$doc1, $doc2]);
+            $db->upsertDocuments(__FUNCTION__, [$doc1, $doc2]);
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e, $e->getMessage());
@@ -1034,7 +1088,7 @@ trait DocumentTests
             Permission::read(Role::any())
         ]);
 
-        $db->createOrUpdateDocuments(__FUNCTION__, [$d1, $d2]);
+        $db->upsertDocuments(__FUNCTION__, [$d1, $d2]);
 
         $this->assertEquals([
             Permission::read(Role::any()),
@@ -5707,7 +5761,7 @@ trait DocumentTests
 
         // Test 1: Upsert new document with custom createdAt
         $upsertResults = [];
-        $database->createOrUpdateDocuments($collection, [
+        $database->upsertDocuments($collection, [
             new Document([
                 '$id' => 'upsert1',
                 '$permissions' => $permissions,
@@ -5726,7 +5780,7 @@ trait DocumentTests
         $upsertDoc1->setAttribute('string', 'upsert1_updated');
         $upsertDoc1->setAttribute('$updatedAt', $updateDate);
         $updatedUpsertResults = [];
-        $database->createOrUpdateDocuments($collection, [$upsertDoc1], onNext: function ($doc) use (&$updatedUpsertResults) {
+        $database->upsertDocuments($collection, [$upsertDoc1], onNext: function ($doc) use (&$updatedUpsertResults) {
             $updatedUpsertResults[] = $doc;
         });
         $updatedUpsertDoc1 = $updatedUpsertResults[0];
@@ -5736,7 +5790,7 @@ trait DocumentTests
 
         // Test 3: Upsert new document with both custom dates
         $upsertResults2 = [];
-        $database->createOrUpdateDocuments($collection, [
+        $database->upsertDocuments($collection, [
             new Document([
                 '$id' => 'upsert2',
                 '$permissions' => $permissions,
@@ -5757,7 +5811,7 @@ trait DocumentTests
         $upsertDoc2->setAttribute('$createdAt', $date3);
         $upsertDoc2->setAttribute('$updatedAt', $date3);
         $updatedUpsertResults2 = [];
-        $database->createOrUpdateDocuments($collection, [$upsertDoc2], onNext: function ($doc) use (&$updatedUpsertResults2) {
+        $database->upsertDocuments($collection, [$upsertDoc2], onNext: function ($doc) use (&$updatedUpsertResults2) {
             $updatedUpsertResults2[] = $doc;
         });
         $updatedUpsertDoc2 = $updatedUpsertResults2[0];
@@ -5770,7 +5824,7 @@ trait DocumentTests
 
         $customDate = '2000-01-01T10:00:00.000+00:00';
         $upsertResults3 = [];
-        $database->createOrUpdateDocuments($collection, [
+        $database->upsertDocuments($collection, [
             new Document([
                 '$id' => 'upsert3',
                 '$permissions' => $permissions,
@@ -5791,7 +5845,7 @@ trait DocumentTests
         $upsertDoc3->setAttribute('$createdAt', $customDate);
         $upsertDoc3->setAttribute('$updatedAt', $customDate);
         $updatedUpsertResults3 = [];
-        $database->createOrUpdateDocuments($collection, [$upsertDoc3], onNext: function ($doc) use (&$updatedUpsertResults3) {
+        $database->upsertDocuments($collection, [$upsertDoc3], onNext: function ($doc) use (&$updatedUpsertResults3) {
             $updatedUpsertResults3[] = $doc;
         });
         $updatedUpsertDoc3 = $updatedUpsertResults3[0];
@@ -5831,7 +5885,7 @@ trait DocumentTests
         ];
 
         $bulkUpsertResults = [];
-        $database->createOrUpdateDocuments($collection, $upsertDocuments, onNext: function ($doc) use (&$bulkUpsertResults) {
+        $database->upsertDocuments($collection, $upsertDocuments, onNext: function ($doc) use (&$bulkUpsertResults) {
             $bulkUpsertResults[] = $doc;
         });
 
@@ -5898,7 +5952,7 @@ trait DocumentTests
             $this->assertNotEmpty($doc->getAttribute('$updatedAt'), "updatedAt mismatch for $id");
         }
 
-        // Test 11: Bulk upsert operations with createOrUpdateDocuments
+        // Test 11: Bulk upsert operations with upsertDocuments
         $upsertUpdateDocuments = [];
         foreach ($upsertDocuments as $doc) {
             $updatedDoc = clone $doc;
@@ -5909,7 +5963,7 @@ trait DocumentTests
         }
 
         $upsertUpdateResults = [];
-        $countUpsertUpdate = $database->createOrUpdateDocuments($collection, $upsertUpdateDocuments, onNext: function ($doc) use (&$upsertUpdateResults) {
+        $countUpsertUpdate = $database->upsertDocuments($collection, $upsertUpdateDocuments, onNext: function ($doc) use (&$upsertUpdateResults) {
             $upsertUpdateResults[] = $doc;
         });
         $this->assertEquals(4, $countUpsertUpdate);
@@ -5934,7 +5988,7 @@ trait DocumentTests
         }
 
         $upsertDisabledResults = [];
-        $countUpsertDisabled = $database->createOrUpdateDocuments($collection, $upsertDisabledDocuments, onNext: function ($doc) use (&$upsertDisabledResults) {
+        $countUpsertDisabled = $database->upsertDocuments($collection, $upsertDisabledDocuments, onNext: function ($doc) use (&$upsertDisabledResults) {
             $upsertDisabledResults[] = $doc;
         });
         $this->assertEquals(4, $countUpsertDisabled);
@@ -5989,7 +6043,7 @@ trait DocumentTests
             ])
         ];
         $upsertUpdateResults = [];
-        $count = $database->createOrUpdateDocuments($collectionName, $docs, onNext: function ($doc) use (&$upsertUpdateResults) {
+        $count = $database->upsertDocuments($collectionName, $docs, onNext: function ($doc) use (&$upsertUpdateResults) {
             $upsertUpdateResults[] = $doc;
         });
         $this->assertCount(4, $upsertUpdateResults);

@@ -88,7 +88,7 @@ trait GeneralTests
 
     public function testPreserveDatesUpdate(): void
     {
-        Authorization::disable();
+        $this->getDatabase()->getAuthorization()->disable();
 
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -178,12 +178,12 @@ trait GeneralTests
 
         $database->setPreserveDates(false);
 
-        Authorization::reset();
+        $this->getDatabase()->getAuthorization()->reset();
     }
 
     public function testPreserveDatesCreate(): void
     {
-        Authorization::disable();
+        $this->getDatabase()->getAuthorization()->disable();
 
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -283,7 +283,7 @@ trait GeneralTests
 
         $database->setPreserveDates(false);
 
-        Authorization::reset();
+        $this->getDatabase()->getAuthorization()->reset();
     }
 
     public function testGetAttributeLimit(): void
@@ -629,8 +629,8 @@ trait GeneralTests
             return;
         }
 
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
         $database = $this->getDatabase();
 
         // Write mock data

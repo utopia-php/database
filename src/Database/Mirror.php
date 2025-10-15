@@ -1084,7 +1084,7 @@ class Mirror extends Database
             return new Document();
         }
 
-        return Authorization::skip(function () use ($collection) {
+        return $this->getAuthorization()->skip(function () use ($collection) {
             try {
                 return $this->source->getDocument('upgrades', $collection);
             } catch (\Throwable) {

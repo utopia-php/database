@@ -1240,7 +1240,7 @@ trait AttributeTests
      */
     public function testArrayAttribute(): void
     {
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         /** @var Database $database */
         $database = $this->getDatabase();

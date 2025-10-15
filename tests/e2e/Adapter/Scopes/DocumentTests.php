@@ -583,7 +583,7 @@ trait DocumentTests
 
         $documents = array_map(fn ($d) => new Document($d), $data);
 
-        Authorization::disable();
+        $this->getDatabase()->getAuthorization()->disable();
 
         $results = [];
         $count = $database->upsertDocuments(
@@ -594,7 +594,7 @@ trait DocumentTests
             }
         );
 
-        Authorization::reset();
+        $this->getDatabase()->getAuthorization()->reset();
 
         $this->assertEquals(2, \count($results));
         $this->assertEquals(2, $count);
@@ -1398,7 +1398,7 @@ trait DocumentTests
      */
     public function testFind(): array
     {
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -1672,7 +1672,7 @@ trait DocumentTests
         /**
          * Check Permissions
          */
-        Authorization::setRole('user:x');
+        $this->getDatabase()->getAuthorization()->addRole('user:x');
         $documents = $database->find('movies');
 
         $this->assertEquals(6, count($documents));
@@ -3146,7 +3146,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         $database->createCollection('movies_nested_id', permissions: [
             Permission::create(Role::any()),
@@ -3854,30 +3854,30 @@ trait DocumentTests
         $count = $database->count('movies', [Query::equal('with-dash', ['Works2', 'Works3'])]);
         $this->assertEquals(4, $count);
 
-        Authorization::unsetRole('user:x');
+        $this->getDatabase()->getAuthorization()->removeRole('user:x');
         $count = $database->count('movies');
         $this->assertEquals(5, $count);
 
-        Authorization::disable();
+        $this->getDatabase()->getAuthorization()->disable();
         $count = $database->count('movies');
         $this->assertEquals(6, $count);
-        Authorization::reset();
+        $this->getDatabase()->getAuthorization()->reset();
 
-        Authorization::disable();
+        $this->getDatabase()->getAuthorization()->disable();
         $count = $database->count('movies', [], 3);
         $this->assertEquals(3, $count);
-        Authorization::reset();
+        $this->getDatabase()->getAuthorization()->reset();
 
         /**
          * Test that OR queries are handled correctly
          */
-        Authorization::disable();
+        $this->getDatabase()->getAuthorization()->disable();
         $count = $database->count('movies', [
             Query::equal('director', ['TBD', 'Joe Johnston']),
             Query::equal('year', [2025]),
         ]);
         $this->assertEquals(1, $count);
-        Authorization::reset();
+        $this->getDatabase()->getAuthorization()->reset();
     }
 
     /**
@@ -3888,7 +3888,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        Authorization::setRole('user:x');
+        $this->getDatabase()->getAuthorization()->addRole('user:x');
 
         $sum = $database->sum('movies', 'year', [Query::equal('year', [2019]),]);
         $this->assertEquals(2019 + 2019, $sum);
@@ -3902,8 +3902,8 @@ trait DocumentTests
         $sum = $database->sum('movies', 'year', [Query::equal('year', [2019])], 1);
         $this->assertEquals(2019, $sum);
 
-        Authorization::unsetRole('user:x');
-        Authorization::unsetRole('userx');
+        $this->getDatabase()->getAuthorization()->removeRole('user:x');
+        $this->getDatabase()->getAuthorization()->removeRole('userx');
         $sum = $database->sum('movies', 'year', [Query::equal('year', [2019]),]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = $database->sum('movies', 'year');
@@ -4322,8 +4322,8 @@ trait DocumentTests
         }
 
         $collection = 'testUpdateDocuments';
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         $database->createCollection($collection, attributes: [
             new Document([
@@ -4447,7 +4447,7 @@ trait DocumentTests
         // Check document level permissions
         $database->updateCollection($collection, permissions: [], documentSecurity: true);
 
-        Authorization::skip(function () use ($collection, $database) {
+        $this->getDatabase()->getAuthorization()->skip(function () use ($collection, $database) {
             $database->updateDocument($collection, 'doc0', new Document([
                 'string' => 'text📝 updated all',
                 '$permissions' => [
@@ -4459,7 +4459,7 @@ trait DocumentTests
             ]));
         });
 
-        Authorization::setRole(Role::user('asd')->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::user('asd')->toString());
 
         $database->updateDocuments($collection, new Document([
             'string' => 'permission text',
@@ -4471,7 +4471,7 @@ trait DocumentTests
 
         $this->assertCount(1, $documents);
 
-        Authorization::skip(function () use ($collection, $database) {
+        $this->getDatabase()->getAuthorization()->skip(function () use ($collection, $database) {
             $unmodifiedDocuments = $database->find($collection, [
                 Query::equal('string', ['text📝 updated all']),
             ]);
@@ -4479,7 +4479,7 @@ trait DocumentTests
             $this->assertCount(9, $unmodifiedDocuments);
         });
 
-        Authorization::skip(function () use ($collection, $database) {
+        $this->getDatabase()->getAuthorization()->skip(function () use ($collection, $database) {
             $database->updateDocuments($collection, new Document([
                 '$permissions' => [
                     Permission::read(Role::any()),
@@ -4501,8 +4501,8 @@ trait DocumentTests
             $this->assertEquals('batchSize Test', $document->getAttribute('string'));
         }
 
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
     }
 
     public function testUpdateDocumentsWithCallbackSupport(): void
@@ -4516,8 +4516,8 @@ trait DocumentTests
         }
 
         $collection = 'update_callback';
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         $database->createCollection($collection, attributes: [
             new Document([
@@ -4605,8 +4605,8 @@ trait DocumentTests
      */
     public function testReadPermissionsSuccess(Document $document): Document
     {
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -4631,12 +4631,12 @@ trait DocumentTests
 
         $this->assertEquals(false, $document->isEmpty());
 
-        Authorization::cleanRoles();
+        $this->getDatabase()->getAuthorization()->cleanRoles();
 
         $document = $database->getDocument($document->getCollection(), $document->getId());
         $this->assertEquals(true, $document->isEmpty());
 
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         return $document;
     }
@@ -4646,7 +4646,7 @@ trait DocumentTests
      */
     public function testWritePermissionsSuccess(Document $document): void
     {
-        Authorization::cleanRoles();
+        $this->getDatabase()->getAuthorization()->cleanRoles();
 
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -4678,8 +4678,8 @@ trait DocumentTests
     {
         $this->expectException(AuthorizationException::class);
 
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -4702,7 +4702,7 @@ trait DocumentTests
             'colors' => ['pink', 'green', 'blue'],
         ]));
 
-        Authorization::cleanRoles();
+        $this->getDatabase()->getAuthorization()->cleanRoles();
 
         $document = $database->updateDocument('documents', $document->getId(), new Document([
             '$id' => ID::custom($document->getId()),
@@ -4768,7 +4768,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        Authorization::setRole(Role::users()->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
         // create document then update to conflict with index
         $document = $database->createDocument('movies', new Document([
             '$permissions' => [
@@ -4941,7 +4941,7 @@ trait DocumentTests
 
         $this->assertEquals(0, $database->deleteDocuments('bulk_delete'));
 
-        $documents = Authorization::skip(function () use ($database) {
+        $documents = $this->getDatabase()->getAuthorization()->skip(function () use ($database) {
             return $database->find('bulk_delete');
         });
 
@@ -6445,8 +6445,8 @@ trait DocumentTests
         }
 
         $collectionId = 'successive_updates';
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         // Create collection with two attributes that have default values
         $database->createCollection($collectionId);
@@ -6497,8 +6497,8 @@ trait DocumentTests
         $database = $this->getDatabase();
 
         $collectionId = 'successive_update_single';
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         // Create collection with two attributes that have default values
         $database->createCollection($collectionId);

@@ -401,7 +401,7 @@ trait CollectionTests
 
         $this->assertGreaterThan($size1, $size2);
 
-        Authorization::skip(function () use ($loopCount) {
+        $this->getDatabase()->getAuthorization()->skip(function () use ($loopCount) {
             for ($i = 0; $i < $loopCount; $i++) {
                 $this->getDatabase()->deleteDocument('sizeTest2', 'doc' . $i);
             }
@@ -917,7 +917,7 @@ trait CollectionTests
 
         $this->assertEmpty($documents);
 
-        Authorization::setRole(Role::label('reader')->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::label('reader')->toString());
 
         $documents = $database->find('labels_test');
 
@@ -1329,7 +1329,7 @@ trait CollectionTests
 
     public function testEvents(): void
     {
-        Authorization::skip(function () {
+        $this->getDatabase()->getAuthorization()->skip(function () {
             $database = $this->getDatabase();
 
             $events = [

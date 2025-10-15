@@ -25,6 +25,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\PartialStructure;
@@ -868,6 +869,16 @@ class Database
         $this->adapter->setAuthorization($authorization);
         $this->authorization = $authorization;
         return $this;
+    }
+
+    /**
+     * Get Authorization
+     *
+     * @return Authorization
+     */
+    public function getAuthorization(): Authorization
+    {
+        return $this->authorization;
     }
 
     /**

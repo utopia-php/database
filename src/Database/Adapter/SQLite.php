@@ -1242,9 +1242,17 @@ class SQLite extends MariaDB
         }
 
         // Duplicate row
-        if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 19) {
-            if (preg_match('/UNIQUE constraint failed:\s+([^.]+)\.([^\s]+)/', $e->getMessage(), $m)) {
-                if ($m[2] === '_uid') {
+        if ($e->getCode() === '23000' && ($e->errorInfo[1] ?? null) === 19) {
+            $msg = $e->errorInfo[2] ?? $e->getMessage();
+
+            // Match all table.column pairs (handles commas & spaces)
+            if (preg_match_all('/\b([^.]+)\.([^\s,]+)/', $msg, $matches, PREG_SET_ORDER)) {
+                $columns = array_map(fn ($m) => $m[2], $matches);
+                sort($columns);
+
+                var_dump($columns);
+
+                if ($columns === ['_tenant', '_uid'] || in_array('_uid', $columns)) {
                     return new DuplicateException('Document already exists', $e->getCode(), $e);
                 }
             }

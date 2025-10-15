@@ -1924,11 +1924,13 @@ class Postgres extends SQL
         }
 
         // Duplicate row
-        if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            if (preg_match('/Key \(([^)]+)\)=\(.+\) already exists/', $e->getMessage(), $matches)) {
-                $columns = array_map('trim', explode(',', $matches[1]));
+        if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 19) {
+            if (preg_match_all('/\b([^.]+)\.([^\s,]+)/', $e->getMessage(), $matches)) {
+                $columns = $matches[2];
                 sort($columns);
+
                 $target = $this->sharedTables ? ['_tenant', '_uid'] : ['_uid'];
+
                 if ($columns == $target) {
                     return new DuplicateException('Document already exists', $e->getCode(), $e);
                 }

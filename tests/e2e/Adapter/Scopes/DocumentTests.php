@@ -4762,8 +4762,8 @@ trait DocumentTests
 
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
+            $this->assertInstanceOf(UniqueException::class, $e);
             $this->assertInstanceOf(DuplicateException::class, $e);
-            $this->assertNotInstanceOf(UniqueException::class, $e);
         }
     }
     /**
@@ -4805,8 +4805,8 @@ trait DocumentTests
 
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
+            $this->assertInstanceOf(UniqueException::class, $e);
             $this->assertInstanceOf(DuplicateException::class, $e);
-            $this->assertNotInstanceOf(UniqueException::class, $e);
         }
     }
 
@@ -5330,18 +5330,18 @@ trait DocumentTests
         $database = static::getDatabase();
 
         $document->setAttribute('$id', 'caseSensitive');
-        $document->setAttribute('$sequence', '200');
-        $database->createDocument($document->getCollection(), $document);
+        $document->removeAttribute('$sequence');
 
+        $database->createDocument($document->getCollection(), $document);
         $document->setAttribute('$id', 'CaseSensitive');
+        $document->removeAttribute('$sequence');
 
         try {
             $database->createDocument($document->getCollection(), $document);
-
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
-            $this->assertInstanceOf(UniqueException::class, $e);
+            $this->assertNotInstanceOf(UniqueException::class, $e);
         }
 
         return $document;

@@ -1796,7 +1796,15 @@ class MariaDB extends SQL
 
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
-            return new UniqueException('Document already exists', $e->getCode(), $e);
+            var_dump($e->getMessage());
+            if (preg_match("/for key '(?:[^.]+\.)?([^']+)'/", $e->getMessage(), $m)) {
+                if($m[1] === '_uid' || $m[1] === 'PRIMARY') {
+                    var_dump($m);
+                    return new UniqueException('Document already exists', $e->getCode(), $e);
+                }
+            }
+
+            return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
         // Data is too big for column resize

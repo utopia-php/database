@@ -1250,8 +1250,6 @@ class SQLite extends MariaDB
                 $columns = array_map(fn ($m) => $m[2], $matches);
                 sort($columns);
 
-                var_dump($columns);
-
                 if ($columns === ['_tenant', '_uid'] || in_array('_uid', $columns)) {
                     return new DuplicateException('Document already exists', $e->getCode(), $e);
                 }

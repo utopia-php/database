@@ -1925,15 +1925,16 @@ class Postgres extends SQL
 
         // Duplicate row
         if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            var_dump($e->getMessage());
-            if (preg_match("/for key '(?:[^.]+\.)?([^']+)'/", $e->getMessage(), $m)) {
-                if ($m[1] === '_uid' || $m[1] === 'PRIMARY') {
-                    var_dump($m);
-                    return new UniqueException('Document already exists', $e->getCode(), $e);
+            if (preg_match('/Key \(([^)]+)\)=\(.+\) already exists/', $e->getMessage(), $matches)) {
+                $columns = array_map('trim', explode(',', $matches[1]));
+                sort($columns);
+                $target = $this->sharedTables ? ['_tenant', '_uid'] : ['_uid'];
+                if ($columns == $target) {
+                    return new DuplicateException('Document already exists', $e->getCode(), $e);
                 }
             }
 
-            return new DuplicateException('Document already exists', $e->getCode(), $e);
+            return new UniqueException('Document already exists', $e->getCode(), $e);
         }
 
         // Data is too big for column resize

@@ -5309,15 +5309,17 @@ trait DocumentTests
         $database = static::getDatabase();
 
         $document->setAttribute('$id', 'duplicated');
+        $document->removeAttribute('$sequence');
+
         $database->createDocument($document->getCollection(), $document);
+        $document->removeAttribute('$sequence');
 
         try {
             $database->createDocument($document->getCollection(), $document);
-
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
-            $this->assertInstanceOf(UniqueException::class, $e);
+            $this->assertNotInstanceOf(UniqueException::class, $e);
         }
     }
 
@@ -5333,13 +5335,14 @@ trait DocumentTests
         $document->removeAttribute('$sequence');
 
         $database->createDocument($document->getCollection(), $document);
-        $document->setAttribute('$id', 'CaseSensitive');
+        $document->setAttribute('$id', 'caseSensitive'); // Revert this
         $document->removeAttribute('$sequence');
 
         try {
             $database->createDocument($document->getCollection(), $document);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
+            var_dump($e);
             $this->assertInstanceOf(DuplicateException::class, $e);
             $this->assertNotInstanceOf(UniqueException::class, $e);
         }

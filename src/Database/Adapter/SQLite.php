@@ -8,6 +8,7 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -1242,6 +1243,12 @@ class SQLite extends MariaDB
 
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 19) {
+            if (preg_match('/UNIQUE constraint failed:\s+([^.]+)\.([^\s]+)/', $e->getMessage(), $m)) {
+                if ($m[2] === '_uid') {
+                    return new DuplicateException('Document already exists', $e->getCode(), $e);
+                }
+            }
+
             return new UniqueException('Document already exists', $e->getCode(), $e);
         }
 

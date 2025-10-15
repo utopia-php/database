@@ -14,7 +14,6 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 abstract class SQL extends Adapter
 {

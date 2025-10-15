@@ -26,6 +26,8 @@ $namesPool = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi',
 $genresPool = ['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance'];
 $tagsPool = ['short', 'quick', 'easy', 'medium', 'hard'];
 
+$authorization = new Authorization();
+
 /**
  * @Example
  * docker compose exec tests bin/load --adapter=mariadb --limit=1000
@@ -37,7 +39,32 @@ $cli
     ->param('limit', 0, new Integer(true), 'Total number of records to add to database')
     ->param('name', 'myapp_' . uniqid(), new Text(0), 'Name of created database.', true)
     ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
-    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables) {
+    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables) use ($authorization) {
+
+
+        $createSchema = function (Database $database) use ($authorization): void {
+            if ($database->exists($database->getDatabase())) {
+                $database->delete($database->getDatabase());
+            }
+            $database->create();
+
+            $authorization->addRole(Role::any()->toString());
+
+            $database->createCollection('articles', permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+            ]);
+
+            $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
+            $database->createAttribute('articles', 'created', Database::VAR_DATETIME, 0, true, filters: ['datetime']);
+            $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
+            $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
+            $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
+            $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
+            $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
+        };
+
+
         $start = null;
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
@@ -95,7 +122,7 @@ $cli
             $cfg['attrs']
         );
 
-        createSchema(
+        $createSchema(
             (new Database(new ($cfg['adapter'])($pdo), $cache))
                 ->setDatabase($name)
                 ->setNamespace($namespace)
@@ -138,27 +165,7 @@ $cli
         Console::success("Completed in {$time} seconds");
     });
 
-function createSchema(Database $database): void
-{
-    if ($database->exists($database->getDatabase())) {
-        $database->delete($database->getDatabase());
-    }
-    $database->create();
 
-    Authorization::setRole(Role::any()->toString());
-
-    $database->createCollection('articles', permissions: [
-        Permission::create(Role::any()),
-        Permission::read(Role::any()),
-    ]);
-
-    $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
-    $database->createAttribute('articles', 'created', Database::VAR_DATETIME, 0, true, filters: ['datetime']);
-    $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
-    $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
-    $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
-    $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
-}
 
 function createDocuments(Database $database): void
 {

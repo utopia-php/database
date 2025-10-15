@@ -34,6 +34,8 @@ $tagsPool = ['short', 'quick', 'easy', 'medium', 'hard'];
  * @Example
  * docker compose exec tests bin/relationships --adapter=mariadb --limit=1000
  */
+$authorization = new Authorization();
+
 $cli
     ->task('relationships')
     ->desc('Load database with mock relationships for testing')
@@ -42,12 +44,83 @@ $cli
     ->param('name', 'myapp_' . uniqid(), new Text(0), 'Name of created database.', true)
     ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
     ->param('runs', 1, new Integer(true), 'Number of times to run benchmarks', true)
-    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables, int $runs) {
+    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables, int $runs) use ($authorization) {
         $start = null;
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
+
+        $createRelationshipSchema = function (Database $database) use ($authorization): void {
+            if ($database->exists($database->getDatabase())) {
+                $database->delete($database->getDatabase());
+            }
+            $database->create();
+
+            $authorization->addRole(Role::any()->toString());
+
+            $database->createCollection('authors', permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ]);
+            $database->createAttribute('authors', 'name', Database::VAR_STRING, 256, true);
+            $database->createAttribute('authors', 'created', Database::VAR_DATETIME, 0, true, filters: ['datetime']);
+            $database->createAttribute('authors', 'bio', Database::VAR_STRING, 5000, true);
+            $database->createAttribute('authors', 'avatar', Database::VAR_STRING, 256, true);
+            $database->createAttribute('authors', 'website', Database::VAR_STRING, 256, true);
+
+            $database->createCollection('articles', permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ]);
+            $database->createAttribute('articles', 'title', Database::VAR_STRING, 256, true);
+            $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
+            $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
+            $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
+            $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
+
+            $database->createCollection('users', permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ]);
+            $database->createAttribute('users', 'username', Database::VAR_STRING, 256, true);
+            $database->createAttribute('users', 'email', Database::VAR_STRING, 256, true);
+            $database->createAttribute('users', 'password', Database::VAR_STRING, 256, true);
+
+            $database->createCollection('comments', permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ]);
+            $database->createAttribute('comments', 'content', Database::VAR_STRING, 256, true);
+            $database->createAttribute('comments', 'likes', Database::VAR_INTEGER, 8, true, signed: false);
+
+            $database->createCollection('profiles', permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ]);
+            $database->createAttribute('profiles', 'bio_extended', Database::VAR_STRING, 10000, true);
+            $database->createAttribute('profiles', 'social_links', Database::VAR_STRING, 256, true, array: true);
+            $database->createAttribute('profiles', 'verified', Database::VAR_BOOLEAN, 0, true);
+
+            $database->createCollection('categories', permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ]);
+            $database->createAttribute('categories', 'name', Database::VAR_STRING, 256, true);
+            $database->createAttribute('categories', 'description', Database::VAR_STRING, 1000, true);
+
+            $database->createRelationship('authors', 'articles', Database::RELATION_MANY_TO_MANY, true, onDelete: Database::RELATION_MUTATE_SET_NULL);
+            $database->createRelationship('articles', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'article', onDelete: Database::RELATION_MUTATE_CASCADE);
+            $database->createRelationship('users', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'user', onDelete: Database::RELATION_MUTATE_CASCADE);
+            $database->createRelationship('authors', 'profiles', Database::RELATION_ONE_TO_ONE, true, twoWayKey: 'author', onDelete: Database::RELATION_MUTATE_CASCADE);
+            $database->createRelationship('articles', 'categories', Database::RELATION_MANY_TO_ONE, true, id: 'category', twoWayKey: 'articles', onDelete: Database::RELATION_MUTATE_SET_NULL);
+        };
 
         $dbAdapters = [
             'mariadb' => [
@@ -98,7 +171,7 @@ $cli
             ->setNamespace($namespace)
             ->setSharedTables($sharedTables);
 
-        createRelationshipSchema($database);
+        $createRelationshipSchema($database);
 
         // Create categories and users once before parallel batch creation
         $globalDocs = createGlobalDocuments($database, $limit);
@@ -165,77 +238,6 @@ $cli
         displayBenchmarkResults($results, $runs);
     });
 
-function createRelationshipSchema(Database $database): void
-{
-    if ($database->exists($database->getDatabase())) {
-        $database->delete($database->getDatabase());
-    }
-    $database->create();
-
-    Authorization::setRole(Role::any()->toString());
-
-    $database->createCollection('authors', permissions: [
-        Permission::create(Role::any()),
-        Permission::read(Role::any()),
-        Permission::update(Role::any()),
-    ]);
-    $database->createAttribute('authors', 'name', Database::VAR_STRING, 256, true);
-    $database->createAttribute('authors', 'created', Database::VAR_DATETIME, 0, true, filters: ['datetime']);
-    $database->createAttribute('authors', 'bio', Database::VAR_STRING, 5000, true);
-    $database->createAttribute('authors', 'avatar', Database::VAR_STRING, 256, true);
-    $database->createAttribute('authors', 'website', Database::VAR_STRING, 256, true);
-
-    $database->createCollection('articles', permissions: [
-        Permission::create(Role::any()),
-        Permission::read(Role::any()),
-        Permission::update(Role::any()),
-    ]);
-    $database->createAttribute('articles', 'title', Database::VAR_STRING, 256, true);
-    $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
-    $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
-    $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
-    $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
-
-    $database->createCollection('users', permissions: [
-        Permission::create(Role::any()),
-        Permission::read(Role::any()),
-        Permission::update(Role::any()),
-    ]);
-    $database->createAttribute('users', 'username', Database::VAR_STRING, 256, true);
-    $database->createAttribute('users', 'email', Database::VAR_STRING, 256, true);
-    $database->createAttribute('users', 'password', Database::VAR_STRING, 256, true);
-
-    $database->createCollection('comments', permissions: [
-        Permission::create(Role::any()),
-        Permission::read(Role::any()),
-        Permission::update(Role::any()),
-    ]);
-    $database->createAttribute('comments', 'content', Database::VAR_STRING, 256, true);
-    $database->createAttribute('comments', 'likes', Database::VAR_INTEGER, 8, true, signed: false);
-
-    $database->createCollection('profiles', permissions: [
-        Permission::create(Role::any()),
-        Permission::read(Role::any()),
-        Permission::update(Role::any()),
-    ]);
-    $database->createAttribute('profiles', 'bio_extended', Database::VAR_STRING, 10000, true);
-    $database->createAttribute('profiles', 'social_links', Database::VAR_STRING, 256, true, array: true);
-    $database->createAttribute('profiles', 'verified', Database::VAR_BOOLEAN, 0, true);
-
-    $database->createCollection('categories', permissions: [
-        Permission::create(Role::any()),
-        Permission::read(Role::any()),
-        Permission::update(Role::any()),
-    ]);
-    $database->createAttribute('categories', 'name', Database::VAR_STRING, 256, true);
-    $database->createAttribute('categories', 'description', Database::VAR_STRING, 1000, true);
-
-    $database->createRelationship('authors', 'articles', Database::RELATION_MANY_TO_MANY, true, onDelete: Database::RELATION_MUTATE_SET_NULL);
-    $database->createRelationship('articles', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'article', onDelete: Database::RELATION_MUTATE_CASCADE);
-    $database->createRelationship('users', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'user', onDelete: Database::RELATION_MUTATE_CASCADE);
-    $database->createRelationship('authors', 'profiles', Database::RELATION_ONE_TO_ONE, true, twoWayKey: 'author', onDelete: Database::RELATION_MUTATE_CASCADE);
-    $database->createRelationship('articles', 'categories', Database::RELATION_MANY_TO_ONE, true, id: 'category', twoWayKey: 'articles', onDelete: Database::RELATION_MUTATE_SET_NULL);
-}
 
 function createGlobalDocuments(Database $database, int $limit): array
 {

@@ -8,11 +8,11 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 
 /**
@@ -517,7 +517,7 @@ class SQLite extends MariaDB
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws UniqueException
      */
     public function createDocument(Document $collection, Document $document): Document
     {
@@ -619,10 +619,7 @@ class SQLite extends MariaDB
                 $stmtPermissions->execute();
             }
         } catch (PDOException $e) {
-            throw match ($e->getCode()) {
-                "1062", "23000" => new Duplicate('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            throw $this->processException($e);
         }
 
 
@@ -639,7 +636,7 @@ class SQLite extends MariaDB
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws UniqueException
      */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
@@ -841,11 +838,7 @@ class SQLite extends MariaDB
                 $stmtAddPermissions->execute();
             }
         } catch (PDOException $e) {
-            throw match ($e->getCode()) {
-                '1062',
-                '23000' => new Duplicate('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            throw $this->processException($e);
         }
 
         return $document;
@@ -1248,9 +1241,21 @@ class SQLite extends MariaDB
             return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
-        // Duplicate
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1) {
-            return new DuplicateException('Document already exists', $e->getCode(), $e);
+        // Duplicate row
+        if ($e->getCode() === '23000' && ($e->errorInfo[1] ?? null) === 19) {
+            $msg = $e->errorInfo[2] ?? $e->getMessage();
+
+            // Match all table.column pairs (handles commas & spaces)
+            if (preg_match_all('/\b([^.]+)\.([^\s,]+)/', $msg, $matches, PREG_SET_ORDER)) {
+                $columns = array_map(fn ($m) => $m[2], $matches);
+                sort($columns);
+
+                if ($columns === ['_tenant', '_uid'] || in_array('_uid', $columns)) {
+                    return new DuplicateException('Document already exists', $e->getCode(), $e);
+                }
+            }
+
+            return new UniqueException('Document already exists', $e->getCode(), $e);
         }
 
         return $e;

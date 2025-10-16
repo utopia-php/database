@@ -10,7 +10,6 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Validator\Authorization;
 
 trait PermissionTests
 {
@@ -1115,9 +1114,9 @@ trait PermissionTests
     public function testCollectionPermissionsUpdateThrowsException(array $data): void
     {
         [$collection, $document] = $data;
+
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
-
         $this->expectException(AuthorizationException::class);
 
         /** @var Database $database */

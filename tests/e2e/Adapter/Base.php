@@ -45,7 +45,7 @@ abstract class Base extends TestCase
      *
      * @return bool
      */
-    abstract protected static function deleteColumn(string $collection, string $column): bool;
+    abstract protected function deleteColumn(string $collection, string $column): bool;
 
     /**
      * @param string $collection
@@ -53,7 +53,7 @@ abstract class Base extends TestCase
      *
      * @return bool
      */
-    abstract protected static function deleteIndex(string $collection, string $index): bool;
+    abstract protected function deleteIndex(string $collection, string $index): bool;
 
     public function setUp(): void
     {

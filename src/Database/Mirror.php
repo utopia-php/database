@@ -1083,8 +1083,8 @@ class Mirror extends Database
         if ($collection === 'upgrades' || $collection === Database::METADATA) {
             return new Document();
         }
-
-        return $this->getAuthorization()->skip(function () use ($collection) {
+ 
+        return $this->getSource()->getAuthorization()->skip(function () use ($collection) {
             try {
                 return $this->source->getDocument('upgrades', $collection);
             } catch (\Throwable) {

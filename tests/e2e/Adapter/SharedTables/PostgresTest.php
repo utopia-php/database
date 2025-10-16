@@ -29,7 +29,7 @@ class PostgresTest extends Base
     /**
      * @reture Adapter
      */
-    public  function getDatabase(): Database
+    public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -64,9 +64,9 @@ class PostgresTest extends Base
         return self::$database = $database;
     }
 
-    protected static function deleteColumn(string $collection, string $column): bool
+    protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = '"' . self::getDatabase()->getDatabase() . '"."' . self::getDatabase()->getNamespace() . '_' . $collection . '"';
+        $sqlTable = '"' . $this->getDatabase()->getDatabase() . '"."' . $this->getDatabase()->getNamespace() . '_' . $collection . '"';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN \"{$column}\"";
 
         self::$pdo->exec($sql);
@@ -74,11 +74,11 @@ class PostgresTest extends Base
         return true;
     }
 
-    protected static function deleteIndex(string $collection, string $index): bool
+    protected function deleteIndex(string $collection, string $index): bool
     {
-        $key = "\"".self::getDatabase()->getNamespace()."_".self::getDatabase()->getTenant()."_{$collection}_{$index}\"";
+        $key = "\"".$this->getDatabase()->getNamespace()."_".$this->getDatabase()->getTenant()."_{$collection}_{$index}\"";
 
-        $sql = "DROP INDEX \"".self::getDatabase()->getDatabase()."\".{$key}";
+        $sql = "DROP INDEX \"".$this->getDatabase()->getDatabase()."\".{$key}";
 
         self::$pdo->exec($sql);
 

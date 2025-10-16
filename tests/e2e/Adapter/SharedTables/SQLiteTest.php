@@ -30,7 +30,7 @@ class SQLiteTest extends Base
     /**
      * @return Database
      */
-    public  function getDatabase(): Database
+    public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -70,9 +70,9 @@ class SQLiteTest extends Base
         return self::$database = $database;
     }
 
-    protected static function deleteColumn(string $collection, string $column): bool
+    protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pdo->exec($sql);
@@ -80,9 +80,9 @@ class SQLiteTest extends Base
         return true;
     }
 
-    protected static function deleteIndex(string $collection, string $index): bool
+    protected function deleteIndex(string $collection, string $index): bool
     {
-        $index = "`".self::getDatabase()->getNamespace()."_".self::getDatabase()->getTenant()."_{$collection}_{$index}`";
+        $index = "`".$this->getDatabase()->getNamespace()."_".$this->getDatabase()->getTenant()."_{$collection}_{$index}`";
         $sql = "DROP INDEX {$index}";
 
         self::$pdo->exec($sql);

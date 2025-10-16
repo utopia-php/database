@@ -158,7 +158,7 @@ trait AttributeTests
         $this->assertEquals(true, $database->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
         sleep(1);
 
-        $this->assertEquals(true, static::deleteColumn('attributes', 'string1'));
+        $this->assertEquals(true, $this->deleteColumn('attributes', 'string1'));
 
         $collection = $database->getCollection('attributes');
         $attributes = $collection->getAttribute('attributes');

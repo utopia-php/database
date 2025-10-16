@@ -4333,9 +4333,8 @@ class Database
         $batchSize = \min(Database::INSERT_BATCH_SIZE, \max(1, $batchSize));
         $collection = $this->silent(fn () => $this->getCollection($collection));
         if ($collection->getId() !== self::METADATA) {
-            $authorization = new Authorization(self::PERMISSION_CREATE);
-            if (!$authorization->isValid($collection->getCreate())) {
-                throw new AuthorizationException($authorization->getDescription());
+            if (!$this->authorization->isValid(new Input(self::PERMISSION_CREATE, $collection->getCreate()))) {
+                throw new AuthorizationException($this->authorization->getDescription());
             }
         }
 
@@ -4886,26 +4885,31 @@ class Database
                         break;
                     }
                 }
-            }
 
-            if ($shouldUpdate) {
+                $updatePermissions = array_merge(
+                    $collection->getUpdate(),
+                    $documentSecurity ? $old->getUpdate() : []
+                );
 
-                $isUpdateValid = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
-                    ...$collection->getUpdate(),
-                    ...($documentSecurity ? $old->getUpdate() : [])
-                ]));
+                $readPermissions = array_merge(
+                    $collection->getRead(),
+                    $documentSecurity ? $old->getRead() : []
+                );
 
-                $isReadValid = $this->authorization->isValid(new Input(self::PERMISSION_READ, [
-                    ...$collection->getRead(),
-                    ...($documentSecurity ? $old->getRead() : [])
-                ]));
-
-                if (!$isReadValid || !$isUpdateValid) {
-                    throw new AuthorizationException($this->authorization->getDescription());
+                if ($shouldUpdate) {
+                    if(!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {
+                        throw new AuthorizationException($this->authorization->getDescription());
+                    }
+                } else {
+                    if(!$this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))){
+                        throw new AuthorizationException($this->authorization->getDescription());
+                    }
                 }
-
-                $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
             }
+         
+            if ($shouldUpdate) {     
+                $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
+            } 
 
             // Check if document was updated after the request timestamp
             $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
@@ -4991,11 +4995,10 @@ class Database
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $authorization = new Authorization(self::PERMISSION_UPDATE);
-        $skipAuth = $authorization->isValid($collection->getUpdate());
+        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $collection->getUpdate()));
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-            throw new AuthorizationException($authorization->getDescription());
+            throw new AuthorizationException($this->authorization->getDescription());
         }
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -6070,7 +6073,7 @@ class Database
             if ($collection->getId() !== self::METADATA) {
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-                if (!$this->authorization->isValid(new Input([
+                if (!$this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
                     ...$collection->getDelete(),
                     ...($documentSecurity ? $document->getDelete() : [])
                 ]))) {
@@ -6522,11 +6525,10 @@ class Database
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $authorization = new Authorization(self::PERMISSION_DELETE);
-        $skipAuth = $authorization->isValid($collection->getDelete());
+        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_DELETE, $collection->getDelete()));
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-            throw new AuthorizationException($authorization->getDescription());
+            throw new AuthorizationException($this->authorization->getDescription());
         }
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -6745,12 +6747,12 @@ class Database
             }
         }
 
-        $authorization = new Authorization($forPermission);
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $authorization->isValid($collection->getPermissionsByType($forPermission));
+        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
+
 
         if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
-            throw new AuthorizationException($authorization->getDescription());
+            throw new AuthorizationException($this->authorization->getDescription());
         }
 
         $relationships = \array_filter(
@@ -6825,7 +6827,7 @@ class Database
                 $cursorDirection,
                 $forPermission
             );
-
+      
             $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
         }
 
@@ -6968,11 +6970,7 @@ class Database
             }
         }
 
-        $authorization = new Authorization(self::PERMISSION_READ);
-        if ($authorization->isValid($collection->getRead())) {
-            $skipAuth = true;
-        }
-
+        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP

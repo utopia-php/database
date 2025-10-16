@@ -30,7 +30,7 @@ class MariaDBTest extends Base
     /**
      * @return Database
      */
-    public  function getDatabase(bool $fresh = false): Database
+    public function getDatabase(bool $fresh = false): Database
     {
         if (!is_null(self::$database) && !$fresh) {
             return self::$database;
@@ -65,9 +65,9 @@ class MariaDBTest extends Base
         return self::$database = $database;
     }
 
-    protected static function deleteColumn(string $collection, string $column): bool
+    protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pdo->exec($sql);
@@ -75,9 +75,9 @@ class MariaDBTest extends Base
         return true;
     }
 
-    protected static function deleteIndex(string $collection, string $index): bool
+    protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pdo->exec($sql);

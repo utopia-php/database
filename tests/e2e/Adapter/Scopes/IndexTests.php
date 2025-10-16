@@ -99,7 +99,7 @@ trait IndexTests
 
         // Test delete index when index does not exist
         $this->assertEquals(true, $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
-        $this->assertEquals(true, static::deleteIndex('indexes', 'index1'));
+        $this->assertEquals(true, $this->deleteIndex('indexes', 'index1'));
         $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
 
         // Test delete index when attribute does not exist

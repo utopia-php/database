@@ -6,6 +6,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Mirroring\Filter;
+use Utopia\Database\Validator\Authorization;
 
 class Mirror extends Database
 {
@@ -1097,5 +1098,20 @@ class Mirror extends Database
         foreach ($this->errorCallbacks as $callback) {
             $callback($action, $err);
         }
+    }
+
+    public function setAuthorization(Authorization $authorization): self
+    {
+     
+        parent::setAuthorization($authorization);
+
+        if (isset($this->source)) {
+            $this->source->setAuthorization($authorization);
+        }
+        if (isset($this->destination)) {
+            $this->destination->setAuthorization($authorization);
+        }
+        
+        return $this;
     }
 }

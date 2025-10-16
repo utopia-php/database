@@ -8,9 +8,9 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
@@ -1621,16 +1621,14 @@ class SQLite extends MariaDB
                 )";
 
             case Operator::TYPE_ARRAY_FILTER:
-                // SQLite: Implement filtering using json_each
                 $values = $operator->getValues();
-                if (empty($values) || count($values) < 1) {
+                if (empty($values)) {
                     // No filter criteria, return array unchanged
                     return "{$quotedColumn} = {$quotedColumn}";
                 }
 
                 $filterType = $values[0]; // 'equals', 'notEquals', 'notNull', 'greaterThan', etc.
 
-                // Build SQL based on filter type
                 switch ($filterType) {
                     case 'notNull':
                         // Filter out null values - no bind parameter needed
@@ -1646,8 +1644,7 @@ class SQLite extends MariaDB
                     case 'greaterThanOrEqual':
                     case 'lessThan':
                     case 'lessThanOrEqual':
-                        // These require a value parameter
-                        if (count($values) < 2) {
+                        if (\count($values) < 2) {
                             return "{$quotedColumn} = {$quotedColumn}";
                         }
 
@@ -1661,6 +1658,7 @@ class SQLite extends MariaDB
                             'greaterThanOrEqual' => '>=',
                             'lessThan' => '<',
                             'lessThanOrEqual' => '<=',
+                            default => throw new OperatorException('Unsupported filter type: ' . $filterType),
                         };
 
                         return "{$quotedColumn} = (
@@ -1670,26 +1668,23 @@ class SQLite extends MariaDB
                         )";
 
                     default:
-                        // Unsupported filter type, return array unchanged
                         return "{$quotedColumn} = {$quotedColumn}";
                 }
 
+                // no break
             case Operator::TYPE_DATE_ADD_DAYS:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                // SQLite: use datetime function with day modifier
-                // Note: The sign is included in the value itself, so we don't add '+' prefix
+
                 return "{$quotedColumn} = datetime({$quotedColumn}, :$bindKey || ' days')";
 
             case Operator::TYPE_DATE_SUB_DAYS:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                // SQLite: use datetime function with negative day modifier
-                // We negate the value to subtract
+
                 return "{$quotedColumn} = datetime({$quotedColumn}, '-' || abs(:$bindKey) || ' days')";
 
             case Operator::TYPE_DATE_SET_NOW:
-                // SQLite: use current timestamp
                 return "{$quotedColumn} = datetime('now')";
 
             default:

@@ -1212,11 +1212,27 @@ class Postgres extends SQL
          */
 
         $bindIndex = 0;
+        $operators = [];
+
+        // Separate regular attributes from operators
+        foreach ($attributes as $attribute => $value) {
+            if (Operator::isOperator($value)) {
+                $operators[$attribute] = $value;
+            }
+        }
+
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
-            $bindIndex++;
+
+            // Check if this is an operator or regular attribute
+            if (isset($operators[$attribute])) {
+                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+                $columns .= $operatorSQL . ',';
+            } else {
+                $bindKey = 'key_' . $bindIndex;
+                $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
+                $bindIndex++;
+            }
         }
 
         $sql = "
@@ -1239,14 +1255,19 @@ class Postgres extends SQL
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) {
-                $value = json_encode($value);
-            }
+            // Handle operators separately
+            if (isset($operators[$attribute])) {
+                $this->bindOperatorParams($stmt, $operators[$attribute], $attributeIndex);
+            } else {
+                if (is_array($value)) {
+                    $value = json_encode($value);
+                }
 
-            $bindKey = 'key_' . $attributeIndex;
-            $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
+                $bindKey = 'key_' . $attributeIndex;
+                $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
+                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
+            }
         }
 
         try {
@@ -2264,8 +2285,100 @@ class Postgres extends SQL
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
+        $values = $operator->getValues();
 
         switch ($method) {
+            // Numeric operators with NULL handling
+            case Operator::TYPE_INCREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    // Use CASE to avoid overflow before capping
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN :$maxKey - COALESCE({$quotedColumn}, 0) < :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
+
+            case Operator::TYPE_DECREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    // Use CASE to avoid underflow before capping
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) - :$minKey < :$bindKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
+
+            case Operator::TYPE_MULTIPLY:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    // Use CASE to avoid overflow before capping
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 0
+                        WHEN :$bindKey = 0 THEN 0
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
+
+            case Operator::TYPE_DIVIDE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    // Use CASE to avoid underflow before capping
+                    return "{$quotedColumn} = CASE
+                        WHEN :$bindKey = 0 THEN COALESCE({$quotedColumn}, 0)
+                        WHEN COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
+
+            case Operator::TYPE_MODULO:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // PostgreSQL MOD requires compatible types - cast to numeric
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = GREATEST(MOD(COALESCE({$quotedColumn}::numeric, 0), :$bindKey::numeric), :$minKey)";
+                }
+                return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}::numeric, 0), :$bindKey::numeric)";
+
+            case Operator::TYPE_POWER:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    // Use CASE to handle edge cases and avoid overflow
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 0
+                        WHEN COALESCE({$quotedColumn}, 0) = 1 THEN 1
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN :$bindKey <= 0 THEN 1
+                        ELSE LEAST(POWER(COALESCE({$quotedColumn}, 0), :$bindKey), :$maxKey)
+                    END";
+                }
+                return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
+
             case Operator::TYPE_CONCAT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2291,11 +2404,11 @@ class Postgres extends SQL
             case Operator::TYPE_ARRAY_REMOVE:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = (
+                return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(value)
                     FROM jsonb_array_elements({$quotedColumn}) AS value
                     WHERE value != :$bindKey::jsonb
-                )";
+                ), '[]'::jsonb)";
 
             case Operator::TYPE_ARRAY_INSERT:
                 $indexKey = "op_{$bindIndex}";
@@ -2321,20 +2434,40 @@ class Postgres extends SQL
             case Operator::TYPE_ARRAY_INTERSECT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = (
+                return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(value)
                     FROM jsonb_array_elements({$quotedColumn}) AS value
                     WHERE value IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
-                )";
+                ), '[]'::jsonb)";
 
             case Operator::TYPE_ARRAY_DIFF:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = (
+                return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(value)
                     FROM jsonb_array_elements({$quotedColumn}) AS value
                     WHERE value NOT IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
-                )";
+                ), '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_FILTER:
+                $conditionKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // PostgreSQL-specific implementation using jsonb_array_elements
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$quotedColumn}) AS value
+                    WHERE CASE :$conditionKey
+                        WHEN 'equals' THEN value = :$valueKey::jsonb
+                        WHEN 'notEquals' THEN value != :$valueKey::jsonb
+                        WHEN 'greaterThan' THEN (value::text)::numeric > (:$valueKey::text)::numeric
+                        WHEN 'lessThan' THEN (value::text)::numeric < (:$valueKey::text)::numeric
+                        WHEN 'null' THEN value = 'null'::jsonb
+                        WHEN 'notNull' THEN value != 'null'::jsonb
+                        ELSE TRUE
+                    END
+                ), '[]'::jsonb)";
 
             case Operator::TYPE_REPLACE:
                 $searchKey = "op_{$bindIndex}";
@@ -2344,8 +2477,7 @@ class Postgres extends SQL
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
             case Operator::TYPE_TOGGLE:
-                // PostgreSQL boolean toggle with proper casting
-                return "{$quotedColumn} = NOT {$quotedColumn}";
+                return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
 
             case Operator::TYPE_DATE_ADD_DAYS:
                 $bindKey = "op_{$bindIndex}";
@@ -2383,9 +2515,9 @@ class Postgres extends SQL
         switch ($method) {
             case Operator::TYPE_ARRAY_APPEND:
             case Operator::TYPE_ARRAY_PREPEND:
-                $value = $values[0] ?? [];
+                $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, json_encode($value), \PDO::PARAM_STR);
+                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
@@ -2399,9 +2531,9 @@ class Postgres extends SQL
 
             case Operator::TYPE_ARRAY_INTERSECT:
             case Operator::TYPE_ARRAY_DIFF:
-                $value = $values[0] ?? [];
+                $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, json_encode($value), \PDO::PARAM_STR);
+                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 

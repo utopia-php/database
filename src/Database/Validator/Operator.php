@@ -145,7 +145,6 @@ class Operator extends Validator
                         DatabaseOperator::TYPE_DIVIDE => $operatorValue != 0 ? $currentValue / $operatorValue : $currentValue,
                         DatabaseOperator::TYPE_MODULO => $operatorValue != 0 ? $currentValue % $operatorValue : $currentValue,
                         DatabaseOperator::TYPE_POWER => $currentValue ** $operatorValue,
-                        default => $currentValue,
                     };
 
                     if ($predictedResult > Database::INT_MAX) {

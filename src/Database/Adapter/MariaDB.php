@@ -1112,16 +1112,32 @@ class MariaDB extends SQL
              * Update Attributes
              */
             $bindIndex = 0;
+            $operators = [];
+
+            // Separate regular attributes from operators
+            foreach ($attributes as $attribute => $value) {
+                if (Operator::isOperator($value)) {
+                    $operators[$attribute] = $value;
+                }
+            }
+
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
-                $bindKey = 'key_' . $bindIndex;
 
-                if (in_array($attribute, $spatialAttributes)) {
-                    $columns .= "`{$column}`" . '=' . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
+                // Check if this is an operator or regular attribute
+                if (isset($operators[$attribute])) {
+                    $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+                    $columns .= $operatorSQL . ',';
                 } else {
-                    $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+                    $bindKey = 'key_' . $bindIndex;
+
+                    if (in_array($attribute, $spatialAttributes)) {
+                        $columns .= "`{$column}`" . '=' . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
+                    } else {
+                        $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+                    }
+                    $bindIndex++;
                 }
-                $bindIndex++;
             }
 
             $sql = "
@@ -1144,14 +1160,19 @@ class MariaDB extends SQL
 
             $attributeIndex = 0;
             foreach ($attributes as $attribute => $value) {
-                if (is_array($value)) {
-                    $value = json_encode($value);
-                }
+                // Handle operators separately
+                if (isset($operators[$attribute])) {
+                    $this->bindOperatorParams($stmt, $operators[$attribute], $attributeIndex);
+                } else {
+                    if (is_array($value)) {
+                        $value = json_encode($value);
+                    }
 
-                $bindKey = 'key_' . $attributeIndex;
-                $value = (is_bool($value)) ? (int)$value : $value;
-                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $attributeIndex++;
+                    $bindKey = 'key_' . $attributeIndex;
+                    $value = (is_bool($value)) ? (int)$value : $value;
+                    $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                    $attributeIndex++;
+                }
             }
 
             $stmt->execute();
@@ -1870,8 +1891,95 @@ class MariaDB extends SQL
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
+        $values = $operator->getValues();
 
         switch ($method) {
+            // Numeric operators with NULL handling
+            case Operator::TYPE_INCREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = LEAST(COALESCE({$quotedColumn}, 0) + :$bindKey, :$maxKey)";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
+
+            case Operator::TYPE_DECREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = GREATEST(COALESCE({$quotedColumn}, 0) - :$bindKey, :$minKey)";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
+
+            case Operator::TYPE_MULTIPLY:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = LEAST(COALESCE({$quotedColumn}, 0) * :$bindKey, :$maxKey)";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
+
+            case Operator::TYPE_DIVIDE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = GREATEST(COALESCE({$quotedColumn}, 0) / :$bindKey, :$minKey)";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
+
+            case Operator::TYPE_MODULO:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
+
+            case Operator::TYPE_POWER:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = LEAST(POWER(COALESCE({$quotedColumn}, 0), :$bindKey), :$maxKey)";
+                }
+                return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
+
+            // Boolean operator with NULL handling
+            case Operator::TYPE_TOGGLE:
+                return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
+
+            case Operator::TYPE_ARRAY_INSERT:
+                // Use JSON_ARRAY_INSERT for proper array insertion
+                $indexKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_ARRAY_INSERT({$quotedColumn}, CONCAT('$[', :$indexKey, ']'), JSON_EXTRACT(:$valueKey, '$'))";
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE((
+                    SELECT JSON_ARRAYAGG(jt1.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value JSON PATH '\$')) AS jt1
+                    WHERE JSON_CONTAINS(JSON_EXTRACT(:$bindKey, '$'), jt1.value)
+                ), CAST('[]' AS JSON))";
+
+            case Operator::TYPE_ARRAY_DIFF:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE((
+                    SELECT JSON_ARRAYAGG(jt1.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value JSON PATH '\$')) AS jt1
+                    WHERE NOT JSON_CONTAINS(JSON_EXTRACT(:$bindKey, '$'), jt1.value)
+                ), CAST('[]' AS JSON))";
+
             case Operator::TYPE_ARRAY_UNIQUE:
                 return "{$quotedColumn} = (
                     SELECT JSON_ARRAYAGG(DISTINCT jt.value)

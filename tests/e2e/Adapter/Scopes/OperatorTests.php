@@ -2398,7 +2398,7 @@ trait OperatorTests
         ]));
 
         $updated = $database->updateDocument($collectionId, 'frac_power_doc', new Document([
-            'value' => Operator::power(1/3)
+            'value' => Operator::power(1 / 3)
         ]));
 
         $this->assertEqualsWithDelta(3.0, $updated->getAttribute('value'), 0.000001);

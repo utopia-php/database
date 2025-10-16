@@ -17,7 +17,7 @@ trait ManyToManyTests
     public function testManyToManyOneWayRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -328,7 +328,7 @@ trait ManyToManyTests
     public function testManyToManyTwoWayRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -782,7 +782,7 @@ trait ManyToManyTests
     public function testNestedManyToMany_OneToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -893,7 +893,7 @@ trait ManyToManyTests
     public function testNestedManyToMany_OneToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -993,7 +993,7 @@ trait ManyToManyTests
     public function testNestedManyToMany_ManyToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1107,7 +1107,7 @@ trait ManyToManyTests
     public function testNestedManyToMany_ManyToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1211,7 +1211,7 @@ trait ManyToManyTests
     public function testManyToManyRelationshipKeyWithSymbols(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1254,7 +1254,7 @@ trait ManyToManyTests
     public function testRecreateManyToManyOneWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1320,7 +1320,7 @@ trait ManyToManyTests
     public function testRecreateManyToManyTwoWayRelationshipFromParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1388,7 +1388,7 @@ trait ManyToManyTests
     public function testRecreateManyToManyTwoWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1456,7 +1456,7 @@ trait ManyToManyTests
     public function testRecreateManyToManyOneWayRelationshipFromParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1522,7 +1522,7 @@ trait ManyToManyTests
     public function testSelectManyToMany(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1600,7 +1600,7 @@ trait ManyToManyTests
     public function testSelectAcrossMultipleCollections(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1721,7 +1721,7 @@ trait ManyToManyTests
     public function testDeleteBulkDocumentsManyToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
@@ -1798,7 +1798,7 @@ trait ManyToManyTests
     public function testUpdateParentAndChild_ManyToMany(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (
             !$database->getAdapter()->getSupportForRelationships() ||
@@ -1883,7 +1883,7 @@ trait ManyToManyTests
     public function testDeleteDocumentsRelationshipErrorDoesNotDeleteParent_ManyToMany(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();

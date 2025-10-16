@@ -24,6 +24,7 @@ use Utopia\Validator\Text;
  * @Example
  * docker compose exec tests bin/query --adapter=mariadb --limit=1000 --name=testing
  */
+
 $cli
     ->task('query')
     ->desc('Query mock data')
@@ -32,6 +33,14 @@ $cli
     ->param('limit', 25, new Integer(true), 'Limit on queried documents', true)
     ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
     ->action(function (string $adapter, string $name, int $limit, bool $sharedTables) {
+
+        $setRoles = function (Authorization $authorization, $faker, $count): int {
+            for ($i = 0; $i < $count; $i++) {
+                $authorization->addRole($faker->numerify('user####'));
+            }
+            return \count($authorization->getRoles());
+        };
+
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
@@ -91,35 +100,35 @@ $cli
 
         $report = [];
 
-        $count = setRoles($faker, 1);
+        $count = $setRoles($database->getAuthorization(), $faker, 1);
         Console::info("\nRunning queries with {$count} authorization roles:");
         $report[] = [
             'roles' => $count,
             'results' => runQueries($database, $limit)
         ];
 
-        $count = setRoles($faker, 100);
+        $count = $setRoles($database->getAuthorization(), $faker, 100);
         Console::info("\nRunning queries with {$count} authorization roles:");
         $report[] = [
             'roles' => $count,
             'results' => runQueries($database, $limit)
         ];
 
-        $count = setRoles($faker, 400);
+        $count = $setRoles($database->getAuthorization(), $faker, 400);
         Console::info("\nRunning queries with {$count} authorization roles:");
         $report[] = [
             'roles' => $count,
             'results' => runQueries($database, $limit)
         ];
 
-        $count = setRoles($faker, 500);
+        $count = $setRoles($database->getAuthorization(), $faker, 500);
         Console::info("\nRunning queries with {$count} authorization roles:");
         $report[] = [
             'roles' => $count,
             'results' => runQueries($database, $limit)
         ];
 
-        $count = setRoles($faker, 1000);
+        $count = $setRoles($database->getAuthorization(), $faker, 1000);
         Console::info("\nRunning queries with {$count} authorization roles:");
         $report[] = [
             'roles' => $count,
@@ -136,13 +145,6 @@ $cli
         \fclose($results);
     });
 
-function setRoles($faker, $count): int
-{
-    for ($i = 0; $i < $count; $i++) {
-        Authorization::setRole($faker->numerify('user####'));
-    }
-    return \count(Authorization::getRoles());
-}
 
 function runQueries(Database $database, int $limit): array
 {

@@ -1950,63 +1950,63 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('students');
-        $database->createCollection('courses');
+        $database->createCollection('partial_students');
+        $database->createCollection('partial_courses');
 
-        $database->createAttribute('students', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('students', 'grade', Database::VAR_STRING, 10, false);
-        $database->createAttribute('courses', 'title', Database::VAR_STRING, 255, true);
-        $database->createAttribute('courses', 'credits', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('partial_students', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('partial_students', 'grade', Database::VAR_STRING, 10, false);
+        $database->createAttribute('partial_courses', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('partial_courses', 'credits', Database::VAR_INTEGER, 0, false);
 
         $database->createRelationship(
-            collection: 'students',
-            relatedCollection: 'courses',
+            collection: 'partial_students',
+            relatedCollection: 'partial_courses',
             type: Database::RELATION_MANY_TO_MANY,
             twoWay: true,
-            id: 'courses',
-            twoWayKey: 'students'
+            id: 'partial_courses',
+            twoWayKey: 'partial_students'
         );
 
         // Create student with courses
-        $database->createDocument('students', new Document([
+        $database->createDocument('partial_students', new Document([
             '$id' => 'student1',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'name' => 'David',
             'grade' => 'A',
-            'courses' => [
+            'partial_courses' => [
                 ['$id' => 'course1', '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())], 'title' => 'Math', 'credits' => 3],
                 ['$id' => 'course2', '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())], 'title' => 'Science', 'credits' => 4],
             ],
         ]));
 
         // Partial update from student side - update grade only, preserve courses
-        $database->updateDocument('students', 'student1', new Document([
+        $database->updateDocument('partial_students', 'student1', new Document([
             '$id' => 'student1',
-            '$collection' => 'students',
+            '$collection' => 'partial_students',
             'grade' => 'A+',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
         ]));
 
-        $student = $database->getDocument('students', 'student1');
+        $student = $database->getDocument('partial_students', 'student1');
         $this->assertEquals('David', $student->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals('A+', $student->getAttribute('grade'), 'Grade should be updated');
-        $this->assertCount(2, $student->getAttribute('courses'), 'Courses should be preserved');
+        $this->assertCount(2, $student->getAttribute('partial_courses'), 'Courses should be preserved');
 
         // Partial update from course side - update credits only, preserve students
-        $database->updateDocument('courses', 'course1', new Document([
+        $database->updateDocument('partial_courses', 'course1', new Document([
             '$id' => 'course1',
-            '$collection' => 'courses',
+            '$collection' => 'partial_courses',
             'credits' => 5,
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
         ]));
 
-        $course = $database->getDocument('courses', 'course1');
+        $course = $database->getDocument('partial_courses', 'course1');
         $this->assertEquals('Math', $course->getAttribute('title'), 'Title should be preserved');
         $this->assertEquals(5, $course->getAttribute('credits'), 'Credits should be updated');
-        $this->assertCount(1, $course->getAttribute('students'), 'Students should be preserved');
+        $this->assertCount(1, $course->getAttribute('partial_students'), 'Students should be preserved');
 
-        $database->deleteCollection('students');
-        $database->deleteCollection('courses');
+        $database->deleteCollection('partial_students');
+        $database->deleteCollection('partial_courses');
     }
 
     public function testPartialUpdateManyToManyWithStringIdsAndDocuments(): void

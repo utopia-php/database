@@ -47,6 +47,7 @@ class Database
     public const VAR_OBJECT_ID = 'objectId';
 
     public const INT_MAX = 2147483647;
+    public const INT_MIN = -2147483648;
     public const BIG_INT_MAX = PHP_INT_MAX;
     public const DOUBLE_MAX = PHP_FLOAT_MAX;
 
@@ -4757,6 +4758,14 @@ class Database
             $operators = $extracted['operators'];
             $updates = $extracted['updates'];
 
+            // Validate operators against attribute types (with current document for runtime checks)
+            $operatorValidator = new OperatorValidator($collection, $old);
+            foreach ($operators as $attribute => $operator) {
+                if (!$operatorValidator->isValid($operator)) {
+                    throw new StructureException($operatorValidator->getDescription());
+                }
+            }
+
             $document = \array_merge($old->getArrayCopy(), $updates);
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
@@ -4913,8 +4922,20 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
+            // Re-add operators to document for adapter processing
+            foreach ($operators as $key => $operator) {
+                $document->setAttribute($key, $operator);
+            }
+
             $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
             $this->purgeCachedDocument($collection->getId(), $id);
+
+            // If operators were used, refetch document to get computed values
+            if (!empty($operators)) {
+                $document = Authorization::skip(fn () => $this->silent(
+                    fn () => $this->getDocument($collection->getId(), $id)
+                ));
+            }
 
             return $document;
         });

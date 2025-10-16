@@ -18,14 +18,18 @@ class Operator extends Validator
 
     protected string $message = 'Invalid operator';
 
+    protected ?Document $currentDocument = null;
+
     /**
      * Constructor
      *
      * @param Document $collection
+     * @param Document|null $currentDocument Current document for runtime validation (e.g., array bounds checking)
      */
-    public function __construct(Document $collection)
+    public function __construct(Document $collection, ?Document $currentDocument = null)
     {
         $this->collection = $collection;
+        $this->currentDocument = $currentDocument;
 
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
             $this->attributes[$attribute->getAttribute('key', $attribute->getId())] = $attribute;
@@ -84,17 +88,19 @@ class Operator extends Validator
      * Validate operator against attribute configuration
      *
      * @param DatabaseOperator $operator
-     * @param array<string, mixed> $attribute
+     * @param Document|array<string, mixed> $attribute
      * @return bool
      */
     private function validateOperatorForAttribute(
         DatabaseOperator $operator,
-        array $attribute
+        Document|array $attribute
     ): bool {
         $method = $operator->getMethod();
         $values = $operator->getValues();
-        $type = $attribute['type'];
-        $isArray = $attribute['array'] ?? false;
+
+        // Handle both Document objects and arrays
+        $type = $attribute instanceof Document ? $attribute->getAttribute('type') : $attribute['type'];
+        $isArray = $attribute instanceof Document ? ($attribute->getAttribute('array') ?? false) : ($attribute['array'] ?? false);
 
         switch ($method) {
             case DatabaseOperator::TYPE_INCREMENT:
@@ -105,7 +111,7 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_POWER:
                 // Numeric operations only work on numeric types
                 if (!\in_array($type, [Database::VAR_INTEGER, Database::VAR_FLOAT])) {
-                    $this->message = "Cannot use {$method} operator on non-numeric attribute '{$operator->getAttribute()}' of type '{$type}'";
+                    $this->message = "Cannot apply {$method} to non-numeric field '{$operator->getAttribute()}'";
                     return false;
                 }
 
@@ -127,12 +133,54 @@ class Operator extends Validator
                     return false;
                 }
 
+                if ($this->currentDocument !== null && $type === Database::VAR_INTEGER && !isset($values[1])) {
+                    $currentValue = $this->currentDocument->getAttribute($operator->getAttribute()) ?? 0;
+                    $operatorValue = $values[0];
+
+                    // Compute predicted result
+                    $predictedResult = match ($method) {
+                        DatabaseOperator::TYPE_INCREMENT => $currentValue + $operatorValue,
+                        DatabaseOperator::TYPE_DECREMENT => $currentValue - $operatorValue,
+                        DatabaseOperator::TYPE_MULTIPLY => $currentValue * $operatorValue,
+                        DatabaseOperator::TYPE_DIVIDE => $operatorValue != 0 ? $currentValue / $operatorValue : $currentValue,
+                        DatabaseOperator::TYPE_MODULO => $operatorValue != 0 ? $currentValue % $operatorValue : $currentValue,
+                        DatabaseOperator::TYPE_POWER => $currentValue ** $operatorValue,
+                        default => $currentValue,
+                    };
+
+                    if ($predictedResult > Database::INT_MAX) {
+                        $this->message = "Attribute '{$operator->getAttribute()}': invalid type, value must be less than or equal to " . Database::INT_MAX;
+                        return false;
+                    }
+
+                    if ($predictedResult < Database::INT_MIN) {
+                        $this->message = "Attribute '{$operator->getAttribute()}': invalid type, value must be greater than or equal to " . Database::INT_MIN;
+                        return false;
+                    }
+                }
+
                 break;
             case DatabaseOperator::TYPE_ARRAY_APPEND:
             case DatabaseOperator::TYPE_ARRAY_PREPEND:
+                if (!$isArray) {
+                    $this->message = "Cannot apply {$method} to non-array field '{$operator->getAttribute()}'";
+                    return false;
+                }
+
+                if (!empty($values) && $type === Database::VAR_INTEGER) {
+                    $newItems = \is_array($values[0]) ? $values[0] : $values;
+                    foreach ($newItems as $item) {
+                        if (\is_numeric($item) && ($item > Database::INT_MAX || $item < Database::INT_MIN)) {
+                            $this->message = "Attribute '{$operator->getAttribute()}': invalid type, array items must be between " . Database::INT_MIN . " and " . Database::INT_MAX;
+                            return false;
+                        }
+                    }
+                }
+
+                break;
             case DatabaseOperator::TYPE_ARRAY_UNIQUE:
                 if (!$isArray) {
-                    $this->message = "Cannot use {$method} operator on non-array attribute '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
 
@@ -152,6 +200,27 @@ class Operator extends Validator
                 if (!\is_int($index) || $index < 0) {
                     $this->message = "Insert index must be a non-negative integer";
                     return false;
+                }
+
+                $insertValue = $values[1];
+                if ($type === Database::VAR_INTEGER && \is_numeric($insertValue)) {
+                    if ($insertValue > Database::INT_MAX || $insertValue < Database::INT_MIN) {
+                        $this->message = "Attribute '{$operator->getAttribute()}': invalid type, array items must be between " . Database::INT_MIN . " and " . Database::INT_MAX;
+                        return false;
+                    }
+                }
+
+                // Runtime validation: Check if index is within bounds
+                if ($this->currentDocument !== null) {
+                    $currentArray = $this->currentDocument->getAttribute($operator->getAttribute());
+                    if (\is_array($currentArray)) {
+                        $arrayLength = \count($currentArray);
+                        // Valid indices are 0 to length (inclusive, as we can append)
+                        if ($index > $arrayLength) {
+                            $this->message = "Insert index {$index} is out of bounds for array of length {$arrayLength}";
+                            return false;
+                        }
+                    }
                 }
 
                 break;
@@ -174,10 +243,6 @@ class Operator extends Validator
                     return false;
                 }
 
-                if (empty($values) || !\is_array($values[0]) || \count($values[0]) === 0) {
-                    $this->message = "{$method} operator requires an array of values";
-                    return false;
-                }
 
                 break;
             case DatabaseOperator::TYPE_ARRAY_FILTER:
@@ -200,7 +265,7 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_CONCAT:
                 // Concat works on both strings and arrays
                 if ($type !== Database::VAR_STRING && !$isArray) {
-                    $this->message = "Cannot use concat operator on attribute '{$operator->getAttribute()}' of type '{$type}' (must be string or array)";
+                    $this->message = "Cannot apply concat to non-string field '{$operator->getAttribute()}'";
                     return false;
                 }
 
@@ -209,11 +274,26 @@ class Operator extends Validator
                     return false;
                 }
 
+                if ($this->currentDocument !== null && $type === Database::VAR_STRING) {
+                    $currentString = $this->currentDocument->getAttribute($operator->getAttribute()) ?? '';
+                    $concatValue = $values[0];
+                    $predictedLength = strlen($currentString) + strlen($concatValue);
+
+                    $maxSize = $attribute instanceof Document
+                        ? $attribute->getAttribute('size', 0)
+                        : ($attribute['size'] ?? 0);
+
+                    if ($maxSize > 0 && $predictedLength > $maxSize) {
+                        $this->message = "Attribute '{$operator->getAttribute()}': invalid type, value must be no longer than {$maxSize} characters";
+                        return false;
+                    }
+                }
+
                 break;
             case DatabaseOperator::TYPE_REPLACE:
                 // Replace only works on string types
                 if ($type !== Database::VAR_STRING) {
-                    $this->message = "Cannot use replace operator on non-string attribute '{$operator->getAttribute()}' of type '{$type}'";
+                    $this->message = "Cannot apply replace to non-string field '{$operator->getAttribute()}'";
                     return false;
                 }
 
@@ -226,7 +306,7 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_TOGGLE:
                 // Toggle only works on boolean types
                 if ($type !== Database::VAR_BOOLEAN) {
-                    $this->message = "Cannot use toggle operator on non-boolean attribute '{$operator->getAttribute()}' of type '{$type}'";
+                    $this->message = "Cannot apply toggle to non-boolean field '{$operator->getAttribute()}'";
                     return false;
                 }
 
@@ -234,7 +314,7 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_DATE_ADD_DAYS:
             case DatabaseOperator::TYPE_DATE_SUB_DAYS:
                 if ($type !== Database::VAR_DATETIME) {
-                    $this->message = "Cannot use {$method} operator on non-datetime attribute '{$operator->getAttribute()}' of type '{$type}'";
+                    $this->message = "Invalid date format in field '{$operator->getAttribute()}'";
                     return false;
                 }
 
@@ -246,7 +326,7 @@ class Operator extends Validator
                 break;
             case DatabaseOperator::TYPE_DATE_SET_NOW:
                 if ($type !== Database::VAR_DATETIME) {
-                    $this->message = "Cannot use {$method} operator on non-datetime attribute '{$operator->getAttribute()}' of type '{$type}'";
+                    $this->message = "Invalid date format in field '{$operator->getAttribute()}'";
                     return false;
                 }
 

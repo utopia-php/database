@@ -5359,6 +5359,9 @@ trait DocumentTests
         $this->assertArrayNotHasKey('$tenant', $document);
     }
 
+    /**
+     * @depends testCreateDocument
+     */
     public function testEmptyOperatorValues(): void
     {
         /** @var Database $database */

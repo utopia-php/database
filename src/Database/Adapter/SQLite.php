@@ -1375,9 +1375,28 @@ class SQLite extends MariaDB
 
         // For operators that SQLite doesn't use bind parameters for, skip binding entirely
         // Note: The bindIndex increment happens in getOperatorSQL(), NOT here
-        if (in_array($method, [Operator::TYPE_ARRAY_FILTER, Operator::TYPE_TOGGLE, Operator::TYPE_DATE_SET_NOW, Operator::TYPE_ARRAY_UNIQUE])) {
+        if (in_array($method, [Operator::TYPE_TOGGLE, Operator::TYPE_DATE_SET_NOW, Operator::TYPE_ARRAY_UNIQUE])) {
             // These operators don't bind any parameters - they're handled purely in SQL
             // DO NOT increment bindIndex here as it's already handled in getOperatorSQL()
+            return;
+        }
+
+        // For ARRAY_FILTER, bind the filter value if present
+        if ($method === Operator::TYPE_ARRAY_FILTER) {
+            $values = $operator->getValues();
+            if (!empty($values) && count($values) >= 2) {
+                $filterType = $values[0];
+                $filterValue = $values[1];
+
+                // Only bind if we support this filter type (all comparison operators need binding)
+                $comparisonTypes = ['equals', 'notEquals', 'greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual'];
+                if (in_array($filterType, $comparisonTypes)) {
+                    $bindKey = "op_{$bindIndex}";
+                    $value = (is_bool($filterValue)) ? (int)$filterValue : $filterValue;
+                    $stmt->bindValue(":{$bindKey}", $value, $this->getPDOType($value));
+                    $bindIndex++;
+                }
+            }
             return;
         }
 
@@ -1424,9 +1443,9 @@ class SQLite extends MariaDB
                     // SQLite uses MIN/MAX instead of LEAST/GREATEST
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = MIN({$quotedColumn} + :$bindKey, :$maxKey)";
+                    return "{$quotedColumn} = MIN(COALESCE({$quotedColumn}, 0) + :$bindKey, :$maxKey)";
                 }
-                return "{$quotedColumn} = {$quotedColumn} + :$bindKey";
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
             case Operator::TYPE_DECREMENT:
                 $values = $operator->getValues();
@@ -1437,9 +1456,9 @@ class SQLite extends MariaDB
                     // SQLite uses MIN/MAX instead of LEAST/GREATEST
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = MAX({$quotedColumn} - :$bindKey, :$minKey)";
+                    return "{$quotedColumn} = MAX(COALESCE({$quotedColumn}, 0) - :$bindKey, :$minKey)";
                 }
-                return "{$quotedColumn} = {$quotedColumn} - :$bindKey";
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
             case Operator::TYPE_MULTIPLY:
                 $values = $operator->getValues();
@@ -1450,9 +1469,9 @@ class SQLite extends MariaDB
                     // SQLite uses MIN/MAX instead of LEAST/GREATEST
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = MIN({$quotedColumn} * :$bindKey, :$maxKey)";
+                    return "{$quotedColumn} = MIN(COALESCE({$quotedColumn}, 0) * :$bindKey, :$maxKey)";
                 }
-                return "{$quotedColumn} = {$quotedColumn} * :$bindKey";
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
             case Operator::TYPE_DIVIDE:
                 $values = $operator->getValues();
@@ -1463,14 +1482,14 @@ class SQLite extends MariaDB
                     // SQLite uses MIN/MAX instead of LEAST/GREATEST
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = MAX({$quotedColumn} / :$bindKey, :$minKey)";
+                    return "{$quotedColumn} = MAX(COALESCE({$quotedColumn}, 0) / :$bindKey, :$minKey)";
                 }
-                return "{$quotedColumn} = {$quotedColumn} / :$bindKey";
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
 
             case Operator::TYPE_MODULO:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = {$quotedColumn} % :$bindKey";
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) % :$bindKey";
 
             case Operator::TYPE_POWER:
                 if (!$this->getSupportForMathFunctions()) {
@@ -1488,13 +1507,13 @@ class SQLite extends MariaDB
                     // SQLite uses MIN/MAX instead of LEAST/GREATEST
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = MIN(POWER({$quotedColumn}, :$bindKey), :$maxKey)";
+                    return "{$quotedColumn} = MIN(POWER(COALESCE({$quotedColumn}, 0), :$bindKey), :$maxKey)";
                 }
-                return "{$quotedColumn} = POWER({$quotedColumn}, :$bindKey)";
+                return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
             case Operator::TYPE_TOGGLE:
-                // SQLite: toggle boolean (0 or 1)
-                return "{$quotedColumn} = CASE WHEN {$quotedColumn} = 0 THEN 1 ELSE 0 END";
+                // SQLite: toggle boolean (0 or 1), treat NULL as 0
+                return "{$quotedColumn} = CASE WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 1 ELSE 0 END";
 
             case Operator::TYPE_REPLACE:
                 $searchKey = "op_{$bindIndex}";
@@ -1602,26 +1621,72 @@ class SQLite extends MariaDB
                 )";
 
             case Operator::TYPE_ARRAY_FILTER:
-                // SQLite doesn't support complex filtering easily, just keep array as-is
-                // The actual filter will be handled by PHP when retrieving the document
-                // But we still need to consume the bind parameters
+                // SQLite: Implement filtering using json_each
                 $values = $operator->getValues();
-                if (!empty($values)) {
-                    $bindIndex += count($values);
+                if (empty($values) || count($values) < 1) {
+                    // No filter criteria, return array unchanged
+                    return "{$quotedColumn} = {$quotedColumn}";
                 }
-                return "{$quotedColumn} = {$quotedColumn}";
+
+                $filterType = $values[0]; // 'equals', 'notEquals', 'notNull', 'greaterThan', etc.
+
+                // Build SQL based on filter type
+                switch ($filterType) {
+                    case 'notNull':
+                        // Filter out null values - no bind parameter needed
+                        return "{$quotedColumn} = (
+                            SELECT json_group_array(value)
+                            FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                            WHERE value IS NOT NULL
+                        )";
+
+                    case 'equals':
+                    case 'notEquals':
+                    case 'greaterThan':
+                    case 'greaterThanOrEqual':
+                    case 'lessThan':
+                    case 'lessThanOrEqual':
+                        // These require a value parameter
+                        if (count($values) < 2) {
+                            return "{$quotedColumn} = {$quotedColumn}";
+                        }
+
+                        $bindKey = "op_{$bindIndex}";
+                        $bindIndex++;
+
+                        $operator = match ($filterType) {
+                            'equals' => '=',
+                            'notEquals' => '!=',
+                            'greaterThan' => '>',
+                            'greaterThanOrEqual' => '>=',
+                            'lessThan' => '<',
+                            'lessThanOrEqual' => '<=',
+                        };
+
+                        return "{$quotedColumn} = (
+                            SELECT json_group_array(value)
+                            FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                            WHERE value $operator :$bindKey
+                        )";
+
+                    default:
+                        // Unsupported filter type, return array unchanged
+                        return "{$quotedColumn} = {$quotedColumn}";
+                }
 
             case Operator::TYPE_DATE_ADD_DAYS:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 // SQLite: use datetime function with day modifier
-                return "{$quotedColumn} = datetime({$quotedColumn}, '+' || :$bindKey || ' days')";
+                // Note: The sign is included in the value itself, so we don't add '+' prefix
+                return "{$quotedColumn} = datetime({$quotedColumn}, :$bindKey || ' days')";
 
             case Operator::TYPE_DATE_SUB_DAYS:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 // SQLite: use datetime function with negative day modifier
-                return "{$quotedColumn} = datetime({$quotedColumn}, '-' || :$bindKey || ' days')";
+                // We negate the value to subtract
+                return "{$quotedColumn} = datetime({$quotedColumn}, '-' || abs(:$bindKey) || ' days')";
 
             case Operator::TYPE_DATE_SET_NOW:
                 // SQLite: use current timestamp

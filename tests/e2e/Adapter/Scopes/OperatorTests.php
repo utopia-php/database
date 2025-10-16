@@ -2291,4 +2291,917 @@ trait OperatorTests
 
         $database->deleteCollection($collectionId);
     }
+
+    /**
+     * Edge Case 1: Test operators with MAXIMUM and MINIMUM integer values
+     * Tests: Integer overflow/underflow prevention, boundary arithmetic
+     */
+    public function testOperatorWithExtremeIntegerValues(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_extreme_integers';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'bigint_max', Database::VAR_INTEGER, 8, true);
+        $database->createAttribute($collectionId, 'bigint_min', Database::VAR_INTEGER, 8, true);
+
+        $maxValue = PHP_INT_MAX - 1000; // Near max but with room
+        $minValue = PHP_INT_MIN + 1000; // Near min but with room
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'extreme_int_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'bigint_max' => $maxValue,
+            'bigint_min' => $minValue
+        ]));
+
+        // Test increment near max with limit
+        $updated = $database->updateDocument($collectionId, 'extreme_int_doc', new Document([
+            'bigint_max' => Operator::increment(2000, PHP_INT_MAX - 500)
+        ]));
+        // Should be capped at max
+        $this->assertLessThanOrEqual(PHP_INT_MAX - 500, $updated->getAttribute('bigint_max'));
+        $this->assertEquals(PHP_INT_MAX - 500, $updated->getAttribute('bigint_max'));
+
+        // Test decrement near min with limit
+        $updated = $database->updateDocument($collectionId, 'extreme_int_doc', new Document([
+            'bigint_min' => Operator::decrement(2000, PHP_INT_MIN + 500)
+        ]));
+        // Should be capped at min
+        $this->assertGreaterThanOrEqual(PHP_INT_MIN + 500, $updated->getAttribute('bigint_min'));
+        $this->assertEquals(PHP_INT_MIN + 500, $updated->getAttribute('bigint_min'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 2: Test NEGATIVE exponents in power operator
+     * Tests: Fractional results, precision handling
+     */
+    public function testOperatorPowerWithNegativeExponent(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_negative_power';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
+
+        // Create document with value 8
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'neg_power_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 8.0
+        ]));
+
+        // Test negative exponent: 8^(-2) = 1/64 = 0.015625
+        $updated = $database->updateDocument($collectionId, 'neg_power_doc', new Document([
+            'value' => Operator::power(-2)
+        ]));
+
+        $this->assertEqualsWithDelta(0.015625, $updated->getAttribute('value'), 0.000001);
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 3: Test FRACTIONAL exponents in power operator
+     * Tests: Square roots, cube roots via fractional powers
+     */
+    public function testOperatorPowerWithFractionalExponent(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_fractional_power';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
+
+        // Create document with value 16
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'frac_power_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 16.0
+        ]));
+
+        // Test fractional exponent: 16^(0.5) = sqrt(16) = 4
+        $updated = $database->updateDocument($collectionId, 'frac_power_doc', new Document([
+            'value' => Operator::power(0.5)
+        ]));
+
+        $this->assertEqualsWithDelta(4.0, $updated->getAttribute('value'), 0.000001);
+
+        // Test cube root: 27^(1/3) = 3
+        $database->updateDocument($collectionId, 'frac_power_doc', new Document([
+            'value' => 27.0
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'frac_power_doc', new Document([
+            'value' => Operator::power(1/3)
+        ]));
+
+        $this->assertEqualsWithDelta(3.0, $updated->getAttribute('value'), 0.000001);
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 4: Test EMPTY STRING operations
+     * Tests: Concatenation with empty strings, replacement edge cases
+     */
+    public function testOperatorWithEmptyStrings(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_empty_strings';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false, '');
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'empty_str_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'text' => ''
+        ]));
+
+        // Test concatenation to empty string
+        $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
+            'text' => Operator::concat('hello')
+        ]));
+        $this->assertEquals('hello', $updated->getAttribute('text'));
+
+        // Test concatenation of empty string
+        $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
+            'text' => Operator::concat('')
+        ]));
+        $this->assertEquals('hello', $updated->getAttribute('text'));
+
+        // Test replace with empty search string (should do nothing or replace all)
+        $database->updateDocument($collectionId, 'empty_str_doc', new Document([
+            'text' => 'test'
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
+            'text' => Operator::replace('', 'X')
+        ]));
+        // Empty search should not change the string
+        $this->assertEquals('test', $updated->getAttribute('text'));
+
+        // Test replace with empty replace string (deletion)
+        $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
+            'text' => Operator::replace('t', '')
+        ]));
+        $this->assertEquals('es', $updated->getAttribute('text'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 5: Test UNICODE edge cases in string operations
+     * Tests: Multi-byte character handling, emoji operations
+     */
+    public function testOperatorWithUnicodeCharacters(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_unicode';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 500, false, '');
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'unicode_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'text' => '你好'
+        ]));
+
+        // Test concatenation with emoji
+        $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
+            'text' => Operator::concat('👋🌍')
+        ]));
+        $this->assertEquals('你好👋🌍', $updated->getAttribute('text'));
+
+        // Test replace with Chinese characters
+        $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
+            'text' => Operator::replace('你好', '再见')
+        ]));
+        $this->assertEquals('再见👋🌍', $updated->getAttribute('text'));
+
+        // Test with combining characters (é = e + ´)
+        $database->updateDocument($collectionId, 'unicode_doc', new Document([
+            'text' => 'cafe\u{0301}' // café with combining acute accent
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
+            'text' => Operator::concat(' ☕')
+        ]));
+        $this->assertStringContainsString('☕', $updated->getAttribute('text'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 6: Test array operations on EMPTY ARRAYS
+     * Tests: Behavior with zero-length arrays
+     */
+    public function testOperatorArrayOperationsOnEmptyArrays(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_empty_arrays';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'empty_array_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'items' => []
+        ]));
+
+        // Test append to empty array
+        $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
+            'items' => Operator::arrayAppend(['first'])
+        ]));
+        $this->assertEquals(['first'], $updated->getAttribute('items'));
+
+        // Reset and test prepend to empty array
+        $database->updateDocument($collectionId, 'empty_array_doc', new Document([
+            'items' => []
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
+            'items' => Operator::arrayPrepend(['prepended'])
+        ]));
+        $this->assertEquals(['prepended'], $updated->getAttribute('items'));
+
+        // Test insert at index 0 of empty array
+        $database->updateDocument($collectionId, 'empty_array_doc', new Document([
+            'items' => []
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
+            'items' => Operator::arrayInsert(0, 'zero')
+        ]));
+        $this->assertEquals(['zero'], $updated->getAttribute('items'));
+
+        // Test unique on empty array
+        $database->updateDocument($collectionId, 'empty_array_doc', new Document([
+            'items' => []
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
+            'items' => Operator::arrayUnique()
+        ]));
+        $this->assertEquals([], $updated->getAttribute('items'));
+
+        // Test remove from empty array (should stay empty)
+        $updated = $database->updateDocument($collectionId, 'empty_array_doc', new Document([
+            'items' => Operator::arrayRemove('nonexistent')
+        ]));
+        $this->assertEquals([], $updated->getAttribute('items'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 7: Test array operations with NULL and special values
+     * Tests: How operators handle null, empty strings, and mixed types in arrays
+     */
+    public function testOperatorArrayWithNullAndSpecialValues(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_array_special_values';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'mixed', Database::VAR_STRING, 50, false, null, true, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'special_values_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'mixed' => ['', 'text', '', 'text']
+        ]));
+
+        // Test unique with empty strings (should deduplicate)
+        $updated = $database->updateDocument($collectionId, 'special_values_doc', new Document([
+            'mixed' => Operator::arrayUnique()
+        ]));
+        $this->assertContains('', $updated->getAttribute('mixed'));
+        $this->assertContains('text', $updated->getAttribute('mixed'));
+        // Should have only 2 unique values: '' and 'text'
+        $this->assertCount(2, $updated->getAttribute('mixed'));
+
+        // Test remove empty string
+        $database->updateDocument($collectionId, 'special_values_doc', new Document([
+            'mixed' => ['', 'a', '', 'b']
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'special_values_doc', new Document([
+            'mixed' => Operator::arrayRemove('')
+        ]));
+        $this->assertNotContains('', $updated->getAttribute('mixed'));
+        $this->assertEquals(['a', 'b'], $updated->getAttribute('mixed'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 8: Test MODULO with negative numbers
+     * Tests: Sign preservation, mathematical correctness
+     */
+    public function testOperatorModuloWithNegativeNumbers(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_negative_modulo';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_INTEGER, 0, true);
+
+        // Test -17 % 5 (different languages handle this differently)
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'neg_mod_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => -17
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'neg_mod_doc', new Document([
+            'value' => Operator::modulo(5)
+        ]));
+
+        // In PHP/MySQL: -17 % 5 = -2
+        $this->assertEquals(-2, $updated->getAttribute('value'));
+
+        // Test positive % negative
+        $database->updateDocument($collectionId, 'neg_mod_doc', new Document([
+            'value' => 17
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'neg_mod_doc', new Document([
+            'value' => Operator::modulo(-5)
+        ]));
+
+        // In PHP/MySQL: 17 % -5 = 2
+        $this->assertEquals(2, $updated->getAttribute('value'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 9: Test FLOAT PRECISION issues
+     * Tests: Rounding errors, precision loss in arithmetic
+     */
+    public function testOperatorFloatPrecisionLoss(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_float_precision';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'precision_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 0.1
+        ]));
+
+        // Test repeated additions that expose floating point errors
+        // 0.1 + 0.1 + 0.1 should be 0.3, but might be 0.30000000000000004
+        $updated = $database->updateDocument($collectionId, 'precision_doc', new Document([
+            'value' => Operator::increment(0.1)
+        ]));
+        $updated = $database->updateDocument($collectionId, 'precision_doc', new Document([
+            'value' => Operator::increment(0.1)
+        ]));
+
+        // Use delta for float comparison
+        $this->assertEqualsWithDelta(0.3, $updated->getAttribute('value'), 0.000001);
+
+        // Test division that creates repeating decimal
+        $database->updateDocument($collectionId, 'precision_doc', new Document([
+            'value' => 10.0
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'precision_doc', new Document([
+            'value' => Operator::divide(3.0)
+        ]));
+
+        // 10/3 = 3.333...
+        $this->assertEqualsWithDelta(3.333333, $updated->getAttribute('value'), 0.000001);
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 10: Test VERY LONG string concatenation
+     * Tests: Performance with large strings, memory limits
+     */
+    public function testOperatorWithVeryLongStrings(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_long_strings';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 70000, false, '');
+
+        // Create a long string (10k characters)
+        $longString = str_repeat('A', 10000);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'long_str_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'text' => $longString
+        ]));
+
+        // Concat another 10k
+        $updated = $database->updateDocument($collectionId, 'long_str_doc', new Document([
+            'text' => Operator::concat(str_repeat('B', 10000))
+        ]));
+
+        $result = $updated->getAttribute('text');
+        $this->assertEquals(20000, strlen($result));
+        $this->assertStringStartsWith('AAA', $result);
+        $this->assertStringEndsWith('BBB', $result);
+
+        // Test replace on long string
+        $updated = $database->updateDocument($collectionId, 'long_str_doc', new Document([
+            'text' => Operator::replace('A', 'X')
+        ]));
+
+        $result = $updated->getAttribute('text');
+        $this->assertStringNotContainsString('A', $result);
+        $this->assertStringContainsString('X', $result);
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 11: Test DATE operations at year boundaries
+     * Tests: Year rollover, leap year handling, edge timestamps
+     */
+    public function testOperatorDateAtYearBoundaries(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_date_boundaries';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'date', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
+
+        // Test date at end of year
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'date_boundary_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'date' => '2023-12-31 23:59:59'
+        ]));
+
+        // Add 1 day (should roll to next year)
+        $updated = $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
+            'date' => Operator::dateAddDays(1)
+        ]));
+
+        $resultDate = $updated->getAttribute('date');
+        $this->assertStringStartsWith('2024-01-01', $resultDate);
+
+        // Test leap year: Feb 28, 2024 + 1 day = Feb 29, 2024 (leap year)
+        $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
+            'date' => '2024-02-28 12:00:00'
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
+            'date' => Operator::dateAddDays(1)
+        ]));
+
+        $resultDate = $updated->getAttribute('date');
+        $this->assertStringStartsWith('2024-02-29', $resultDate);
+
+        // Test non-leap year: Feb 28, 2023 + 1 day = Mar 1, 2023
+        $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
+            'date' => '2023-02-28 12:00:00'
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
+            'date' => Operator::dateAddDays(1)
+        ]));
+
+        $resultDate = $updated->getAttribute('date');
+        $this->assertStringStartsWith('2023-03-01', $resultDate);
+
+        // Test large day addition (cross multiple months)
+        $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
+            'date' => '2023-01-01 00:00:00'
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'date_boundary_doc', new Document([
+            'date' => Operator::dateAddDays(365)
+        ]));
+
+        $resultDate = $updated->getAttribute('date');
+        $this->assertStringStartsWith('2024-01-01', $resultDate);
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 12: Test ARRAY INSERT at exact boundaries
+     * Tests: Insert at length, insert at length+1 (should fail)
+     */
+    public function testOperatorArrayInsertAtExactBoundaries(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_array_insert_boundaries';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'boundary_insert_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'items' => ['a', 'b', 'c']
+        ]));
+
+        // Test insert at exact length (index 3 of array with 3 elements = append)
+        $updated = $database->updateDocument($collectionId, 'boundary_insert_doc', new Document([
+            'items' => Operator::arrayInsert(3, 'd')
+        ]));
+        $this->assertEquals(['a', 'b', 'c', 'd'], $updated->getAttribute('items'));
+
+        // Test insert beyond length (should throw exception)
+        try {
+            $database->updateDocument($collectionId, 'boundary_insert_doc', new Document([
+                'items' => Operator::arrayInsert(10, 'z')
+            ]));
+            $this->fail('Expected exception for out of bounds insert');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString('out of bounds', $e->getMessage());
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 13: Test SEQUENTIAL operator applications
+     * Tests: Multiple updates with operators in sequence
+     */
+    public function testOperatorSequentialApplications(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_sequential_ops';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false, '');
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'sequential_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'counter' => 10,
+            'text' => 'start'
+        ]));
+
+        // Apply operators sequentially and verify cumulative effect
+        $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
+            'counter' => Operator::increment(5)
+        ]));
+        $this->assertEquals(15, $updated->getAttribute('counter'));
+
+        $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
+            'counter' => Operator::multiply(2)
+        ]));
+        $this->assertEquals(30, $updated->getAttribute('counter'));
+
+        $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
+            'counter' => Operator::decrement(10)
+        ]));
+        $this->assertEquals(20, $updated->getAttribute('counter'));
+
+        $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
+            'counter' => Operator::divide(2)
+        ]));
+        $this->assertEquals(10, $updated->getAttribute('counter'));
+
+        // Sequential string operations
+        $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
+            'text' => Operator::concat('-middle')
+        ]));
+        $this->assertEquals('start-middle', $updated->getAttribute('text'));
+
+        $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
+            'text' => Operator::concat('-end')
+        ]));
+        $this->assertEquals('start-middle-end', $updated->getAttribute('text'));
+
+        $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
+            'text' => Operator::replace('-', '_')
+        ]));
+        $this->assertEquals('start_middle_end', $updated->getAttribute('text'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 14: Test operators with ZERO values
+     * Tests: Zero in arithmetic, empty behavior
+     */
+    public function testOperatorWithZeroValues(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_zero_values';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'zero_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 0.0
+        ]));
+
+        // Increment from zero
+        $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
+            'value' => Operator::increment(5)
+        ]));
+        $this->assertEquals(5.0, $updated->getAttribute('value'));
+
+        // Multiply by zero (should become zero)
+        $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
+            'value' => Operator::multiply(0)
+        ]));
+        $this->assertEquals(0.0, $updated->getAttribute('value'));
+
+        // Power with zero base: 0^5 = 0
+        $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
+            'value' => Operator::power(5)
+        ]));
+        $this->assertEquals(0.0, $updated->getAttribute('value'));
+
+        // Increment and test power with zero exponent: n^0 = 1
+        $database->updateDocument($collectionId, 'zero_doc', new Document([
+            'value' => 99.0
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'zero_doc', new Document([
+            'value' => Operator::power(0)
+        ]));
+        $this->assertEquals(1.0, $updated->getAttribute('value'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 15: Test ARRAY INTERSECT and DIFF with empty result sets
+     * Tests: What happens when operations produce empty arrays
+     */
+    public function testOperatorArrayIntersectAndDiffWithEmptyResults(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_array_empty_results';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'empty_result_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'items' => ['a', 'b', 'c']
+        ]));
+
+        // Intersect with no common elements (result should be empty array)
+        $updated = $database->updateDocument($collectionId, 'empty_result_doc', new Document([
+            'items' => Operator::arrayIntersect(['x', 'y', 'z'])
+        ]));
+        $this->assertEquals([], $updated->getAttribute('items'));
+
+        // Reset and test diff that removes all elements
+        $database->updateDocument($collectionId, 'empty_result_doc', new Document([
+            'items' => ['a', 'b', 'c']
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'empty_result_doc', new Document([
+            'items' => Operator::arrayDiff(['a', 'b', 'c'])
+        ]));
+        $this->assertEquals([], $updated->getAttribute('items'));
+
+        // Test intersect on empty array
+        $updated = $database->updateDocument($collectionId, 'empty_result_doc', new Document([
+            'items' => Operator::arrayIntersect(['x', 'y'])
+        ]));
+        $this->assertEquals([], $updated->getAttribute('items'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 16: Test REPLACE with patterns that appear multiple times
+     * Tests: Replace all occurrences, not just first
+     */
+    public function testOperatorReplaceMultipleOccurrences(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_replace_multiple';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false, '');
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'replace_multi_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'text' => 'the cat and the dog'
+        ]));
+
+        // Replace all occurrences of 'the'
+        $updated = $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
+            'text' => Operator::replace('the', 'a')
+        ]));
+        $this->assertEquals('a cat and a dog', $updated->getAttribute('text'));
+
+        // Replace with overlapping patterns
+        $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
+            'text' => 'aaa bbb aaa ccc aaa'
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
+            'text' => Operator::replace('aaa', 'X')
+        ]));
+        $this->assertEquals('X bbb X ccc X', $updated->getAttribute('text'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 17: Test INCREMENT/DECREMENT with FLOAT values that have many decimal places
+     * Tests: Precision preservation in arithmetic
+     */
+    public function testOperatorIncrementDecrementWithPreciseFloats(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_precise_floats';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'precise_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 3.141592653589793
+        ]));
+
+        // Increment by precise float
+        $updated = $database->updateDocument($collectionId, 'precise_doc', new Document([
+            'value' => Operator::increment(2.718281828459045)
+        ]));
+
+        // π + e ≈ 5.859874482048838
+        $this->assertEqualsWithDelta(5.859874482, $updated->getAttribute('value'), 0.000001);
+
+        // Decrement by precise float
+        $updated = $database->updateDocument($collectionId, 'precise_doc', new Document([
+            'value' => Operator::decrement(1.414213562373095)
+        ]));
+
+        // (π + e) - √2 ≈ 4.44566
+        $this->assertEqualsWithDelta(4.44566, $updated->getAttribute('value'), 0.0001);
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 18: Test ARRAY operations with single-element arrays
+     * Tests: Boundary between empty and multi-element
+     */
+    public function testOperatorArrayWithSingleElement(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_single_element';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'single_elem_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'items' => ['only']
+        ]));
+
+        // Remove the only element
+        $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
+            'items' => Operator::arrayRemove('only')
+        ]));
+        $this->assertEquals([], $updated->getAttribute('items'));
+
+        // Reset and test unique on single element
+        $database->updateDocument($collectionId, 'single_elem_doc', new Document([
+            'items' => ['single']
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
+            'items' => Operator::arrayUnique()
+        ]));
+        $this->assertEquals(['single'], $updated->getAttribute('items'));
+
+        // Test intersect with single element (match)
+        $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
+            'items' => Operator::arrayIntersect(['single'])
+        ]));
+        $this->assertEquals(['single'], $updated->getAttribute('items'));
+
+        // Test intersect with single element (no match)
+        $database->updateDocument($collectionId, 'single_elem_doc', new Document([
+            'items' => ['single']
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'single_elem_doc', new Document([
+            'items' => Operator::arrayIntersect(['other'])
+        ]));
+        $this->assertEquals([], $updated->getAttribute('items'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 19: Test TOGGLE on default boolean values
+     * Tests: Toggle from default state
+     */
+    public function testOperatorToggleFromDefaultValue(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_toggle_default';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'flag', Database::VAR_BOOLEAN, 0, false, false);
+
+        // Create doc without setting flag (should use default false)
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'toggle_default_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        // Verify default
+        $this->assertEquals(false, $doc->getAttribute('flag'));
+
+        // Toggle from default false to true
+        $updated = $database->updateDocument($collectionId, 'toggle_default_doc', new Document([
+            'flag' => Operator::toggle()
+        ]));
+        $this->assertEquals(true, $updated->getAttribute('flag'));
+
+        // Toggle back
+        $updated = $database->updateDocument($collectionId, 'toggle_default_doc', new Document([
+            'flag' => Operator::toggle()
+        ]));
+        $this->assertEquals(false, $updated->getAttribute('flag'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Edge Case 20: Test operators with ATTRIBUTE that has max/min constraints
+     * Tests: Interaction between operator limits and attribute constraints
+     */
+    public function testOperatorWithAttributeConstraints(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_attribute_constraints';
+        $database->createCollection($collectionId);
+        // Integer with size 0 (32-bit INT)
+        $database->createAttribute($collectionId, 'small_int', Database::VAR_INTEGER, 0, true);
+
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'constraint_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'small_int' => 100
+        ]));
+
+        // Test increment with max that's within bounds
+        $updated = $database->updateDocument($collectionId, 'constraint_doc', new Document([
+            'small_int' => Operator::increment(50, 120)
+        ]));
+        $this->assertEquals(120, $updated->getAttribute('small_int'));
+
+        // Test multiply that would exceed without limit
+        $database->updateDocument($collectionId, 'constraint_doc', new Document([
+            'small_int' => 1000
+        ]));
+
+        $updated = $database->updateDocument($collectionId, 'constraint_doc', new Document([
+            'small_int' => Operator::multiply(1000, 5000)
+        ]));
+        $this->assertEquals(5000, $updated->getAttribute('small_int'));
+
+        $database->deleteCollection($collectionId);
+    }
 }

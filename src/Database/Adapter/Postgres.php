@@ -2304,9 +2304,25 @@ class Postgres extends SQL
                 )";
 
             case Operator::TYPE_ARRAY_INSERT:
-                // For PostgreSQL, we'll use parent implementation which falls back to PHP processing
-                // as jsonb array insertion at specific index is complex
-                return null;
+                $indexKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // PostgreSQL implementation using jsonb functions with row numbering
+                return "{$quotedColumn} = (
+                    SELECT jsonb_agg(value ORDER BY idx)
+                    FROM (
+                        SELECT value, idx
+                        FROM jsonb_array_elements({$quotedColumn}) WITH ORDINALITY AS t(value, idx)
+                        WHERE idx - 1 < :$indexKey
+                        UNION ALL
+                        SELECT :$valueKey::jsonb AS value, :$indexKey + 1 AS idx
+                        UNION ALL
+                        SELECT value, idx + 1
+                        FROM jsonb_array_elements({$quotedColumn}) WITH ORDINALITY AS t(value, idx)
+                        WHERE idx - 1 >= :$indexKey
+                    ) AS combined
+                )";
 
             case Operator::TYPE_ARRAY_INTERSECT:
                 $bindKey = "op_{$bindIndex}";

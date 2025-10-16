@@ -1334,6 +1334,33 @@ class SQLite extends MariaDB
     }
 
     /**
+     * Check if SQLite math functions (like POWER) are available
+     * SQLite must be compiled with -DSQLITE_ENABLE_MATH_FUNCTIONS
+     *
+     * @return bool
+     */
+    private function getSupportForMathFunctions(): bool
+    {
+        static $available = null;
+
+        if ($available !== null) {
+            return $available;
+        }
+
+        try {
+            // Test if POWER function exists by attempting to use it
+            $stmt = $this->getPDO()->query('SELECT POWER(2, 3) as test');
+            $result = $stmt->fetch();
+            $available = ($result['test'] == 8);
+            return $available;
+        } catch (PDOException $e) {
+            // Function doesn't exist
+            $available = false;
+            return false;
+        }
+    }
+
+    /**
      * Bind operator parameters to statement
      * Override to handle SQLite-specific operator bindings
      *
@@ -1345,15 +1372,12 @@ class SQLite extends MariaDB
     protected function bindOperatorParams(\PDOStatement $stmt, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
-        $values = $operator->getValues();
 
-        // For operators that SQLite doesn't actually use parameters for, skip binding
-        if (in_array($method, [Operator::TYPE_ARRAY_FILTER])) {
-            // These operators don't actually use the bind parameters in SQLite's SQL
-            // but we still need to increment the index to keep it in sync
-            if (!empty($values)) {
-                $bindIndex += count($values);
-            }
+        // For operators that SQLite doesn't use bind parameters for, skip binding entirely
+        // Note: The bindIndex increment happens in getOperatorSQL(), NOT here
+        if (in_array($method, [Operator::TYPE_ARRAY_FILTER, Operator::TYPE_TOGGLE, Operator::TYPE_DATE_SET_NOW, Operator::TYPE_ARRAY_UNIQUE])) {
+            // These operators don't bind any parameters - they're handled purely in SQL
+            // DO NOT increment bindIndex here as it's already handled in getOperatorSQL()
             return;
         }
 
@@ -1363,6 +1387,17 @@ class SQLite extends MariaDB
 
     /**
      * Get SQL expression for operator
+     *
+     * IMPORTANT: SQLite JSON Limitations
+     * -----------------------------------
+     * Array operators using json_each() and json_group_array() have type conversion behavior:
+     * - Numbers are preserved but may lose precision (e.g., 1.0 becomes 1)
+     * - Booleans become integers (true→1, false→0)
+     * - Strings remain strings
+     * - Objects and nested arrays are converted to JSON strings
+     *
+     * This is inherent to SQLite's JSON implementation and affects: ARRAY_APPEND, ARRAY_PREPEND,
+     * ARRAY_UNIQUE, ARRAY_INTERSECT, ARRAY_DIFF, ARRAY_INSERT, and ARRAY_REMOVE.
      *
      * @param string $column
      * @param Operator $operator
@@ -1438,8 +1473,24 @@ class SQLite extends MariaDB
                 return "{$quotedColumn} = {$quotedColumn} % :$bindKey";
 
             case Operator::TYPE_POWER:
-                // SQLite doesn't have a built-in POWER function
-                throw new DatabaseException('POWER operator is not supported on SQLite adapter');
+                if (!$this->getSupportForMathFunctions()) {
+                    throw new DatabaseException(
+                        'SQLite POWER operator requires math functions. ' .
+                        'Compile SQLite with -DSQLITE_ENABLE_MATH_FUNCTIONS or use multiply operators instead.'
+                    );
+                }
+
+                $values = $operator->getValues();
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                if (isset($values[1]) && $values[1] !== null) {
+                    // SQLite uses MIN/MAX instead of LEAST/GREATEST
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = MIN(POWER({$quotedColumn}, :$bindKey), :$maxKey)";
+                }
+                return "{$quotedColumn} = POWER({$quotedColumn}, :$bindKey)";
 
             case Operator::TYPE_TOGGLE:
                 // SQLite: toggle boolean (0 or 1)

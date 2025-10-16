@@ -27,6 +27,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
+use Utopia\Database\Validator\Operator as OperatorValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
@@ -5750,6 +5751,14 @@ class Database
             $extracted = Operator::extractOperators($documentArray);
             $operators = $extracted['operators'];
             $regularUpdates = $extracted['updates'];
+
+            // Validate operators against attribute types
+            $operatorValidator = new OperatorValidator($collection);
+            foreach ($operators as $attribute => $operator) {
+                if (!$operatorValidator->isValid($operator)) {
+                    throw new StructureException($operatorValidator->getDescription());
+                }
+            }
 
             // Create a temporary document with only regular updates for encoding and validation
             $tempDocument = new Document($regularUpdates);

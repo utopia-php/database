@@ -932,4 +932,31 @@ class OperatorTest extends TestCase
         $operator = Operator::power(0);
         $this->assertEquals(0, $operator->getValue());
     }
+
+    public function testPowerOperatorWithMax(): void
+    {
+        // Test power with max limit
+        $operator = Operator::power(2, 1000);
+        $this->assertEquals(Operator::TYPE_POWER, $operator->getMethod());
+        $this->assertEquals([2, 1000], $operator->getValues());
+
+        // Test power without max
+        $operator = Operator::power(3);
+        $this->assertEquals([3], $operator->getValues());
+    }
+
+    public function testOperatorTypeValidation(): void
+    {
+        // Test that operators have proper type checking methods
+        $numericOp = Operator::power(2);
+        $this->assertTrue($numericOp->isNumericOperation());
+        $this->assertFalse($numericOp->isArrayOperation());
+        $this->assertFalse($numericOp->isStringOperation());
+        $this->assertFalse($numericOp->isBooleanOperation());
+        $this->assertFalse($numericOp->isDateOperation());
+
+        $moduloOp = Operator::modulo(5);
+        $this->assertTrue($moduloOp->isNumericOperation());
+        $this->assertFalse($moduloOp->isArrayOperation());
+    }
 }

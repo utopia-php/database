@@ -1862,19 +1862,17 @@ class MariaDB extends SQL
      * Override to handle MariaDB/MySQL-specific operators
      *
      * @param string $column
-     * @param \Utopia\Database\Operator $operator
+     * @param Operator $operator
      * @param int &$bindIndex
      * @return ?string
      */
-    protected function getOperatorSQL(string $column, \Utopia\Database\Operator $operator, int &$bindIndex): ?string
+    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
 
         switch ($method) {
-            case \Utopia\Database\Operator::TYPE_ARRAY_UNIQUE:
-                // MariaDB supports JSON_ARRAYAGG(DISTINCT ...) but the parent's JSON_TABLE syntax needs adjustment
-                // Use a simpler subquery approach
+            case Operator::TYPE_ARRAY_UNIQUE:
                 return "{$quotedColumn} = (
                     SELECT JSON_ARRAYAGG(DISTINCT jt.value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt

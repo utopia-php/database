@@ -110,7 +110,7 @@ class Operator extends Validator
                 }
 
                 // Validate the numeric value and optional max/min
-                if (empty($values) || !\is_numeric($values[0])) {
+                if (!isset($values[0]) || !\is_numeric($values[0])) {
                     $this->message = "Numeric operator value must be numeric, got " . gettype($operator->getValue());
                     return false;
                 }

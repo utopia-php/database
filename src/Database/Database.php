@@ -4897,19 +4897,19 @@ class Database
                 );
 
                 if ($shouldUpdate) {
-                    if(!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {
+                    if (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {
                         throw new AuthorizationException($this->authorization->getDescription());
                     }
                 } else {
-                    if(!$this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))){
+                    if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {
                         throw new AuthorizationException($this->authorization->getDescription());
                     }
                 }
             }
-         
-            if ($shouldUpdate) {     
+
+            if ($shouldUpdate) {
                 $document->setAttribute('$updatedAt', ($newUpdatedAt === null || !$this->preserveDates) ? $time : $newUpdatedAt);
-            } 
+            }
 
             // Check if document was updated after the request timestamp
             $oldUpdatedAt = new \DateTime($old->getUpdatedAt());
@@ -5798,7 +5798,7 @@ class Database
             /**
              * @var array<Change> $chunk
              */
-            $batch = $this->withTransaction(fn () =>$this->authorization->skip(fn () => $this->adapter->upsertDocuments(
+            $batch = $this->withTransaction(fn () => $this->authorization->skip(fn () => $this->adapter->upsertDocuments(
                 $collection,
                 $attribute,
                 $chunk
@@ -6827,7 +6827,7 @@ class Database
                 $cursorDirection,
                 $forPermission
             );
-      
+
             $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
         }
 

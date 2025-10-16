@@ -6,7 +6,6 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Mirroring\Filter;
-use Utopia\Database\Validator\Authorization;
 
 class Mirror extends Database
 {
@@ -1083,7 +1082,7 @@ class Mirror extends Database
         if ($collection === 'upgrades' || $collection === Database::METADATA) {
             return new Document();
         }
- 
+
         return $this->getSource()->getAuthorization()->skip(function () use ($collection) {
             try {
                 return $this->source->getDocument('upgrades', $collection);

@@ -20,7 +20,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
@@ -34,7 +33,6 @@ $tagsPool = ['short', 'quick', 'easy', 'medium', 'hard'];
  * @Example
  * docker compose exec tests bin/relationships --adapter=mariadb --limit=1000
  */
-$authorization = new Authorization();
 
 $cli
     ->task('relationships')
@@ -44,21 +42,19 @@ $cli
     ->param('name', 'myapp_' . uniqid(), new Text(0), 'Name of created database.', true)
     ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
     ->param('runs', 1, new Integer(true), 'Number of times to run benchmarks', true)
-    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables, int $runs) use ($authorization) {
+    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables, int $runs) {
         $start = null;
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
         Console::info("Filling {$adapter} with {$limit} records: {$name}");
 
-        $createRelationshipSchema = function (Database $database) use ($authorization): void {
+        $createRelationshipSchema = function (Database $database): void {
             if ($database->exists($database->getDatabase())) {
                 $database->delete($database->getDatabase());
             }
+            $database->getAuthorization()->addRole(Role::any()->toString());
             $database->create();
-
-            $authorization->addRole(Role::any()->toString());
-
             $database->createCollection('authors', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),

@@ -17,7 +17,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 
-
 trait CollectionTests
 {
     public function testCreateExistsDelete(): void

@@ -16,7 +16,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
-use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
@@ -26,7 +25,6 @@ $namesPool = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank', 'Grace', 'Heidi',
 $genresPool = ['fashion', 'food', 'travel', 'music', 'lifestyle', 'fitness', 'diy', 'sports', 'finance'];
 $tagsPool = ['short', 'quick', 'easy', 'medium', 'hard'];
 
-$authorization = new Authorization();
 
 /**
  * @Example
@@ -39,16 +37,15 @@ $cli
     ->param('limit', 0, new Integer(true), 'Total number of records to add to database')
     ->param('name', 'myapp_' . uniqid(), new Text(0), 'Name of created database.', true)
     ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
-    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables) use ($authorization) {
+    ->action(function (string $adapter, int $limit, string $name, bool $sharedTables) {
 
 
-        $createSchema = function (Database $database) use ($authorization): void {
+        $createSchema = function (Database $database): void {
             if ($database->exists($database->getDatabase())) {
                 $database->delete($database->getDatabase());
             }
+            $database->getAuthorization()->addRole(Role::any()->toString());
             $database->create();
-
-            $authorization->addRole(Role::any()->toString());
 
             $database->createCollection('articles', permissions: [
                 Permission::create(Role::any()),

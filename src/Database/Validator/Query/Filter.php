@@ -33,7 +33,7 @@ class Filter extends Base
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
     ) {
         foreach ($attributes as $attribute) {
-            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
+            $this->schema[$attribute->getAttribute('key', $attribute->getId())] = $attribute->getArrayCopy();
         }
     }
 

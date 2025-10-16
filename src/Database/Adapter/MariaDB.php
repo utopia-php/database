@@ -1798,7 +1798,7 @@ class MariaDB extends SQL
 
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
-            if (str_ends_with($e->getMessage(), "._uid'")) {
+            if (str_ends_with($e->getMessage(), "._uid'") || str_ends_with($e->getMessage(), "'_uid'")) {
                 return new DuplicateException('Document already exists', $e->getCode(), $e);
             }
 

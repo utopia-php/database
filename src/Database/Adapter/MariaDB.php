@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
 class MariaDB extends SQL
@@ -1176,7 +1177,9 @@ class MariaDB extends SQL
      * @param array<string> $attributes
      * @param array<mixed> $bindValues
      * @param string $attribute
+     * @param array<Operator> $operators
      * @return mixed
+     * @throws DatabaseException
      */
     public function getUpsertStatement(
         string $tableName,

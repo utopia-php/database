@@ -358,7 +358,7 @@ class Operator
     /**
      * Parse an array of operators
      *
-     * @param array<array<string, mixed>> $operators
+     * @param array<string> $operators
      *
      * @return array<Operator>
      * @throws OperatorException
@@ -368,7 +368,7 @@ class Operator
         $parsed = [];
 
         foreach ($operators as $operator) {
-            $parsed[] = self::parseOperator($operator);
+            $parsed[] = self::parse($operator);
         }
 
         return $parsed;

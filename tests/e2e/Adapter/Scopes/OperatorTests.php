@@ -2,7 +2,6 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
-use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;

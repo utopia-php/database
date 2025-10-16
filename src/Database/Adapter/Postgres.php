@@ -1279,6 +1279,7 @@ class Postgres extends SQL
      * @param array<string> $attributes
      * @param array<mixed> $bindValues
      * @param string $attribute
+     * @param array<Operator> $operators
      * @return mixed
      */
     protected function getUpsertStatement(
@@ -1288,6 +1289,7 @@ class Postgres extends SQL
         array $attributes,
         array $bindValues,
         string $attribute = '',
+        array $operators = [],
     ): mixed {
         $getUpdateClause = function (string $attribute, bool $increment = false): string {
             $attribute = $this->quote($this->filter($attribute));

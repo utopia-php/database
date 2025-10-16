@@ -1589,6 +1589,7 @@ abstract class SQL extends Adapter
      * @param array<mixed> $bindValues
      * @param array<string> $attributes
      * @param string $attribute
+     * @param array<Operator> $operators
      * @return mixed
      */
     abstract protected function getUpsertStatement(

@@ -77,7 +77,7 @@ class PoolTest extends Base
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . $this->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
@@ -94,7 +94,7 @@ class PoolTest extends Base
 
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . $this->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {

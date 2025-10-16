@@ -60,7 +60,7 @@ class MySQLTest extends Base
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . $this->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pdo->exec($sql);

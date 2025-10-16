@@ -6988,7 +6988,7 @@ class Database
         $queries = $queriesOrNull;
 
         $getCount = fn () => $this->adapter->count($collection, $queries, $max);
-        $count = $skipAuth ?? false ? $this->authorization->skip($getCount) : $getCount();
+        $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
 

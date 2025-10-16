@@ -151,9 +151,9 @@ class Postgres extends SQL
         $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis;')->execute();
 
         $collation = "
-            CREATE COLLATION IF NOT EXISTS utf8_ci (
+            CREATE COLLATION IF NOT EXISTS utf8_ci_ai (
             provider = icu,
-            locale   = 'und-u-ks-primary',
+            locale = 'und-u-ks-level1',
             deterministic = false
             );
         ";
@@ -244,14 +244,14 @@ class Postgres extends SQL
 
         if ($this->sharedTables) {
             $collection .= "
-				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\", \"_tenant\");
+				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai, \"_tenant\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_updated\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_tenant_id\" ON {$this->getSQLTable($id)} (_tenant, _id);
 			";
         } else {
             $collection .= "
-				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\");
+				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai);
             	CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
 			";
@@ -279,7 +279,7 @@ class Postgres extends SQL
         } else {
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$namespace}_{$id}_ukey\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission);
                 CREATE INDEX \"{$namespace}_{$id}_permission\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_permission,_type); 
             ";
@@ -852,15 +852,7 @@ class Postgres extends SQL
                 default => $this->filter($attr),
             };
 
-            if (Database::INDEX_UNIQUE === $type) {
-                if (isset($indexAttributeTypes[$attr]) && $indexAttributeTypes[$attr] === Database::VAR_STRING) {
-                    $attributes[$i] = "\"{$attr}\" COLLATE utf8_ci {$order}";
-                } else {
-                    $attributes[$i] = "\"{$attr}\" {$order}";
-                }
-            } else {
-                $attributes[$i] = "\"{$attr}\" {$order}";
-            }
+            $attributes[$i] = "\"{$attr}\" {$order}";
         }
 
         $sqlType = match ($type) {
@@ -908,7 +900,7 @@ class Postgres extends SQL
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        $name = $this->filter($collection);
+        $collection = $this->filter($collection);
         $id = $this->filter($id);
         $schemaName = $this->getDatabase();
 

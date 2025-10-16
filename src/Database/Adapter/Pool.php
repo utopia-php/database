@@ -66,6 +66,7 @@ class Pool extends Adapter
             $adapter->setNamespace($this->getNamespace());
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
+            $adapter->setAuthorization($this->authorization);
 
             if ($this->getTimeout() > 0) {
                 $adapter->setTimeout($this->getTimeout());
@@ -567,5 +568,11 @@ class Pool extends Adapter
     public function decodePolygon(string $wkb): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setAuthorization(\Utopia\Database\Validator\Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+        return $this;
     }
 }

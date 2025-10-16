@@ -4762,8 +4762,8 @@ trait DocumentTests
 
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertInstanceOf(UniqueException::class, $e);
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
     }
     /**
@@ -4805,8 +4805,8 @@ trait DocumentTests
 
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertInstanceOf(UniqueException::class, $e);
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
     }
 

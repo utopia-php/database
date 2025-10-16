@@ -1939,4 +1939,158 @@ trait ManyToManyTests
         $database->deleteCollection($parentCollection);
         $database->deleteCollection($childCollection);
     }
+
+    public function testPartialUpdateManyToManyBothSides(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('students');
+        $database->createCollection('courses');
+
+        $database->createAttribute('students', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('students', 'grade', Database::VAR_STRING, 10, false);
+        $database->createAttribute('courses', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('courses', 'credits', Database::VAR_INTEGER, 0, false);
+
+        $database->createRelationship(
+            collection: 'students',
+            relatedCollection: 'courses',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'courses',
+            twoWayKey: 'students'
+        );
+
+        // Create student with courses
+        $database->createDocument('students', new Document([
+            '$id' => 'student1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'David',
+            'grade' => 'A',
+            'courses' => [
+                ['$id' => 'course1', '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())], 'title' => 'Math', 'credits' => 3],
+                ['$id' => 'course2', '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())], 'title' => 'Science', 'credits' => 4],
+            ],
+        ]));
+
+        // Partial update from student side - update grade only, preserve courses
+        $database->updateDocument('students', 'student1', new Document([
+            '$id' => 'student1',
+            '$collection' => 'students',
+            'grade' => 'A+',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $student = $database->getDocument('students', 'student1');
+        $this->assertEquals('David', $student->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals('A+', $student->getAttribute('grade'), 'Grade should be updated');
+        $this->assertCount(2, $student->getAttribute('courses'), 'Courses should be preserved');
+
+        // Partial update from course side - update credits only, preserve students
+        $database->updateDocument('courses', 'course1', new Document([
+            '$id' => 'course1',
+            '$collection' => 'courses',
+            'credits' => 5,
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $course = $database->getDocument('courses', 'course1');
+        $this->assertEquals('Math', $course->getAttribute('title'), 'Title should be preserved');
+        $this->assertEquals(5, $course->getAttribute('credits'), 'Credits should be updated');
+        $this->assertCount(1, $course->getAttribute('students'), 'Students should be preserved');
+
+        $database->deleteCollection('students');
+        $database->deleteCollection('courses');
+    }
+
+    public function testPartialUpdateManyToManyWithStringIdsAndDocuments(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('tags');
+        $database->createCollection('articles');
+
+        $database->createAttribute('tags', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('tags', 'color', Database::VAR_STRING, 50, false);
+        $database->createAttribute('articles', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('articles', 'published', Database::VAR_BOOLEAN, 0, false);
+
+        $database->createRelationship(
+            collection: 'articles',
+            relatedCollection: 'tags',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'tags',
+            twoWayKey: 'articles'
+        );
+
+        // Create article with tags
+        $database->createDocument('articles', new Document([
+            '$id' => 'article1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'title' => 'Great Article',
+            'published' => false,
+            'tags' => [
+                ['$id' => 'tag1', '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())], 'name' => 'Tech', 'color' => 'blue'],
+            ],
+        ]));
+
+        $database->createDocument('tags', new Document([
+            '$id' => 'tag2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'News',
+            'color' => 'red',
+        ]));
+
+        // Update using STRING IDs
+        $database->updateDocument('articles', 'article1', new Document([
+            '$id' => 'article1',
+            '$collection' => 'articles',
+            'tags' => ['tag1', 'tag2'], // String IDs
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $article = $database->getDocument('articles', 'article1');
+        $this->assertEquals('Great Article', $article->getAttribute('title'));
+        $this->assertFalse($article->getAttribute('published'));
+        $this->assertCount(2, $article->getAttribute('tags'));
+
+        // Update from tag side using DOCUMENT objects
+        $database->createDocument('articles', new Document([
+            '$id' => 'article2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'title' => 'Another Article',
+            'published' => true,
+        ]));
+
+        $database->updateDocument('tags', 'tag1', new Document([
+            '$id' => 'tag1',
+            '$collection' => 'tags',
+            'articles' => [ // Document objects
+                new Document(['$id' => 'article1']),
+                new Document(['$id' => 'article2']),
+            ],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $tag = $database->getDocument('tags', 'tag1');
+        $this->assertEquals('Tech', $tag->getAttribute('name'));
+        $this->assertEquals('blue', $tag->getAttribute('color'));
+        $this->assertCount(2, $tag->getAttribute('articles'));
+
+        $database->deleteCollection('tags');
+        $database->deleteCollection('articles');
+    }
 }

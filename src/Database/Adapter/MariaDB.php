@@ -1185,6 +1185,7 @@ class MariaDB extends SQL
         array $attributes,
         array $bindValues,
         string $attribute = '',
+        array $operators = []
     ): mixed {
         $getUpdateClause = function (string $attribute, bool $increment = false): string {
             $attribute = $this->quote($this->filter($attribute));
@@ -1202,6 +1203,9 @@ class MariaDB extends SQL
             return "{$attribute} = {$new}";
         };
 
+        $updateColumns = [];
+        $bindIndex = count($bindValues);
+
         if (!empty($attribute)) {
             // Increment specific column by its new value in place
             $updateColumns = [
@@ -1209,13 +1213,22 @@ class MariaDB extends SQL
                 $getUpdateClause('_updatedAt'),
             ];
         } else {
-            // Update all columns
-            $updateColumns = [];
+            // Update all columns, handling operators separately
             foreach (\array_keys($attributes) as $attr) {
                 /**
                  * @var string $attr
                  */
-                $updateColumns[] = $getUpdateClause($this->filter($attr));
+                $filteredAttr = $this->filter($attr);
+
+                // Check if this attribute has an operator
+                if (isset($operators[$attr])) {
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $bindIndex);
+                    if ($operatorSQL !== null) {
+                        $updateColumns[] = $operatorSQL;
+                    }
+                } else {
+                    $updateColumns[] = $getUpdateClause($filteredAttr);
+                }
             }
         }
 
@@ -1227,9 +1240,16 @@ class MariaDB extends SQL
                 " . \implode(', ', $updateColumns)
         );
 
+        // Bind regular attribute values
         foreach ($bindValues as $key => $binding) {
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
+
+        // Bind operator parameters
+        foreach ($operators as $attr => $operator) {
+            $this->bindOperatorParams($stmt, $operator, $bindIndex);
+        }
+
         return $stmt;
     }
 

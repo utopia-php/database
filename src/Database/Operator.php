@@ -358,7 +358,7 @@ class Operator
     /**
      * Parse an array of operators
      *
-     * @param array<string> $operators
+     * @param array<array<string, mixed>> $operators
      *
      * @return array<Operator>
      * @throws OperatorException
@@ -368,7 +368,7 @@ class Operator
         $parsed = [];
 
         foreach ($operators as $operator) {
-            $parsed[] = self::parse($operator);
+            $parsed[] = self::parseOperator($operator);
         }
 
         return $parsed;
@@ -379,13 +379,11 @@ class Operator
      */
     public function toArray(): array
     {
-        $array = [
+        return [
             'method' => $this->method,
             'attribute' => $this->attribute,
             'values' => $this->values,
         ];
-
-        return $array;
     }
 
     /**

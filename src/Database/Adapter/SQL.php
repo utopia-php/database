@@ -1598,6 +1598,7 @@ abstract class SQL extends Adapter
         array $attributes,
         array $bindValues,
         string $attribute = '',
+        array $operators = []
     ): mixed;
 
     /**
@@ -2486,26 +2487,34 @@ abstract class SQL extends Adapter
             $batchKeys = [];
             $bindValues = [];
 
+            $operators = [];
+
             foreach ($changes as $change) {
                 $document = $change->getNew();
                 $attributes = $document->getAttributes();
-                $attributes['_uid'] = $document->getId();
-                $attributes['_createdAt'] = $document->getCreatedAt();
-                $attributes['_updatedAt'] = $document->getUpdatedAt();
-                $attributes['_permissions'] = \json_encode($document->getPermissions());
+
+                // Extract operators before processing attributes
+                $extracted = Operator::extractOperators($attributes);
+                $operators = $extracted['operators'];
+                $regularAttributes = $extracted['updates'];
+
+                $regularAttributes['_uid'] = $document->getId();
+                $regularAttributes['_createdAt'] = $document->getCreatedAt();
+                $regularAttributes['_updatedAt'] = $document->getUpdatedAt();
+                $regularAttributes['_permissions'] = \json_encode($document->getPermissions());
 
                 if (!empty($document->getSequence())) {
-                    $attributes['_id'] = $document->getSequence();
+                    $regularAttributes['_id'] = $document->getSequence();
                 }
 
                 if ($this->sharedTables) {
-                    $attributes['_tenant'] = $document->getTenant();
+                    $regularAttributes['_tenant'] = $document->getTenant();
                 }
 
-                \ksort($attributes);
+                \ksort($regularAttributes);
 
                 $columns = [];
-                foreach (\array_keys($attributes) as $key => $attr) {
+                foreach (\array_keys($regularAttributes) as $key => $attr) {
                     /**
                      * @var string $attr
                      */
@@ -2515,7 +2524,7 @@ abstract class SQL extends Adapter
 
                 $bindKeys = [];
 
-                foreach ($attributes as $attributeKey => $attrValue) {
+                foreach ($regularAttributes as $attributeKey => $attrValue) {
                     if (\is_array($attrValue)) {
                         $attrValue = \json_encode($attrValue);
                     }
@@ -2535,7 +2544,7 @@ abstract class SQL extends Adapter
                 $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
             }
 
-            $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $attributes, $bindValues, $attribute);
+            $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $regularAttributes, $bindValues, $attribute, $operators);
             $stmt->execute();
             $stmt->closeCursor();
 

@@ -5745,7 +5745,24 @@ class Database
                 }
             }
 
-            $document = $this->encode($collection, $document);
+            // Extract operators for validation - operators remain in document for adapter
+            $documentArray = $document->getArrayCopy();
+            $extracted = Operator::extractOperators($documentArray);
+            $operators = $extracted['operators'];
+            $regularUpdates = $extracted['updates'];
+
+            // Create a temporary document with only regular updates for encoding and validation
+            $tempDocument = new Document($regularUpdates);
+            $tempDocument->setAttribute('$id', $document->getId());
+            $tempDocument->setAttribute('$collection', $document->getAttribute('$collection'));
+            $tempDocument->setAttribute('$createdAt', $document->getAttribute('$createdAt'));
+            $tempDocument->setAttribute('$updatedAt', $document->getAttribute('$updatedAt'));
+            $tempDocument->setAttribute('$permissions', $document->getAttribute('$permissions'));
+            if ($this->adapter->getSharedTables()) {
+                $tempDocument->setAttribute('$tenant', $document->getAttribute('$tenant'));
+            }
+
+            $encodedTemp = $this->encode($collection, $tempDocument);
 
             $validator = new Structure(
                 $collection,
@@ -5754,9 +5771,12 @@ class Database
                 $this->adapter->getMaxDateTime(),
             );
 
-            if (!$validator->isValid($document)) {
+            if (!$validator->isValid($encodedTemp)) {
                 throw new StructureException($validator->getDescription());
             }
+
+            // Now encode the full document with operators for the adapter
+            $document = $this->encode($collection, $document);
 
             if (!$old->isEmpty()) {
                 // Check if document was updated after the request timestamp

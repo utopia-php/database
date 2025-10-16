@@ -1798,10 +1798,8 @@ class MariaDB extends SQL
 
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
-            if (preg_match("/for key '(?:[^.]+\.)?([^']+)'/", $e->getMessage(), $matches)) {
-                if ($matches[1] === '_uid') {
-                    return new DuplicateException('Document already exists', $e->getCode(), $e);
-                }
+            if (str_ends_with($e->getMessage(), "._uid'")) {
+                return new DuplicateException('Document already exists', $e->getCode(), $e);
             }
 
             return new UniqueException('Document already exists', $e->getCode(), $e);

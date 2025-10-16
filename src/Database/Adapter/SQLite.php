@@ -795,16 +795,37 @@ class SQLite extends MariaDB
          * Update Attributes
          */
         $bindIndex = 0;
+        $operators = [];
+
+        // Separate regular attributes from operators
+        foreach ($attributes as $attribute => $value) {
+            if (Operator::isOperator($value)) {
+                $operators[$attribute] = $value;
+            }
+        }
+
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
-            $bindIndex++;
+
+            // Check if this is an operator or regular attribute
+            if (isset($operators[$attribute])) {
+                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+                $columns .= $operatorSQL;
+            } else {
+                $bindKey = 'key_' . $bindIndex;
+                $columns .= "`{$column}`" . '=:' . $bindKey;
+                $bindIndex++;
+            }
+
+            $columns .= ',';
         }
+
+        // Remove trailing comma
+        $columns = rtrim($columns, ',');
 
         $sql = "
 			UPDATE `{$this->getNamespace()}_{$name}`
-			SET {$columns} _uid = :_newUid 
+			SET {$columns}, _uid = :_newUid
 			WHERE _uid = :_existingUid
 			{$this->getTenantQuery($collection)}
 		";
@@ -820,17 +841,23 @@ class SQLite extends MariaDB
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        $attributeIndex = 0;
+        // Bind values for non-operator attributes and operator parameters
+        $bindIndexForBinding = 0;
         foreach ($attributes as $attribute => $value) {
+            // Handle operators separately
+            if (isset($operators[$attribute])) {
+                $this->bindOperatorParams($stmt, $operators[$attribute], $bindIndexForBinding);
+                continue;
+            }
+
             if (is_array($value)) { // arrays & objects should be saved as strings
                 $value = json_encode($value);
             }
 
-            $bindKey = 'key_' . $attributeIndex;
-            $attribute = $this->filter($attribute);
+            $bindKey = 'key_' . $bindIndexForBinding;
             $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
+            $bindIndexForBinding++;
         }
 
         try {
@@ -1321,26 +1348,11 @@ class SQLite extends MariaDB
         $values = $operator->getValues();
 
         // For operators that SQLite doesn't actually use parameters for, skip binding
-        if (in_array($method, [Operator::TYPE_ARRAY_INSERT, Operator::TYPE_ARRAY_FILTER])) {
+        if (in_array($method, [Operator::TYPE_ARRAY_FILTER])) {
             // These operators don't actually use the bind parameters in SQLite's SQL
             // but we still need to increment the index to keep it in sync
             if (!empty($values)) {
                 $bindIndex += count($values);
-            }
-            return;
-        }
-
-        // Special handling for POWER operator in SQLite
-        if ($method === Operator::TYPE_POWER) {
-            // Bind exponent parameter
-            $exponentKey = "op_{$bindIndex}";
-            $stmt->bindValue(':' . $exponentKey, $values[0] ?? 1, $this->getPDOType($values[0] ?? 1));
-            $bindIndex++;
-            // Bind max limit if provided
-            if (isset($values[1])) {
-                $maxKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $maxKey, $values[1], $this->getPDOType($values[1]));
-                $bindIndex++;
             }
             return;
         }
@@ -1426,32 +1438,8 @@ class SQLite extends MariaDB
                 return "{$quotedColumn} = {$quotedColumn} % :$bindKey";
 
             case Operator::TYPE_POWER:
-                $values = $operator->getValues();
-                $exponentKey = "op_{$bindIndex}";
-                $bindIndex++;
-
-                // SQLite doesn't have POWER function, but we can simulate simple cases
-                // For power of 2, multiply by itself
-                if (isset($values[1]) && $values[1] !== null) {
-                    // SQLite uses MIN/MAX instead of LEAST/GREATEST
-                    $maxKey = "op_{$bindIndex}";
-                    $bindIndex++;
-                    // Simulate power of 2 by multiplying by itself, limited by max
-                    return "{$quotedColumn} = MIN(
-                        CASE
-                            WHEN :$exponentKey = 2 THEN {$quotedColumn} * {$quotedColumn}
-                            WHEN :$exponentKey = 3 THEN {$quotedColumn} * {$quotedColumn} * {$quotedColumn}
-                            ELSE {$quotedColumn}
-                        END,
-                        :$maxKey
-                    )";
-                }
-                // Simulate power for common exponents
-                return "{$quotedColumn} = CASE
-                    WHEN :$exponentKey = 2 THEN {$quotedColumn} * {$quotedColumn}
-                    WHEN :$exponentKey = 3 THEN {$quotedColumn} * {$quotedColumn} * {$quotedColumn}
-                    ELSE {$quotedColumn}
-                END";
+                // SQLite doesn't have a built-in POWER function
+                throw new DatabaseException('POWER operator is not supported on SQLite adapter');
 
             case Operator::TYPE_TOGGLE:
                 // SQLite: toggle boolean (0 or 1)
@@ -1509,14 +1497,38 @@ class SQLite extends MariaDB
                 )";
 
             case Operator::TYPE_ARRAY_INSERT:
-                // SQLite doesn't support index-based insert easily, just keep array as-is
-                // The actual insert will be handled by PHP when retrieving the document
-                // But we still need to consume the bind parameters
-                $values = $operator->getValues();
-                if (!empty($values)) {
-                    $bindIndex += count($values);
-                }
-                return "{$quotedColumn} = {$quotedColumn}";
+                $indexKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // SQLite: Insert element at specific index by:
+                // 1. Take elements before index (0 to index-1)
+                // 2. Add new element
+                // 3. Take elements from index to end
+                // The bound value is JSON-encoded by parent, json() parses it back to a value,
+                // then we wrap it in json_array() and extract to get the same format as json_each()
+                return "{$quotedColumn} = (
+                    SELECT json_group_array(value)
+                    FROM (
+                        SELECT value, rownum
+                        FROM (
+                            SELECT value, (ROW_NUMBER() OVER ()) - 1 as rownum
+                            FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                        )
+                        WHERE rownum < :$indexKey
+                        UNION ALL
+                        SELECT value, :$indexKey as rownum
+                        FROM json_each(json_array(json(:$valueKey)))
+                        UNION ALL
+                        SELECT value, rownum + 1 as rownum
+                        FROM (
+                            SELECT value, (ROW_NUMBER() OVER ()) - 1 as rownum
+                            FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                        )
+                        WHERE rownum >= :$indexKey
+                        ORDER BY rownum
+                    )
+                )";
 
             case Operator::TYPE_ARRAY_INTERSECT:
                 $bindKey = "op_{$bindIndex}";

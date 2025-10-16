@@ -10,12 +10,12 @@ use Utopia\Validator;
 class Operator extends Validator
 {
     protected Document $collection;
-    /** @var array<string, mixed> */
-    protected array $attributes;
 
     /**
-     * @var string
+     * @var array<string, array<string, mixed>>
      */
+    protected array $attributes;
+
     protected string $message = 'Invalid operator';
 
     /**
@@ -26,7 +26,10 @@ class Operator extends Validator
     public function __construct(Document $collection)
     {
         $this->collection = $collection;
-        $this->attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            $this->attributes[$attribute->getAttribute('key', $attribute->getId())] = $attribute;
+        }
     }
 
     /**
@@ -67,7 +70,7 @@ class Operator extends Validator
         }
 
         // Check if attribute exists in collection
-        $attributeConfig = $this->findAttribute($attribute);
+        $attributeConfig = $this->attributes[$attribute] ?? null;
         if ($attributeConfig === null) {
             $this->message = "Attribute '{$attribute}' does not exist in collection";
             return false;
@@ -78,30 +81,16 @@ class Operator extends Validator
     }
 
     /**
-     * Find attribute configuration by key
-     *
-     * @param string $key
-     * @return array<string, mixed>|null
-     */
-    private function findAttribute(string $key): ?array
-    {
-        foreach ($this->attributes as $attribute) {
-            if ($attribute['key'] === $key) {
-                return $attribute;
-            }
-        }
-        return null;
-    }
-
-    /**
      * Validate operator against attribute configuration
      *
      * @param DatabaseOperator $operator
      * @param array<string, mixed> $attribute
      * @return bool
      */
-    private function validateOperatorForAttribute(DatabaseOperator $operator, array $attribute): bool
-    {
+    private function validateOperatorForAttribute(
+        DatabaseOperator $operator,
+        array $attribute
+    ): bool {
         $method = $operator->getMethod();
         $values = $operator->getValues();
         $type = $attribute['type'];
@@ -115,7 +104,7 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_MODULO:
             case DatabaseOperator::TYPE_POWER:
                 // Numeric operations only work on numeric types
-                if (!in_array($type, [Database::VAR_INTEGER, Database::VAR_FLOAT])) {
+                if (!\in_array($type, [Database::VAR_INTEGER, Database::VAR_FLOAT])) {
                     $this->message = "Cannot use {$method} operator on non-numeric attribute '{$operator->getAttribute()}' of type '{$type}'";
                     return false;
                 }
@@ -133,8 +122,8 @@ class Operator extends Validator
                 }
 
                 // Validate max/min if provided
-                if (count($values) > 1 && $values[1] !== null && !is_numeric($values[1])) {
-                    $this->message = "Max/min limit must be numeric, got " . gettype($values[1]);
+                if (\count($values) > 1 && $values[1] !== null && !\is_numeric($values[1])) {
+                    $this->message = "Max/min limit must be numeric, got " . \gettype($values[1]);
                     return false;
                 }
 
@@ -185,7 +174,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                if (empty($values)) {
+                if (empty($values) || !\is_array($values[0]) || \count($values[0]) === 0) {
                     $this->message = "{$method} operator requires an array of values";
                     return false;
                 }
@@ -198,7 +187,7 @@ class Operator extends Validator
                 }
 
                 if (\count($values) < 1 || \count($values) > 2) {
-                    $this->message = "Array filter operator requires 1 or 2 values: condition and optional compareValue";
+                    $this->message = "Array filter operator requires 1 or 2 values: condition and optional comparison value";
                     return false;
                 }
 
@@ -215,7 +204,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                if (empty($values) || !is_string($values[0])) {
+                if (empty($values) || !\is_string($values[0])) {
                     $this->message = "String concatenation operator requires a string value";
                     return false;
                 }
@@ -265,109 +254,6 @@ class Operator extends Validator
             default:
                 $this->message = "Unsupported operator method: {$method}";
                 return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Validate operation against current value and document context
-     *
-     * @param DatabaseOperator $operator
-     * @param string $attribute
-     * @param mixed $currentValue
-     * @param array<string, mixed> $attributes
-     * @return bool
-     */
-    public function validateOperation(
-        DatabaseOperator $operator,
-        string $attribute,
-        mixed $currentValue,
-        array $attributes
-    ): bool {
-        $method = $operator->getMethod();
-        $values = $operator->getValues();
-
-        switch ($method) {
-            case DatabaseOperator::TYPE_INCREMENT:
-            case DatabaseOperator::TYPE_DECREMENT:
-            case DatabaseOperator::TYPE_MULTIPLY:
-            case DatabaseOperator::TYPE_DIVIDE:
-            case DatabaseOperator::TYPE_MODULO:
-            case DatabaseOperator::TYPE_POWER:
-                if (!\is_numeric($currentValue) && !\is_null($currentValue)) {
-                    $this->message = "Cannot apply {$method} to non-numeric field '{$attribute}'";
-                    return false;
-                }
-
-                if (($method === DatabaseOperator::TYPE_DIVIDE || $method === DatabaseOperator::TYPE_MODULO) && $values[0] == 0) {
-                    $operation = $method === DatabaseOperator::TYPE_DIVIDE ? 'divide' : 'modulo';
-                    $this->message = "Cannot {$operation} by zero in field '{$attribute}'";
-                    return false;
-                }
-                break;
-
-            case DatabaseOperator::TYPE_CONCAT:
-                // Concat can work on strings or arrays
-                if (!\is_string($currentValue) && !\is_array($currentValue) && !\is_null($currentValue)) {
-                    $this->message = "Cannot apply concat to field '{$attribute}' which is neither string nor array";
-                    return false;
-                }
-                break;
-
-            case DatabaseOperator::TYPE_REPLACE:
-                if (!is_string($currentValue) && !is_null($currentValue)) {
-                    $this->message = "Cannot apply replace to non-string field '{$attribute}'";
-                    return false;
-                }
-                break;
-
-            case DatabaseOperator::TYPE_ARRAY_APPEND:
-            case DatabaseOperator::TYPE_ARRAY_PREPEND:
-            case DatabaseOperator::TYPE_ARRAY_INSERT:
-            case DatabaseOperator::TYPE_ARRAY_REMOVE:
-            case DatabaseOperator::TYPE_ARRAY_UNIQUE:
-            case DatabaseOperator::TYPE_ARRAY_INTERSECT:
-            case DatabaseOperator::TYPE_ARRAY_DIFF:
-            case DatabaseOperator::TYPE_ARRAY_FILTER:
-                if (!is_array($currentValue) && !is_null($currentValue)) {
-                    $this->message = "Cannot apply {$method} to non-array field '{$attribute}'";
-                    return false;
-                }
-
-                if ($method === DatabaseOperator::TYPE_ARRAY_INSERT) {
-                    $index = $values[0];
-                    $arrayLength = is_array($currentValue) ? count($currentValue) : 0;
-                    if ($index > $arrayLength) {
-                        $this->message = "Insert index {$index} is out of bounds for array of length {$arrayLength} in field '{$attribute}'";
-                        return false;
-                    }
-                }
-                break;
-
-            case DatabaseOperator::TYPE_TOGGLE:
-                if (!is_bool($currentValue) && !is_null($currentValue)) {
-                    $this->message = "Cannot apply toggle to non-boolean field '{$attribute}'";
-                    return false;
-                }
-                break;
-
-            case DatabaseOperator::TYPE_DATE_ADD_DAYS:
-            case DatabaseOperator::TYPE_DATE_SUB_DAYS:
-                if (!is_string($currentValue) && !($currentValue instanceof \DateTime) && !is_null($currentValue)) {
-                    $this->message = "Cannot apply {$method} to non-date field '{$attribute}'";
-                    return false;
-                }
-
-                if (is_string($currentValue)) {
-                    try {
-                        new \DateTime($currentValue);
-                    } catch (\Exception $e) {
-                        $this->message = "Invalid date format in field '{$attribute}': {$currentValue}";
-                        return false;
-                    }
-                }
-                break;
         }
 
         return true;

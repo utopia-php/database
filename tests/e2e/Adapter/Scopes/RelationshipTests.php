@@ -4601,7 +4601,7 @@ trait RelationshipTests
             Query::lessThan('author.age', 30),
             Query::equal('published', [true]),
         ]);
-        $this->assertEquals(1, $count); // Only Bob's published post
+        $this->assertEquals(1, $count);
 
         // Count posts by author name (different author)
         $count = $database->count('postsCount', [
@@ -4626,13 +4626,13 @@ trait RelationshipTests
             Query::lessThan('author.age', 30),
             Query::equal('published', [true]),
         ]);
-        $this->assertEquals(150, $sum); // Only Bob's published post
+        $this->assertEquals(150, $sum);
 
         // Sum views for Bob's posts
         $sum = $database->sum('postsCount', 'views', [
             Query::equal('author.name', ['Bob']),
         ]);
-        $this->assertEquals(225, $sum); // 150 + 75
+        $this->assertEquals(225, $sum);
 
         // Sum with no matches
         $sum = $database->sum('postsCount', 'views', [

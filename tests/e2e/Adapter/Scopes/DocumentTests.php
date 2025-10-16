@@ -4729,36 +4729,40 @@ trait DocumentTests
      */
     public function testUniqueIndexDuplicate(): void
     {
-        $this->expectException(DuplicateException::class);
-
         /** @var Database $database */
         $database = static::getDatabase();
 
         $this->assertEquals(true, $database->createIndex('movies', 'uniqueIndex', Database::INDEX_UNIQUE, ['name'], [128], [Database::ORDER_ASC]));
 
-        $database->createDocument('movies', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::read(Role::user('1')),
-                Permission::read(Role::user('2')),
-                Permission::create(Role::any()),
-                Permission::create(Role::user('1x')),
-                Permission::create(Role::user('2x')),
-                Permission::update(Role::any()),
-                Permission::update(Role::user('1x')),
-                Permission::update(Role::user('2x')),
-                Permission::delete(Role::any()),
-                Permission::delete(Role::user('1x')),
-                Permission::delete(Role::user('2x')),
-            ],
-            'name' => 'Frozen',
-            'director' => 'Chris Buck & Jennifer Lee',
-            'year' => 2013,
-            'price' => 39.50,
-            'active' => true,
-            'genres' => ['animation', 'kids'],
-            'with-dash' => 'Works4'
-        ]));
+        try {
+            $database->createDocument('movies', new Document([
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::read(Role::user('1')),
+                    Permission::read(Role::user('2')),
+                    Permission::create(Role::any()),
+                    Permission::create(Role::user('1x')),
+                    Permission::create(Role::user('2x')),
+                    Permission::update(Role::any()),
+                    Permission::update(Role::user('1x')),
+                    Permission::update(Role::user('2x')),
+                    Permission::delete(Role::any()),
+                    Permission::delete(Role::user('1x')),
+                    Permission::delete(Role::user('2x')),
+                ],
+                'name' => 'Frozen',
+                'director' => 'Chris Buck & Jennifer Lee',
+                'year' => 2013,
+                'price' => 39.50,
+                'active' => true,
+                'genres' => ['animation', 'kids'],
+                'with-dash' => 'Works4'
+            ]));
+
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
     }
     /**
      * @depends testUniqueIndexDuplicate
@@ -4794,9 +4798,13 @@ trait DocumentTests
             'with-dash' => 'Works4'
         ]));
 
-        $this->expectException(DuplicateException::class);
+        try {
+            $database->updateDocument('movies', $document->getId(), $document->setAttribute('name', 'Frozen'));
 
-        $database->updateDocument('movies', $document->getId(), $document->setAttribute('name', 'Frozen'));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
     }
 
     public function propagateBulkDocuments(string $collection, int $amount = 10, bool $documentSecurity = false): void
@@ -5298,9 +5306,17 @@ trait DocumentTests
         $database = static::getDatabase();
 
         $document->setAttribute('$id', 'duplicated');
+        $document->removeAttribute('$sequence');
+
         $database->createDocument($document->getCollection(), $document);
-        $this->expectException(DuplicateException::class);
-        $database->createDocument($document->getCollection(), $document);
+        $document->removeAttribute('$sequence');
+
+        try {
+            $database->createDocument($document->getCollection(), $document);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
     }
 
     /**
@@ -5312,13 +5328,18 @@ trait DocumentTests
         $database = static::getDatabase();
 
         $document->setAttribute('$id', 'caseSensitive');
-        $document->setAttribute('$sequence', '200');
-        $database->createDocument($document->getCollection(), $document);
+        $document->removeAttribute('$sequence');
 
+        $database->createDocument($document->getCollection(), $document);
         $document->setAttribute('$id', 'CaseSensitive');
+        $document->removeAttribute('$sequence');
 
-        $this->expectException(DuplicateException::class);
-        $database->createDocument($document->getCollection(), $document);
+        try {
+            $database->createDocument($document->getCollection(), $document);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
 
         return $document;
     }

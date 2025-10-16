@@ -2404,7 +2404,7 @@ trait OneToManyTests
         $this->assertEquals('A great author', $authorAfter->getAttribute('bio'), 'Bio should be preserved');
         $this->assertCount(2, $authorAfter->getAttribute('books'), 'Should now have 2 books');
 
-        $bookIds = array_map(fn($book) => $book->getId(), $authorAfter->getAttribute('books'));
+        $bookIds = array_map(fn ($book) => $book->getId(), $authorAfter->getAttribute('books'));
         $this->assertContains('book1', $bookIds);
         $this->assertContains('book2', $bookIds);
 
@@ -2515,7 +2515,7 @@ trait OneToManyTests
         $this->assertEquals(1946, $teamAfter->getAttribute('founded'), 'Founded should be preserved');
         $this->assertCount(2, $teamAfter->getAttribute('players'), 'Should still have 2 players');
 
-        $playerIds = array_map(fn($player) => $player->getId(), $teamAfter->getAttribute('players'));
+        $playerIds = array_map(fn ($player) => $player->getId(), $teamAfter->getAttribute('players'));
         $this->assertContains('player1', $playerIds, 'Should still have player1');
         $this->assertContains('player3', $playerIds, 'Should now have player3');
         $this->assertNotContains('player2', $playerIds, 'Should no longer have player2');
@@ -2669,7 +2669,7 @@ trait OneToManyTests
         $this->assertEquals('Downtown', $lib->getAttribute('location'), 'Location should be preserved');
         $this->assertCount(2, $lib->getAttribute('books'), 'Should have 2 books');
 
-        $bookIds = array_map(fn($book) => $book->getId(), $lib->getAttribute('books'));
+        $bookIds = array_map(fn ($book) => $book->getId(), $lib->getAttribute('books'));
         $this->assertContains('book1', $bookIds);
         $this->assertContains('book3', $bookIds);
 

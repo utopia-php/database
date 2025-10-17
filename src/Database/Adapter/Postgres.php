@@ -893,7 +893,7 @@ class Postgres extends SQL
         $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
         $attributes = \implode(', ', $attributes);
 
-        if ($this->sharedTables && \in_array($type, [Database::INDEX_KEY, Database::INDEX_UNIQUE, Database::INDEX_GIN])) {
+        if ($this->sharedTables && \in_array($type, [Database::INDEX_KEY, Database::INDEX_UNIQUE])) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }

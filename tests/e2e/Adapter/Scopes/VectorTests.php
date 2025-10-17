@@ -1570,39 +1570,36 @@ trait VectorTests
             return;
         }
 
-        $database->createCollection('vectorPermissions', [], [], [
-            Permission::create(Role::any()),
-            Permission::read(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ], true);
-        $database->createAttribute('vectorPermissions', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('vectorPermissions', 'embedding', Database::VAR_VECTOR, 3, true);
+        // Create documents with different permissions inside Authorization::skip
+        Authorization::skip(function () use ($database) {
+            $database->createCollection('vectorPermissions', [], [], [], true);
+            $database->createAttribute('vectorPermissions', 'name', Database::VAR_STRING, 255, true);
+            $database->createAttribute('vectorPermissions', 'embedding', Database::VAR_VECTOR, 3, true);
 
-        // Create documents with different permissions
-        $doc1 = $database->createDocument('vectorPermissions', new Document([
-            '$permissions' => [
-                Permission::read(Role::user('user1'))
-            ],
-            'name' => 'Doc 1',
-            'embedding' => [1.0, 0.0, 0.0]
-        ]));
+            $database->createDocument('vectorPermissions', new Document([
+                '$permissions' => [
+                    Permission::read(Role::user('user1'))
+                ],
+                'name' => 'Doc 1',
+                'embedding' => [1.0, 0.0, 0.0]
+            ]));
 
-        $doc2 = $database->createDocument('vectorPermissions', new Document([
-            '$permissions' => [
-                Permission::read(Role::user('user2'))
-            ],
-            'name' => 'Doc 2',
-            'embedding' => [0.9, 0.1, 0.0]
-        ]));
+            $database->createDocument('vectorPermissions', new Document([
+                '$permissions' => [
+                    Permission::read(Role::user('user2'))
+                ],
+                'name' => 'Doc 2',
+                'embedding' => [0.9, 0.1, 0.0]
+            ]));
 
-        $doc3 = $database->createDocument('vectorPermissions', new Document([
-            '$permissions' => [
-                Permission::read(Role::any())
-            ],
-            'name' => 'Doc 3',
-            'embedding' => [0.8, 0.2, 0.0]
-        ]));
+            $database->createDocument('vectorPermissions', new Document([
+                '$permissions' => [
+                    Permission::read(Role::any())
+                ],
+                'name' => 'Doc 3',
+                'embedding' => [0.8, 0.2, 0.0]
+            ]));
+        });
 
         // Query as user1 - should only see doc1 and doc3
         Authorization::setRole(Role::user('user1')->toString());
@@ -2611,7 +2608,8 @@ trait VectorTests
             $database->find('vectorNested', [
                 Query::vectorCosine('embedding1', [1.0, 0.0, 0.0]),
                 Query::or([
-                    Query::vectorCosine('embedding2', [0.0, 1.0, 0.0])
+                    Query::vectorCosine('embedding2', [0.0, 1.0, 0.0]),
+                    Query::equal('name', ['Doc 1'])
                 ])
             ]);
             $this->fail('Should not allow multiple vector queries across nested queries');

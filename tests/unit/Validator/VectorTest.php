@@ -15,15 +15,17 @@ class VectorTest extends TestCase
         $this->assertTrue($validator->isValid([1.0, 2.0, 3.0]));
         $this->assertTrue($validator->isValid([0, 0, 0]));
         $this->assertTrue($validator->isValid([-1.5, 0.0, 2.5]));
-        $this->assertTrue($validator->isValid(['1', '2', '3'])); // Numeric strings should pass
 
         // Test invalid vectors
         $this->assertFalse($validator->isValid([1.0, 2.0])); // Wrong dimensions
         $this->assertFalse($validator->isValid([1.0, 2.0, 3.0, 4.0])); // Wrong dimensions
         $this->assertFalse($validator->isValid('not an array')); // Not an array
+        $this->assertFalse($validator->isValid(['1', '2', '3'])); // String numbers should fail
         $this->assertFalse($validator->isValid([1.0, 'not numeric', 3.0])); // Non-numeric value
         $this->assertFalse($validator->isValid([1.0, null, 3.0])); // Null value
         $this->assertFalse($validator->isValid([])); // Empty array
+        $this->assertFalse($validator->isValid(['x' => 1.0, 'y' => 2.0, 'z' => 3.0])); // Associative array
+        $this->assertFalse($validator->isValid([1.0, true, 3.0])); // Boolean value
     }
 
     public function testVectorWithDifferentDimensions(): void

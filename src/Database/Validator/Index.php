@@ -30,6 +30,8 @@ class Index extends Validator
 
     protected bool $spatialIndexOrderSupport;
 
+    protected bool $objectIndexSupport;
+
     /**
      * @param array<Document> $attributes
      * @param int $maxLength
@@ -38,9 +40,10 @@ class Index extends Validator
      * @param bool $spatialIndexSupport
      * @param bool $spatialIndexNullSupport
      * @param bool $spatialIndexOrderSupport
+     * @param bool $objectIndexSupport
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [], bool $arrayIndexSupport = false, bool $spatialIndexSupport = false, bool $spatialIndexNullSupport = false, bool $spatialIndexOrderSupport = false)
+    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [], bool $arrayIndexSupport = false, bool $spatialIndexSupport = false, bool $spatialIndexNullSupport = false, bool $spatialIndexOrderSupport = false, bool $objectIndexSupport = false)
     {
         $this->maxLength = $maxLength;
         $this->reservedKeys = $reservedKeys;
@@ -48,6 +51,7 @@ class Index extends Validator
         $this->spatialIndexSupport = $spatialIndexSupport;
         $this->spatialIndexNullSupport = $spatialIndexNullSupport;
         $this->spatialIndexOrderSupport = $spatialIndexOrderSupport;
+        $this->objectIndexSupport = $objectIndexSupport;
 
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -305,6 +309,10 @@ class Index extends Validator
             return false;
         }
 
+        if (!$this->checkGinIndex($value)) {
+            return false;
+        }
+
         return true;
     }
 
@@ -377,6 +385,48 @@ class Index extends Validator
             }
         }
 
+
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+    */
+    public function checkGinIndex(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+
+        $attributes = $index->getAttribute('attributes', []);
+        $orders     = $index->getAttribute('orders', []);
+
+        if ($type !== Database::INDEX_GIN) {
+            return true;
+        }
+
+        if (!$this->objectIndexSupport) {
+            $this->message = 'GIN indexes are not supported';
+            return false;
+        }
+
+        if (count($attributes) !== 1) {
+            $this->message = 'GIN index can be created on a single object attribute';
+            return false;
+        }
+
+        if (!empty($orders)) {
+            $this->message = 'GIN indexes do not support explicit orders. Remove the orders to create this index.';
+            return false;
+        }
+
+        $attributeName = $attributes[0] ?? '';
+        $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
+        $attributeType = $attribute->getAttribute('type', '');
+
+        if ($attributeType !== Database::TYPE_OBJECT) {
+            $this->message = 'GIN index can only be created on object attributes. Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
+            return false;
+        }
 
         return true;
     }

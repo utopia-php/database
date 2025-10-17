@@ -8,6 +8,7 @@ use Tests\E2E\Adapter\Scopes\CollectionTests;
 use Tests\E2E\Adapter\Scopes\DocumentTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
+use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
 use Tests\E2E\Adapter\Scopes\SpatialTests;
@@ -25,6 +26,7 @@ abstract class Base extends TestCase
     use PermissionTests;
     use RelationshipTests;
     use SpatialTests;
+    use ObjectAttributeTests;
     use GeneralTests;
 
     protected static string $namespace;

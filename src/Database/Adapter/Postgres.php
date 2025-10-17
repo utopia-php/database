@@ -860,14 +860,15 @@ class Postgres extends SQL
             Database::INDEX_FULLTEXT => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
             Database::INDEX_SPATIAL => 'INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL),
+            Database::INDEX_GIN => 'INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_GIN),
         };
 
         $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
         $attributes = \implode(', ', $attributes);
 
-        // Spatial indexes can't include _tenant because GIST indexes require all columns to have compatible operator classes
-        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT && $type !== Database::INDEX_SPATIAL) {
+        // Spatial and GIN indexes can't include _tenant because GIST/GIN indexes require all columns to have compatible operator classes
+        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT && $type !== Database::INDEX_SPATIAL && $type !== Database::INDEX_GIN) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }
@@ -877,6 +878,11 @@ class Postgres extends SQL
         // Add USING GIST for spatial indexes
         if ($type === Database::INDEX_SPATIAL) {
             $sql .= " USING GIST";
+        }
+
+        // Add USING GIN for JSONB indexes
+        if ($type === Database::INDEX_GIN) {
+            $sql .= " USING GIN";
         }
 
         $sql .= " ({$attributes});";
@@ -1576,44 +1582,41 @@ class Postgres extends SQL
     {
         switch ($query->getMethod()) {
             case Query::TYPE_EQUAL:
+            case Query::TYPE_NOT_EQUAL: {
+                $isNot = $query->getMethod() === Query::TYPE_NOT_EQUAL;
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
+                    $binds[":{$placeholder}_{$key}"] = json_encode($value);
                     if (is_array($value)) {
-                        // JSONB containment operator @>
-                        $binds[":{$placeholder}_{$key}"] = json_encode($value);
-                        $conditions[] = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
+                        $fragment = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
+                        $conditions[] = $isNot ? "NOT (" . $fragment . ")" : $fragment;
                     } else {
-                        // Direct equality
-                        $binds[":{$placeholder}_{$key}"] = json_encode($value);
-                        $conditions[] = "{$alias}.{$attribute} = :{$placeholder}_{$key}::jsonb";
+                        $fragment = "{$alias}.{$attribute} = :{$placeholder}_{$key}::jsonb";
+                        $conditions[] = $isNot ? "{$alias}.{$attribute} <> :{$placeholder}_{$key}::jsonb" : $fragment;
                     }
                 }
-                return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
+                $separator = $isNot ? ' AND ' : ' OR ';
+                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
+            }
 
             case Query::TYPE_CONTAINS:
+            case Query::TYPE_NOT_CONTAINS: {
+                $isNot = $query->getMethod() === Query::TYPE_NOT_CONTAINS;
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
-                    if (is_array($value)) {
-                        // For JSONB contains, we need to check if an array contains a specific element
-                        // The JSONB containment operator @> checks if left contains right
-                        // For array element containment: {"array": ["element"]} means array contains "element"
-                        // For nested array containment: {"matrix": [[4,5,6]]} means matrix contains [4,5,6]
-
-                        if (count($value) === 1) {
-                            $jsonKey = array_key_first($value);
-                            $jsonValue = $value[$jsonKey];
-
-                            // Always wrap the value in an array to represent "array contains this element"
-                            // - For scalar: 'react' becomes ["react"]
-                            // - For array: [4,5,6] becomes [[4,5,6]]
-                            $value[$jsonKey] = [$jsonValue];
-                        }
-
-                        $binds[":{$placeholder}_{$key}"] = json_encode($value);
-                        $conditions[] = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
+                    if (count($value) === 1) {
+                        $jsonKey = array_key_first($value);
+                        $jsonValue = $value[$jsonKey];
+                        // wrap to represent array; eg: key -> [value]
+                        $value[$jsonKey] = [$jsonValue];
                     }
+                    $binds[":{$placeholder}_{$key}"] = json_encode($value);
+                    $fragment = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
+                    $conditions[] = $isNot ? "NOT (" . $fragment . ")" : $fragment;
                 }
-                return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
+                $separator = $isNot ? ' AND ' : ' OR ';
+                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
+            }
 
             default:
                 throw new DatabaseException('Query method ' . $query->getMethod() . ' not supported for object attributes');

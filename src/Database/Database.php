@@ -69,6 +69,7 @@ class Database
     public const INDEX_FULLTEXT = 'fulltext';
     public const INDEX_UNIQUE = 'unique';
     public const INDEX_SPATIAL = 'spatial';
+    public const INDEX_GIN = 'gin';
     public const ARRAY_INDEX_LENGTH = 255;
 
     // Relation Types
@@ -1412,6 +1413,7 @@ class Database
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForObject(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2027,7 +2029,7 @@ class Database
 
         if ($defaultType === 'array') {
             // spatial types require the array itself
-            if (!in_array($type, Database::SPATIAL_TYPES)) {
+            if (!in_array($type, Database::SPATIAL_TYPES) && $type != Database::TYPE_OBJECT) {
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value);
                 }
@@ -2051,10 +2053,11 @@ class Database
                 break;
             case self::TYPE_OBJECT:
                 // Object types expect arrays as default values
+                var_dump($defaultType);
                 if ($defaultType !== 'array') {
                     throw new DatabaseException('Default value for object type must be an array');
                 }
-                break;
+                // no break
             case self::VAR_POINT:
             case self::VAR_LINESTRING:
             case self::VAR_POLYGON:
@@ -2062,7 +2065,7 @@ class Database
                 if ($defaultType !== 'array') {
                     throw new DatabaseException('Default value for spatial type ' . $type . ' must be an array');
                 }
-                break;
+                // no break
             default:
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::TYPE_OBJECT . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
@@ -3315,8 +3318,14 @@ class Database
                 }
                 break;
 
+            case self::INDEX_GIN:
+                if (!$this->adapter->getSupportForObject()) {
+                    throw new DatabaseException('GIN indexes are not supported');
+                }
+                break;
+
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_GIN);
         }
 
         /** @var array<Document> $collectionAttributes */
@@ -3373,6 +3382,27 @@ class Database
             }
         }
 
+        if ($type === self::INDEX_GIN) {
+            if (count($attributes) !== 1) {
+                throw new IndexException('GIN index can be created on a single object attribute');
+            }
+
+            foreach ($attributes as $attr) {
+                if (!isset($indexAttributesWithTypes[$attr])) {
+                    throw new IndexException('Attribute "' . $attr . '" not found in collection');
+                }
+
+                $attributeType = $indexAttributesWithTypes[$attr];
+                if ($attributeType !== self::TYPE_OBJECT) {
+                    throw new IndexException('GIN index can only be created on object attributes. Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                }
+            }
+
+            if (!empty($orders)) {
+                throw new IndexException('GIN indexes do not support explicit orders. Remove the orders to create this index.');
+            }
+        }
+
         $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -3393,6 +3423,7 @@ class Database
                 $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForObject(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

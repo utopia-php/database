@@ -147,6 +147,15 @@ class Filter extends Base
                     $validator = new Text(255, 0); // The query is always on uid
                     break;
 
+                case Database::TYPE_OBJECT:
+                    // For JSONB/object queries, value must be an array
+                    if (!is_array($value)) {
+                        $this->message = 'Query value for object type must be an array';
+                        return false;
+                    }
+                    // No further validation needed - JSONB accepts any valid array structure
+                    continue 2;
+
                 case Database::VAR_POINT:
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:
@@ -201,10 +210,11 @@ class Filter extends Base
             !$array &&
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
             $attributeSchema['type'] !== Database::VAR_STRING &&
+            $attributeSchema['type'] !== Database::TYPE_OBJECT &&
             !in_array($attributeSchema['type'], Database::SPATIAL_TYPES)
         ) {
             $queryType = $method === Query::TYPE_NOT_CONTAINS ? 'notContains' : 'contains';
-            $this->message = 'Cannot query ' . $queryType . ' on attribute "' . $attribute . '" because it is not an array or string.';
+            $this->message = 'Cannot query ' . $queryType . ' on attribute "' . $attribute . '" because it is not an array, string, or object.';
             return false;
         }
 

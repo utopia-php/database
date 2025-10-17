@@ -350,6 +350,15 @@ class Structure extends Validator
                     );
                     break;
 
+                case Database::TYPE_OBJECT:
+                    // For JSONB/object types, just validate it's an array (associative or list)
+                    if (!is_array($value)) {
+                        $this->message = 'Attribute "'.$key.'" has invalid type. Value must be an array for object type';
+                        return false;
+                    }
+                    // No additional validators needed - JSONB accepts any valid array structure
+                    continue 2; // Skip to next attribute
+
                 case Database::VAR_POINT:
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:

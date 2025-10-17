@@ -576,6 +576,34 @@ class Database
                 return $this->adapter->decodePolygon($value);
             }
         );
+
+        self::addFilter(
+            Database::VAR_VECTOR,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!is_array($value)) {
+                    return $value;
+                }
+                return json_encode($value);
+            },
+            /**
+             * @param string|null $value
+             * @return array|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return null;
+                }
+                if (!is_string($value)) {
+                    return $value;
+                }
+                $decoded = json_decode($value, true);
+                return is_array($decoded) ? $decoded : $value;
+            }
+        );
     }
 
     /**
@@ -1342,7 +1370,7 @@ class Database
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
         foreach ($attributes as &$attribute) {
-            if (in_array($attribute['type'], Database::SPATIAL_TYPES)) {
+            if (in_array($attribute['type'], Database::SPATIAL_TYPES) || $attribute['type'] === Database::VAR_VECTOR) {
                 $existingFilters = $attribute['filters'] ?? [];
                 if (!is_array($existingFilters)) {
                     $existingFilters = [$existingFilters];
@@ -1711,6 +1739,10 @@ class Database
             throw new NotFoundException('Collection not found');
         }
         if (in_array($type, Database::SPATIAL_TYPES)) {
+            $filters[] = $type;
+            $filters = array_unique($filters);
+        }
+        if ($type === Database::VAR_VECTOR) {
             $filters[] = $type;
             $filters = array_unique($filters);
         }
@@ -7265,14 +7297,6 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
-
-                if (\is_string($node) && $type === Database::VAR_VECTOR) {
-                    $decoded = \json_decode($node, true);
-                    if (\is_array($decoded)) {
-                        $node = $decoded;
-                    }
-                }
-
                 foreach (\array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }

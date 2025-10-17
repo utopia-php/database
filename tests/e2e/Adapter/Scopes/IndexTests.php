@@ -168,9 +168,9 @@ trait IndexTests
             $database->getAdapter()->getMaxIndexLength(),
             $database->getAdapter()->getInternalIndexesKeys(),
             $database->getAdapter()->getSupportForIndexArray(),
-            $database->getAdapter()->getSupportForSpatialAttributes(),
             $database->getAdapter()->getSupportForSpatialIndexNull(),
             $database->getAdapter()->getSupportForSpatialIndexOrder(),
+            $database->getAdapter()->getSupportForVectors(),
             $database->getAdapter()->getSupportForAttributes(),
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
             $database->getAdapter()->getSupportForIdenticalIndexes()
@@ -259,9 +259,9 @@ trait IndexTests
             $database->getAdapter()->getMaxIndexLength(),
             $database->getAdapter()->getInternalIndexesKeys(),
             $database->getAdapter()->getSupportForIndexArray(),
-            $database->getAdapter()->getSupportForSpatialAttributes(),
             $database->getAdapter()->getSupportForSpatialIndexNull(),
             $database->getAdapter()->getSupportForSpatialIndexOrder(),
+            $database->getAdapter()->getSupportForVectors(),
             $database->getAdapter()->getSupportForAttributes(),
             $database->getAdapter()->getSupportForMultipleFulltextIndexes(),
             $database->getAdapter()->getSupportForIdenticalIndexes()

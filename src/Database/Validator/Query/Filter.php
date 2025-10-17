@@ -171,6 +171,25 @@ class Filter extends Base
                     }
                     continue 2;
 
+                case Database::VAR_VECTOR:
+                    // For vector queries, validate that the value is an array of floats
+                    if (!is_array($value)) {
+                        $this->message = 'Vector query value must be an array';
+                        return false;
+                    }
+                    foreach ($value as $component) {
+                        if (!is_numeric($component)) {
+                            $this->message = 'Vector query value must contain only numeric values';
+                            return false;
+                        }
+                    }
+                    // Check size match
+                    $expectedSize = $attributeSchema['size'] ?? 0;
+                    if (count($value) !== $expectedSize) {
+                        $this->message = "Vector query value must have {$expectedSize} elements";
+                        return false;
+                    }
+                    continue 2;
                 default:
                     $this->message = 'Unknown Data type';
                     return false;
@@ -229,6 +248,18 @@ class Filter extends Base
         ) {
             $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
             return false;
+        }
+
+        // Vector queries can only be used on vector attributes (not arrays)
+        if (\in_array($method, Query::VECTOR_TYPES)) {
+            if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
+                $this->message = 'Vector queries can only be used on vector attributes';
+                return false;
+            }
+            if ($array) {
+                $this->message = 'Vector queries cannot be used on array attributes';
+                return false;
+            }
         }
 
         return true;
@@ -317,6 +348,32 @@ class Filter extends Base
             case Query::TYPE_IS_NOT_NULL:
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 
+            case Query::TYPE_VECTOR_DOT:
+            case Query::TYPE_VECTOR_COSINE:
+            case Query::TYPE_VECTOR_EUCLIDEAN:
+                // Validate that the attribute is a vector type
+                if (!$this->isValidAttribute($attribute)) {
+                    return false;
+                }
+
+                // Handle dotted attributes (relationships)
+                $attributeKey = $attribute;
+                if (\str_contains($attributeKey, '.') && !isset($this->schema[$attributeKey])) {
+                    $attributeKey = \explode('.', $attributeKey)[0];
+                }
+
+                $attributeSchema = $this->schema[$attributeKey];
+                if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
+                    $this->message = 'Vector queries can only be used on vector attributes';
+                    return false;
+                }
+
+                if (count($value->getValues()) != 1) {
+                    $this->message = \ucfirst($method) . ' queries require exactly one vector value.';
+                    return false;
+                }
+
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
             case Query::TYPE_OR:
             case Query::TYPE_AND:
                 $filters = Query::groupByType($value->getValues())['filters'];

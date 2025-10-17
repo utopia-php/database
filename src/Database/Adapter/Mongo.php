@@ -2966,6 +2966,11 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForVectors(): bool
+    {
+        return false;
+    }
+
     /**
      * Flattens the array.
      *

@@ -50,7 +50,7 @@ class Sequence extends Validator
                 return preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1;
             case Database::VAR_INTEGER:
                 $start = ($this->primary) ? 1 : 0;
-                $validator = new Range($start, Database::BIG_INT_MAX, Database::VAR_INTEGER);
+                $validator = new Range($start, Database::MAX_BIG_INT, Database::VAR_INTEGER);
                 return $validator->isValid($value);
 
             default:

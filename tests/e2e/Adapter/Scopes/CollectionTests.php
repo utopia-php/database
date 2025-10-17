@@ -716,7 +716,7 @@ trait CollectionTests
 
         if ($database->getAdapter()->getSupportForIndexArray()) {
             $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'cards');
-            $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], Database::ARRAY_INDEX_LENGTH);
+            $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], Database::MAX_ARRAY_INDEX_LENGTH);
             $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], null);
         }
     }

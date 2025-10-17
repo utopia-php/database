@@ -117,7 +117,7 @@ class MySQL extends MariaDB
         }
 
         if ($useMeters) {
-            $attr = "ST_SRID({$alias}.{$attribute}, " . Database::SRID . ")";
+            $attr = "ST_SRID({$alias}.{$attribute}, " . Database::DEFAULT_SRID . ")";
             $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", null);
             return "ST_Distance({$attr}, {$geom}, 'metre') {$operator} :{$placeholder}_1";
         }

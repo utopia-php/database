@@ -1029,6 +1029,13 @@ abstract class Adapter
     abstract public function getSupportForUpserts(): bool;
 
     /**
+     * Is vector type supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForVectors(): bool;
+
+    /**
      * Is Cache Fallback supported?
      *
      * @return bool

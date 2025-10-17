@@ -280,6 +280,11 @@ class Index extends Validator
         $attributes = $index->getAttribute('attributes', []);
         $orders = $index->getAttribute('orders', []);
 
+        if (\count($attributes) !== 1) {
+            $this->message = 'Spatial index must have exactly one attribute';
+            return false;
+        }
+
         foreach ($attributes as $attributeName) {
             $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
             $attributeType = $attribute->getAttribute('type', '');
@@ -299,6 +304,34 @@ class Index extends Validator
         if (!empty($orders) && !$this->spatialIndexOrderSupport) {
             $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
             return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkNonSpatialIndexOnSpatialAttribute(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+
+        // Skip check for spatial indexes
+        if ($type === Database::INDEX_SPATIAL) {
+            return true;
+        }
+
+        $attributes = $index->getAttribute('attributes', []);
+
+        foreach ($attributes as $attributeName) {
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
+            $attributeType = $attribute->getAttribute('type', '');
+
+            if (\in_array($attributeType, Database::SPATIAL_TYPES, true)) {
+                $this->message = 'Cannot create ' . $type . ' index on spatial attribute "' . $attributeName . '". Spatial attributes require spatial indexes.';
+                return false;
+            }
         }
 
         return true;
@@ -376,6 +409,9 @@ class Index extends Validator
             return false;
         }
         if (!$this->checkSpatialIndex($value)) {
+            return false;
+        }
+        if (!$this->checkNonSpatialIndexOnSpatialAttribute($value)) {
             return false;
         }
         if (!$this->checkVectorIndex($value)) {

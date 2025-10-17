@@ -584,10 +584,10 @@ class Database
              * @return mixed
              */
             function (mixed $value) {
-                if (!is_array($value)) {
+                if (!\is_array($value)) {
                     return $value;
                 }
-                return json_encode($value);
+                return \json_encode(\array_values(\array_map(\floatval(...), $value)));
             },
             /**
              * @param string|null $value
@@ -3576,7 +3576,7 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentValidator($attributes);
@@ -5084,7 +5084,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -6623,7 +6623,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -6820,7 +6820,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -7043,7 +7043,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -7107,7 +7107,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -7707,7 +7707,7 @@ class Database
      * @return void
      * @throws QueryException
      */
-    private function checkQueriesType(array $queries): void
+    private function checkQueryTypes(array $queries): void
     {
         foreach ($queries as $query) {
             if (!$query instanceof Query) {
@@ -7715,7 +7715,7 @@ class Database
             }
 
             if ($query->isNested()) {
-                $this->checkQueriesType($query->getValues());
+                $this->checkQueryTypes($query->getValues());
             }
         }
     }

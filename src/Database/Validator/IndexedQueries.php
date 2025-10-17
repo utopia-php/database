@@ -90,6 +90,18 @@ class IndexedQueries extends Queries
         $grouped = Query::groupByType($queries);
         $filters = $grouped['filters'];
 
+        // Check for multiple vector queries
+        $vectorQueryCount = 0;
+        foreach ($filters as $filter) {
+            if (in_array($filter->getMethod(), Query::VECTOR_TYPES)) {
+                $vectorQueryCount++;
+                if ($vectorQueryCount > 1) {
+                    $this->message = 'Cannot use multiple vector queries in a single request';
+                    return false;
+                }
+            }
+        }
+
         foreach ($filters as $filter) {
             if (
                 $filter->getMethod() === Query::TYPE_SEARCH ||

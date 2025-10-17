@@ -556,7 +556,12 @@ abstract class SQL extends Adapter
             $attributeIndex++;
         }
 
-        $stmt->execute();
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
         $affected = $stmt->rowCount();
 
         // Permissions logic

@@ -8,6 +8,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -1846,6 +1847,16 @@ class MariaDB extends SQL
         if (($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1406) ||
             ($e->getCode() === '01000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1265)) {
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
+        }
+
+        // Numeric value out of range
+        if ($e->getCode() === '22003' && isset($e->errorInfo[1]) && ($e->errorInfo[1] === 1264 || $e->errorInfo[1] === 1690)) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
+        }
+
+        // Numeric value out of range
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1690) {
+            return new LimitException('Value is out of range', $e->getCode(), $e);
         }
 
         // Unknown database

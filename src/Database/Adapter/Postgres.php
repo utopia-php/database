@@ -9,6 +9,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -1946,6 +1947,16 @@ class Postgres extends SQL
         // Data is too big for column resize
         if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
+        }
+
+        // Numeric value out of range (overflow/underflow from operators)
+        if ($e->getCode() === '22003' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new LimitException('Numeric value out of range', $e->getCode(), $e);
+        }
+
+        // Datetime field overflow
+        if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new LimitException('Datetime field overflow', $e->getCode(), $e);
         }
 
         // Unknown column

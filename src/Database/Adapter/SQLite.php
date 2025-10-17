@@ -973,6 +973,11 @@ class SQLite extends MariaDB
         return false; // SQLite doesn't have native spatial support
     }
 
+    public function getSupportForObject(): bool
+    {
+        return false;
+    }
+
     public function getSupportForSpatialIndexNull(): bool
     {
         return false; // SQLite doesn't have native spatial support

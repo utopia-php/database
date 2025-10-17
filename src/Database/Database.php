@@ -44,6 +44,7 @@ class Database
     public const VAR_DATETIME = 'datetime';
     public const VAR_ID = 'id';
     public const VAR_OBJECT_ID = 'objectId';
+    public const TYPE_OBJECT = 'object';
 
     public const INT_MAX = 2147483647;
     public const BIG_INT_MAX = PHP_INT_MAX;
@@ -1950,6 +1951,17 @@ class Database
             case self::VAR_DATETIME:
             case self::VAR_RELATIONSHIP:
                 break;
+            case self::TYPE_OBJECT:
+                if (!$this->adapter->getSupportForObject()) {
+                    throw new DatabaseException('Object attributes are not supported');
+                }
+                if (!empty($size)) {
+                    throw new DatabaseException('Size must be empty for object attributes');
+                }
+                if (!empty($array)) {
+                    throw new DatabaseException('Object attributes cannot be arrays');
+                }
+                break;
             case self::VAR_POINT:
             case self::VAR_LINESTRING:
             case self::VAR_POLYGON:
@@ -1965,7 +1977,7 @@ class Database
                 }
                 break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::TYPE_OBJECT . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
 
         // Only execute when $default is given
@@ -2037,6 +2049,12 @@ class Database
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
+            case self::TYPE_OBJECT:
+                // Object types expect arrays as default values
+                if ($defaultType !== 'array') {
+                    throw new DatabaseException('Default value for object type must be an array');
+                }
+                break;
             case self::VAR_POINT:
             case self::VAR_LINESTRING:
             case self::VAR_POLYGON:
@@ -2044,9 +2062,9 @@ class Database
                 if ($defaultType !== 'array') {
                     throw new DatabaseException('Default value for spatial type ' . $type . ' must be an array');
                 }
-                // no break
+                break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::TYPE_OBJECT . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
         }
     }
 
@@ -2293,6 +2311,18 @@ class Database
                     }
                     break;
 
+                case self::TYPE_OBJECT:
+                    if (!$this->adapter->getSupportForObject()) {
+                        throw new DatabaseException('Object attributes are not supported');
+                    }
+                    if (!empty($size)) {
+                        throw new DatabaseException('Size must be empty for object attributes');
+                    }
+                    if (!empty($array)) {
+                        throw new DatabaseException('Object attributes cannot be arrays');
+                    }
+                    break;
+
                 case self::VAR_POINT:
                 case self::VAR_LINESTRING:
                 case self::VAR_POLYGON:
@@ -2307,7 +2337,7 @@ class Database
                     }
                     break;
                 default:
-                    throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                    throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::TYPE_OBJECT);
             }
 
             /** Ensure required filters for the attribute are passed */
@@ -7286,6 +7316,12 @@ class Database
                         break;
                     case self::VAR_FLOAT:
                         $node = (float)$node;
+                        break;
+                    case self::TYPE_OBJECT:
+                        // Decode JSONB string to array
+                        if (is_string($node)) {
+                            $node = json_decode($node, true);
+                        }
                         break;
                     default:
                         break;

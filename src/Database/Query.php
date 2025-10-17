@@ -960,6 +960,14 @@ class Query
         return in_array($this->attributeType, Database::SPATIAL_TYPES);
     }
 
+    /**
+     * @return bool
+     */
+    public function isObjectAttribute(): bool
+    {
+        return $this->attributeType === Database::TYPE_OBJECT;
+    }
+
     // Spatial query methods
 
     /**

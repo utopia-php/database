@@ -1563,6 +1563,64 @@ class Postgres extends SQL
     }
 
     /**
+     * Handle JSONB queries
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $attribute
+     * @param string $alias
+     * @param string $placeholder
+     * @return string
+     */
+    protected function handleObjectQueries(Query $query, array &$binds, string $attribute, string $alias, string $placeholder): string
+    {
+        switch ($query->getMethod()) {
+            case Query::TYPE_EQUAL:
+                $conditions = [];
+                foreach ($query->getValues() as $key => $value) {
+                    if (is_array($value)) {
+                        // JSONB containment operator @>
+                        $binds[":{$placeholder}_{$key}"] = json_encode($value);
+                        $conditions[] = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
+                    } else {
+                        // Direct equality
+                        $binds[":{$placeholder}_{$key}"] = json_encode($value);
+                        $conditions[] = "{$alias}.{$attribute} = :{$placeholder}_{$key}::jsonb";
+                    }
+                }
+                return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
+
+            case Query::TYPE_CONTAINS:
+                $conditions = [];
+                foreach ($query->getValues() as $key => $value) {
+                    if (is_array($value)) {
+                        // For JSONB contains, we need to check if an array contains a specific element
+                        // The JSONB containment operator @> checks if left contains right
+                        // For array element containment: {"array": ["element"]} means array contains "element"
+                        // For nested array containment: {"matrix": [[4,5,6]]} means matrix contains [4,5,6]
+
+                        if (count($value) === 1) {
+                            $jsonKey = array_key_first($value);
+                            $jsonValue = $value[$jsonKey];
+
+                            // Always wrap the value in an array to represent "array contains this element"
+                            // - For scalar: 'react' becomes ["react"]
+                            // - For array: [4,5,6] becomes [[4,5,6]]
+                            $value[$jsonKey] = [$jsonValue];
+                        }
+
+                        $binds[":{$placeholder}_{$key}"] = json_encode($value);
+                        $conditions[] = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
+                    }
+                }
+                return empty($conditions) ? '' : '(' . implode(' OR ', $conditions) . ')';
+
+            default:
+                throw new DatabaseException('Query method ' . $query->getMethod() . ' not supported for object attributes');
+        }
+    }
+
+    /**
      * Get SQL Condition
      *
      * @param Query $query
@@ -1583,6 +1641,10 @@ class Postgres extends SQL
 
         if ($query->isSpatialAttribute()) {
             return $this->handleSpatialQueries($query, $binds, $attribute, $alias, $placeholder);
+        }
+
+        if ($query->isObjectAttribute()) {
+            return $this->handleObjectQueries($query, $binds, $attribute, $alias, $placeholder);
         }
 
         switch ($query->getMethod()) {
@@ -1732,6 +1794,9 @@ class Postgres extends SQL
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
 
+            case Database::TYPE_OBJECT:
+                return 'JSONB';
+
                 // in all other DB engines, 4326 is the default SRID
             case Database::VAR_POINT:
                 return 'GEOMETRY(POINT,' . Database::SRID . ')';
@@ -1743,7 +1808,7 @@ class Postgres extends SQL
                 return 'GEOMETRY(POLYGON,' . Database::SRID . ')';
 
             default:
-                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
+                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::TYPE_OBJECT . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 
@@ -1947,6 +2012,16 @@ class Postgres extends SQL
      * @return bool
     */
     public function getSupportForSpatialAttributes(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Are object (JSONB) attributes supported?
+     *
+     * @return bool
+    */
+    public function getSupportForObject(): bool
     {
         return true;
     }

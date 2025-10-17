@@ -13,6 +13,7 @@ include 'tasks/load.php';
 include 'tasks/index.php';
 include 'tasks/query.php';
 include 'tasks/relationships.php';
+include 'tasks/operators.php';
 
 $cli
     ->error()

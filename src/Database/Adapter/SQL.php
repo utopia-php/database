@@ -1546,7 +1546,7 @@ abstract class SQL extends Adapter
      */
     protected function getSpatialGeomFromText(string $wktPlaceholder, ?int $srid = null): string
     {
-        $srid = $srid ?? Database::SRID;
+        $srid = $srid ?? Database::DEFAULT_SRID;
         $geomFromText = "ST_GeomFromText({$wktPlaceholder}, {$srid}";
 
         if ($this->getSupportForSpatialAxisOrder()) {
@@ -1663,7 +1663,7 @@ abstract class SQL extends Adapter
             case Query::TYPE_VECTOR_DOT:
             case Query::TYPE_VECTOR_COSINE:
             case Query::TYPE_VECTOR_EUCLIDEAN:
-                throw new DatabaseException('Vector queries are only supported in PostgreSQL adapter');
+                throw new DatabaseException('Vector queries are not supported by this database');
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }
@@ -2366,7 +2366,6 @@ abstract class SQL extends Adapter
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $attributes = $collection->getAttribute('attributes', []);
-
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -2379,27 +2378,23 @@ abstract class SQL extends Adapter
 
         // Extract vector queries for ORDER BY
         $vectorQueries = [];
-        $filterQueries = [];
+        $otherQueries = [];
         foreach ($queries as $query) {
-            if (in_array($query->getMethod(), [
-                Query::TYPE_VECTOR_DOT,
-                Query::TYPE_VECTOR_COSINE,
-                Query::TYPE_VECTOR_EUCLIDEAN,
-            ])) {
+            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
                 $vectorQueries[] = $query;
             } else {
-                $filterQueries[] = $query;
+                $otherQueries[] = $query;
             }
         }
 
-        $queries = $filterQueries;
+        $queries = $otherQueries;
 
         $cursorWhere = [];
 
         foreach ($orderAttributes as $i => $originalAttribute) {
             $orderType = $orderTypes[$i] ?? Database::ORDER_ASC;
 
-            // Handle random ordering specially
+            // Handle random ordering
             if ($orderType === Database::ORDER_RANDOM) {
                 $orders[] = $this->getRandomOrder();
                 continue;

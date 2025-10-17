@@ -75,14 +75,14 @@ class Database
     public const INDEX_HNSW_DOT = 'hnsw_dot';
 
     // Max limits
-    public const INT_MAX = 2147483647;
-    public const BIG_INT_MAX = PHP_INT_MAX;
-    public const DOUBLE_MAX = PHP_FLOAT_MAX;
-    public const VECTOR_MAX_DIMENSIONS = 16000;
-    public const ARRAY_INDEX_LENGTH = 255;
+    public const MAX_INT = 2147483647;
+    public const MAX_BIG_INT = PHP_INT_MAX;
+    public const MAX_DOUBLE = PHP_FLOAT_MAX;
+    public const MAX_VECTOR_DIMENSIONS = 16000;
+    public const MAX_ARRAY_INDEX_LENGTH = 255;
 
     // Global SRID for geographic coordinates (WGS84)
-    public const SRID = 4326;
+    public const DEFAULT_SRID = 4326;
     public const EARTH_RADIUS = 6371000;
 
     // Relation Types
@@ -106,7 +106,6 @@ class Database
     // Orders
     public const ORDER_ASC = 'ASC';
     public const ORDER_DESC = 'DESC';
-
     public const ORDER_RANDOM = 'RANDOM';
 
     // Permissions
@@ -1394,7 +1393,7 @@ class Database
                         $isArray = $collectionAttribute->getAttribute('array', false);
                         if ($isArray) {
                             if ($this->adapter->getMaxIndexLength() > 0) {
-                                $lengths[$i] = self::ARRAY_INDEX_LENGTH;
+                                $lengths[$i] = self::MAX_ARRAY_INDEX_LENGTH;
                             }
                             $orders[$i] = null;
                         }
@@ -1425,6 +1424,7 @@ class Database
                 $this->adapter->getSupportForIndexArray(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForVectors(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -1980,7 +1980,7 @@ class Database
                 break;
             case self::VAR_VECTOR:
                 if (!$this->adapter->getSupportForVectors()) {
-                    throw new DatabaseException('Vector type is not supported by the current database adapter');
+                    throw new DatabaseException('Vector types are not supported by the current database');
                 }
                 if ($array) {
                     throw new DatabaseException('Vector type cannot be an array');
@@ -1988,8 +1988,8 @@ class Database
                 if ($size <= 0) {
                     throw new DatabaseException('Vector dimensions must be a positive integer');
                 }
-                if ($size > self::VECTOR_MAX_DIMENSIONS) {
-                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
+                if ($size > self::MAX_VECTOR_DIMENSIONS) {
+                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::MAX_VECTOR_DIMENSIONS);
                 }
 
                 // Validate default value if provided
@@ -2377,7 +2377,7 @@ class Database
                     break;
                 case self::VAR_VECTOR:
                     if (!$this->adapter->getSupportForVectors()) {
-                        throw new DatabaseException('Vector type is only supported in PostgreSQL adapter');
+                        throw new DatabaseException('Vector types are not supported by the current database');
                     }
                     if ($array) {
                         throw new DatabaseException('Vector type cannot be an array');
@@ -2385,8 +2385,8 @@ class Database
                     if ($size <= 0) {
                         throw new DatabaseException('Vector dimensions must be a positive integer');
                     }
-                    if ($size > self::VECTOR_MAX_DIMENSIONS) {
-                        throw new DatabaseException('Vector dimensions cannot exceed ' . self::VECTOR_MAX_DIMENSIONS);
+                    if ($size > self::MAX_VECTOR_DIMENSIONS) {
+                        throw new DatabaseException('Vector dimensions cannot exceed ' . self::MAX_VECTOR_DIMENSIONS);
                     }
                     break;
                 default:
@@ -2516,6 +2516,7 @@ class Database
                         $this->adapter->getSupportForIndexArray(),
                         $this->adapter->getSupportForSpatialIndexNull(),
                         $this->adapter->getSupportForSpatialIndexOrder(),
+                        $this->adapter->getSupportForVectors(),
                     );
 
                     foreach ($indexes as $index) {
@@ -3413,7 +3414,7 @@ class Database
                     $isArray = $collectionAttribute->getAttribute('array', false);
                     if ($isArray) {
                         if ($this->adapter->getMaxIndexLength() > 0) {
-                            $lengths[$i] = self::ARRAY_INDEX_LENGTH;
+                            $lengths[$i] = self::MAX_ARRAY_INDEX_LENGTH;
                         }
                         $orders[$i] = null;
                     }
@@ -3441,6 +3442,7 @@ class Database
                 $this->adapter->getSupportForIndexArray(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForVectors(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());

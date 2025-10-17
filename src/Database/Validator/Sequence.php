@@ -51,7 +51,7 @@ class Sequence extends Validator
 
             case Database::VAR_INTEGER:
                 $start = ($this->primary) ? 1 : 0;
-                $validator = new Range($start, Database::BIG_INT_MAX, Database::VAR_INTEGER);
+                $validator = new Range($start, Database::MAX_BIG_INT, Database::VAR_INTEGER);
                 return $validator->isValid($value);
 
             default:

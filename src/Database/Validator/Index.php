@@ -9,48 +9,29 @@ use Utopia\Validator;
 
 class Index extends Validator
 {
-    protected string $message = 'Invalid index';
-    protected int $maxLength;
-
     /**
      * @var array<Document> $attributes
      */
     protected array $attributes;
 
     /**
-     * @var array<string> $reservedKeys
-     */
-    protected array $reservedKeys;
-
-    protected bool $arrayIndexSupport;
-
-    protected bool $spatialIndexNullSupport;
-
-    protected bool $spatialIndexOrderSupport;
-
-    /**
      * @param array<Document> $attributes
      * @param int $maxLength
      * @param array<string> $reservedKeys
-     * @param bool $arrayIndexSupport
-     * @param bool $spatialIndexNullSupport
-     * @param bool $spatialIndexOrderSupport
+     * @param bool $supportForArrayIndexes
+     * @param bool $supportForSpatialIndexNull
+     * @param bool $supportForSpatialIndexOrder
      * @throws DatabaseException
      */
     public function __construct(
         array $attributes,
-        int $maxLength,
-        array $reservedKeys = [],
-        bool $arrayIndexSupport = false,
-        bool $spatialIndexNullSupport = false,
-        bool $spatialIndexOrderSupport = false,
+        protected int $maxLength,
+        protected array $reservedKeys = [],
+        protected bool $supportForArrayIndexes = false,
+        protected bool $supportForSpatialIndexNull = false,
+        protected bool $supportForSpatialIndexOrder = false,
+        protected bool $supportForVectorIndexes = false,
     ) {
-        $this->maxLength = $maxLength;
-        $this->reservedKeys = $reservedKeys;
-        $this->arrayIndexSupport = $arrayIndexSupport;
-        $this->spatialIndexNullSupport = $spatialIndexNullSupport;
-        $this->spatialIndexOrderSupport = $spatialIndexOrderSupport;
-
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
             $this->attributes[$key] = $attribute;
@@ -175,7 +156,7 @@ class Index extends Validator
                     return false;
                 }
 
-                if ($this->arrayIndexSupport === false) {
+                if ($this->supportForArrayIndexes === false) {
                     $this->message = 'Indexing an array attribute is not supported';
                     return false;
                 }
@@ -227,8 +208,8 @@ class Index extends Validator
             }
 
             if ($attribute->getAttribute('array', false)) {
-                $attributeSize = Database::ARRAY_INDEX_LENGTH;
-                $indexLength = Database::ARRAY_INDEX_LENGTH;
+                $attributeSize = Database::MAX_ARRAY_INDEX_LENGTH;
+                $indexLength = Database::MAX_ARRAY_INDEX_LENGTH;
             }
 
             if ($indexLength > $attributeSize) {
@@ -295,13 +276,13 @@ class Index extends Validator
             }
 
             $required = (bool)$attribute->getAttribute('required', false);
-            if (!$required && !$this->spatialIndexNullSupport) {
+            if (!$required && !$this->supportForSpatialIndexNull) {
                 $this->message = 'Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.';
                 return false;
             }
         }
 
-        if (!empty($orders) && !$this->spatialIndexOrderSupport) {
+        if (!empty($orders) && !$this->supportForSpatialIndexNull) {
             $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
             return false;
         }
@@ -352,6 +333,11 @@ class Index extends Validator
             $type !== Database::INDEX_HNSW_EUCLIDEAN
         ) {
             return true;
+        }
+
+        if ($this->supportForVectorIndexes === false) {
+            $this->message = 'Vector indexes are not supported';
+            return false;
         }
 
         $attributes = $index->getAttribute('attributes', []);

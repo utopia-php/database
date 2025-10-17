@@ -111,6 +111,12 @@ class Query
         self::TYPE_OR,
     ];
 
+    public const VECTOR_TYPES = [
+        self::TYPE_VECTOR_DOT,
+        self::TYPE_VECTOR_COSINE,
+        self::TYPE_VECTOR_EUCLIDEAN,
+    ];
+
     protected const LOGICAL_TYPES = [
         self::TYPE_AND,
         self::TYPE_OR,
@@ -868,7 +874,7 @@ class Query
 
                     break;
                 case Query::TYPE_LIMIT:
-                    // keep the 1st limit encountered and ignore the rest
+                    // Keep the 1st limit encountered and ignore the rest
                     if ($limit !== null) {
                         break;
                     }

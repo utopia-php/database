@@ -83,10 +83,10 @@ trait DocumentTests
                 Permission::delete(Role::user(ID::custom('2x'))),
             ],
             'string' => 'text📝',
-            'integer_signed' => -Database::INT_MAX,
-            'integer_unsigned' => Database::INT_MAX,
-            'bigint_signed' => -Database::BIG_INT_MAX,
-            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'integer_signed' => -Database::MAX_INT,
+            'integer_unsigned' => Database::MAX_INT,
+            'bigint_signed' => -Database::MAX_BIG_INT,
+            'bigint_unsigned' => Database::MAX_BIG_INT,
             'float_signed' => -5.55,
             'float_unsigned' => 5.55,
             'boolean' => true,
@@ -100,13 +100,13 @@ trait DocumentTests
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($document->getAttribute('integer_signed'));
-        $this->assertEquals(-Database::INT_MAX, $document->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::MAX_INT, $document->getAttribute('integer_signed'));
         $this->assertIsInt($document->getAttribute('integer_unsigned'));
-        $this->assertEquals(Database::INT_MAX, $document->getAttribute('integer_unsigned'));
+        $this->assertEquals(Database::MAX_INT, $document->getAttribute('integer_unsigned'));
         $this->assertIsInt($document->getAttribute('bigint_signed'));
-        $this->assertEquals(-Database::BIG_INT_MAX, $document->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::MAX_BIG_INT, $document->getAttribute('bigint_signed'));
         $this->assertIsInt($document->getAttribute('bigint_signed'));
-        $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint_unsigned'));
+        $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint_unsigned'));
         $this->assertIsFloat($document->getAttribute('float_signed'));
         $this->assertEquals(-5.55, $document->getAttribute('float_signed'));
         $this->assertIsFloat($document->getAttribute('float_unsigned'));
@@ -139,10 +139,10 @@ trait DocumentTests
                 Permission::delete(Role::user(ID::custom('2x'))),
             ],
             'string' => 'text📝',
-            'integer_signed' => -Database::INT_MAX,
-            'integer_unsigned' => Database::INT_MAX,
-            'bigint_signed' => -Database::BIG_INT_MAX,
-            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'integer_signed' => -Database::MAX_INT,
+            'integer_unsigned' => Database::MAX_INT,
+            'bigint_signed' => -Database::MAX_BIG_INT,
+            'bigint_unsigned' => Database::MAX_BIG_INT,
             'float_signed' => -5.55,
             'float_unsigned' => 5.55,
             'boolean' => true,
@@ -156,13 +156,13 @@ trait DocumentTests
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
-        $this->assertEquals(-Database::INT_MAX, $manualIdDocument->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::MAX_INT, $manualIdDocument->getAttribute('integer_signed'));
         $this->assertIsInt($manualIdDocument->getAttribute('integer_unsigned'));
-        $this->assertEquals(Database::INT_MAX, $manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertEquals(Database::MAX_INT, $manualIdDocument->getAttribute('integer_unsigned'));
         $this->assertIsInt($manualIdDocument->getAttribute('bigint_signed'));
-        $this->assertEquals(-Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_signed'));
         $this->assertIsInt($manualIdDocument->getAttribute('bigint_unsigned'));
-        $this->assertEquals(Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertEquals(Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_unsigned'));
         $this->assertIsFloat($manualIdDocument->getAttribute('float_signed'));
         $this->assertEquals(-5.55, $manualIdDocument->getAttribute('float_signed'));
         $this->assertIsFloat($manualIdDocument->getAttribute('float_unsigned'));
@@ -182,13 +182,13 @@ trait DocumentTests
         $this->assertIsString($manualIdDocument->getAttribute('string'));
         $this->assertEquals('text📝', $manualIdDocument->getAttribute('string')); // Also makes sure an emoji is working
         $this->assertIsInt($manualIdDocument->getAttribute('integer_signed'));
-        $this->assertEquals(-Database::INT_MAX, $manualIdDocument->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::MAX_INT, $manualIdDocument->getAttribute('integer_signed'));
         $this->assertIsInt($manualIdDocument->getAttribute('integer_unsigned'));
-        $this->assertEquals(Database::INT_MAX, $manualIdDocument->getAttribute('integer_unsigned'));
+        $this->assertEquals(Database::MAX_INT, $manualIdDocument->getAttribute('integer_unsigned'));
         $this->assertIsInt($manualIdDocument->getAttribute('bigint_signed'));
-        $this->assertEquals(-Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_signed'));
         $this->assertIsInt($manualIdDocument->getAttribute('bigint_unsigned'));
-        $this->assertEquals(Database::BIG_INT_MAX, $manualIdDocument->getAttribute('bigint_unsigned'));
+        $this->assertEquals(Database::MAX_BIG_INT, $manualIdDocument->getAttribute('bigint_unsigned'));
         $this->assertIsFloat($manualIdDocument->getAttribute('float_signed'));
         $this->assertEquals(-5.55, $manualIdDocument->getAttribute('float_signed'));
         $this->assertIsFloat($manualIdDocument->getAttribute('float_unsigned'));
@@ -386,7 +386,7 @@ trait DocumentTests
                 ],
                 'string' => 'text📝',
                 'integer' => 5,
-                'bigint' => Database::BIG_INT_MAX,
+                'bigint' => Database::MAX_BIG_INT,
             ]);
         }
 
@@ -625,7 +625,7 @@ trait DocumentTests
                 '$id' => 'first',
                 'string' => 'text📝',
                 'integer' => 5,
-                'bigint' => Database::BIG_INT_MAX,
+                'bigint' => Database::MAX_BIG_INT,
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::create(Role::any()),
@@ -637,7 +637,7 @@ trait DocumentTests
                 '$id' => 'second',
                 'string' => 'text📝',
                 'integer' => 5,
-                'bigint' => Database::BIG_INT_MAX,
+                'bigint' => Database::MAX_BIG_INT,
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::create(Role::any()),
@@ -668,7 +668,7 @@ trait DocumentTests
             $this->assertIsInt($document->getAttribute('integer'));
             $this->assertEquals(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+            $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
         }
 
         $documents = $database->find(__FUNCTION__);
@@ -682,7 +682,7 @@ trait DocumentTests
             $this->assertIsInt($document->getAttribute('integer'));
             $this->assertEquals(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+            $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
         }
 
         $documents[0]->setAttribute('string', 'new text📝');
@@ -705,7 +705,7 @@ trait DocumentTests
             $this->assertIsInt($document->getAttribute('integer'));
             $this->assertEquals(10, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+            $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
         }
 
         $documents = $database->find(__FUNCTION__);
@@ -720,7 +720,7 @@ trait DocumentTests
             $this->assertIsInt($document->getAttribute('integer'));
             $this->assertEquals(10, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
-            $this->assertEquals(Database::BIG_INT_MAX, $document->getAttribute('bigint'));
+            $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
         }
     }
 
@@ -1333,7 +1333,7 @@ trait DocumentTests
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer_signed'));
-        $this->assertEquals(-Database::INT_MAX, $document->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::MAX_INT, $document->getAttribute('integer_signed'));
         $this->assertIsFloat($document->getAttribute('float_signed'));
         $this->assertEquals(-5.55, $document->getAttribute('float_signed'));
         $this->assertIsFloat($document->getAttribute('float_unsigned'));
@@ -1365,7 +1365,7 @@ trait DocumentTests
         $this->assertIsString($document->getAttribute('string'));
         $this->assertEquals('text📝', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer_signed'));
-        $this->assertEquals(-Database::INT_MAX, $document->getAttribute('integer_signed'));
+        $this->assertEquals(-Database::MAX_INT, $document->getAttribute('integer_signed'));
         $this->assertArrayNotHasKey('float', $document->getAttributes());
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());
@@ -4619,10 +4619,10 @@ trait DocumentTests
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer_signed' => -Database::INT_MAX,
-            'integer_unsigned' => Database::INT_MAX,
-            'bigint_signed' => -Database::BIG_INT_MAX,
-            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'integer_signed' => -Database::MAX_INT,
+            'integer_unsigned' => Database::MAX_INT,
+            'bigint_signed' => -Database::MAX_BIG_INT,
+            'bigint_unsigned' => Database::MAX_BIG_INT,
             'float_signed' => -5.55,
             'float_unsigned' => 5.55,
             'boolean' => true,
@@ -4660,10 +4660,10 @@ trait DocumentTests
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer_signed' => -Database::INT_MAX,
-            'integer_unsigned' => Database::INT_MAX,
-            'bigint_signed' => -Database::BIG_INT_MAX,
-            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'integer_signed' => -Database::MAX_INT,
+            'integer_unsigned' => Database::MAX_INT,
+            'bigint_signed' => -Database::MAX_BIG_INT,
+            'bigint_unsigned' => Database::MAX_BIG_INT,
             'float_signed' => -5.55,
             'float_unsigned' => 5.55,
             'boolean' => true,
@@ -4692,10 +4692,10 @@ trait DocumentTests
                 Permission::delete(Role::any()),
             ],
             'string' => 'text📝',
-            'integer_signed' => -Database::INT_MAX,
-            'integer_unsigned' => Database::INT_MAX,
-            'bigint_signed' => -Database::BIG_INT_MAX,
-            'bigint_unsigned' => Database::BIG_INT_MAX,
+            'integer_signed' => -Database::MAX_INT,
+            'integer_unsigned' => Database::MAX_INT,
+            'bigint_signed' => -Database::MAX_BIG_INT,
+            'bigint_unsigned' => Database::MAX_BIG_INT,
             'float_signed' => -5.55,
             'float_unsigned' => 5.55,
             'boolean' => true,
@@ -4714,9 +4714,9 @@ trait DocumentTests
             ],
             'string' => 'text📝',
             'integer_signed' => 6,
-            'bigint_signed' => -Database::BIG_INT_MAX,
-            'float_signed' => -Database::DOUBLE_MAX,
-            'float_unsigned' => Database::DOUBLE_MAX,
+            'bigint_signed' => -Database::MAX_BIG_INT,
+            'float_signed' => -Database::MAX_DOUBLE,
+            'float_unsigned' => Database::MAX_DOUBLE,
             'boolean' => true,
             'colors' => ['pink', 'green', 'blue'],
         ]));

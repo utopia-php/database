@@ -458,8 +458,8 @@ class Postgres extends SQL
             if ($size <= 0) {
                 throw new DatabaseException('Vector dimensions must be a positive integer');
             }
-            if ($size > Database::VECTOR_MAX_DIMENSIONS) {
-                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::VECTOR_MAX_DIMENSIONS);
+            if ($size > Database::MAX_VECTOR_DIMENSIONS) {
+                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::MAX_VECTOR_DIMENSIONS);
             }
             $this->ensurePgVectorExtension();
         }
@@ -569,8 +569,8 @@ class Postgres extends SQL
             if ($size <= 0) {
                 throw new DatabaseException('Vector dimensions must be a positive integer');
             }
-            if ($size > Database::VECTOR_MAX_DIMENSIONS) {
-                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::VECTOR_MAX_DIMENSIONS);
+            if ($size > Database::MAX_VECTOR_DIMENSIONS) {
+                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::MAX_VECTOR_DIMENSIONS);
             }
             $this->ensurePgVectorExtension();
         }
@@ -1521,7 +1521,7 @@ class Postgres extends SQL
 
         if ($meters) {
             $attr = "({$alias}.{$attribute}::geography)";
-            $geom = "ST_SetSRID(" . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ", " . Database::SRID . ")::geography";
+            $geom = "ST_SetSRID(" . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ", " . Database::DEFAULT_SRID . ")::geography";
             return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
         }
 
@@ -1808,13 +1808,13 @@ class Postgres extends SQL
                 return 'TIMESTAMP(3)';
 
             case Database::VAR_POINT:
-                return 'GEOMETRY(POINT,' . Database::SRID . ')';
+                return 'GEOMETRY(POINT,' . Database::DEFAULT_SRID . ')';
 
             case Database::VAR_LINESTRING:
-                return 'GEOMETRY(LINESTRING,' . Database::SRID . ')';
+                return 'GEOMETRY(LINESTRING,' . Database::DEFAULT_SRID . ')';
 
             case Database::VAR_POLYGON:
-                return 'GEOMETRY(POLYGON,' . Database::SRID . ')';
+                return 'GEOMETRY(POLYGON,' . Database::DEFAULT_SRID . ')';
 
             case Database::VAR_VECTOR:
                 return "VECTOR({$size})";

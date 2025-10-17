@@ -141,7 +141,7 @@ class MariaDB extends SQL
                 $indexAttributes[$nested] = "`{$indexAttribute}`{$indexLength} {$indexOrder}";
 
                 if (!empty($hash[$indexAttribute]['array']) && $this->getSupportForCastIndexArray()) {
-                    $indexAttributes[$nested] = '(CAST(`' . $indexAttribute . '` AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
+                    $indexAttributes[$nested] = '(CAST(`' . $indexAttribute . '` AS char(' . Database::MAX_ARRAY_INDEX_LENGTH . ') ARRAY))';
                 }
             }
 
@@ -748,7 +748,7 @@ class MariaDB extends SQL
             $attributes[$i] = "`{$attr}`{$length} {$order}";
 
             if ($this->getSupportForCastIndexArray() && !empty($attribute['array'])) {
-                $attributes[$i] = '(CAST(`' . $attr . '` AS char(' . Database::ARRAY_INDEX_LENGTH . ') ARRAY))';
+                $attributes[$i] = '(CAST(`' . $attr . '` AS char(' . Database::MAX_ARRAY_INDEX_LENGTH . ') ARRAY))';
             }
         }
 
@@ -2114,7 +2114,7 @@ class MariaDB extends SQL
 
     public function getSpatialSQLType(string $type, bool $required): string
     {
-        $srid = Database::SRID;
+        $srid = Database::DEFAULT_SRID;
         $nullability = '';
 
         if (!$this->getSupportForSpatialIndexNull()) {

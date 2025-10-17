@@ -1169,6 +1169,11 @@ abstract class SQL extends Adapter
                     $total += 20;
                     break;
 
+                case Database::VAR_VECTOR:
+                    // Each dimension is typically 4 bytes (float32)
+                    $total += ($attribute['size'] ?? 0) * 4;
+                    break;
+
                 default:
                     throw new DatabaseException('Unknown type: ' . $attribute['type']);
             }
@@ -1522,7 +1527,7 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Is spatial attributes supported?
+     * Are spatial attributes supported?
      *
      * @return bool
     */
@@ -1562,6 +1567,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Is vector type supported?
+     *
+     * @return bool
+     */
+    public function getSupportForVectors(): bool
+    {
+        return false;
+    }
+
+    /**
      * Generate ST_GeomFromText call with proper SRID and axis order support
      *
      * @param string $wktPlaceholder
@@ -1570,7 +1585,7 @@ abstract class SQL extends Adapter
      */
     protected function getSpatialGeomFromText(string $wktPlaceholder, ?int $srid = null): string
     {
-        $srid = $srid ?? Database::SRID;
+        $srid = $srid ?? Database::DEFAULT_SRID;
         $geomFromText = "ST_GeomFromText({$wktPlaceholder}, {$srid}";
 
         if ($this->getSupportForSpatialAxisOrder()) {
@@ -1611,6 +1626,19 @@ abstract class SQL extends Adapter
         string $attribute = '',
         array $operators = []
     ): mixed;
+
+    /**
+     * Get vector distance calculation for ORDER BY clause
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $alias
+     * @return string|null
+     */
+    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    {
+        return null;
+    }
 
     /**
      * @param string $value
@@ -1673,6 +1701,10 @@ abstract class SQL extends Adapter
             case Query::TYPE_NOT_ENDS_WITH:
             case Query::TYPE_NOT_CONTAINS:
                 return $this->getLikeOperator();
+            case Query::TYPE_VECTOR_DOT:
+            case Query::TYPE_VECTOR_COSINE:
+            case Query::TYPE_VECTOR_EUCLIDEAN:
+                throw new DatabaseException('Vector queries are not supported by this database');
             default:
                 throw new DatabaseException('Unknown method: ' . $method);
         }
@@ -2714,7 +2746,6 @@ abstract class SQL extends Adapter
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
     {
         $attributes = $collection->getAttribute('attributes', []);
-
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = Authorization::getRoles();
@@ -2725,12 +2756,25 @@ abstract class SQL extends Adapter
 
         $queries = array_map(fn ($query) => clone $query, $queries);
 
+        // Extract vector queries for ORDER BY
+        $vectorQueries = [];
+        $otherQueries = [];
+        foreach ($queries as $query) {
+            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
+                $vectorQueries[] = $query;
+            } else {
+                $otherQueries[] = $query;
+            }
+        }
+
+        $queries = $otherQueries;
+
         $cursorWhere = [];
 
         foreach ($orderAttributes as $i => $originalAttribute) {
             $orderType = $orderTypes[$i] ?? Database::ORDER_ASC;
 
-            // Handle random ordering specially
+            // Handle random ordering
             if ($orderType === Database::ORDER_RANDOM) {
                 $orders[] = $this->getRandomOrder();
                 continue;
@@ -2811,7 +2855,22 @@ abstract class SQL extends Adapter
         }
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
-        $sqlOrder = 'ORDER BY ' . implode(', ', $orders);
+
+        // Add vector distance calculations to ORDER BY
+        $vectorOrders = [];
+        foreach ($vectorQueries as $query) {
+            $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
+            if ($vectorOrder) {
+                $vectorOrders[] = $vectorOrder;
+            }
+        }
+
+        if (!empty($vectorOrders)) {
+            // Vector orders should come first for similarity search
+            $orders = \array_merge($vectorOrders, $orders);
+        }
+
+        $sqlOrder = !empty($orders) ? 'ORDER BY ' . implode(', ', $orders) : '';
 
         $sqlLimit = '';
         if (! \is_null($limit)) {
@@ -2825,7 +2884,6 @@ abstract class SQL extends Adapter
         }
 
         $selections = $this->getAttributeSelections($queries);
-
 
         $sql = "
             SELECT {$this->getAttributeProjection($selections, $alias)}

@@ -54,6 +54,7 @@ Below is a list of supported databases, and their compatibly tested versions alo
 | MySQL    | ✅      | 8.0     |
 | Postgres | ✅      | 13.0    |
 | SQLite   | ✅      | 3.38    |
+| ScyllaDB | ✅      | 5.2     |
 
 ` ✅  - supported `
 
@@ -80,6 +81,16 @@ Below is a list of supported databases, and their compatibly tested versions alo
 - Index value can have unrestricted size
 - String max size is 2147483647 characters 
 - Integer max size is 4294967295 
+
+#### ScyllaDB
+- ID max size can be 255 bytes
+- ID can only contain [^A-Za-z0-9] and symbols `_` `-`
+- Document can have unrestricted size
+- Collection can have unrestricted amount of attributes
+- Collection can have unrestricted amount of indexes
+- Index value can have unrestricted size
+- String max size is unrestricted
+- Integer max size is 2^63 - 1
 
 ## Usage
 
@@ -204,6 +215,32 @@ $pdo = new PDO("sqlite:{$dbPath}", $pdoConfig);
 $cache = new Cache(new Memory()); // or use any cache adapter you wish
 
 $database = new Database(new SQLite($pdo), $cache);
+```
+
+#### ScyllaDB
+
+```php
+require_once __DIR__ . '/vendor/autoload.php';
+
+use PDO;
+use Utopia\Database\Database;
+use Utopia\Cache\Cache;
+use Utopia\Cache\Adapter\Memory;
+use Utopia\Database\Adapter\ScyllaDB;
+
+$dbHost = 'scylladb';
+$dbPort = '9042';
+$dbUser = 'root';
+$dbPass = 'password';
+
+$pdo = new PDO("scylla:host={$dbHost};port={$dbPort}", $dbUser, $dbPass, ScyllaDB::getPDOAttributes());
+
+$cache = new Cache(new Memory());
+$database = new Database(new ScyllaDB($pdo), $cache);
+
+$database
+    ->setDatabase('myapp')
+    ->setNamespace('myapp_ns');
 ```
 
 #### MongoDB

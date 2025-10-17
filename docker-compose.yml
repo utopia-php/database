@@ -131,5 +131,38 @@ services:
     networks:
       - database
 
+  scylladb:
+    image: scylladb/scylla:5.2
+    container_name: utopia-scylladb
+    restart: unless-stopped
+    networks:
+      - database
+    ports:
+      - "8710:9042"
+    command: --smp 1 --memory 750M --overprovisioned 1 --api-address 0.0.0.0
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  scylladb-mirror:
+    image: scylladb/scylla:5.2
+    container_name: utopia-scylladb-mirror
+    restart: unless-stopped
+    networks:
+      - database
+    ports:
+      - "8711:9042"
+    command: --smp 1 --memory 750M --overprovisioned 1 --api-address 0.0.0.0
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
 networks:
   database:
+
+volumes:
+  appwrite-scylladb:

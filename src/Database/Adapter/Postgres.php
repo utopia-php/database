@@ -2307,9 +2307,9 @@ class Postgres extends SQL
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
-                        ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
+                        WHEN COALESCE({$quotedColumn}, 0) >= CAST(:$maxKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        WHEN COALESCE({$quotedColumn}, 0) > CAST(:$maxKey AS NUMERIC) - CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        ELSE COALESCE({$quotedColumn}, 0) + CAST(:$bindKey AS NUMERIC)
                     END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
@@ -2321,9 +2321,9 @@ class Postgres extends SQL
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
-                        ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
+                        WHEN COALESCE({$quotedColumn}, 0) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        WHEN COALESCE({$quotedColumn}, 0) < CAST(:$minKey AS NUMERIC) + CAST(:$bindKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        ELSE COALESCE({$quotedColumn}, 0) - CAST(:$bindKey AS NUMERIC)
                     END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
@@ -2335,9 +2335,9 @@ class Postgres extends SQL
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
-                        ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
+                        WHEN COALESCE({$quotedColumn}, 0) >= CAST(:$maxKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        WHEN CAST(:$bindKey AS NUMERIC) != 0 AND COALESCE({$quotedColumn}, 0) > CAST(:$maxKey AS NUMERIC) / CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        ELSE COALESCE({$quotedColumn}, 0) * CAST(:$bindKey AS NUMERIC)
                     END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
@@ -2349,9 +2349,9 @@ class Postgres extends SQL
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) < :$minKey * :$bindKey THEN :$minKey
-                        ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
+                        WHEN COALESCE({$quotedColumn}, 0) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        WHEN CAST(:$bindKey AS NUMERIC) != 0 AND COALESCE({$quotedColumn}, 0) < CAST(:$minKey AS NUMERIC) * CAST(:$bindKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        ELSE COALESCE({$quotedColumn}, 0) / CAST(:$bindKey AS NUMERIC)
                     END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";

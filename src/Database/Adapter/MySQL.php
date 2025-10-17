@@ -284,7 +284,7 @@ class MySQL extends MariaDB
             case Operator::TYPE_ARRAY_APPEND:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = JSON_ARRAY_APPEND(IFNULL({$quotedColumn}, JSON_ARRAY()), '\$', JSON_EXTRACT(:$bindKey, '\$[0]'))";
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
             case Operator::TYPE_ARRAY_PREPEND:
                 $bindKey = "op_{$bindIndex}";

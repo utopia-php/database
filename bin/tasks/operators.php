@@ -191,7 +191,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
     Console::info("Starting benchmarks...\n");
 
     // Helper function to safely run benchmarks
-    $safeBenchmark = function(string $name, callable $benchmark) use (&$results, &$failed) {
+    $safeBenchmark = function (string $name, callable $benchmark) use (&$results, &$failed) {
         try {
             $results[$name] = $benchmark();
         } catch (\Throwable $e) {
@@ -201,65 +201,65 @@ function runAllBenchmarks(Database $database, int $iterations): array
     };
 
     // Numeric operators
-    $safeBenchmark('INCREMENT', fn() => benchmarkOperator(
+    $safeBenchmark('INCREMENT', fn () => benchmarkOperator(
         $database,
         $iterations,
         'INCREMENT',
         'counter',
         Operator::increment(1),
-        function($doc) {
+        function ($doc) {
             $doc->setAttribute('counter', $doc->getAttribute('counter', 0) + 1);
             return $doc;
         },
         ['counter' => 0]
     ));
 
-    $safeBenchmark('DECREMENT', fn() => benchmarkOperator(
+    $safeBenchmark('DECREMENT', fn () => benchmarkOperator(
         $database,
         $iterations,
         'DECREMENT',
         'counter',
         Operator::decrement(1),
-        function($doc) {
+        function ($doc) {
             $doc->setAttribute('counter', $doc->getAttribute('counter', 100) - 1);
             return $doc;
         },
         ['counter' => 100]
     ));
 
-    $safeBenchmark('MULTIPLY', fn() => benchmarkOperator(
+    $safeBenchmark('MULTIPLY', fn () => benchmarkOperator(
         $database,
         $iterations,
         'MULTIPLY',
         'multiplier',
         Operator::multiply(1.1),
-        function($doc) {
+        function ($doc) {
             $doc->setAttribute('multiplier', $doc->getAttribute('multiplier', 1.0) * 1.1);
             return $doc;
         },
         ['multiplier' => 1.0]
     ));
 
-    $safeBenchmark('DIVIDE', fn() => benchmarkOperator(
+    $safeBenchmark('DIVIDE', fn () => benchmarkOperator(
         $database,
         $iterations,
         'DIVIDE',
         'divider',
         Operator::divide(1.1),
-        function($doc) {
+        function ($doc) {
             $doc->setAttribute('divider', $doc->getAttribute('divider', 100.0) / 1.1);
             return $doc;
         },
         ['divider' => 100.0]
     ));
 
-    $safeBenchmark('MODULO', fn() => benchmarkOperator(
+    $safeBenchmark('MODULO', fn () => benchmarkOperator(
         $database,
         $iterations,
         'MODULO',
         'modulo_val',
         Operator::modulo(7),
-        function($doc) {
+        function ($doc) {
             $val = $doc->getAttribute('modulo_val', 100);
             $doc->setAttribute('modulo_val', $val % 7);
             return $doc;
@@ -267,13 +267,13 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['modulo_val' => 100]
     ));
 
-    $safeBenchmark('POWER', fn() => benchmarkOperator(
+    $safeBenchmark('POWER', fn () => benchmarkOperator(
         $database,
         $iterations,
         'POWER',
         'power_val',
         Operator::power(1.001),
-        function($doc) {
+        function ($doc) {
             $doc->setAttribute('power_val', pow($doc->getAttribute('power_val', 2.0), 1.001));
             return $doc;
         },
@@ -281,26 +281,26 @@ function runAllBenchmarks(Database $database, int $iterations): array
     ));
 
     // String operators
-    $safeBenchmark('CONCAT', fn() => benchmarkOperator(
+    $safeBenchmark('CONCAT', fn () => benchmarkOperator(
         $database,
         $iterations,
         'CONCAT',
         'text',
         Operator::concat('x'),
-        function($doc) {
+        function ($doc) {
             $doc->setAttribute('text', $doc->getAttribute('text', 'initial') . 'x');
             return $doc;
         },
         ['text' => 'initial']
     ));
 
-    $safeBenchmark('REPLACE', fn() => benchmarkOperator(
+    $safeBenchmark('REPLACE', fn () => benchmarkOperator(
         $database,
         $iterations,
         'REPLACE',
         'description',
         Operator::replace('foo', 'bar'),
-        function($doc) {
+        function ($doc) {
             $doc->setAttribute('description', str_replace('foo', 'bar', $doc->getAttribute('description', 'foo bar baz')));
             return $doc;
         },
@@ -308,13 +308,13 @@ function runAllBenchmarks(Database $database, int $iterations): array
     ));
 
     // Boolean operators
-    $safeBenchmark('TOGGLE', fn() => benchmarkOperator(
+    $safeBenchmark('TOGGLE', fn () => benchmarkOperator(
         $database,
         $iterations,
         'TOGGLE',
         'active',
         Operator::toggle(),
-        function($doc) {
+        function ($doc) {
             $doc->setAttribute('active', !$doc->getAttribute('active', true));
             return $doc;
         },
@@ -322,13 +322,13 @@ function runAllBenchmarks(Database $database, int $iterations): array
     ));
 
     // Array operators
-    $safeBenchmark('ARRAY_APPEND', fn() => benchmarkOperator(
+    $safeBenchmark('ARRAY_APPEND', fn () => benchmarkOperator(
         $database,
         $iterations,
         'ARRAY_APPEND',
         'tags',
         Operator::arrayAppend(['new']),
-        function($doc) {
+        function ($doc) {
             $tags = $doc->getAttribute('tags', ['initial']);
             $tags[] = 'new';
             $doc->setAttribute('tags', $tags);
@@ -337,13 +337,13 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['initial']]
     ));
 
-    $safeBenchmark('ARRAY_PREPEND', fn() => benchmarkOperator(
+    $safeBenchmark('ARRAY_PREPEND', fn () => benchmarkOperator(
         $database,
         $iterations,
         'ARRAY_PREPEND',
         'tags',
         Operator::arrayPrepend(['first']),
-        function($doc) {
+        function ($doc) {
             $tags = $doc->getAttribute('tags', ['initial']);
             array_unshift($tags, 'first');
             $doc->setAttribute('tags', $tags);
@@ -352,13 +352,13 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['initial']]
     ));
 
-    $safeBenchmark('ARRAY_INSERT', fn() => benchmarkOperator(
+    $safeBenchmark('ARRAY_INSERT', fn () => benchmarkOperator(
         $database,
         $iterations,
         'ARRAY_INSERT',
         'numbers',
         Operator::arrayInsert(1, 99),
-        function($doc) {
+        function ($doc) {
             $numbers = $doc->getAttribute('numbers', [1, 2, 3]);
             array_splice($numbers, 1, 0, [99]);
             $doc->setAttribute('numbers', $numbers);
@@ -367,28 +367,28 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['numbers' => [1, 2, 3]]
     ));
 
-    $safeBenchmark('ARRAY_REMOVE', fn() => benchmarkOperator(
+    $safeBenchmark('ARRAY_REMOVE', fn () => benchmarkOperator(
         $database,
         $iterations,
         'ARRAY_REMOVE',
         'tags',
         Operator::arrayRemove('unwanted'),
-        function($doc) {
+        function ($doc) {
             $tags = $doc->getAttribute('tags', ['keep', 'unwanted', 'also']);
-            $tags = array_values(array_filter($tags, fn($t) => $t !== 'unwanted'));
+            $tags = array_values(array_filter($tags, fn ($t) => $t !== 'unwanted'));
             $doc->setAttribute('tags', $tags);
             return $doc;
         },
         ['tags' => ['keep', 'unwanted', 'also']]
     ));
 
-    $safeBenchmark('ARRAY_UNIQUE', fn() => benchmarkOperator(
+    $safeBenchmark('ARRAY_UNIQUE', fn () => benchmarkOperator(
         $database,
         $iterations,
         'ARRAY_UNIQUE',
         'tags',
         Operator::arrayUnique(),
-        function($doc) {
+        function ($doc) {
             $tags = $doc->getAttribute('tags', ['a', 'b', 'a', 'c', 'b']);
             $doc->setAttribute('tags', array_values(array_unique($tags)));
             return $doc;
@@ -396,13 +396,13 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['a', 'b', 'a', 'c', 'b']]
     ));
 
-    $safeBenchmark('ARRAY_INTERSECT', fn() => benchmarkOperator(
+    $safeBenchmark('ARRAY_INTERSECT', fn () => benchmarkOperator(
         $database,
         $iterations,
         'ARRAY_INTERSECT',
         'tags',
         Operator::arrayIntersect(['keep', 'this']),
-        function($doc) {
+        function ($doc) {
             $tags = $doc->getAttribute('tags', ['keep', 'remove', 'this']);
             $doc->setAttribute('tags', array_values(array_intersect($tags, ['keep', 'this'])));
             return $doc;
@@ -410,13 +410,13 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['keep', 'remove', 'this']]
     ));
 
-    $safeBenchmark('ARRAY_DIFF', fn() => benchmarkOperator(
+    $safeBenchmark('ARRAY_DIFF', fn () => benchmarkOperator(
         $database,
         $iterations,
         'ARRAY_DIFF',
         'tags',
         Operator::arrayDiff(['remove']),
-        function($doc) {
+        function ($doc) {
             $tags = $doc->getAttribute('tags', ['keep', 'remove', 'this']);
             $doc->setAttribute('tags', array_values(array_diff($tags, ['remove'])));
             return $doc;
@@ -424,28 +424,28 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['keep', 'remove', 'this']]
     ));
 
-    $safeBenchmark('ARRAY_FILTER', fn() => benchmarkOperator(
+    $safeBenchmark('ARRAY_FILTER', fn () => benchmarkOperator(
         $database,
         $iterations,
         'ARRAY_FILTER',
         'numbers',
         Operator::arrayFilter('greaterThan', 5),
-        function($doc) {
+        function ($doc) {
             $numbers = $doc->getAttribute('numbers', [1, 3, 5, 7, 9]);
-            $doc->setAttribute('numbers', array_values(array_filter($numbers, fn($n) => $n > 5)));
+            $doc->setAttribute('numbers', array_values(array_filter($numbers, fn ($n) => $n > 5)));
             return $doc;
         },
         ['numbers' => [1, 3, 5, 7, 9]]
     ));
 
     // Date operators
-    $safeBenchmark('DATE_ADD_DAYS', fn() => benchmarkOperator(
+    $safeBenchmark('DATE_ADD_DAYS', fn () => benchmarkOperator(
         $database,
         $iterations,
         'DATE_ADD_DAYS',
         'created_at',
         Operator::dateAddDays(1),
-        function($doc) {
+        function ($doc) {
             $date = new \DateTime($doc->getAttribute('created_at', DateTime::now()));
             $date->modify('+1 day');
             $doc->setAttribute('created_at', DateTime::format($date));
@@ -454,13 +454,13 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['created_at' => DateTime::now()]
     ));
 
-    $safeBenchmark('DATE_SUB_DAYS', fn() => benchmarkOperator(
+    $safeBenchmark('DATE_SUB_DAYS', fn () => benchmarkOperator(
         $database,
         $iterations,
         'DATE_SUB_DAYS',
         'updated_at',
         Operator::dateSubDays(1),
-        function($doc) {
+        function ($doc) {
             $date = new \DateTime($doc->getAttribute('updated_at', DateTime::now()));
             $date->modify('-1 day');
             $doc->setAttribute('updated_at', DateTime::format($date));
@@ -469,13 +469,13 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['updated_at' => DateTime::now()]
     ));
 
-    $safeBenchmark('DATE_SET_NOW', fn() => benchmarkOperator(
+    $safeBenchmark('DATE_SET_NOW', fn () => benchmarkOperator(
         $database,
         $iterations,
         'DATE_SET_NOW',
         'updated_at',
         Operator::dateSetNow(),
-        function($doc) {
+        function ($doc) {
             $doc->setAttribute('updated_at', DateTime::now());
             return $doc;
         },
@@ -673,11 +673,15 @@ function displayResults(array $results, string $adapter, int $iterations): void
     Console::info("\n" . str_repeat('=', array_sum($colWidths) + 5));
     Console::info("PERFORMANCE INSIGHTS:");
 
-    $fastest = array_reduce($results, fn($carry, $item) =>
+    $fastest = array_reduce(
+        $results,
+        fn ($carry, $item) =>
         $carry === null || $item['speedup'] > $carry['speedup'] ? $item : $carry
     );
 
-    $slowest = array_reduce($results, fn($carry, $item) =>
+    $slowest = array_reduce(
+        $results,
+        fn ($carry, $item) =>
         $carry === null || $item['speedup'] < $carry['speedup'] ? $item : $carry
     );
 

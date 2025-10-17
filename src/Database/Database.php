@@ -46,6 +46,7 @@ class Database
     // ID types
     public const VAR_ID = 'id';
     public const VAR_UUID = 'uuid';
+    public const TYPE_OBJECT = 'object';
 
     // Vector types
     public const VAR_VECTOR = 'vector';
@@ -70,6 +71,7 @@ class Database
     public const INDEX_FULLTEXT = 'fulltext';
     public const INDEX_UNIQUE = 'unique';
     public const INDEX_SPATIAL = 'spatial';
+    public const INDEX_GIN = 'gin';
     public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';
     public const INDEX_HNSW_DOT = 'hnsw_dot';
@@ -1462,6 +1464,7 @@ class Database
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
                 $this->adapter->getSupportForVectors(),
+                $this->adapter->getSupportForObject(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -2005,6 +2008,17 @@ class Database
             case self::VAR_DATETIME:
             case self::VAR_RELATIONSHIP:
                 break;
+            case self::TYPE_OBJECT:
+                if (!$this->adapter->getSupportForObject()) {
+                    throw new DatabaseException('Object attributes are not supported');
+                }
+                if (!empty($size)) {
+                    throw new DatabaseException('Size must be empty for object attributes');
+                }
+                if (!empty($array)) {
+                    throw new DatabaseException('Object attributes cannot be arrays');
+                }
+                break;
             case self::VAR_POINT:
             case self::VAR_LINESTRING:
             case self::VAR_POLYGON:
@@ -2113,7 +2127,7 @@ class Database
 
         if ($defaultType === 'array') {
             // Spatial types require the array itself
-            if (!in_array($type, Database::SPATIAL_TYPES)) {
+            if (!in_array($type, Database::SPATIAL_TYPES) && $type != Database::TYPE_OBJECT) {
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value);
                 }
@@ -2403,6 +2417,18 @@ class Database
                     }
                     break;
 
+                case self::TYPE_OBJECT:
+                    if (!$this->adapter->getSupportForObject()) {
+                        throw new DatabaseException('Object attributes are not supported');
+                    }
+                    if (!empty($size)) {
+                        throw new DatabaseException('Size must be empty for object attributes');
+                    }
+                    if (!empty($array)) {
+                        throw new DatabaseException('Object attributes cannot be arrays');
+                    }
+                    break;
+
                 case self::VAR_POINT:
                 case self::VAR_LINESTRING:
                 case self::VAR_POLYGON:
@@ -2450,7 +2476,7 @@ class Database
                         self::VAR_FLOAT,
                         self::VAR_BOOLEAN,
                         self::VAR_DATETIME,
-                        self::VAR_RELATIONSHIP
+                        self::VAR_RELATIONSHIP . ', ' . self::TYPE_OBJECT
                     ];
                     if ($this->adapter->getSupportForVectors()) {
                         $supportedTypes[] = self::VAR_VECTOR;
@@ -3444,8 +3470,14 @@ class Database
                 }
                 break;
 
+            case self::INDEX_GIN:
+                if (!$this->adapter->getSupportForObject()) {
+                    throw new DatabaseException('GIN indexes are not supported');
+                }
+                break;
+
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_GIN . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
         }
 
         /** @var array<Document> $collectionAttributes */
@@ -3477,6 +3509,27 @@ class Database
             }
         }
 
+        if ($type === self::INDEX_GIN) {
+            if (count($attributes) !== 1) {
+                throw new IndexException('GIN index can be created on a single object attribute');
+            }
+
+            foreach ($attributes as $attr) {
+                if (!isset($indexAttributesWithTypes[$attr])) {
+                    throw new IndexException('Attribute "' . $attr . '" not found in collection');
+                }
+
+                $attributeType = $indexAttributesWithTypes[$attr];
+                if ($attributeType !== self::TYPE_OBJECT) {
+                    throw new IndexException('GIN index can only be created on object attributes. Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                }
+            }
+
+            if (!empty($orders)) {
+                throw new IndexException('GIN indexes do not support explicit orders. Remove the orders to create this index.');
+            }
+        }
+
         $index = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -3497,6 +3550,7 @@ class Database
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
                 $this->adapter->getSupportForVectors(),
+                $this->adapter->getSupportForObject(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -7419,6 +7473,12 @@ class Database
                         break;
                     case self::VAR_FLOAT:
                         $node = (float)$node;
+                        break;
+                    case self::TYPE_OBJECT:
+                        // Decode JSONB string to array
+                        if (is_string($node)) {
+                            $node = json_decode($node, true);
+                        }
                         break;
                     default:
                         break;

@@ -1849,6 +1849,11 @@ class MariaDB extends SQL
         return true;
     }
 
+    public function getSupportForObject(): bool
+    {
+        return false;
+    }
+
     /**
      * Get Support for Null Values in Spatial Indexes
      *

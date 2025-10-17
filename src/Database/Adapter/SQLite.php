@@ -518,7 +518,7 @@ class SQLite extends MariaDB
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function createDocument(Document $collection, Document $document): Document
     {
@@ -621,7 +621,7 @@ class SQLite extends MariaDB
             }
         } catch (PDOException $e) {
             throw match ($e->getCode()) {
-                "1062", "23000" => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                "1062", "23000" => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
@@ -640,7 +640,7 @@ class SQLite extends MariaDB
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
@@ -871,7 +871,7 @@ class SQLite extends MariaDB
         } catch (PDOException $e) {
             throw match ($e->getCode()) {
                 '1062',
-                '23000' => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                '23000' => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }

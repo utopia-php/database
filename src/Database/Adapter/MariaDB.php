@@ -1971,7 +1971,7 @@ class MariaDB extends SQL
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
-            // Boolean operator with NULL handling
+                // Boolean operator with NULL handling
             case Operator::TYPE_TOGGLE:
                 return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
 

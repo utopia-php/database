@@ -556,7 +556,14 @@ function benchmarkOperator(
     $speedup = $timeWithout / $timeWith;
     $improvement = (($timeWithout - $timeWith) / $timeWithout) * 100;
 
-    Console::success("  WITH operator: {$timeWith}s | WITHOUT operator: {$timeWithout}s | Speedup: {$speedup}x");
+    // Color code the speedup output
+    if ($speedup > 1.0) {
+        Console::success("  WITH operator: {$timeWith}s | WITHOUT operator: {$timeWithout}s | Speedup: {$speedup}x");
+    } elseif ($speedup >= 0.85) {
+        Console::warning("  WITH operator: {$timeWith}s | WITHOUT operator: {$timeWithout}s | Speedup: {$speedup}x");
+    } else {
+        Console::error("  WITH operator: {$timeWith}s | WITHOUT operator: {$timeWithout}s | Speedup: {$speedup}x");
+    }
 
     return [
         'operator' => $operatorName,
@@ -636,13 +643,16 @@ function displayResults(array $results, string $adapter, int $iterations): void
             $memDiff = formatBytes($result['memory_without'] - $result['memory_with']);
 
             // Color code based on performance
-            $speedupDisplay = $result['speedup'] >= 1.5 ? "\033[32m{$speedup}x\033[0m" :
-                             ($result['speedup'] >= 1.1 ? "\033[33m{$speedup}x\033[0m" :
+            // Red: <0.85x (regression), Yellow: 0.85-1.0x (slower), Green: >1.0x (faster)
+            $speedupDisplay = $result['speedup'] > 1.0 ? "\033[32m{$speedup}x\033[0m" :
+                             ($result['speedup'] >= 0.85 ? "\033[33m{$speedup}x\033[0m" :
                              "\033[31m{$speedup}x\033[0m");
 
-            $improvementDisplay = $result['improvement_percent'] >= 30 ? "\033[32m+{$improvement}%\033[0m" :
-                                 ($result['improvement_percent'] >= 10 ? "\033[33m+{$improvement}%\033[0m" :
-                                 "\033[31m+{$improvement}%\033[0m");
+            // Color improvement percent consistently with speedup
+            // Green: >0% (faster), Yellow: -15% to 0% (slower but acceptable), Red: <-15% (regression)
+            $improvementDisplay = $result['improvement_percent'] > 0 ? "\033[32m+{$improvement}%\033[0m" :
+                                 ($result['improvement_percent'] >= -15 ? "\033[33m{$improvement}%\033[0m" :
+                                 "\033[31m{$improvement}%\033[0m");
 
             $row = sprintf(
                 "  %-{$colWidths['operator']}s %-{$colWidths['with']}s %-{$colWidths['without']}s %-{$colWidths['speedup']}s %-{$colWidths['improvement']}s %-{$colWidths['mem_diff']}s",

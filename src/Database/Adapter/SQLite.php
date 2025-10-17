@@ -1451,10 +1451,13 @@ class SQLite extends MariaDB
                 $bindIndex++;
 
                 if (isset($values[1]) && $values[1] !== null) {
-                    // SQLite uses MIN/MAX instead of LEAST/GREATEST
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = MIN(COALESCE({$quotedColumn}, 0) + :$bindKey, :$maxKey)";
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
+                    END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
@@ -1464,10 +1467,13 @@ class SQLite extends MariaDB
                 $bindIndex++;
 
                 if (isset($values[1]) && $values[1] !== null) {
-                    // SQLite uses MIN/MAX instead of LEAST/GREATEST
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = MAX(COALESCE({$quotedColumn}, 0) - :$bindKey, :$minKey)";
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
+                    END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
@@ -1477,10 +1483,13 @@ class SQLite extends MariaDB
                 $bindIndex++;
 
                 if (isset($values[1]) && $values[1] !== null) {
-                    // SQLite uses MIN/MAX instead of LEAST/GREATEST
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = MIN(COALESCE({$quotedColumn}, 0) * :$bindKey, :$maxKey)";
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
+                    END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
@@ -1490,10 +1499,13 @@ class SQLite extends MariaDB
                 $bindIndex++;
 
                 if (isset($values[1]) && $values[1] !== null) {
-                    // SQLite uses MIN/MAX instead of LEAST/GREATEST
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = MAX(COALESCE({$quotedColumn}, 0) / :$bindKey, :$minKey)";
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) < :$minKey * :$bindKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
+                    END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
 
@@ -1515,10 +1527,14 @@ class SQLite extends MariaDB
                 $bindIndex++;
 
                 if (isset($values[1]) && $values[1] !== null) {
-                    // SQLite uses MIN/MAX instead of LEAST/GREATEST
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = MIN(POWER(COALESCE({$quotedColumn}, 0), :$bindKey), :$maxKey)";
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey * LN(COALESCE({$quotedColumn}, 1)) > LN(:$maxKey) THEN :$maxKey
+                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
+                    END";
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 

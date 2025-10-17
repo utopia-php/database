@@ -51,6 +51,7 @@ class Query
     // Order methods
     public const TYPE_ORDER_DESC = 'orderDesc';
     public const TYPE_ORDER_ASC = 'orderAsc';
+    public const TYPE_ORDER_RANDOM = 'orderRandom';
 
     // Pagination methods
     public const TYPE_LIMIT = 'limit';
@@ -101,6 +102,7 @@ class Query
         self::TYPE_SELECT,
         self::TYPE_ORDER_DESC,
         self::TYPE_ORDER_ASC,
+        self::TYPE_ORDER_RANDOM,
         self::TYPE_LIMIT,
         self::TYPE_OFFSET,
         self::TYPE_CURSOR_AFTER,
@@ -116,6 +118,7 @@ class Query
 
     protected string $method = '';
     protected string $attribute = '';
+    protected string $attributeType = '';
     protected bool $onArray = false;
 
     /**
@@ -255,6 +258,7 @@ class Query
             self::TYPE_NOT_SEARCH,
             self::TYPE_ORDER_ASC,
             self::TYPE_ORDER_DESC,
+            self::TYPE_ORDER_RANDOM,
             self::TYPE_LIMIT,
             self::TYPE_OFFSET,
             self::TYPE_CURSOR_AFTER,
@@ -612,6 +616,16 @@ class Query
     }
 
     /**
+     * Helper method to create Query with orderRandom method
+     *
+     * @return Query
+     */
+    public static function orderRandom(): self
+    {
+        return new self(self::TYPE_ORDER_RANDOM);
+    }
+
+    /**
      * Helper method to create Query with limit method
      *
      * @param int $value
@@ -841,13 +855,16 @@ class Query
             switch ($method) {
                 case Query::TYPE_ORDER_ASC:
                 case Query::TYPE_ORDER_DESC:
+                case Query::TYPE_ORDER_RANDOM:
                     if (!empty($attribute)) {
                         $orderAttributes[] = $attribute;
                     }
 
-                    $orderTypes[] = $method === Query::TYPE_ORDER_ASC
-                        ? Database::ORDER_ASC
-                        : Database::ORDER_DESC;
+                    $orderTypes[] = match ($method) {
+                        Query::TYPE_ORDER_ASC => Database::ORDER_ASC,
+                        Query::TYPE_ORDER_DESC => Database::ORDER_DESC,
+                        Query::TYPE_ORDER_RANDOM => Database::ORDER_RANDOM,
+                    };
 
                     break;
                 case Query::TYPE_LIMIT:
@@ -931,6 +948,32 @@ class Query
     }
 
     /**
+     * @param string $type
+     * @return void
+     */
+    public function setAttributeType(string $type): void
+    {
+        $this->attributeType = $type;
+    }
+
+    /**
+     * @return string
+     */
+    public function getAttributeType(): string
+    {
+        return $this->attributeType;
+    }
+    /**
+     * @return bool
+     */
+    public function isSpatialAttribute(): bool
+    {
+        return in_array($this->attributeType, Database::SPATIAL_TYPES);
+    }
+
+    // Spatial query methods
+
+    /**
      * Helper method to create Query with distanceEqual method
      *
      * @param string $attribute
@@ -995,7 +1038,7 @@ class Query
      */
     public static function intersects(string $attribute, array $values): self
     {
-        return new self(self::TYPE_INTERSECTS, $attribute, $values);
+        return new self(self::TYPE_INTERSECTS, $attribute, [$values]);
     }
 
     /**
@@ -1007,7 +1050,7 @@ class Query
      */
     public static function notIntersects(string $attribute, array $values): self
     {
-        return new self(self::TYPE_NOT_INTERSECTS, $attribute, $values);
+        return new self(self::TYPE_NOT_INTERSECTS, $attribute, [$values]);
     }
 
     /**
@@ -1019,7 +1062,7 @@ class Query
      */
     public static function crosses(string $attribute, array $values): self
     {
-        return new self(self::TYPE_CROSSES, $attribute, $values);
+        return new self(self::TYPE_CROSSES, $attribute, [$values]);
     }
 
     /**
@@ -1031,7 +1074,7 @@ class Query
      */
     public static function notCrosses(string $attribute, array $values): self
     {
-        return new self(self::TYPE_NOT_CROSSES, $attribute, $values);
+        return new self(self::TYPE_NOT_CROSSES, $attribute, [$values]);
     }
 
     /**
@@ -1043,7 +1086,7 @@ class Query
      */
     public static function overlaps(string $attribute, array $values): self
     {
-        return new self(self::TYPE_OVERLAPS, $attribute, $values);
+        return new self(self::TYPE_OVERLAPS, $attribute, [$values]);
     }
 
     /**
@@ -1055,7 +1098,7 @@ class Query
      */
     public static function notOverlaps(string $attribute, array $values): self
     {
-        return new self(self::TYPE_NOT_OVERLAPS, $attribute, $values);
+        return new self(self::TYPE_NOT_OVERLAPS, $attribute, [$values]);
     }
 
     /**
@@ -1067,7 +1110,7 @@ class Query
      */
     public static function touches(string $attribute, array $values): self
     {
-        return new self(self::TYPE_TOUCHES, $attribute, $values);
+        return new self(self::TYPE_TOUCHES, $attribute, [$values]);
     }
 
     /**
@@ -1079,7 +1122,7 @@ class Query
      */
     public static function notTouches(string $attribute, array $values): self
     {
-        return new self(self::TYPE_NOT_TOUCHES, $attribute, $values);
+        return new self(self::TYPE_NOT_TOUCHES, $attribute, [$values]);
     }
 
     /**

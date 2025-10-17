@@ -83,6 +83,7 @@ class Database
 
     // Global SRID for geographic coordinates (WGS84)
     public const SRID = 4326;
+    public const EARTH_RADIUS = 6371000;
 
     // Relation Types
     public const RELATION_ONE_TO_ONE = 'oneToOne';
@@ -100,10 +101,13 @@ class Database
     public const RELATION_SIDE_CHILD = 'child';
 
     public const RELATION_MAX_DEPTH = 3;
+    public const RELATION_QUERY_CHUNK_SIZE = 5000;
 
     // Orders
     public const ORDER_ASC = 'ASC';
     public const ORDER_DESC = 'DESC';
+
+    public const ORDER_RANDOM = 'RANDOM';
 
     // Permissions
     public const PERMISSION_CREATE = 'create';
@@ -334,11 +338,6 @@ class Database
     protected string $cacheName = 'default';
 
     /**
-     * @var array<bool|string>
-     */
-    protected array $map = [];
-
-    /**
      * @var array<string, array{encode: callable, decode: callable}>
      */
     protected static array $filters = [];
@@ -370,7 +369,9 @@ class Database
 
     protected bool $checkRelationshipsExist = true;
 
-    protected int $relationshipFetchDepth = 1;
+    protected int $relationshipFetchDepth = 0;
+
+    protected bool $inBatchRelationshipPopulation = false;
 
     protected bool $filter = true;
 
@@ -383,7 +384,7 @@ class Database
 
     protected bool $preserveDates = false;
 
-    protected int $maxQueryValues = 100;
+    protected int $maxQueryValues = 5000;
 
     protected bool $migrating = false;
 
@@ -490,6 +491,90 @@ class Database
              */
             function (?string $value) {
                 return DateTime::formatTz($value);
+            }
+        );
+
+        self::addFilter(
+            Database::VAR_POINT,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!is_array($value)) {
+                    return $value;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_POINT);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return array|null
+             */
+            function (?string $value) {
+                if ($value === null) {
+                    return null;
+                }
+                return $this->adapter->decodePoint($value);
+            }
+        );
+
+        self::addFilter(
+            Database::VAR_LINESTRING,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!is_array($value)) {
+                    return $value;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_LINESTRING);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return array|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return null;
+                }
+                return $this->adapter->decodeLinestring($value);
+            }
+        );
+
+        self::addFilter(
+            Database::VAR_POLYGON,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!is_array($value)) {
+                    return $value;
+                }
+                try {
+                    return  self::encodeSpatialData($value, Database::VAR_POLYGON);
+                } catch (\Throwable) {
+                    return $value;
+                }
+            },
+            /**
+             * @param string|null $value
+             * @return array|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return null;
+                }
+                return $this->adapter->decodePolygon($value);
             }
         );
     }
@@ -1257,6 +1342,19 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
+        foreach ($attributes as &$attribute) {
+            if (in_array($attribute['type'], Database::SPATIAL_TYPES)) {
+                $existingFilters = $attribute['filters'] ?? [];
+                if (!is_array($existingFilters)) {
+                    $existingFilters = [$existingFilters];
+                }
+                $attribute['filters'] = array_values(
+                    array_unique(array_merge($existingFilters, [$attribute['type']]))
+                );
+            }
+        }
+        unset($attribute);
+
         $permissions ??= [
             Permission::create(Role::any()),
         ];
@@ -1611,6 +1709,10 @@ class Database
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
+        }
+        if (in_array($type, Database::SPATIAL_TYPES)) {
+            $filters[] = $type;
+            $filters = array_unique($filters);
         }
 
         $attribute = $this->validateAttribute(
@@ -2230,6 +2332,11 @@ class Database
                 $default = null;
             }
 
+            // we need to alter table attribute type to NOT NULL/NULL for change in required
+            if (!$this->adapter->getSupportForSpatialIndexNull() && in_array($type, Database::SPATIAL_TYPES)) {
+                $altering = true;
+            }
+
             switch ($type) {
                 case self::VAR_STRING:
                     if (empty($size)) {
@@ -2418,7 +2525,7 @@ class Database
                     }
                 }
 
-                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey);
+                $updated = $this->adapter->updateAttribute($collection, $id, $type, $size, $signed, $array, $newKey, $required);
 
                 if (!$updated) {
                     throw new DatabaseException('Failed to update attribute');
@@ -3509,10 +3616,11 @@ class Database
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
-        $this->map = [];
 
-        if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document, $nestedSelections));
+        // Skip relationship population if we're in batch mode (relationships will be populated later)
+        if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
+            $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth, $nestedSelections));
+            $document = $documents[0];
         }
 
         $relationships = \array_filter(
@@ -3536,261 +3644,599 @@ class Database
     }
 
     /**
+     * Populate relationships for an array of documents with breadth-first traversal
+     *
+     * @param array<Document> $documents
      * @param Document $collection
-     * @param Document $document
+     * @param int $relationshipFetchDepth
      * @param array<string, array<Query>> $selects
-     * @return Document
+     * @return array<Document>
      * @throws DatabaseException
      */
-    private function populateDocumentRelationships(Document $collection, Document $document, array $selects = []): Document
-    {
-        $attributes = $collection->getAttribute('attributes', []);
+    private function populateDocumentsRelationships(
+        array $documents,
+        Document $collection,
+        int $relationshipFetchDepth = 0,
+        array $selects = []
+    ): array {
+        // Prevent nested relationship population during fetches
+        $this->inBatchRelationshipPopulation = true;
 
-        $relationships = [];
+        try {
+            $queue = [
+                [
+                    'documents' => $documents,
+                    'collection' => $collection,
+                    'depth' => $relationshipFetchDepth,
+                    'selects' => $selects,
+                    'skipKey' => null, // No back-reference to skip at top level
+                    'hasExplicitSelects' => !empty($selects) // Track if we're in explicit select mode
+                ]
+            ];
 
-        foreach ($attributes as $attribute) {
-            if ($attribute['type'] === Database::VAR_RELATIONSHIP) {
-                if (empty($selects) || array_key_exists($attribute['key'], $selects)) {
-                    $relationships[] = $attribute;
-                }
-            }
-        }
+            $currentDepth = $relationshipFetchDepth;
 
-        foreach ($relationships as $relationship) {
-            $key = $relationship['key'];
-            $value = $document->getAttribute($key);
-            $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
-            $relationType = $relationship['options']['relationType'];
-            $twoWay = $relationship['options']['twoWay'];
-            $twoWayKey = $relationship['options']['twoWayKey'];
-            $side = $relationship['options']['side'];
+            while (!empty($queue) && $currentDepth < self::RELATION_MAX_DEPTH) {
+                $nextQueue = [];
 
-            $queries = $selects[$key] ?? [];
+                foreach ($queue as $item) {
+                    $docs = $item['documents'];
+                    $coll = $item['collection'];
+                    $sels = $item['selects'];
+                    $skipKey = $item['skipKey'] ?? null;
+                    $parentHasExplicitSelects = $item['hasExplicitSelects'];
 
-            if (!empty($value)) {
-                $k = $relatedCollection->getId() . ':' . $value . '=>' . $collection->getId() . ':' . $document->getId();
-                if ($relationType === Database::RELATION_ONE_TO_MANY) {
-                    $k = $collection->getId() . ':' . $document->getId() . '=>' . $relatedCollection->getId() . ':' . $value;
-                }
-                $this->map[$k] = true;
-            }
-
-            $relationship->setAttribute('collection', $collection->getId());
-            $relationship->setAttribute('document', $document->getId());
-
-            $skipFetch = false;
-            foreach ($this->relationshipFetchStack as $fetchedRelationship) {
-                $existingKey = $fetchedRelationship['key'];
-                $existingCollection = $fetchedRelationship['collection'];
-                $existingRelatedCollection = $fetchedRelationship['options']['relatedCollection'];
-                $existingTwoWayKey = $fetchedRelationship['options']['twoWayKey'];
-                $existingSide = $fetchedRelationship['options']['side'];
-
-                // If this relationship has already been fetched for this document, skip it
-                $reflexive = $fetchedRelationship == $relationship;
-
-                // If this relationship is the same as a previously fetched relationship, but on the other side, skip it
-                $symmetric = $existingKey === $twoWayKey
-                    && $existingTwoWayKey === $key
-                    && $existingRelatedCollection === $collection->getId()
-                    && $existingCollection === $relatedCollection->getId()
-                    && $existingSide !== $side;
-
-                // If this relationship is not directly related but relates across multiple collections, skip it.
-                //
-                // These conditions ensure that a relationship is considered transitive if it has the same
-                // two-way key and related collection, but is on the opposite side of the relationship (the first and second conditions).
-                //
-                // They also ensure that a relationship is considered transitive if it has the same key and related
-                // collection as an existing relationship, but a different two-way key (the third condition),
-                // or the same two-way key as an existing relationship, but a different key (the fourth condition).
-                $transitive = (($existingKey === $twoWayKey
-                        && $existingCollection === $relatedCollection->getId()
-                        && $existingSide !== $side)
-                    || ($existingTwoWayKey === $key
-                        && $existingRelatedCollection === $collection->getId()
-                        && $existingSide !== $side)
-                    || ($existingKey === $key
-                        && $existingTwoWayKey !== $twoWayKey
-                        && $existingRelatedCollection === $relatedCollection->getId()
-                        && $existingSide !== $side)
-                    || ($existingKey !== $key
-                        && $existingTwoWayKey === $twoWayKey
-                        && $existingRelatedCollection === $relatedCollection->getId()
-                        && $existingSide !== $side));
-
-                if ($reflexive || $symmetric || $transitive) {
-                    $skipFetch = true;
-                }
-            }
-
-            switch ($relationType) {
-                case Database::RELATION_ONE_TO_ONE:
-                    if ($skipFetch || $twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH)) {
-                        $document->removeAttribute($key);
-                        break;
+                    if (empty($docs)) {
+                        continue;
                     }
 
-                    if (\is_null($value)) {
-                        break;
-                    }
+                    $attributes = $coll->getAttribute('attributes', []);
+                    $relationships = [];
 
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchStack[] = $relationship;
+                    foreach ($attributes as $attribute) {
+                        if ($attribute['type'] === Database::VAR_RELATIONSHIP) {
+                            // Skip the back-reference relationship that brought us here
+                            if ($attribute['key'] === $skipKey) {
+                                continue;
+                            }
 
-                    $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchStack);
-
-                    $document->setAttribute($key, $related);
-                    break;
-                case Database::RELATION_ONE_TO_MANY:
-                    if ($side === Database::RELATION_SIDE_CHILD) {
-                        if (!$twoWay || $this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
-                            $document->removeAttribute($key);
-                            break;
-                        }
-                        if (!\is_null($value)) {
-                            $this->relationshipFetchDepth++;
-                            $this->relationshipFetchStack[] = $relationship;
-
-                            $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
-
-                            $this->relationshipFetchDepth--;
-                            \array_pop($this->relationshipFetchStack);
-
-                            $document->setAttribute($key, $related);
-                        }
-                        break;
-                    }
-
-                    if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchStack[] = $relationship;
-
-                    $relatedDocuments = $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX),
-                        ...$queries
-                    ]);
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchStack);
-
-                    foreach ($relatedDocuments as $related) {
-                        $related->removeAttribute($twoWayKey);
-                    }
-
-                    $document->setAttribute($key, $relatedDocuments);
-                    break;
-                case Database::RELATION_MANY_TO_ONE:
-                    if ($side === Database::RELATION_SIDE_PARENT) {
-                        if ($skipFetch || $this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH) {
-                            $document->removeAttribute($key);
-                            break;
-                        }
-
-                        if (\is_null($value)) {
-                            break;
-                        }
-                        $this->relationshipFetchDepth++;
-                        $this->relationshipFetchStack[] = $relationship;
-
-                        $related = $this->getDocument($relatedCollection->getId(), $value, $queries);
-
-                        $this->relationshipFetchDepth--;
-                        \array_pop($this->relationshipFetchStack);
-
-                        $document->setAttribute($key, $related);
-                        break;
-                    }
-
-                    if (!$twoWay) {
-                        $document->removeAttribute($key);
-                        break;
-                    }
-
-                    if ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchStack[] = $relationship;
-
-                    $relatedDocuments = $this->find($relatedCollection->getId(), [
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX),
-                        ...$queries
-                    ]);
-
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchStack);
-
-
-                    foreach ($relatedDocuments as $related) {
-                        $related->removeAttribute($twoWayKey);
-                    }
-
-                    $document->setAttribute($key, $relatedDocuments);
-                    break;
-                case Database::RELATION_MANY_TO_MANY:
-                    if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
-                        break;
-                    }
-
-                    if ($twoWay && ($this->relationshipFetchDepth === Database::RELATION_MAX_DEPTH || $skipFetch)) {
-                        break;
-                    }
-
-                    $this->relationshipFetchDepth++;
-                    $this->relationshipFetchStack[] = $relationship;
-
-                    $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
-
-                    $junctions = $this->skipRelationships(fn () => $this->find($junction, [
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX)
-                    ]));
-
-                    $relatedIds = [];
-                    foreach ($junctions as $junction) {
-                        $relatedIds[] = $junction->getAttribute($key);
-                    }
-
-                    $related = [];
-                    if (!empty($relatedIds)) {
-                        $foundRelated = $this->find($relatedCollection->getId(), [
-                            Query::equal('$id', $relatedIds),
-                            Query::limit(PHP_INT_MAX),
-                            ...$queries
-                        ]);
-
-                        // Preserve the order of related documents to match the junction order
-                        $relatedById = [];
-                        foreach ($foundRelated as $doc) {
-                            $relatedById[$doc->getId()] = $doc;
-                        }
-
-                        foreach ($relatedIds as $relatedId) {
-                            if (isset($relatedById[$relatedId])) {
-                                $related[] = $relatedById[$relatedId];
+                            // Include relationship if:
+                            // 1. No explicit selects (fetch all) OR
+                            // 2. Relationship is explicitly selected
+                            if (!$parentHasExplicitSelects || \array_key_exists($attribute['key'], $sels)) {
+                                $relationships[] = $attribute;
                             }
                         }
                     }
 
-                    $this->relationshipFetchDepth--;
-                    \array_pop($this->relationshipFetchStack);
+                    foreach ($relationships as $relationship) {
+                        $key = $relationship['key'];
+                        $queries = $sels[$key] ?? [];
+                        $relationship->setAttribute('collection', $coll->getId());
+                        $isAtMaxDepth = ($currentDepth + 1) >= self::RELATION_MAX_DEPTH;
 
-                    $document->setAttribute($key, $related);
-                    break;
+                        // If we're at max depth, remove this relationship from source documents and skip
+                        if ($isAtMaxDepth) {
+                            foreach ($docs as $doc) {
+                                $doc->removeAttribute($key);
+                            }
+                            continue;
+                        }
+
+                        $relatedDocs = $this->populateSingleRelationshipBatch(
+                            $docs,
+                            $relationship,
+                            $queries
+                        );
+
+                        // Get two-way relationship info
+                        $twoWay = $relationship['options']['twoWay'];
+                        $twoWayKey = $relationship['options']['twoWayKey'];
+
+                        // Queue if:
+                        // 1. No explicit selects (fetch all recursively), OR
+                        // 2. Explicit nested selects for this relationship
+                        $hasNestedSelectsForThisRel = isset($sels[$key]);
+                        $shouldQueue = !empty($relatedDocs) &&
+                            ($hasNestedSelectsForThisRel || !$parentHasExplicitSelects);
+
+                        if ($shouldQueue) {
+                            $relatedCollectionId = $relationship['options']['relatedCollection'];
+                            $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollectionId));
+
+                            if (!$relatedCollection->isEmpty()) {
+                                // Get nested selections for this relationship
+                                $relationshipQueries = $hasNestedSelectsForThisRel ? $sels[$key] : [];
+
+                                // Extract nested selections for the related collection
+                                $relatedCollectionRelationships = $relatedCollection->getAttribute('attributes', []);
+                                $relatedCollectionRelationships = \array_filter(
+                                    $relatedCollectionRelationships,
+                                    fn ($attr) => $attr['type'] === Database::VAR_RELATIONSHIP
+                                );
+
+                                $nextSelects = $this->processRelationshipQueries($relatedCollectionRelationships, $relationshipQueries);
+
+                                // If parent has explicit selects, child inherits that mode
+                                // (even if nextSelects is empty, we're still in explicit mode)
+                                $childHasExplicitSelects = $parentHasExplicitSelects;
+
+                                $nextQueue[] = [
+                                    'documents' => $relatedDocs,
+                                    'collection' => $relatedCollection,
+                                    'depth' => $currentDepth + 1,
+                                    'selects' => $nextSelects,
+                                    'skipKey' => $twoWay ? $twoWayKey : null, // Skip the back-reference at next depth
+                                    'hasExplicitSelects' => $childHasExplicitSelects
+                                ];
+                            }
+                        }
+
+                        // Remove back-references for two-way relationships
+                        // Back-references are always removed to prevent circular references
+                        if ($twoWay && !empty($relatedDocs)) {
+                            foreach ($relatedDocs as $relatedDoc) {
+                                $relatedDoc->removeAttribute($twoWayKey);
+                            }
+                        }
+                    }
+                }
+
+                $queue = $nextQueue;
+                $currentDepth++;
+            }
+        } finally {
+            $this->inBatchRelationshipPopulation = false;
+        }
+
+        return $documents;
+    }
+
+    /**
+     * Populate a single relationship type for all documents in batch
+     * Returns all related documents that were populated
+     *
+     * @param array<Document> $documents
+     * @param Document $relationship
+     * @param array<Query> $queries
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    private function populateSingleRelationshipBatch(
+        array $documents,
+        Document $relationship,
+        array $queries
+    ): array {
+        return match ($relationship['options']['relationType']) {
+            Database::RELATION_ONE_TO_ONE => $this->populateOneToOneRelationshipsBatch($documents, $relationship, $queries),
+            Database::RELATION_ONE_TO_MANY => $this->populateOneToManyRelationshipsBatch($documents, $relationship, $queries),
+            Database::RELATION_MANY_TO_ONE => $this->populateManyToOneRelationshipsBatch($documents, $relationship, $queries),
+            Database::RELATION_MANY_TO_MANY => $this->populateManyToManyRelationshipsBatch($documents, $relationship, $queries),
+            default => [],
+        };
+    }
+
+    /**
+     * Populate one-to-one relationships in batch
+     * Returns all related documents that were fetched
+     *
+     * @param array<Document> $documents
+     * @param Document $relationship
+     * @param array<Query> $queries
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    private function populateOneToOneRelationshipsBatch(array $documents, Document $relationship, array $queries): array
+    {
+        $key = $relationship['key'];
+        $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
+
+        $relatedIds = [];
+        $documentsByRelatedId = [];
+
+        foreach ($documents as $document) {
+            $value = $document->getAttribute($key);
+            if (!\is_null($value)) {
+                // Skip if value is already populated
+                if ($value instanceof Document) {
+                    continue;
+                }
+
+                // For one-to-one, multiple documents can reference the same related ID
+                $relatedIds[] = $value;
+                if (!isset($documentsByRelatedId[$value])) {
+                    $documentsByRelatedId[$value] = [];
+                }
+                $documentsByRelatedId[$value][] = $document;
             }
         }
 
-        return $document;
+        if (empty($relatedIds)) {
+            return [];
+        }
+
+        $uniqueRelatedIds = \array_unique($relatedIds);
+        $relatedDocuments = [];
+
+        // Process in chunks to avoid exceeding query value limits
+        foreach (\array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+            $chunkDocs = $this->find($relatedCollection->getId(), [
+                Query::equal('$id', $chunk),
+                Query::limit(PHP_INT_MAX),
+                ...$queries
+            ]);
+            \array_push($relatedDocuments, ...$chunkDocs);
+        }
+
+        // Index related documents by ID for quick lookup
+        $relatedById = [];
+        foreach ($relatedDocuments as $related) {
+            $relatedById[$related->getId()] = $related;
+        }
+
+        // Assign related documents to their parent documents
+        foreach ($documentsByRelatedId as $relatedId => $docs) {
+            if (isset($relatedById[$relatedId])) {
+                // Set the relationship for all documents that reference this related ID
+                foreach ($docs as $document) {
+                    $document->setAttribute($key, $relatedById[$relatedId]);
+                }
+            } else {
+                // If related document not found, set to empty Document instead of leaving the string ID
+                foreach ($docs as $document) {
+                    $document->setAttribute($key, new Document());
+                }
+            }
+        }
+
+        return $relatedDocuments;
+    }
+
+    /**
+     * Populate one-to-many relationships in batch
+     * Returns all related documents that were fetched
+     *
+     * @param array<Document> $documents
+     * @param Document $relationship
+     * @param array<Query> $queries
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    private function populateOneToManyRelationshipsBatch(
+        array $documents,
+        Document $relationship,
+        array $queries,
+    ): array {
+        $key = $relationship['key'];
+        $twoWay = $relationship['options']['twoWay'];
+        $twoWayKey = $relationship['options']['twoWayKey'];
+        $side = $relationship['options']['side'];
+        $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
+
+        if ($side === Database::RELATION_SIDE_CHILD) {
+            // Child side - treat like one-to-one
+            if (!$twoWay) {
+                foreach ($documents as $document) {
+                    $document->removeAttribute($key);
+                }
+                return [];
+            }
+            return $this->populateOneToOneRelationshipsBatch($documents, $relationship, $queries);
+        }
+
+        // Parent side - fetch multiple related documents
+        $parentIds = [];
+        foreach ($documents as $document) {
+            $parentId = $document->getId();
+            $parentIds[] = $parentId;
+        }
+
+        $parentIds = \array_unique($parentIds);
+
+        if (empty($parentIds)) {
+            return [];
+        }
+
+        // For batch relationship population, we need to fetch documents with all attributes
+        // to enable proper grouping by back-reference, then apply selects afterward
+        $selectQueries = [];
+        $otherQueries = [];
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                $selectQueries[] = $query;
+            } else {
+                $otherQueries[] = $query;
+            }
+        }
+
+        $relatedDocuments = [];
+
+        foreach (\array_chunk($parentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+            $chunkDocs = $this->find($relatedCollection->getId(), [
+                Query::equal($twoWayKey, $chunk),
+                Query::limit(PHP_INT_MAX),
+                ...$otherQueries
+            ]);
+            \array_push($relatedDocuments, ...$chunkDocs);
+        }
+
+        // Group related documents by parent ID
+        $relatedByParentId = [];
+        foreach ($relatedDocuments as $related) {
+            $parentId = $related->getAttribute($twoWayKey);
+            if (!\is_null($parentId)) {
+                // Handle case where parentId might be a Document object instead of string
+                $parentKey = $parentId instanceof Document
+                    ? $parentId->getId()
+                    : $parentId;
+
+                if (!isset($relatedByParentId[$parentKey])) {
+                    $relatedByParentId[$parentKey] = [];
+                }
+                // We don't remove the back-reference here because documents may be reused across fetches
+                // Cycles are prevented by depth limiting in breadth-first traversal
+                $relatedByParentId[$parentKey][] = $related;
+            }
+        }
+
+        $this->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+
+        // Assign related documents to their parent documents
+        foreach ($documents as $document) {
+            $parentId = $document->getId();
+            $relatedDocs = $relatedByParentId[$parentId] ?? [];
+            $document->setAttribute($key, $relatedDocs);
+        }
+
+        return $relatedDocuments;
+    }
+
+    /**
+     * Populate many-to-one relationships in batch
+     *
+     * @param array<Document> $documents
+     * @param Document $relationship
+     * @param array<Query> $queries
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    private function populateManyToOneRelationshipsBatch(
+        array $documents,
+        Document $relationship,
+        array $queries,
+    ): array {
+        $key = $relationship['key'];
+        $twoWay = $relationship['options']['twoWay'];
+        $twoWayKey = $relationship['options']['twoWayKey'];
+        $side = $relationship['options']['side'];
+        $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
+
+        if ($side === Database::RELATION_SIDE_PARENT) {
+            // Parent side - treat like one-to-one
+            return $this->populateOneToOneRelationshipsBatch($documents, $relationship, $queries);
+        }
+
+        // Child side - fetch multiple related documents
+        if (!$twoWay) {
+            foreach ($documents as $document) {
+                $document->removeAttribute($key);
+            }
+            return [];
+        }
+
+        $childIds = [];
+        foreach ($documents as $document) {
+            $childId = $document->getId();
+            $childIds[] = $childId;
+        }
+
+        $childIds = array_unique($childIds);
+
+        if (empty($childIds)) {
+            return [];
+        }
+
+        $selectQueries = [];
+        $otherQueries = [];
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                $selectQueries[] = $query;
+            } else {
+                $otherQueries[] = $query;
+            }
+        }
+
+        $relatedDocuments = [];
+
+        foreach (\array_chunk($childIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+            $chunkDocs = $this->find($relatedCollection->getId(), [
+                Query::equal($twoWayKey, $chunk),
+                Query::limit(PHP_INT_MAX),
+                ...$otherQueries
+            ]);
+            \array_push($relatedDocuments, ...$chunkDocs);
+        }
+
+        // Group related documents by child ID
+        $relatedByChildId = [];
+        foreach ($relatedDocuments as $related) {
+            $childId = $related->getAttribute($twoWayKey);
+            if (!\is_null($childId)) {
+                // Handle case where childId might be a Document object instead of string
+                $childKey = $childId instanceof Document
+                    ? $childId->getId()
+                    : $childId;
+
+                if (!isset($relatedByChildId[$childKey])) {
+                    $relatedByChildId[$childKey] = [];
+                }
+                // We don't remove the back-reference here because documents may be reused across fetches
+                // Cycles are prevented by depth limiting in breadth-first traversal
+                $relatedByChildId[$childKey][] = $related;
+            }
+        }
+
+        $this->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
+
+        foreach ($documents as $document) {
+            $childId = $document->getId();
+            $document->setAttribute($key, $relatedByChildId[$childId] ?? []);
+        }
+
+        return $relatedDocuments;
+    }
+
+    /**
+     * Populate many-to-many relationships in batch
+     *
+     * @param array<Document> $documents
+     * @param Document $relationship
+     * @param array<Query> $queries
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    private function populateManyToManyRelationshipsBatch(
+        array $documents,
+        Document $relationship,
+        array $queries
+    ): array {
+        $key = $relationship['key'];
+        $twoWay = $relationship['options']['twoWay'];
+        $twoWayKey = $relationship['options']['twoWayKey'];
+        $side = $relationship['options']['side'];
+        $relatedCollection = $this->getCollection($relationship['options']['relatedCollection']);
+        $collection = $this->getCollection($relationship->getAttribute('collection'));
+
+        if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
+            return [];
+        }
+
+        $documentIds = [];
+        foreach ($documents as $document) {
+            $documentId = $document->getId();
+            $documentIds[] = $documentId;
+        }
+
+        $documentIds = array_unique($documentIds);
+
+        if (empty($documentIds)) {
+            return [];
+        }
+
+        $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
+
+        $junctions = [];
+
+        foreach (\array_chunk($documentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+            $chunkJunctions = $this->skipRelationships(fn () => $this->find($junction, [
+                Query::equal($twoWayKey, $chunk),
+                Query::limit(PHP_INT_MAX)
+            ]));
+            \array_push($junctions, ...$chunkJunctions);
+        }
+
+        $relatedIds = [];
+        $junctionsByDocumentId = [];
+
+        foreach ($junctions as $junctionDoc) {
+            $documentId = $junctionDoc->getAttribute($twoWayKey);
+            $relatedId = $junctionDoc->getAttribute($key);
+
+            if (!\is_null($documentId) && !\is_null($relatedId)) {
+                if (!isset($junctionsByDocumentId[$documentId])) {
+                    $junctionsByDocumentId[$documentId] = [];
+                }
+                $junctionsByDocumentId[$documentId][] = $relatedId;
+                $relatedIds[] = $relatedId;
+            }
+        }
+
+        $related = [];
+        $allRelatedDocs = [];
+        if (!empty($relatedIds)) {
+            $uniqueRelatedIds = array_unique($relatedIds);
+            $foundRelated = [];
+
+            foreach (\array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+                $chunkDocs = $this->find($relatedCollection->getId(), [
+                    Query::equal('$id', $chunk),
+                    Query::limit(PHP_INT_MAX),
+                    ...$queries
+                ]);
+                \array_push($foundRelated, ...$chunkDocs);
+            }
+
+            $allRelatedDocs = $foundRelated;
+
+            $relatedById = [];
+            foreach ($foundRelated as $doc) {
+                $relatedById[$doc->getId()] = $doc;
+            }
+
+            // Build final related arrays maintaining junction order
+            foreach ($junctionsByDocumentId as $documentId => $relatedDocIds) {
+                $documentRelated = [];
+                foreach ($relatedDocIds as $relatedId) {
+                    if (isset($relatedById[$relatedId])) {
+                        $documentRelated[] = $relatedById[$relatedId];
+                    }
+                }
+                $related[$documentId] = $documentRelated;
+            }
+        }
+
+        foreach ($documents as $document) {
+            $documentId = $document->getId();
+            $document->setAttribute($key, $related[$documentId] ?? []);
+        }
+
+        return $allRelatedDocs;
+    }
+
+    /**
+     * Apply select filters to documents after fetching
+     *
+     * Filters document attributes based on select queries while preserving internal attributes.
+     * This is used in batch relationship population to apply selects after grouping.
+     *
+     * @param array<Document> $documents Documents to filter
+     * @param array<Query> $selectQueries Select query objects
+     * @return void
+     */
+    private function applySelectFiltersToDocuments(array $documents, array $selectQueries): void
+    {
+        if (empty($selectQueries) || empty($documents)) {
+            return;
+        }
+
+        // Collect all attributes to keep from select queries
+        $attributesToKeep = [];
+        foreach ($selectQueries as $selectQuery) {
+            foreach ($selectQuery->getValues() as $value) {
+                $attributesToKeep[$value] = true;
+            }
+        }
+
+        // Early return if wildcard selector present
+        if (isset($attributesToKeep['*'])) {
+            return;
+        }
+
+        // Always preserve internal attributes (use hashmap for O(1) lookup)
+        $internalKeys = \array_map(fn ($attr) => $attr['$id'], $this->getInternalAttributes());
+        foreach ($internalKeys as $key) {
+            $attributesToKeep[$key] = true;
+        }
+
+        foreach ($documents as $doc) {
+            $allKeys = \array_keys($doc->getArrayCopy());
+            foreach ($allKeys as $attrKey) {
+                // Keep if: explicitly selected OR is internal attribute ($ prefix)
+                if (!isset($attributesToKeep[$attrKey]) && !\str_starts_with($attrKey, '$')) {
+                    $doc->removeAttribute($attrKey);
+                }
+            }
+        }
     }
 
     /**
@@ -3886,8 +4332,11 @@ class Database
             return $this->adapter->createDocument($collection, $document);
         });
 
-        if ($this->resolveRelationships) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+        if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
+            // Use the write stack depth for proper MAX_DEPTH enforcement during creation
+            $fetchDepth = count($this->relationshipWriteStack);
+            $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $fetchDepth));
+            $document = $documents[0];
         }
 
         $document = $this->casting($collection, $document);
@@ -3987,11 +4436,11 @@ class Database
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
-            foreach ($batch as $document) {
-                if ($this->resolveRelationships) {
-                    $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
-                }
+            if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
+                $batch = $this->silent(fn () => $this->populateDocumentsRelationships($batch, $collection, $this->relationshipFetchDepth));
+            }
 
+            foreach ($batch as $document) {
                 $document = $this->casting($collection, $document);
                 $document = $this->decode($collection, $document);
 
@@ -4539,8 +4988,9 @@ class Database
             return $document;
         }
 
-        if ($this->resolveRelationships) {
-            $document = $this->silent(fn () => $this->populateDocumentRelationships($collection, $document));
+        if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
+            $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth));
+            $document = $documents[0];
         }
 
         $document = $this->decode($collection, $document);
@@ -4641,7 +5091,12 @@ class Database
         $updatedAt = $updates->getUpdatedAt();
         $updates['$updatedAt'] = ($updatedAt === null || !$this->preserveDates) ? DateTime::now() : $updatedAt;
 
-        $updates = $this->encode($collection, $updates);
+        $updates = $this->encode(
+            $collection,
+            $updates,
+            applyDefaults: false
+        );
+
         // Check new document structure
         $validator = new PartialStructure(
             $collection,
@@ -4722,7 +5177,6 @@ class Database
                     if (!is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
-
                     $batch[$index] = $this->encode($collection, $document);
                 }
 
@@ -5411,11 +5865,11 @@ class Database
                 }
             }
 
-            foreach ($batch as $index => $doc) {
-                if ($this->resolveRelationships) {
-                    $doc = $this->silent(fn () => $this->populateDocumentRelationships($collection, $doc));
-                }
+            if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
+                $batch = $this->silent(fn () => $this->populateDocumentsRelationships($batch, $collection, $this->relationshipFetchDepth));
+            }
 
+            foreach ($batch as $index => $doc) {
                 $doc = $this->decode($collection, $doc);
 
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
@@ -6408,25 +6862,37 @@ class Database
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
 
-        $getResults = fn () => $this->adapter->find(
-            $collection,
-            $queries,
-            $limit ?? 25,
-            $offset ?? 0,
-            $orderAttributes,
-            $orderTypes,
-            $cursor,
-            $cursorDirection,
-            $forPermission
-        );
+        // Convert relationship filter queries to SQL-level subqueries
+        $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
 
-        $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
+        // If conversion returns null, it means no documents can match (relationship filter found no matches)
+        if ($queriesOrNull === null) {
+            $results = [];
+        } else {
+            $queries = $queriesOrNull;
+
+            $getResults = fn () => $this->adapter->find(
+                $collection,
+                $queries,
+                $limit ?? 25,
+                $offset ?? 0,
+                $orderAttributes,
+                $orderTypes,
+                $cursor,
+                $cursorDirection,
+                $forPermission
+            );
+
+            $results = $skipAuth ? Authorization::skip($getResults) : $getResults();
+        }
+
+        if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
+            if (count($results) > 0) {
+                $results = $this->silent(fn () => $this->populateDocumentsRelationships($results, $collection, $this->relationshipFetchDepth, $nestedSelections));
+            }
+        }
 
         foreach ($results as $index => $node) {
-            if ($this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
-                $node = $this->silent(fn () => $this->populateDocumentRelationships($collection, $node, $nestedSelections));
-            }
-
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
 
@@ -6564,8 +7030,21 @@ class Database
             $skipAuth = true;
         }
 
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+        );
+
         $queries = Query::groupByType($queries)['filters'];
         $queries = $this->convertQueries($collection, $queries);
+
+        $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
+
+        if ($queriesOrNull === null) {
+            return 0;
+        }
+
+        $queries = $queriesOrNull;
 
         $getCount = fn () => $this->adapter->count($collection, $queries, $max);
         $count = $skipAuth ?? false ? Authorization::skip($getCount) : $getCount();
@@ -6610,7 +7089,21 @@ class Database
             }
         }
 
+        $relationships = \array_filter(
+            $collection->getAttribute('attributes', []),
+            fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
+        );
+
         $queries = $this->convertQueries($collection, $queries);
+
+        $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
+
+        // If conversion returns null, it means no documents can match (relationship filter found no matches)
+        if ($queriesOrNull === null) {
+            return 0;
+        }
+
+        $queries = $queriesOrNull;
 
         $sum = $this->adapter->sum($collection, $attribute, $queries, $max);
 
@@ -6641,11 +7134,12 @@ class Database
      *
      * @param Document $collection
      * @param Document $document
+     * @param bool $applyDefaults Whether to apply default values to null attributes
      *
      * @return Document
      * @throws DatabaseException
      */
-    public function encode(Document $collection, Document $document): Document
+    public function encode(Document $collection, Document $document, bool $applyDefaults = true): Document
     {
         $attributes = $collection->getAttribute('attributes', []);
         $internalDateAttributes = ['$createdAt', '$updatedAt'];
@@ -6678,6 +7172,10 @@ class Database
             // False positive "Call to function is_null() with mixed will always evaluate to false"
             // @phpstan-ignore-next-line
             if (is_null($value) && !is_null($default)) {
+                // Skip applying defaults during updates to avoid resetting unspecified attributes
+                if (!$applyDefaults) {
+                    continue;
+                }
                 $value = ($array) ? $default : [$default];
             } else {
                 $value = ($array) ? $value : [$value];
@@ -6685,14 +7183,6 @@ class Database
 
             foreach ($value as $index => $node) {
                 if ($node !== null) {
-                    // Handle spatial data encoding
-                    $attributeType = $attribute['type'] ?? '';
-                    if (in_array($attributeType, Database::SPATIAL_TYPES)) {
-                        if (is_array($node)) {
-                            $node = $this->encodeSpatialData($node, $attributeType);
-                        }
-                    }
-
                     foreach ($filters as $filter) {
                         $node = $this->encodeAttribute($filter, $node, $document);
                     }
@@ -6729,6 +7219,8 @@ class Database
             $collection->getAttribute('attributes', []),
             fn ($attribute) => $attribute['type'] === self::VAR_RELATIONSHIP
         );
+
+        $filteredValue = [];
 
         foreach ($relationships as $relationship) {
             $key = $relationship['$id'] ?? '';
@@ -6771,9 +7263,6 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
-                if (\is_string($node) && \in_array($type, Database::SPATIAL_TYPES)) {
-                    $node = $this->decodeSpatialData($node);
-                }
 
                 if (\is_string($node) && $type === Database::VAR_VECTOR) {
                     $decoded = \json_decode($node, true);
@@ -6788,6 +7277,8 @@ class Database
                 $value[$index] = $node;
             }
 
+            $filteredValue[$key] = ($array) ? $value : $value[0];
+
             if (
                 empty($selections)
                 || \in_array($key, $selections)
@@ -6797,6 +7288,29 @@ class Database
             }
         }
 
+        $hasRelationshipSelections = false;
+        if (!empty($selections)) {
+            foreach ($selections as $selection) {
+                if (\str_contains($selection, '.')) {
+                    $hasRelationshipSelections = true;
+                    break;
+                }
+            }
+        }
+
+        if ($hasRelationshipSelections && !empty($selections) && !\in_array('*', $selections)) {
+            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+                $key = $attribute['$id'] ?? '';
+
+                if ($attribute['type'] === self::VAR_RELATIONSHIP || $key === '$permissions') {
+                    continue;
+                }
+
+                if (!in_array($key, $selections) && isset($filteredValue[$key])) {
+                    $document->setAttribute($key, $filteredValue[$key]);
+                }
+            }
+        }
         return $document;
     }
 
@@ -6971,7 +7485,7 @@ class Database
         // Allow querying internal attributes
         $keys = \array_map(
             fn ($attribute) => $attribute['$id'],
-            self::getInternalAttributes()
+            $this->getInternalAttributes()
         );
 
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
@@ -7074,6 +7588,7 @@ class Database
 
         if (!$attribute->isEmpty()) {
             $query->setOnArray($attribute->getAttribute('array', false));
+            $query->setAttributeType($attribute->getAttribute('type'));
 
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
                 $values = $query->getValues();
@@ -7219,7 +7734,8 @@ class Database
                 // 'foo.bar.baz' becomes 'bar.baz'
 
                 $nestingPath = \implode('.', $nesting);
-                // If nestingPath is empty, it means we want all fields (*) for this relationship
+
+                // If nestingPath is empty, it means we want all attributes (*) for this relationship
                 if (empty($nestingPath)) {
                     $nestedSelections[$selectedKey][] = Query::select(['*']);
                 } else {
@@ -7263,6 +7779,401 @@ class Database
         }
 
         return $nestedSelections;
+    }
+
+    /**
+     * Process nested relationship path iteratively
+     *
+     * Instead of recursive calls, this method processes multi-level queries in a single loop
+     * working from the deepest level up to minimize database queries.
+     *
+     * Example: For "project.employee.company.name":
+     * 1. Query companies matching name filter -> IDs [c1, c2]
+     * 2. Query employees with company IN [c1, c2] -> IDs [e1, e2, e3]
+     * 3. Query projects with employee IN [e1, e2, e3] -> IDs [p1, p2]
+     * 4. Return [p1, p2]
+     *
+     * @param string $startCollection The starting collection for the path
+     * @param array<Query> $queries Queries with nested paths
+     * @return array<string>|null Array of matching IDs or null if no matches
+     */
+    private function processNestedRelationshipPath(string $startCollection, array $queries): ?array
+    {
+        // Build a map of all nested paths and their queries
+        $pathGroups = [];
+        foreach ($queries as $query) {
+            $attribute = $query->getAttribute();
+            if (\str_contains($attribute, '.')) {
+                $parts = \explode('.', $attribute);
+                $pathKey = \implode('.', \array_slice($parts, 0, -1)); // Everything except the last part
+                if (!isset($pathGroups[$pathKey])) {
+                    $pathGroups[$pathKey] = [];
+                }
+                $pathGroups[$pathKey][] = [
+                    'method' => $query->getMethod(),
+                    'attribute' => \end($parts), // The actual attribute to query
+                    'values' => $query->getValues(),
+                ];
+            }
+        }
+
+        $allMatchingIds = [];
+        foreach ($pathGroups as $path => $queryGroup) {
+            $pathParts = \explode('.', $path);
+            $currentCollection = $startCollection;
+            $relationshipChain = [];
+
+            foreach ($pathParts as $relationshipKey) {
+                $collectionDoc = $this->silent(fn () => $this->getCollection($currentCollection));
+                $relationships = \array_filter(
+                    $collectionDoc->getAttribute('attributes', []),
+                    fn ($attr) => $attr['type'] === self::VAR_RELATIONSHIP
+                );
+
+                $relationship = null;
+                foreach ($relationships as $rel) {
+                    if ($rel['key'] === $relationshipKey) {
+                        $relationship = $rel;
+                        break;
+                    }
+                }
+
+                if (!$relationship) {
+                    return null;
+                }
+
+                $relationshipChain[] = [
+                    'key' => $relationshipKey,
+                    'fromCollection' => $currentCollection,
+                    'toCollection' => $relationship['options']['relatedCollection'],
+                    'relationType' => $relationship['options']['relationType'],
+                    'side' => $relationship['options']['side'],
+                    'twoWayKey' => $relationship['options']['twoWayKey'],
+                ];
+
+                $currentCollection = $relationship['options']['relatedCollection'];
+            }
+
+            // Now walk backwards from the deepest collection to the starting collection
+            $leafQueries = [];
+            foreach ($queryGroup as $q) {
+                $leafQueries[] = new Query($q['method'], $q['attribute'], $q['values']);
+            }
+
+            // Query the deepest collection
+            $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                $currentCollection,
+                \array_merge($leafQueries, [
+                    Query::select(['$id']),
+                    Query::limit(PHP_INT_MAX),
+                ])
+            )));
+
+            $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
+
+            if (empty($matchingIds)) {
+                return null;
+            }
+
+            // Walk back up the chain
+            for ($i = \count($relationshipChain) - 1; $i >= 0; $i--) {
+                $link = $relationshipChain[$i];
+                $relationType = $link['relationType'];
+                $side = $link['side'];
+
+                // Determine how to query the parent collection
+                $needsReverseLookup = (
+                    ($relationType === self::RELATION_ONE_TO_MANY && $side === self::RELATION_SIDE_PARENT) ||
+                    ($relationType === self::RELATION_MANY_TO_ONE && $side === self::RELATION_SIDE_CHILD) ||
+                    ($relationType === self::RELATION_MANY_TO_MANY)
+                );
+
+                if ($needsReverseLookup) {
+                    // Need to find parents by querying children and extracting parent IDs
+                    $childDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                        $link['toCollection'],
+                        [
+                            Query::equal('$id', $matchingIds),
+                            Query::select(['$id', $link['twoWayKey']]),
+                            Query::limit(PHP_INT_MAX),
+                        ]
+                    )));
+
+                    $parentIds = [];
+                    foreach ($childDocs as $doc) {
+                        $parentValue = $doc->getAttribute($link['twoWayKey']);
+                        if (\is_array($parentValue)) {
+                            foreach ($parentValue as $pId) {
+                                if ($pId instanceof Document) {
+                                    $pId = $pId->getId();
+                                }
+                                if ($pId && !\in_array($pId, $parentIds)) {
+                                    $parentIds[] = $pId;
+                                }
+                            }
+                        } else {
+                            if ($parentValue instanceof Document) {
+                                $parentValue = $parentValue->getId();
+                            }
+                            if ($parentValue && !\in_array($parentValue, $parentIds)) {
+                                $parentIds[] = $parentValue;
+                            }
+                        }
+                    }
+                    $matchingIds = $parentIds;
+                } else {
+                    // Can directly filter parent by the relationship key
+                    $parentDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                        $link['fromCollection'],
+                        [
+                            Query::equal($link['key'], $matchingIds),
+                            Query::select(['$id']),
+                            Query::limit(PHP_INT_MAX),
+                        ]
+                    )));
+                    $matchingIds = \array_map(fn ($doc) => $doc->getId(), $parentDocs);
+                }
+
+                if (empty($matchingIds)) {
+                    return null;
+                }
+            }
+
+            $allMatchingIds = \array_merge($allMatchingIds, $matchingIds);
+        }
+
+        return \array_unique($allMatchingIds);
+    }
+
+    /**
+     * Convert relationship filter queries to SQL-safe subqueries recursively
+     *
+     * Queries like Query::equal('author.name', ['Alice']) are converted to
+     * Query::equal('author', [<matching author IDs>])
+     *
+     * This method supports multi-level nested relationship queries:
+     * - Depth 1: employee.name
+     * - Depth 2: employee.company.name
+     * - Depth 3: project.employee.company.name
+     *
+     * The method works by:
+     * 1. Parsing dot-path queries (e.g., "project.employee.company.name")
+     * 2. Extracting the first relationship (e.g., "project")
+     * 3. If the nested attribute still contains dots, using iterative processing
+     * 4. Finding matching documents in the related collection
+     * 5. Converting to filters on the parent collection
+     *
+     * @param array<Document> $relationships
+     * @param array<Query> $queries
+     * @return array<Query>|null Returns null if relationship filters cannot match any documents
+     */
+    private function convertRelationshipFiltersToSubqueries(
+        array $relationships,
+        array $queries,
+    ): ?array {
+        // Early return if no dot-path queries exist
+        $hasDotPath = false;
+        foreach ($queries as $query) {
+            $attr = $query->getAttribute();
+            if (\str_contains($attr, '.')) {
+                $hasDotPath = true;
+                break;
+            }
+        }
+
+        if (!$hasDotPath) {
+            return $queries;
+        }
+
+        $relationshipsByKey = [];
+        foreach ($relationships as $relationship) {
+            $relationshipsByKey[$relationship->getAttribute('key')] = $relationship;
+        }
+
+        $additionalQueries = [];
+        $groupedQueries = [];
+        $indicesToRemove = [];
+
+        // Group queries by relationship key
+        foreach ($queries as $index => $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+            $method = $query->getMethod();
+            $attribute = $query->getAttribute();
+
+            if (!\str_contains($attribute, '.')) {
+                continue;
+            }
+
+            // Parse the relationship path
+            $parts = \explode('.', $attribute);
+            $relationshipKey = \array_shift($parts);
+            $nestedAttribute = \implode('.', $parts);
+            $relationship = $relationshipsByKey[$relationshipKey] ?? null;
+
+            if (!$relationship) {
+                continue;
+            }
+
+            // Group queries by relationship key
+            if (!isset($groupedQueries[$relationshipKey])) {
+                $groupedQueries[$relationshipKey] = [
+                    'relationship' => $relationship,
+                    'queries' => [],
+                    'indices' => []
+                ];
+            }
+
+            $groupedQueries[$relationshipKey]['queries'][] = [
+                'method' => $method,
+                'attribute' => $nestedAttribute,
+                'values' => $query->getValues()
+            ];
+
+            $groupedQueries[$relationshipKey]['indices'][] = $index;
+        }
+
+        // Process each relationship group
+        foreach ($groupedQueries as $relationshipKey => $group) {
+            $relationship = $group['relationship'];
+            $relatedCollection = $relationship->getAttribute('options')['relatedCollection'];
+            $relationType = $relationship->getAttribute('options')['relationType'];
+            $side = $relationship->getAttribute('options')['side'];
+
+            // Build combined queries for the related collection
+            $relatedQueries = [];
+            foreach ($group['queries'] as $queryData) {
+                $relatedQueries[] = new Query(
+                    $queryData['method'],
+                    $queryData['attribute'],
+                    $queryData['values']
+                );
+            }
+
+            try {
+                // Process multi-level queries by walking the relationship chain from deepest to shallowest
+                // For example: project.employee.company.name
+                // 1. Find companies matching name -> company IDs
+                // 2. Find employees with those company IDs -> employee IDs
+                // 3. Find projects with those employee IDs -> project IDs
+
+                // Check if we have nested relationships (depth 2+)
+                $hasNestedPaths = false;
+                $deepestQuery = null;
+                foreach ($relatedQueries as $relatedQuery) {
+                    if (\str_contains($relatedQuery->getAttribute(), '.')) {
+                        $hasNestedPaths = true;
+                        $deepestQuery = $relatedQuery;
+                        break;
+                    }
+                }
+
+                if ($hasNestedPaths) {
+                    // Process the nested path iteratively from deepest to shallowest
+                    $matchingIds = $this->processNestedRelationshipPath(
+                        $relatedCollection,
+                        $relatedQueries
+                    );
+
+                    if ($matchingIds === null || empty($matchingIds)) {
+                        return null;
+                    }
+
+                    // Convert to simple ID filter for the current level
+                    $relatedQueries = [Query::equal('$id', $matchingIds)];
+                }
+
+                // For virtual parent relationships (where parent doesn't store child IDs),
+                // we need to find which parents have matching children
+                // - ONE_TO_MANY from parent side: parent doesn't store children
+                // - MANY_TO_ONE from child side: the "one" side doesn't store "many" IDs
+                // - MANY_TO_MANY: both sides are virtual, stored in junction table
+                $needsParentResolution = (
+                    ($relationType === self::RELATION_ONE_TO_MANY && $side === self::RELATION_SIDE_PARENT) ||
+                    ($relationType === self::RELATION_MANY_TO_ONE && $side === self::RELATION_SIDE_CHILD) ||
+                    ($relationType === self::RELATION_MANY_TO_MANY)
+                );
+
+                if ($needsParentResolution) {
+                    $matchingDocs = $this->silent(fn () => $this->find(
+                        $relatedCollection,
+                        \array_merge($relatedQueries, [
+                            Query::limit(PHP_INT_MAX),
+                        ])
+                    ));
+                } else {
+                    $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
+                        $relatedCollection,
+                        \array_merge($relatedQueries, [
+                            Query::select(['$id']),
+                            Query::limit(PHP_INT_MAX),
+                        ])
+                    )));
+                }
+
+                $matchingIds = \array_map(fn ($doc) => $doc->getId(), $matchingDocs);
+
+                if ($needsParentResolution) {
+                    // Need to find which parents have these children
+                    $twoWayKey = $relationship->getAttribute('options')['twoWayKey'];
+
+                    $parentIds = [];
+                    foreach ($matchingDocs as $doc) {
+                        $parentId = $doc->getAttribute($twoWayKey);
+
+                        // Handle MANY_TO_MANY: twoWayKey returns an array
+                        if (\is_array($parentId)) {
+                            foreach ($parentId as $id) {
+                                if ($id instanceof Document) {
+                                    $id = $id->getId();
+                                }
+                                if ($id && !\in_array($id, $parentIds)) {
+                                    $parentIds[] = $id;
+                                }
+                            }
+                        } else {
+                            // Handle ONE_TO_MANY/MANY_TO_ONE: single value
+                            if ($parentId instanceof Document) {
+                                $parentId = $parentId->getId();
+                            }
+                            if ($parentId && !\in_array($parentId, $parentIds)) {
+                                $parentIds[] = $parentId;
+                            }
+                        }
+                    }
+
+                    // Add filter on current collection's $id
+                    if (!empty($parentIds)) {
+                        $additionalQueries[] = Query::equal('$id', $parentIds);
+                    } else {
+                        return null;
+                    }
+                } else {
+                    // For other types, filter by the relationship attribute
+                    if (!empty($matchingIds)) {
+                        $additionalQueries[] = Query::equal($relationshipKey, $matchingIds);
+                    } else {
+                        return null;
+                    }
+                }
+
+                // Remove all original relationship queries for this group
+                foreach ($group['indices'] as $originalIndex) {
+                    $indicesToRemove[] = $originalIndex;
+                }
+            } catch (\Exception $e) {
+                return null;
+            }
+        }
+
+        // Remove the original queries
+        foreach ($indicesToRemove as $index) {
+            unset($queries[$index]);
+        }
+
+        // Merge additional queries
+        return \array_merge(\array_values($queries), $additionalQueries);
     }
 
     /**
@@ -7314,58 +8225,5 @@ class Database
             default:
                 throw new DatabaseException('Unknown spatial type: ' . $type);
         }
-    }
-
-    /**
-     * Decode spatial data from WKT (Well-Known Text) format to array format
-     *
-     * @param string $wkt
-     * @return array<mixed>
-     * @throws DatabaseException
-     */
-    public function decodeSpatialData(string $wkt): array
-    {
-        $upper = strtoupper($wkt);
-
-        // POINT(x y)
-        if (str_starts_with($upper, 'POINT(')) {
-            $start = strpos($wkt, '(') + 1;
-            $end = strrpos($wkt, ')');
-            $inside = substr($wkt, $start, $end - $start);
-
-            $coords = explode(' ', trim($inside));
-            return [(float)$coords[0], (float)$coords[1]];
-        }
-
-        // LINESTRING(x1 y1, x2 y2, ...)
-        if (str_starts_with($upper, 'LINESTRING(')) {
-            $start = strpos($wkt, '(') + 1;
-            $end = strrpos($wkt, ')');
-            $inside = substr($wkt, $start, $end - $start);
-
-            $points = explode(',', $inside);
-            return array_map(function ($point) {
-                $coords = explode(' ', trim($point));
-                return [(float)$coords[0], (float)$coords[1]];
-            }, $points);
-        }
-
-        // POLYGON((x1,y1),(x2,y2))
-        if (str_starts_with($upper, 'POLYGON((')) {
-            $start = strpos($wkt, '((') + 2;
-            $end = strrpos($wkt, '))');
-            $inside = substr($wkt, $start, $end - $start);
-
-            $rings = explode('),(', $inside);
-            return array_map(function ($ring) {
-                $points = explode(',', $ring);
-                return array_map(function ($point) {
-                    $coords = explode(' ', trim($point));
-                    return [(float)$coords[0], (float)$coords[1]];
-                }, $points);
-            }, $rings);
-        }
-
-        return [$wkt];
     }
 }

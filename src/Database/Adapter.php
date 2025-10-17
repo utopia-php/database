@@ -388,19 +388,6 @@ abstract class Adapter
             } catch (\Throwable $action) {
                 try {
                     $this->rollbackTransaction();
-
-                    if (
-                        $action instanceof DuplicateException ||
-                        $action instanceof RestrictedException ||
-                        $action instanceof AuthorizationException ||
-                        $action instanceof RelationshipException ||
-                        $action instanceof ConflictException ||
-                        $action instanceof LimitException
-                    ) {
-                        $this->inTransaction = 0;
-                        throw $action;
-                    }
-
                 } catch (\Throwable $rollback) {
                     if ($attempts < $retries) {
                         \usleep($sleep * ($attempts + 1));
@@ -409,6 +396,18 @@ abstract class Adapter
 
                     $this->inTransaction = 0;
                     throw $rollback;
+                }
+
+                if (
+                    $action instanceof DuplicateException ||
+                    $action instanceof RestrictedException ||
+                    $action instanceof AuthorizationException ||
+                    $action instanceof RelationshipException ||
+                    $action instanceof ConflictException ||
+                    $action instanceof LimitException
+                ) {
+                    $this->inTransaction = 0;
+                    throw $action;
                 }
 
                 if ($attempts < $retries) {
@@ -578,10 +577,11 @@ abstract class Adapter
      * @param bool $signed
      * @param bool $array
      * @param string|null $newKey
+     * @param bool $required
      *
      * @return bool
      */
-    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null): bool;
+    abstract public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool;
 
     /**
      * Delete Attribute
@@ -1071,6 +1071,13 @@ abstract class Adapter
     abstract public function getSupportForSpatialIndexNull(): bool;
 
     /**
+     * Adapter supports optional spatial attributes with existing rows.
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool;
+
+    /**
      * Does the adapter support order attribute in spatial indexes?
      *
      * @return bool
@@ -1078,11 +1085,25 @@ abstract class Adapter
     abstract public function getSupportForSpatialIndexOrder(): bool;
 
     /**
+     * Does the adapter support spatial axis order specification?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSpatialAxisOrder(): bool;
+
+    /**
      * Does the adapter includes boundary during spatial contains?
      *
      * @return bool
      */
     abstract public function getSupportForBoundaryInclusiveContains(): bool;
+
+    /**
+     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool;
 
     /**
      * Get current attribute count from collection document
@@ -1145,9 +1166,9 @@ abstract class Adapter
      *
      * @param array<string> $selections
      * @param string $prefix
-     * @return mixed
+     * @return string
      */
-    abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
+    abstract protected function getAttributeProjection(array $selections, string $prefix): string;
 
     /**
      * Get all selected attributes from queries
@@ -1277,4 +1298,28 @@ abstract class Adapter
      * @return bool
      */
     abstract protected function execute(mixed $stmt): bool;
+
+    /**
+     * Decode a WKB or textual POINT into [x, y]
+     *
+     * @param string $wkb
+     * @return float[] Array with two elements: [x, y]
+     */
+    abstract public function decodePoint(string $wkb): array;
+
+    /**
+     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
+     *
+     * @param string $wkb
+     * @return float[][] Array of points, each as [x, y]
+     */
+    abstract public function decodeLinestring(string $wkb): array;
+
+    /**
+     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
+     *
+     * @param string $wkb
+     * @return float[][][] Array of rings, each ring is an array of points [x, y]
+     */
+    abstract public function decodePolygon(string $wkb): array;
 }

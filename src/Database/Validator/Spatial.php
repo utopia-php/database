@@ -33,7 +33,7 @@ class Spatial extends Validator
             return false;
         }
 
-        return true;
+        return $this->isValidCoordinate((float)$value[0], (float) $value[1]);
     }
 
     /**
@@ -49,7 +49,7 @@ class Spatial extends Validator
             return false;
         }
 
-        foreach ($value as $point) {
+        foreach ($value as $pointIndex => $point) {
             if (!is_array($point) || count($point) !== 2) {
                 $this->message = 'Each point in LineString must be an array of two values [x, y]';
                 return false;
@@ -57,6 +57,11 @@ class Spatial extends Validator
 
             if (!is_numeric($point[0]) || !is_numeric($point[1])) {
                 $this->message = 'Each point in LineString must have numeric coordinates';
+                return false;
+            }
+
+            if (!$this->isValidCoordinate((float)$point[0], (float)$point[1])) {
+                $this->message = "Invalid coordinates at point #{$pointIndex}: {$this->message}";
                 return false;
             }
         }
@@ -77,14 +82,13 @@ class Spatial extends Validator
             return false;
         }
 
-        // Detect single-ring polygon: [[x, y], [x, y], ...]
         $isSingleRing = isset($value[0]) && is_array($value[0]) &&
             count($value[0]) === 2 &&
             is_numeric($value[0][0]) &&
             is_numeric($value[0][1]);
 
         if ($isSingleRing) {
-            $value = [$value]; // wrap single ring
+            $value = [$value];
         }
 
         foreach ($value as $ringIndex => $ring) {
@@ -106,6 +110,11 @@ class Spatial extends Validator
 
                 if (!is_numeric($point[0]) || !is_numeric($point[1])) {
                     $this->message = "Coordinates of point #{$pointIndex} in ring #{$ringIndex} must be numeric";
+                    return false;
+                }
+
+                if (!$this->isValidCoordinate((float)$point[0], (float)$point[1])) {
+                    $this->message = "Invalid coordinates at point #{$pointIndex} in ring #{$ringIndex}: {$this->message}";
                     return false;
                 }
             }
@@ -141,7 +150,12 @@ class Spatial extends Validator
 
     public function getType(): string
     {
-        return 'spatial';
+        return self::TYPE_ARRAY;
+    }
+
+    public function getSpatialType(): string
+    {
+        return $this->spatialType;
     }
 
     /**
@@ -176,5 +190,20 @@ class Spatial extends Validator
 
         $this->message = 'Spatial value must be array or WKT string';
         return false;
+    }
+
+    private function isValidCoordinate(int|float $x, int|float $y): bool
+    {
+        if ($x < -180 || $x > 180) {
+            $this->message = "Longitude (x) must be between -180 and 180, got {$x}";
+            return false;
+        }
+
+        if ($y < -90 || $y > 90) {
+            $this->message = "Latitude (y) must be between -90 and 90, got {$y}";
+            return false;
+        }
+
+        return true;
     }
 }

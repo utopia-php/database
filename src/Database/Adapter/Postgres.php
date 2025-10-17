@@ -1715,7 +1715,7 @@ class Postgres extends SQL
 
         $values = $query->getValues();
         $vectorArray = $values[0] ?? [];
-        $vector = '[' . implode(',', \array_map(\floatval(...), $vectorArray)) . ']';
+        $vector = \json_encode(\array_map(\floatval(...), $vectorArray));
         $binds[":vector_{$placeholder}"] = $vector;
 
         return match ($query->getMethod()) {

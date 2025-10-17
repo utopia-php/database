@@ -1603,6 +1603,7 @@ trait VectorTests
 
         // Query as user1 - should only see doc1 and doc3
         Authorization::setRole(Role::user('user1')->toString());
+        Authorization::setRole(Role::any()->toString());
         $results = $database->find('vectorPermissions', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
         ]);
@@ -1614,7 +1615,9 @@ trait VectorTests
         $this->assertNotContains('Doc 2', $names);
 
         // Query as user2 - should only see doc2 and doc3
+        Authorization::cleanRoles();
         Authorization::setRole(Role::user('user2')->toString());
+        Authorization::setRole(Role::any()->toString());
         $results = $database->find('vectorPermissions', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
         ]);
@@ -1626,6 +1629,7 @@ trait VectorTests
         $this->assertNotContains('Doc 1', $names);
 
         Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
 
         // Cleanup
         $database->deleteCollection('vectorPermissions');

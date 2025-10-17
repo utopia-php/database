@@ -341,7 +341,13 @@ class Filter extends Base
                     return false;
                 }
 
-                $attributeSchema = $this->schema[$attribute];
+                // Handle dotted attributes (relationships)
+                $attributeKey = $attribute;
+                if (\str_contains($attributeKey, '.') && !isset($this->schema[$attributeKey])) {
+                    $attributeKey = \explode('.', $attributeKey)[0];
+                }
+
+                $attributeSchema = $this->schema[$attributeKey];
                 if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
                     $this->message = 'Vector queries can only be used on vector attributes';
                     return false;
@@ -353,7 +359,6 @@ class Filter extends Base
                 }
 
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
-
             case Query::TYPE_OR:
             case Query::TYPE_AND:
                 $filters = Query::groupByType($value->getValues())['filters'];

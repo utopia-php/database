@@ -1587,13 +1587,8 @@ class Postgres extends SQL
                 $conditions = [];
                 foreach ($query->getValues() as $key => $value) {
                     $binds[":{$placeholder}_{$key}"] = json_encode($value);
-                    if (is_array($value)) {
-                        $fragment = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
-                        $conditions[] = $isNot ? "NOT (" . $fragment . ")" : $fragment;
-                    } else {
-                        $fragment = "{$alias}.{$attribute} = :{$placeholder}_{$key}::jsonb";
-                        $conditions[] = $isNot ? "{$alias}.{$attribute} <> :{$placeholder}_{$key}::jsonb" : $fragment;
-                    }
+                    $fragment = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";
+                    $conditions[] = $isNot ? "NOT (" . $fragment . ")" : $fragment;
                 }
                 $separator = $isNot ? ' AND ' : ' OR ';
                 return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
@@ -1607,8 +1602,14 @@ class Postgres extends SQL
                     if (count($value) === 1) {
                         $jsonKey = array_key_first($value);
                         $jsonValue = $value[$jsonKey];
-                        // wrap to represent array; eg: key -> [value]
-                        $value[$jsonKey] = [$jsonValue];
+
+                        // If scalar (e.g. "skills" => "typescript"),
+                        // wrap it to express array containment: {"skills": ["typescript"]}
+                        // If it's already an object/associative array (e.g. "config" => ["lang" => "en"]),
+                        // keep as-is to express object containment.
+                        if (!\is_array($jsonValue)) {
+                            $value[$jsonKey] = [$jsonValue];
+                        }
                     }
                     $binds[":{$placeholder}_{$key}"] = json_encode($value);
                     $fragment = "{$alias}.{$attribute} @> :{$placeholder}_{$key}::jsonb";

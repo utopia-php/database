@@ -476,7 +476,7 @@ trait ObjectAttributeTests
 
         // Test 32: Contains query with nested array
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['matrix' => [4, 5, 6]]])
+            Query::contains('meta', [['matrix' => [[4, 5, 6]]]])
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc12', $results[0]->getId());
@@ -825,6 +825,22 @@ trait ObjectAttributeTests
         // Test 15: Test getDocument with non-existent ID returns empty document
         $nonExistent = $database->getDocument($collectionId, 'does_not_exist');
         $this->assertTrue($nonExistent->isEmpty());
+
+        // Test 16: with multiple json
+        $defaultSettings = ['config' => ['theme' => 'light', 'lang' => 'en']];
+        $this->assertEquals(true, $database->createAttribute($collectionId, 'settings', Database::TYPE_OBJECT, 0, false, $defaultSettings));
+        $database->createDocument($collectionId, new Document(['$permissions' => [Permission::read(Role::any())]]));
+        $database->createDocument($collectionId, new Document(['settings' => ['config' => ['theme' => 'dark', 'lang' => 'en']],'$permissions' => [Permission::read(Role::any())]]));
+        $results = $database->find($collectionId, [
+            Query::equal('settings', [['config' => ['theme' => 'light']],['config' => ['theme' => 'dark']]])
+        ]);
+        $this->assertCount(2, $results);
+
+        $results = $database->find($collectionId, [
+            // Containment: both documents have config.lang == 'en'
+            Query::contains('settings', [['config' => ['lang' => 'en']]])
+        ]);
+        $this->assertCount(2, $results);
 
         // Clean up
         $database->deleteCollection($collectionId);

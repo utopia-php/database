@@ -33,13 +33,21 @@ class Vector extends Validator
     /**
      * Is valid
      *
-     * Validation will pass when $value is a valid vector array
+     * Validation will pass when $value is a valid vector array or JSON string
      *
      * @param mixed $value
      * @return bool
      */
     public function isValid(mixed $value): bool
     {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            if (!is_array($decoded)) {
+                return false;
+            }
+            $value = $decoded;
+        }
+
         if (!is_array($value)) {
             return false;
         }

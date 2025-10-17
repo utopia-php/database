@@ -327,7 +327,7 @@ class Structure extends Validator
                 case Database::VAR_INTEGER:
                     // We need both Integer and Range because Range implicitly casts non-numeric values
                     $validators[] = new Integer();
-                    $max = $size >= 8 ? Database::BIG_INT_MAX : Database::INT_MAX;
+                    $max = $size >= 8 ? Database::MAX_BIG_INT : Database::MAX_INT;
                     $min = $signed ? -$max : 0;
                     $validators[] = new Range($min, $max, Database::VAR_INTEGER);
                     break;
@@ -335,8 +335,8 @@ class Structure extends Validator
                 case Database::VAR_FLOAT:
                     // We need both Float and Range because Range implicitly casts non-numeric values
                     $validators[] = new FloatValidator();
-                    $min = $signed ? -Database::DOUBLE_MAX : 0;
-                    $validators[] =  new Range($min, Database::DOUBLE_MAX, Database::VAR_FLOAT);
+                    $min = $signed ? -Database::MAX_DOUBLE : 0;
+                    $validators[] =  new Range($min, Database::MAX_DOUBLE, Database::VAR_FLOAT);
                     break;
 
                 case Database::VAR_BOOLEAN:
@@ -354,6 +354,10 @@ class Structure extends Validator
                 case Database::VAR_LINESTRING:
                 case Database::VAR_POLYGON:
                     $validators[] = new Spatial($type);
+                    break;
+
+                case Database::VAR_VECTOR:
+                    $validators[] = new Vector($attribute['size'] ?? 0);
                     break;
 
                 default:

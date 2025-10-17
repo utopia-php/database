@@ -36,22 +36,19 @@ use Utopia\Database\Validator\Structure;
 
 class Database
 {
-    public const VAR_STRING = 'string';
     // Simple Types
+    public const VAR_STRING = 'string';
     public const VAR_INTEGER = 'integer';
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
+
+    // ID types
     public const VAR_ID = 'id';
-    public const VAR_OBJECT_ID = 'objectId';
+    public const VAR_UUID = 'uuid';
 
-    public const INT_MAX = 2147483647;
-    public const BIG_INT_MAX = PHP_INT_MAX;
-    public const DOUBLE_MAX = PHP_FLOAT_MAX;
-
-    // Global SRID for geographic coordinates (WGS84)
-    public const SRID = 4326;
-    public const EARTH_RADIUS = 6371000;
+    // Vector types
+    public const VAR_VECTOR = 'vector';
 
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
@@ -61,14 +58,32 @@ class Database
     public const VAR_LINESTRING = 'linestring';
     public const VAR_POLYGON = 'polygon';
 
-    public const SPATIAL_TYPES = [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON];
+    // All spatial types
+    public const SPATIAL_TYPES = [
+        self::VAR_POINT,
+        self::VAR_LINESTRING,
+        self::VAR_POLYGON
+    ];
 
     // Index Types
     public const INDEX_KEY = 'key';
     public const INDEX_FULLTEXT = 'fulltext';
     public const INDEX_UNIQUE = 'unique';
     public const INDEX_SPATIAL = 'spatial';
-    public const ARRAY_INDEX_LENGTH = 255;
+    public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
+    public const INDEX_HNSW_COSINE = 'hnsw_cosine';
+    public const INDEX_HNSW_DOT = 'hnsw_dot';
+
+    // Max limits
+    public const MAX_INT = 2147483647;
+    public const MAX_BIG_INT = PHP_INT_MAX;
+    public const MAX_DOUBLE = PHP_FLOAT_MAX;
+    public const MAX_VECTOR_DIMENSIONS = 16000;
+    public const MAX_ARRAY_INDEX_LENGTH = 255;
+
+    // Global SRID for geographic coordinates (WGS84)
+    public const DEFAULT_SRID = 4326;
+    public const EARTH_RADIUS = 6371000;
 
     // Relation Types
     public const RELATION_ONE_TO_ONE = 'oneToOne';
@@ -91,7 +106,6 @@ class Database
     // Orders
     public const ORDER_ASC = 'ASC';
     public const ORDER_DESC = 'DESC';
-
     public const ORDER_RANDOM = 'RANDOM';
 
     // Permissions
@@ -490,7 +504,7 @@ class Database
                     return $value;
                 }
                 try {
-                    return  self::encodeSpatialData($value, Database::VAR_POINT);
+                    return self::encodeSpatialData($value, Database::VAR_POINT);
                 } catch (\Throwable) {
                     return $value;
                 }
@@ -518,7 +532,7 @@ class Database
                     return $value;
                 }
                 try {
-                    return  self::encodeSpatialData($value, Database::VAR_LINESTRING);
+                    return self::encodeSpatialData($value, Database::VAR_LINESTRING);
                 } catch (\Throwable) {
                     return $value;
                 }
@@ -546,7 +560,7 @@ class Database
                     return $value;
                 }
                 try {
-                    return  self::encodeSpatialData($value, Database::VAR_POLYGON);
+                    return self::encodeSpatialData($value, Database::VAR_POLYGON);
                 } catch (\Throwable) {
                     return $value;
                 }
@@ -560,6 +574,43 @@ class Database
                     return null;
                 }
                 return $this->adapter->decodePolygon($value);
+            }
+        );
+
+        self::addFilter(
+            Database::VAR_VECTOR,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!\is_array($value)) {
+                    return $value;
+                }
+                if (!\array_is_list($value)) {
+                    return $value;
+                }
+                foreach ($value as $item) {
+                    if (!\is_int($item) && !\is_float($item)) {
+                        return $value;
+                    }
+                }
+
+                return \json_encode(\array_map(\floatval(...), $value));
+            },
+            /**
+             * @param string|null $value
+             * @return array|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return null;
+                }
+                if (!is_string($value)) {
+                    return $value;
+                }
+                $decoded = json_decode($value, true);
+                return is_array($decoded) ? $decoded : $value;
             }
         );
     }
@@ -1328,7 +1379,7 @@ class Database
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
         foreach ($attributes as &$attribute) {
-            if (in_array($attribute['type'], Database::SPATIAL_TYPES)) {
+            if (in_array($attribute['type'], Database::SPATIAL_TYPES) || $attribute['type'] === Database::VAR_VECTOR) {
                 $existingFilters = $attribute['filters'] ?? [];
                 if (!is_array($existingFilters)) {
                     $existingFilters = [$existingFilters];
@@ -1379,7 +1430,7 @@ class Database
                         $isArray = $collectionAttribute->getAttribute('array', false);
                         if ($isArray) {
                             if ($this->adapter->getMaxIndexLength() > 0) {
-                                $lengths[$i] = self::ARRAY_INDEX_LENGTH;
+                                $lengths[$i] = self::MAX_ARRAY_INDEX_LENGTH;
                             }
                             $orders[$i] = null;
                         }
@@ -1408,9 +1459,9 @@ class Database
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->getSupportForIndexArray(),
-                $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForVectors(),
             );
             foreach ($indexes as $index) {
                 if (!$validator->isValid($index)) {
@@ -1700,6 +1751,10 @@ class Database
             $filters[] = $type;
             $filters = array_unique($filters);
         }
+        if ($type === Database::VAR_VECTOR) {
+            $filters[] = $type;
+            $filters = array_unique($filters);
+        }
 
         $attribute = $this->validateAttribute(
             $collection,
@@ -1964,8 +2019,51 @@ class Database
                     throw new DatabaseException('Spatial attributes cannot be arrays');
                 }
                 break;
+            case self::VAR_VECTOR:
+                if (!$this->adapter->getSupportForVectors()) {
+                    throw new DatabaseException('Vector types are not supported by the current database');
+                }
+                if ($array) {
+                    throw new DatabaseException('Vector type cannot be an array');
+                }
+                if ($size <= 0) {
+                    throw new DatabaseException('Vector dimensions must be a positive integer');
+                }
+                if ($size > self::MAX_VECTOR_DIMENSIONS) {
+                    throw new DatabaseException('Vector dimensions cannot exceed ' . self::MAX_VECTOR_DIMENSIONS);
+                }
+
+                // Validate default value if provided
+                if ($default !== null) {
+                    if (!is_array($default)) {
+                        throw new DatabaseException('Vector default value must be an array');
+                    }
+                    if (count($default) !== $size) {
+                        throw new DatabaseException('Vector default value must have exactly ' . $size . ' elements');
+                    }
+                    foreach ($default as $component) {
+                        if (!is_numeric($component)) {
+                            throw new DatabaseException('Vector default value must contain only numeric elements');
+                        }
+                    }
+                }
+                break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
+                $supportedTypes = [
+                    self::VAR_STRING,
+                    self::VAR_INTEGER,
+                    self::VAR_FLOAT,
+                    self::VAR_BOOLEAN,
+                    self::VAR_DATETIME,
+                    self::VAR_RELATIONSHIP
+                ];
+                if ($this->adapter->getSupportForVectors()) {
+                    $supportedTypes[] = self::VAR_VECTOR;
+                }
+                if ($this->adapter->getSupportForSpatialAttributes()) {
+                    \array_push($supportedTypes, ...self::SPATIAL_TYPES);
+                }
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
         }
 
         // Only execute when $default is given
@@ -2014,7 +2112,7 @@ class Database
         }
 
         if ($defaultType === 'array') {
-            // spatial types require the array itself
+            // Spatial types require the array itself
             if (!in_array($type, Database::SPATIAL_TYPES)) {
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value);
@@ -2037,16 +2135,28 @@ class Database
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
-            case self::VAR_POINT:
-            case self::VAR_LINESTRING:
-            case self::VAR_POLYGON:
-                // Spatial types expect arrays as default values
-                if ($defaultType !== 'array') {
-                    throw new DatabaseException('Default value for spatial type ' . $type . ' must be an array');
+            case self::VAR_VECTOR:
+                // When validating individual vector components (from recursion), they should be numeric
+                if ($defaultType !== 'double' && $defaultType !== 'integer') {
+                    throw new DatabaseException('Vector components must be numeric values (float or integer)');
                 }
-                // no break
+                break;
             default:
-                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP . ', ' . self::VAR_POINT . ', ' . self::VAR_LINESTRING . ', ' . self::VAR_POLYGON);
+                $supportedTypes = [
+                    self::VAR_STRING,
+                    self::VAR_INTEGER,
+                    self::VAR_FLOAT,
+                    self::VAR_BOOLEAN,
+                    self::VAR_DATETIME,
+                    self::VAR_RELATIONSHIP
+                ];
+                if ($this->adapter->getSupportForVectors()) {
+                    $supportedTypes[] = self::VAR_VECTOR;
+                }
+                if ($this->adapter->getSupportForSpatialAttributes()) {
+                    \array_push($supportedTypes, ...self::SPATIAL_TYPES);
+                }
+                throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
         }
     }
 
@@ -2306,8 +2416,49 @@ class Database
                         throw new DatabaseException('Spatial attributes cannot be arrays');
                     }
                     break;
+                case self::VAR_VECTOR:
+                    if (!$this->adapter->getSupportForVectors()) {
+                        throw new DatabaseException('Vector types are not supported by the current database');
+                    }
+                    if ($array) {
+                        throw new DatabaseException('Vector type cannot be an array');
+                    }
+                    if ($size <= 0) {
+                        throw new DatabaseException('Vector dimensions must be a positive integer');
+                    }
+                    if ($size > self::MAX_VECTOR_DIMENSIONS) {
+                        throw new DatabaseException('Vector dimensions cannot exceed ' . self::MAX_VECTOR_DIMENSIONS);
+                    }
+                    if ($default !== null) {
+                        if (!\is_array($default)) {
+                            throw new DatabaseException('Vector default value must be an array');
+                        }
+                        if (\count($default) !== $size) {
+                            throw new DatabaseException('Vector default value must have exactly ' . $size . ' elements');
+                        }
+                        foreach ($default as $component) {
+                            if (!\is_int($component) && !\is_float($component)) {
+                                throw new DatabaseException('Vector default value must contain only numeric elements');
+                            }
+                        }
+                    }
+                    break;
                 default:
-                    throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . self::VAR_STRING . ', ' . self::VAR_INTEGER . ', ' . self::VAR_FLOAT . ', ' . self::VAR_BOOLEAN . ', ' . self::VAR_DATETIME . ', ' . self::VAR_RELATIONSHIP);
+                    $supportedTypes = [
+                        self::VAR_STRING,
+                        self::VAR_INTEGER,
+                        self::VAR_FLOAT,
+                        self::VAR_BOOLEAN,
+                        self::VAR_DATETIME,
+                        self::VAR_RELATIONSHIP
+                    ];
+                    if ($this->adapter->getSupportForVectors()) {
+                        $supportedTypes[] = self::VAR_VECTOR;
+                    }
+                    if ($this->adapter->getSupportForSpatialAttributes()) {
+                        \array_push($supportedTypes, ...self::SPATIAL_TYPES);
+                    }
+                    throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
             }
 
             /** Ensure required filters for the attribute are passed */
@@ -2417,9 +2568,9 @@ class Database
                         $this->adapter->getMaxIndexLength(),
                         $this->adapter->getInternalIndexesKeys(),
                         $this->adapter->getSupportForIndexArray(),
-                        $this->adapter->getSupportForSpatialAttributes(),
                         $this->adapter->getSupportForSpatialIndexNull(),
                         $this->adapter->getSupportForSpatialIndexOrder(),
+                        $this->adapter->getSupportForVectors(),
                     );
 
                     foreach ($indexes as $index) {
@@ -3285,19 +3436,25 @@ class Database
                 }
                 break;
 
+            case Database::INDEX_HNSW_EUCLIDEAN:
+            case Database::INDEX_HNSW_COSINE:
+            case Database::INDEX_HNSW_DOT:
+                if (!$this->adapter->getSupportForVectors()) {
+                    throw new DatabaseException('Vector indexes are not supported');
+                }
+                break;
+
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
         }
 
         /** @var array<Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $indexAttributesWithTypes = [];
-        $indexAttributesRequired = [];
         foreach ($attributes as $i => $attr) {
             foreach ($collectionAttributes as $collectionAttribute) {
                 if ($collectionAttribute->getAttribute('key') === $attr) {
                     $indexAttributesWithTypes[$attr] = $collectionAttribute->getAttribute('type');
-                    $indexAttributesRequired[$attr] = $collectionAttribute->getAttribute('required', false);
 
                     /**
                      * mysql does not save length in collection when length = attributes size
@@ -3311,34 +3468,11 @@ class Database
                     $isArray = $collectionAttribute->getAttribute('array', false);
                     if ($isArray) {
                         if ($this->adapter->getMaxIndexLength() > 0) {
-                            $lengths[$i] = self::ARRAY_INDEX_LENGTH;
+                            $lengths[$i] = self::MAX_ARRAY_INDEX_LENGTH;
                         }
                         $orders[$i] = null;
                     }
                     break;
-                }
-            }
-        }
-
-        // Validate spatial index constraints
-        if ($type === self::INDEX_SPATIAL) {
-            foreach ($attributes as $attr) {
-                if (!isset($indexAttributesWithTypes[$attr])) {
-                    throw new IndexException('Attribute "' . $attr . '" not found in collection');
-                }
-
-                $attributeType = $indexAttributesWithTypes[$attr];
-                if (!in_array($attributeType, [self::VAR_POINT, self::VAR_LINESTRING, self::VAR_POLYGON])) {
-                    throw new IndexException('Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attr . '" is of type "' . $attributeType . '"');
-                }
-            }
-
-            // Check spatial index null constraints for adapters that don't support null values
-            if (!$this->adapter->getSupportForSpatialIndexNull()) {
-                foreach ($attributes as $attr) {
-                    if (!$indexAttributesRequired[$attr]) {
-                        throw new IndexException('Spatial indexes do not allow null values. Mark the attribute "' . $attr . '" as required or create the index on a column with no null values.');
-                    }
                 }
             }
         }
@@ -3360,9 +3494,9 @@ class Database
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->getSupportForIndexArray(),
-                $this->adapter->getSupportForSpatialAttributes(),
                 $this->adapter->getSupportForSpatialIndexNull(),
                 $this->adapter->getSupportForSpatialIndexOrder(),
+                $this->adapter->getSupportForVectors(),
             );
             if (!$validator->isValid($index)) {
                 throw new IndexException($validator->getDescription());
@@ -3464,7 +3598,7 @@ class Database
 
         $attributes = $collection->getAttribute('attributes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentValidator($attributes);
@@ -4972,7 +5106,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -6511,7 +6645,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -6708,7 +6842,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -6931,7 +7065,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -6995,7 +7129,7 @@ class Database
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
-        $this->checkQueriesType($queries);
+        $this->checkQueryTypes($queries);
 
         if ($this->validate) {
             $validator = new DocumentsValidator(
@@ -7185,8 +7319,7 @@ class Database
             $value = (is_null($value)) ? [] : $value;
 
             foreach ($value as $index => $node) {
-
-                foreach (array_reverse($filters) as $filter) {
+                foreach (\array_reverse($filters) as $filter) {
                     $node = $this->decodeAttribute($filter, $node, $document, $key);
                 }
                 $value[$index] = $node;
@@ -7596,7 +7729,7 @@ class Database
      * @return void
      * @throws QueryException
      */
-    private function checkQueriesType(array $queries): void
+    private function checkQueryTypes(array $queries): void
     {
         foreach ($queries as $query) {
             if (!$query instanceof Query) {
@@ -7604,7 +7737,7 @@ class Database
             }
 
             if ($query->isNested()) {
-                $this->checkQueriesType($query->getValues());
+                $this->checkQueryTypes($query->getValues());
             }
         }
     }

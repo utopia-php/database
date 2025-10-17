@@ -46,12 +46,12 @@ class Sequence extends Validator
         }
 
         switch ($this->idAttributeType) {
-            case Database::VAR_OBJECT_ID:
+            case Database::VAR_UUID:
                 return preg_match('/^[a-f0-9]{24}$/i', $value) === 1;
 
             case Database::VAR_INTEGER:
                 $start = ($this->primary) ? 1 : 0;
-                $validator = new Range($start, Database::BIG_INT_MAX, Database::VAR_INTEGER);
+                $validator = new Range($start, Database::MAX_BIG_INT, Database::VAR_INTEGER);
                 return $validator->isValid($value);
 
             default:

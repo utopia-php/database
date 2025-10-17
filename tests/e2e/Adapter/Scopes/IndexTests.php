@@ -166,7 +166,10 @@ trait IndexTests
             $attributes,
             $database->getAdapter()->getMaxIndexLength(),
             $database->getAdapter()->getInternalIndexesKeys(),
-            $database->getAdapter()->getSupportForIndexArray()
+            $database->getAdapter()->getSupportForIndexArray(),
+            $database->getAdapter()->getSupportForSpatialIndexNull(),
+            $database->getAdapter()->getSupportForSpatialIndexOrder(),
+            $database->getAdapter()->getSupportForVectors(),
         );
 
         $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
@@ -241,7 +244,10 @@ trait IndexTests
             $attributes,
             $database->getAdapter()->getMaxIndexLength(),
             $database->getAdapter()->getInternalIndexesKeys(),
-            $database->getAdapter()->getSupportForIndexArray()
+            $database->getAdapter()->getSupportForIndexArray(),
+            $database->getAdapter()->getSupportForSpatialIndexNull(),
+            $database->getAdapter()->getSupportForSpatialIndexOrder(),
+            $database->getAdapter()->getSupportForVectors(),
         );
         $errorMessage = 'Attribute "integer" cannot be part of a FULLTEXT index, must be of type string';
         $this->assertFalse($validator->isValid($indexes[0]));

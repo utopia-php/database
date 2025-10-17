@@ -118,7 +118,10 @@ class Queries extends Validator
                 Query::TYPE_OVERLAPS,
                 Query::TYPE_NOT_OVERLAPS,
                 Query::TYPE_TOUCHES,
-                Query::TYPE_NOT_TOUCHES => Base::METHOD_TYPE_FILTER,
+                Query::TYPE_NOT_TOUCHES,
+                Query::TYPE_VECTOR_DOT,
+                Query::TYPE_VECTOR_COSINE,
+                Query::TYPE_VECTOR_EUCLIDEAN => Base::METHOD_TYPE_FILTER,
                 default => '',
             };
 

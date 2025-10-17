@@ -2149,13 +2149,6 @@ class Database
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
-            case self::TYPE_OBJECT:
-                // Object types expect arrays as default values
-                var_dump($defaultType);
-                if ($defaultType !== 'array') {
-                    throw new DatabaseException('Default value for object type must be an array');
-                }
-                // no break
             case self::VAR_VECTOR:
                 // When validating individual vector components (from recursion), they should be numeric
                 if ($defaultType !== 'double' && $defaultType !== 'integer') {

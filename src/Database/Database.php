@@ -5774,7 +5774,7 @@ class Database
             $regularUpdates = $extracted['updates'];
 
             // Validate operators against attribute types
-            $operatorValidator = new OperatorValidator($collection);
+            $operatorValidator = new OperatorValidator($collection, $old->isEmpty() ? null : $old);
             foreach ($operators as $attribute => $operator) {
                 if (!$operatorValidator->isValid($operator)) {
                     throw new StructureException($operatorValidator->getDescription());

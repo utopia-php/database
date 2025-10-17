@@ -504,7 +504,7 @@ class Database
                     return $value;
                 }
                 try {
-                    return  self::encodeSpatialData($value, Database::VAR_POINT);
+                    return self::encodeSpatialData($value, Database::VAR_POINT);
                 } catch (\Throwable) {
                     return $value;
                 }
@@ -532,7 +532,7 @@ class Database
                     return $value;
                 }
                 try {
-                    return  self::encodeSpatialData($value, Database::VAR_LINESTRING);
+                    return self::encodeSpatialData($value, Database::VAR_LINESTRING);
                 } catch (\Throwable) {
                     return $value;
                 }
@@ -560,7 +560,7 @@ class Database
                     return $value;
                 }
                 try {
-                    return  self::encodeSpatialData($value, Database::VAR_POLYGON);
+                    return self::encodeSpatialData($value, Database::VAR_POLYGON);
                 } catch (\Throwable) {
                     return $value;
                 }
@@ -587,7 +587,16 @@ class Database
                 if (!\is_array($value)) {
                     return $value;
                 }
-                return \json_encode(\array_values(\array_map(\floatval(...), $value)));
+                if (!\array_is_list($value)) {
+                    return $value;
+                }
+                foreach ($value as $item) {
+                    if (!\is_int($item) && !\is_float($item)) {
+                        return $value;
+                    }
+                }
+
+                return \json_encode(\array_map(\floatval(...), $value));
             },
             /**
              * @param string|null $value
@@ -2419,6 +2428,19 @@ class Database
                     }
                     if ($size > self::MAX_VECTOR_DIMENSIONS) {
                         throw new DatabaseException('Vector dimensions cannot exceed ' . self::MAX_VECTOR_DIMENSIONS);
+                    }
+                    if ($default !== null) {
+                        if (!\is_array($default)) {
+                            throw new DatabaseException('Vector default value must be an array');
+                        }
+                        if (\count($default) !== $size) {
+                            throw new DatabaseException('Vector default value must have exactly ' . $size . ' elements');
+                        }
+                        foreach ($default as $component) {
+                            if (!\is_int($component) && !\is_float($component)) {
+                                throw new DatabaseException('Vector default value must contain only numeric elements');
+                            }
+                        }
                     }
                     break;
                 default:

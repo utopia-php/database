@@ -1570,7 +1570,12 @@ trait VectorTests
             return;
         }
 
-        $database->createCollection('vectorPermissions', [], [], [], true);
+        $database->createCollection('vectorPermissions', [], [], [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ], true);
         $database->createAttribute('vectorPermissions', 'name', Database::VAR_STRING, 255, true);
         $database->createAttribute('vectorPermissions', 'embedding', Database::VAR_VECTOR, 3, true);
 
@@ -2574,5 +2579,47 @@ trait VectorTests
 
         // Cleanup
         $database->deleteCollection('vectorMultiFilters');
+    }
+
+    public function testVectorQueryInNestedQuery(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForVectors()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('vectorNested');
+        $database->createAttribute('vectorNested', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('vectorNested', 'embedding1', Database::VAR_VECTOR, 3, true);
+        $database->createAttribute('vectorNested', 'embedding2', Database::VAR_VECTOR, 3, true);
+
+        // Create document
+        $database->createDocument('vectorNested', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
+            'name' => 'Doc 1',
+            'embedding1' => [1.0, 0.0, 0.0],
+            'embedding2' => [0.0, 1.0, 0.0]
+        ]));
+
+        // Try to use vector query in nested OR clause with another vector query - should reject
+        try {
+            $database->find('vectorNested', [
+                Query::vectorCosine('embedding1', [1.0, 0.0, 0.0]),
+                Query::or([
+                    Query::vectorCosine('embedding2', [0.0, 1.0, 0.0])
+                ])
+            ]);
+            $this->fail('Should not allow multiple vector queries across nested queries');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString('multiple vector queries', strtolower($e->getMessage()));
+        }
+
+        // Cleanup
+        $database->deleteCollection('vectorNested');
     }
 }

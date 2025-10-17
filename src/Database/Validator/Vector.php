@@ -52,13 +52,17 @@ class Vector extends Validator
             return false;
         }
 
+        if (!\array_is_list($value)) {
+            return false;
+        }
+
         if (count($value) !== $this->size) {
             return false;
         }
 
-        // Check that all values are numeric (can be converted to float)
+        // Check that all values are int or float (not strings, booleans, null, arrays, objects)
         foreach ($value as $component) {
-            if (!is_numeric($component)) {
+            if (!\is_int($component) && !\is_float($component)) {
                 return false;
             }
         }

@@ -1258,7 +1258,7 @@ trait VectorTests
         // Create child collection
         $database->createCollection('vectorChild');
         $database->createAttribute('vectorChild', 'title', Database::VAR_STRING, 255, true);
-        $database->createAttribute('vectorChild', 'parent', Database::VAR_RELATIONSHIP, 0, false, null, ['relatedCollection' => 'vectorParent', 'relationType' => Database::RELATION_ONE_TO_MANY, 'twoWay' => true, 'twoWayKey' => 'children']);
+        $database->createAttribute('vectorChild', 'parent', Database::VAR_RELATIONSHIP, 0, false, false, false, ['relatedCollection' => 'vectorParent', 'relationType' => Database::RELATION_ONE_TO_MANY, 'twoWay' => true, 'twoWayKey' => 'children']);
 
         // Create parent documents with vectors
         $parent1 = $database->createDocument('vectorParent', new Document([

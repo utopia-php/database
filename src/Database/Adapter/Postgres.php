@@ -147,15 +147,16 @@ class Postgres extends SQL
             ->prepare($sql)
             ->execute();
 
-        // extension for supporting spatial types
-        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis;')->execute();
+        // Enable extensions
+        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis')->execute();
+        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS vector')->execute();
 
         $collation = "
             CREATE COLLATION IF NOT EXISTS utf8_ci_ai (
             provider = icu,
             locale = 'und-u-ks-level1',
             deterministic = false
-            );
+            )
         ";
         $this->getPDO()->prepare($collation)->execute();
         return $dbCreation;
@@ -192,9 +193,6 @@ class Postgres extends SQL
     {
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
-
-        /** @var array<string> $attributeStrings */
-        $attributeStrings = [];
 
         /** @var array<string> $attributeStrings */
         $attributeStrings = [];
@@ -443,6 +441,16 @@ class Postgres extends SQL
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
+        // Ensure pgvector extension is installed for vector types
+        if ($type === Database::VAR_VECTOR) {
+            if ($size <= 0) {
+                throw new DatabaseException('Vector dimensions must be a positive integer');
+            }
+            if ($size > Database::MAX_VECTOR_DIMENSIONS) {
+                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::MAX_VECTOR_DIMENSIONS);
+            }
+        }
+
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $type = $this->getSQLType($type, $size, $signed, $array, $required);
@@ -543,7 +551,23 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $type = $this->getSQLType($type, $size, $signed, $array, $required);
+
+        if ($type === Database::VAR_VECTOR) {
+            if ($size <= 0) {
+                throw new DatabaseException('Vector dimensions must be a positive integer');
+            }
+            if ($size > Database::MAX_VECTOR_DIMENSIONS) {
+                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::MAX_VECTOR_DIMENSIONS);
+            }
+        }
+
+        $type = $this->getSQLType(
+            $type,
+            $size,
+            $signed,
+            $array,
+            $required,
+        );
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
@@ -841,7 +865,6 @@ class Postgres extends SQL
         $collection = $this->filter($collection);
         $id = $this->filter($id);
 
-
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
 
@@ -857,35 +880,35 @@ class Postgres extends SQL
 
         $sqlType = match ($type) {
             Database::INDEX_KEY,
-            Database::INDEX_FULLTEXT => 'INDEX',
+            Database::INDEX_FULLTEXT,
+            Database::INDEX_SPATIAL,
+            Database::INDEX_HNSW_EUCLIDEAN,
+            Database::INDEX_HNSW_COSINE,
+            Database::INDEX_HNSW_DOT => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            Database::INDEX_SPATIAL => 'INDEX',
             Database::INDEX_GIN => 'INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_GIN),
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_GIN . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
         };
 
         $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
         $attributes = \implode(', ', $attributes);
 
-        // Spatial and GIN indexes can't include _tenant because GIST/GIN indexes require all columns to have compatible operator classes
-        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT && $type !== Database::INDEX_SPATIAL && $type !== Database::INDEX_GIN) {
+        if ($this->sharedTables && \in_array($type, [Database::INDEX_KEY, Database::INDEX_UNIQUE, Database::INDEX_GIN])) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }
 
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)}";
 
-        // Add USING GIST for spatial indexes
-        if ($type === Database::INDEX_SPATIAL) {
-            $sql .= " USING GIST";
-        }
-
-        // Add USING GIN for JSONB indexes
-        if ($type === Database::INDEX_GIN) {
-            $sql .= " USING GIN";
-        }
-
-        $sql .= " ({$attributes});";
+        // Add USING clause for special index types
+        $sql .= match ($type) {
+            Database::INDEX_SPATIAL => " USING GIST ({$attributes})",
+            Database::INDEX_HNSW_EUCLIDEAN => " USING HNSW ({$attributes} vector_l2_ops)",
+            Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
+            Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
+            Database::INDEX_GIN => " USING GIN ({$attributes})",
+            default => " ({$attributes})",
+        };
 
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
@@ -1486,7 +1509,7 @@ class Postgres extends SQL
 
         if ($meters) {
             $attr = "({$alias}.{$attribute}::geography)";
-            $geom = "ST_SetSRID(" . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ", " . Database::SRID . ")::geography";
+            $geom = "ST_SetSRID(" . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ", " . Database::DEFAULT_SRID . ")::geography";
             return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
         }
 
@@ -1671,6 +1694,11 @@ class Postgres extends SQL
                 $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
                 return "NOT (to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0))";
 
+            case Query::TYPE_VECTOR_DOT:
+            case Query::TYPE_VECTOR_COSINE:
+            case Query::TYPE_VECTOR_EUCLIDEAN:
+                return ''; // Handled in ORDER BY clause
+
             case Query::TYPE_BETWEEN:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
@@ -1689,8 +1717,6 @@ class Postgres extends SQL
             case Query::TYPE_NOT_CONTAINS:
                 if ($query->onArray()) {
                     $operator = '@>';
-                } else {
-                    $operator = null;
                 }
 
                 // no break
@@ -1729,6 +1755,37 @@ class Postgres extends SQL
                 $separator = $isNotQuery ? ' AND ' : ' OR ';
                 return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
         }
+    }
+
+    /**
+     * Get vector distance calculation for ORDER BY clause
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $alias
+     * @return string|null
+     * @throws DatabaseException
+     */
+    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    {
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+
+        $attribute = $this->filter($query->getAttribute());
+        $attribute = $this->quote($attribute);
+        $alias = $this->quote($alias);
+        $placeholder = ID::unique();
+
+        $values = $query->getValues();
+        $vectorArray = $values[0] ?? [];
+        $vector = \json_encode(\array_map(\floatval(...), $vectorArray));
+        $binds[":vector_{$placeholder}"] = $vector;
+
+        return match ($query->getMethod()) {
+            Query::TYPE_VECTOR_DOT => "({$alias}.{$attribute} <#> :vector_{$placeholder}::vector)",
+            Query::TYPE_VECTOR_COSINE => "({$alias}.{$attribute} <=> :vector_{$placeholder}::vector)",
+            Query::TYPE_VECTOR_EUCLIDEAN => "({$alias}.{$attribute} <-> :vector_{$placeholder}::vector)",
+            default => null,
+        };
     }
 
     /**
@@ -1801,15 +1858,17 @@ class Postgres extends SQL
             case Database::TYPE_OBJECT:
                 return 'JSONB';
 
-                // in all other DB engines, 4326 is the default SRID
             case Database::VAR_POINT:
-                return 'GEOMETRY(POINT,' . Database::SRID . ')';
+                return 'GEOMETRY(POINT,' . Database::DEFAULT_SRID . ')';
 
             case Database::VAR_LINESTRING:
-                return 'GEOMETRY(LINESTRING,' . Database::SRID . ')';
+                return 'GEOMETRY(LINESTRING,' . Database::DEFAULT_SRID . ')';
 
             case Database::VAR_POLYGON:
-                return 'GEOMETRY(POLYGON,' . Database::SRID . ')';
+                return 'GEOMETRY(POLYGON,' . Database::DEFAULT_SRID . ')';
+
+            case Database::VAR_VECTOR:
+                return "VECTOR({$size})";
 
             default:
                 throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::TYPE_OBJECT . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
@@ -1954,6 +2013,16 @@ class Postgres extends SQL
     }
 
     public function getSupportForUpserts(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is vector type supported?
+     *
+     * @return bool
+     */
+    public function getSupportForVectors(): bool
     {
         return true;
     }

@@ -10,7 +10,6 @@ use Utopia\Validator;
 class Index extends Validator
 {
     protected string $message = 'Invalid index';
-    protected int $maxLength;
 
     /**
      * @var array<Document> $attributes
@@ -18,41 +17,26 @@ class Index extends Validator
     protected array $attributes;
 
     /**
-     * @var array<string> $reservedKeys
-     */
-    protected array $reservedKeys;
-
-    protected bool $arrayIndexSupport;
-
-    protected bool $spatialIndexSupport;
-
-    protected bool $spatialIndexNullSupport;
-
-    protected bool $spatialIndexOrderSupport;
-
-    protected bool $objectIndexSupport;
-
-    /**
      * @param array<Document> $attributes
      * @param int $maxLength
      * @param array<string> $reservedKeys
-     * @param bool $arrayIndexSupport
-     * @param bool $spatialIndexSupport
-     * @param bool $spatialIndexNullSupport
-     * @param bool $spatialIndexOrderSupport
+     * @param bool $supportForArrayIndexes
+     * @param bool $supportForSpatialIndexNull
+     * @param bool $supportForSpatialIndexOrder
+     * @param bool $supportForVectorIndexes
      * @param bool $objectIndexSupport
      * @throws DatabaseException
      */
-    public function __construct(array $attributes, int $maxLength, array $reservedKeys = [], bool $arrayIndexSupport = false, bool $spatialIndexSupport = false, bool $spatialIndexNullSupport = false, bool $spatialIndexOrderSupport = false, bool $objectIndexSupport = false)
-    {
-        $this->maxLength = $maxLength;
-        $this->reservedKeys = $reservedKeys;
-        $this->arrayIndexSupport = $arrayIndexSupport;
-        $this->spatialIndexSupport = $spatialIndexSupport;
-        $this->spatialIndexNullSupport = $spatialIndexNullSupport;
-        $this->spatialIndexOrderSupport = $spatialIndexOrderSupport;
-        $this->objectIndexSupport = $objectIndexSupport;
-
+    public function __construct(
+        array $attributes,
+        protected int $maxLength,
+        protected array $reservedKeys = [],
+        protected bool $supportForArrayIndexes = false,
+        protected bool $supportForSpatialIndexNull = false,
+        protected bool $supportForSpatialIndexOrder = false,
+        protected bool $supportForVectorIndexes = false,
+        protected bool $objectIndexSupport = false
+    ) {
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
             $this->attributes[$key] = $attribute;
@@ -173,16 +157,16 @@ class Index extends Validator
 
                 $direction = $orders[$attributePosition] ?? '';
                 if (!empty($direction)) {
-                    $this->message = 'Invalid index order "' . $direction . '" on array attribute "'. $attribute->getAttribute('key', '') .'"';
+                    $this->message = 'Invalid index order "' . $direction . '" on array attribute "' . $attribute->getAttribute('key', '') . '"';
                     return false;
                 }
 
-                if ($this->arrayIndexSupport === false) {
+                if ($this->supportForArrayIndexes === false) {
                     $this->message = 'Indexing an array attribute is not supported';
                     return false;
                 }
             } elseif ($attribute->getAttribute('type') !== Database::VAR_STRING && !empty($lengths[$attributePosition])) {
-                $this->message = 'Cannot set a length on "'. $attribute->getAttribute('type') . '" attributes';
+                $this->message = 'Cannot set a length on "' . $attribute->getAttribute('type') . '" attributes';
                 return false;
             }
         }
@@ -229,8 +213,8 @@ class Index extends Validator
             }
 
             if ($attribute->getAttribute('array', false)) {
-                $attributeSize = Database::ARRAY_INDEX_LENGTH;
-                $indexLength = Database::ARRAY_INDEX_LENGTH;
+                $attributeSize = Database::MAX_ARRAY_INDEX_LENGTH;
+                $indexLength = Database::MAX_ARRAY_INDEX_LENGTH;
             }
 
             if ($indexLength > $attributeSize) {
@@ -268,6 +252,123 @@ class Index extends Validator
     }
 
     /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkSpatialIndex(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+
+        if ($type !== Database::INDEX_SPATIAL) {
+            return true;
+        }
+
+        $attributes = $index->getAttribute('attributes', []);
+        $orders = $index->getAttribute('orders', []);
+
+        if (\count($attributes) !== 1) {
+            $this->message = 'Spatial index must have exactly one attribute';
+            return false;
+        }
+
+        foreach ($attributes as $attributeName) {
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
+            $attributeType = $attribute->getAttribute('type', '');
+
+            if (!\in_array($attributeType, Database::SPATIAL_TYPES, true)) {
+                $this->message = 'Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
+                return false;
+            }
+
+            $required = (bool)$attribute->getAttribute('required', false);
+            if (!$required && !$this->supportForSpatialIndexNull) {
+                $this->message = 'Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.';
+                return false;
+            }
+        }
+
+        if (!empty($orders) && !$this->supportForSpatialIndexOrder) {
+            $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     */
+    public function checkNonSpatialIndexOnSpatialAttribute(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+
+        // Skip check for spatial indexes
+        if ($type === Database::INDEX_SPATIAL) {
+            return true;
+        }
+
+        $attributes = $index->getAttribute('attributes', []);
+
+        foreach ($attributes as $attributeName) {
+            $attribute = $this->attributes[\strtolower($attributeName)] ?? new Document();
+            $attributeType = $attribute->getAttribute('type', '');
+
+            if (\in_array($attributeType, Database::SPATIAL_TYPES, true)) {
+                $this->message = 'Cannot create ' . $type . ' index on spatial attribute "' . $attributeName . '". Spatial attributes require spatial indexes.';
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param Document $index
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function checkVectorIndex(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+
+        if (
+            $type !== Database::INDEX_HNSW_DOT &&
+            $type !== Database::INDEX_HNSW_COSINE &&
+            $type !== Database::INDEX_HNSW_EUCLIDEAN
+        ) {
+            return true;
+        }
+
+        if ($this->supportForVectorIndexes === false) {
+            $this->message = 'Vector indexes are not supported';
+            return false;
+        }
+
+        $attributes = $index->getAttribute('attributes', []);
+
+        if (\count($attributes) !== 1) {
+            $this->message = 'Vector index must have exactly one attribute';
+            return false;
+        }
+
+        $attribute = $this->attributes[\strtolower($attributes[0])] ?? new Document();
+        if ($attribute->getAttribute('type') !== Database::VAR_VECTOR) {
+            $this->message = 'Vector index can only be created on vector attributes';
+            return false;
+        }
+
+        $orders = $index->getAttribute('orders', []);
+        $lengths = $index->getAttribute('lengths', []);
+        if (!empty($orders) || \count(\array_filter($lengths)) > 0) {
+            $this->message = 'Vector indexes do not support orders or lengths';
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Is valid.
      *
      * Returns true index if valid.
@@ -280,35 +381,33 @@ class Index extends Validator
         if (!$this->checkAttributesNotFound($value)) {
             return false;
         }
-
         if (!$this->checkEmptyIndexAttributes($value)) {
             return false;
         }
-
         if (!$this->checkDuplicatedAttributes($value)) {
             return false;
         }
-
         if (!$this->checkFulltextIndexNonString($value)) {
             return false;
         }
-
         if (!$this->checkArrayIndex($value)) {
             return false;
         }
-
         if (!$this->checkIndexLength($value)) {
             return false;
         }
-
         if (!$this->checkReservedNames($value)) {
             return false;
         }
-
         if (!$this->checkSpatialIndex($value)) {
             return false;
         }
-
+        if (!$this->checkNonSpatialIndexOnSpatialAttribute($value)) {
+            return false;
+        }
+        if (!$this->checkVectorIndex($value)) {
+            return false;
+        }
         if (!$this->checkGinIndex($value)) {
             return false;
         }
@@ -338,55 +437,6 @@ class Index extends Validator
     public function getType(): string
     {
         return self::TYPE_OBJECT;
-    }
-
-    /**
-     * @param Document $index
-     * @return bool
-    */
-    public function checkSpatialIndex(Document $index): bool
-    {
-        $type = $index->getAttribute('type');
-
-        $attributes = $index->getAttribute('attributes', []);
-        $orders     = $index->getAttribute('orders', []);
-
-        foreach ($attributes as $attributeName) {
-            $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
-            $attributeType = $attribute->getAttribute('type', '');
-
-            if (!\in_array($attributeType, Database::SPATIAL_TYPES, true)) {
-                continue;
-            }
-
-            if (!$this->spatialIndexSupport) {
-                $this->message = 'Spatial indexes are not supported';
-                return false;
-            }
-
-            if (count($attributes) !== 1) {
-                $this->message = 'Spatial index can be created on a single spatial attribute';
-                return false;
-            }
-
-            if ($type !== Database::INDEX_SPATIAL) {
-                $this->message = 'Spatial index can only be created on spatial attributes (point, linestring, polygon). Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
-                return false;
-            }
-            $required = (bool) $attribute->getAttribute('required', false);
-            if (!$required && !$this->spatialIndexNullSupport) {
-                $this->message = 'Spatial indexes do not allow null values. Mark the attribute "' . $attributeName . '" as required or create the index on a column with no null values.';
-                return false;
-            }
-
-            if (!empty($orders) && !$this->spatialIndexOrderSupport) {
-                $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
-                return false;
-            }
-        }
-
-
-        return true;
     }
 
     /**

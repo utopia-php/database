@@ -5105,8 +5105,18 @@ class Database
             $currentPermissions = $updates->getPermissions();
             sort($currentPermissions);
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions, $operators) {
                 foreach ($batch as $index => $document) {
+                    // Validate operators against attribute types (with current document for runtime checks)
+                    if (!empty($operators)) {
+                        $operatorValidator = new OperatorValidator($collection, $document);
+                        foreach ($operators as $attribute => $operator) {
+                            if (!$operatorValidator->isValid($operator)) {
+                                throw new StructureException($operatorValidator->getDescription());
+                            }
+                        }
+                    }
+
                     $skipPermissionsUpdate = true;
 
                     if ($updates->offsetExists('$permissions')) {

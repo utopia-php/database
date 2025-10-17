@@ -262,9 +262,8 @@ class Operator extends Validator
 
                 break;
             case DatabaseOperator::TYPE_CONCAT:
-                // Concat works on both strings and arrays
-                if ($type !== Database::VAR_STRING && !$isArray) {
-                    $this->message = "Cannot apply concat to non-string field '{$operator->getAttribute()}'";
+                if ($type !== Database::VAR_STRING || $isArray) {
+                    $this->message = "Concat operator only applies to string fields";
                     return false;
                 }
 

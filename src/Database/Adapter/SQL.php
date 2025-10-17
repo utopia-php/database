@@ -543,7 +543,12 @@ abstract class SQL extends Adapter
                 continue;
             }
 
-            if (!isset($spatialAttributes[$attributeName]) && is_array($value)) {
+            // Convert spatial arrays to WKT, json_encode non-spatial arrays
+            if (\in_array($attributeName, $spatialAttributes, true)) {
+                if (\is_array($value)) {
+                    $value = $this->convertArrayToWKT($value);
+                }
+            } elseif (\is_array($value)) {
                 $value = \json_encode($value);
             }
 

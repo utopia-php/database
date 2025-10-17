@@ -284,7 +284,7 @@ class Index extends Validator
             }
         }
 
-        if (!empty($orders) && !$this->supportForSpatialIndexNull) {
+        if (!empty($orders) && !$this->supportForSpatialIndexOrder) {
             $this->message = 'Spatial indexes with explicit orders are not supported. Remove the orders to create this index.';
             return false;
         }

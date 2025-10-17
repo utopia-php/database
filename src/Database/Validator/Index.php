@@ -23,6 +23,7 @@ class Index extends Validator
      * @param bool $supportForArrayIndexes
      * @param bool $supportForSpatialIndexNull
      * @param bool $supportForSpatialIndexOrder
+     * @param bool $supportForVectorIndexes
      * @throws DatabaseException
      */
     public function __construct(

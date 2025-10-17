@@ -236,7 +236,7 @@ class Filter extends Base
         }
 
         // Vector queries can only be used on vector attributes (not arrays)
-        if (in_array($method, [Query::TYPE_VECTOR_DOT, Query::TYPE_VECTOR_COSINE, Query::TYPE_VECTOR_EUCLIDEAN])) {
+        if (\in_array($method, Query::VECTOR_TYPES)) {
             if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
                 $this->message = 'Vector queries can only be used on vector attributes';
                 return false;

@@ -8,12 +8,14 @@ use PDOException;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Duplicate;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Operator;
 
 /**
  * Main differences from MariaDB and MySQL:
@@ -517,7 +519,7 @@ class SQLite extends MariaDB
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function createDocument(Document $collection, Document $document): Document
     {
@@ -620,7 +622,7 @@ class SQLite extends MariaDB
             }
         } catch (PDOException $e) {
             throw match ($e->getCode()) {
-                "1062", "23000" => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                "1062", "23000" => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
@@ -639,7 +641,7 @@ class SQLite extends MariaDB
      * @return Document
      * @throws Exception
      * @throws PDOException
-     * @throws Duplicate
+     * @throws DuplicateException
      */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
@@ -794,16 +796,37 @@ class SQLite extends MariaDB
          * Update Attributes
          */
         $bindIndex = 0;
+        $operators = [];
+
+        // Separate regular attributes from operators
+        foreach ($attributes as $attribute => $value) {
+            if (Operator::isOperator($value)) {
+                $operators[$attribute] = $value;
+            }
+        }
+
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "`{$column}`" . '=:' . $bindKey . ',';
-            $bindIndex++;
+
+            // Check if this is an operator or regular attribute
+            if (isset($operators[$attribute])) {
+                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+                $columns .= $operatorSQL;
+            } else {
+                $bindKey = 'key_' . $bindIndex;
+                $columns .= "`{$column}`" . '=:' . $bindKey;
+                $bindIndex++;
+            }
+
+            $columns .= ',';
         }
+
+        // Remove trailing comma
+        $columns = rtrim($columns, ',');
 
         $sql = "
 			UPDATE `{$this->getNamespace()}_{$name}`
-			SET {$columns} _uid = :_newUid 
+			SET {$columns}, _uid = :_newUid
 			WHERE _uid = :_existingUid
 			{$this->getTenantQuery($collection)}
 		";
@@ -819,17 +842,23 @@ class SQLite extends MariaDB
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        $attributeIndex = 0;
+        // Bind values for non-operator attributes and operator parameters
+        $bindIndexForBinding = 0;
         foreach ($attributes as $attribute => $value) {
+            // Handle operators separately
+            if (isset($operators[$attribute])) {
+                $this->bindOperatorParams($stmt, $operators[$attribute], $bindIndexForBinding);
+                continue;
+            }
+
             if (is_array($value)) { // arrays & objects should be saved as strings
                 $value = json_encode($value);
             }
 
-            $bindKey = 'key_' . $attributeIndex;
-            $attribute = $this->filter($attribute);
+            $bindKey = 'key_' . $bindIndexForBinding;
             $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
+            $bindIndexForBinding++;
         }
 
         try {
@@ -843,7 +872,7 @@ class SQLite extends MariaDB
         } catch (PDOException $e) {
             throw match ($e->getCode()) {
                 '1062',
-                '23000' => new Duplicate('Duplicated document: ' . $e->getMessage()),
+                '23000' => new DuplicateException('Duplicated document: ' . $e->getMessage()),
                 default => $e,
             };
         }
@@ -1253,6 +1282,16 @@ class SQLite extends MariaDB
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
 
+        // Numeric value out of range
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 25) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
+        }
+
+        // String or BLOB exceeds size limit
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 18) {
+            return new LimitException('Value too large', $e->getCode(), $e);
+        }
+
         return $e;
     }
 
@@ -1303,5 +1342,381 @@ class SQLite extends MariaDB
     protected function getRandomOrder(): string
     {
         return 'RANDOM()';
+    }
+
+    /**
+     * Check if SQLite math functions (like POWER) are available
+     * SQLite must be compiled with -DSQLITE_ENABLE_MATH_FUNCTIONS
+     *
+     * @return bool
+     */
+    private function getSupportForMathFunctions(): bool
+    {
+        static $available = null;
+
+        if ($available !== null) {
+            return $available;
+        }
+
+        try {
+            // Test if POWER function exists by attempting to use it
+            $stmt = $this->getPDO()->query('SELECT POWER(2, 3) as test');
+            $result = $stmt->fetch();
+            $available = ($result['test'] == 8);
+            return $available;
+        } catch (PDOException $e) {
+            // Function doesn't exist
+            $available = false;
+            return false;
+        }
+    }
+
+    /**
+     * Bind operator parameters to statement
+     * Override to handle SQLite-specific operator bindings
+     *
+     * @param \PDOStatement $stmt
+     * @param Operator $operator
+     * @param int &$bindIndex
+     * @return void
+     */
+    protected function bindOperatorParams(\PDOStatement $stmt, Operator $operator, int &$bindIndex): void
+    {
+        $method = $operator->getMethod();
+
+        // For operators that SQLite doesn't use bind parameters for, skip binding entirely
+        // Note: The bindIndex increment happens in getOperatorSQL(), NOT here
+        if (in_array($method, [Operator::TYPE_TOGGLE, Operator::TYPE_DATE_SET_NOW, Operator::TYPE_ARRAY_UNIQUE])) {
+            // These operators don't bind any parameters - they're handled purely in SQL
+            // DO NOT increment bindIndex here as it's already handled in getOperatorSQL()
+            return;
+        }
+
+        // For ARRAY_FILTER, bind the filter value if present
+        if ($method === Operator::TYPE_ARRAY_FILTER) {
+            $values = $operator->getValues();
+            if (!empty($values) && count($values) >= 2) {
+                $filterType = $values[0];
+                $filterValue = $values[1];
+
+                // Only bind if we support this filter type (all comparison operators need binding)
+                $comparisonTypes = ['equals', 'notEquals', 'greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual'];
+                if (in_array($filterType, $comparisonTypes)) {
+                    $bindKey = "op_{$bindIndex}";
+                    $value = (is_bool($filterValue)) ? (int)$filterValue : $filterValue;
+                    $stmt->bindValue(":{$bindKey}", $value, $this->getPDOType($value));
+                    $bindIndex++;
+                }
+            }
+            return;
+        }
+
+        // For all other operators, use parent implementation
+        parent::bindOperatorParams($stmt, $operator, $bindIndex);
+    }
+
+    /**
+     * Get SQL expression for operator
+     *
+     * IMPORTANT: SQLite JSON Limitations
+     * -----------------------------------
+     * Array operators using json_each() and json_group_array() have type conversion behavior:
+     * - Numbers are preserved but may lose precision (e.g., 1.0 becomes 1)
+     * - Booleans become integers (true→1, false→0)
+     * - Strings remain strings
+     * - Objects and nested arrays are converted to JSON strings
+     *
+     * This is inherent to SQLite's JSON implementation and affects: ARRAY_APPEND, ARRAY_PREPEND,
+     * ARRAY_UNIQUE, ARRAY_INTERSECT, ARRAY_DIFF, ARRAY_INSERT, and ARRAY_REMOVE.
+     *
+     * @param string $column
+     * @param Operator $operator
+     * @param int &$bindIndex
+     * @return ?string
+     */
+    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
+    {
+        $quotedColumn = $this->quote($column);
+        $method = $operator->getMethod();
+
+        switch ($method) {
+            case Operator::TYPE_CONCAT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = IFNULL({$quotedColumn}, '') || :$bindKey";
+
+            case Operator::TYPE_INCREMENT:
+                $values = $operator->getValues();
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                if (isset($values[1]) && $values[1] !== null) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
+
+            case Operator::TYPE_DECREMENT:
+                $values = $operator->getValues();
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                if (isset($values[1]) && $values[1] !== null) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
+
+            case Operator::TYPE_MULTIPLY:
+                $values = $operator->getValues();
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                if (isset($values[1]) && $values[1] !== null) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
+
+            case Operator::TYPE_DIVIDE:
+                $values = $operator->getValues();
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                if (isset($values[1]) && $values[1] !== null) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) < :$minKey * :$bindKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
+
+            case Operator::TYPE_MODULO:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) % :$bindKey";
+
+            case Operator::TYPE_POWER:
+                if (!$this->getSupportForMathFunctions()) {
+                    throw new DatabaseException(
+                        'SQLite POWER operator requires math functions. ' .
+                        'Compile SQLite with -DSQLITE_ENABLE_MATH_FUNCTIONS or use multiply operators instead.'
+                    );
+                }
+
+                $values = $operator->getValues();
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                if (isset($values[1]) && $values[1] !== null) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey * LN(COALESCE({$quotedColumn}, 1)) > LN(:$maxKey) THEN :$maxKey
+                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
+                    END";
+                }
+                return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
+
+            case Operator::TYPE_TOGGLE:
+                // SQLite: toggle boolean (0 or 1), treat NULL as 0
+                return "{$quotedColumn} = CASE WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 1 ELSE 0 END";
+
+            case Operator::TYPE_REPLACE:
+                $searchKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $replaceKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
+
+            case Operator::TYPE_ARRAY_APPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // SQLite: merge arrays by using json_group_array on extracted elements
+                // We use json_each to extract elements from both arrays and combine them
+                return "{$quotedColumn} = (
+                    SELECT json_group_array(value)
+                    FROM (
+                        SELECT value FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                        UNION ALL
+                        SELECT value FROM json_each(:$bindKey)
+                    )
+                )";
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // SQLite: prepend by extracting and recombining with new elements first
+                return "{$quotedColumn} = (
+                    SELECT json_group_array(value)
+                    FROM (
+                        SELECT value FROM json_each(:$bindKey)
+                        UNION ALL
+                        SELECT value FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                    )
+                )";
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                // SQLite: get distinct values from JSON array
+                return "{$quotedColumn} = (
+                    SELECT json_group_array(DISTINCT value)
+                    FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                )";
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // SQLite: remove specific value from array
+                return "{$quotedColumn} = (
+                    SELECT json_group_array(value)
+                    FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                    WHERE value != :$bindKey
+                )";
+
+            case Operator::TYPE_ARRAY_INSERT:
+                $indexKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // SQLite: Insert element at specific index by:
+                // 1. Take elements before index (0 to index-1)
+                // 2. Add new element
+                // 3. Take elements from index to end
+                // The bound value is JSON-encoded by parent, json() parses it back to a value,
+                // then we wrap it in json_array() and extract to get the same format as json_each()
+                return "{$quotedColumn} = (
+                    SELECT json_group_array(value)
+                    FROM (
+                        SELECT value, rownum
+                        FROM (
+                            SELECT value, (ROW_NUMBER() OVER ()) - 1 as rownum
+                            FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                        )
+                        WHERE rownum < :$indexKey
+                        UNION ALL
+                        SELECT value, :$indexKey as rownum
+                        FROM json_each(json_array(json(:$valueKey)))
+                        UNION ALL
+                        SELECT value, rownum + 1 as rownum
+                        FROM (
+                            SELECT value, (ROW_NUMBER() OVER ()) - 1 as rownum
+                            FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                        )
+                        WHERE rownum >= :$indexKey
+                        ORDER BY rownum
+                    )
+                )";
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // SQLite: keep only values that exist in both arrays
+                return "{$quotedColumn} = (
+                    SELECT json_group_array(value)
+                    FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                    WHERE value IN (SELECT value FROM json_each(:$bindKey))
+                )";
+
+            case Operator::TYPE_ARRAY_DIFF:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // SQLite: remove values that exist in the comparison array
+                return "{$quotedColumn} = (
+                    SELECT json_group_array(value)
+                    FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                    WHERE value NOT IN (SELECT value FROM json_each(:$bindKey))
+                )";
+
+            case Operator::TYPE_ARRAY_FILTER:
+                $values = $operator->getValues();
+                if (empty($values)) {
+                    // No filter criteria, return array unchanged
+                    return "{$quotedColumn} = {$quotedColumn}";
+                }
+
+                $filterType = $values[0]; // 'equals', 'notEquals', 'notNull', 'greaterThan', etc.
+
+                switch ($filterType) {
+                    case 'notNull':
+                        // Filter out null values - no bind parameter needed
+                        return "{$quotedColumn} = (
+                            SELECT json_group_array(value)
+                            FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                            WHERE value IS NOT NULL
+                        )";
+
+                    case 'equals':
+                    case 'notEquals':
+                    case 'greaterThan':
+                    case 'greaterThanOrEqual':
+                    case 'lessThan':
+                    case 'lessThanOrEqual':
+                        if (\count($values) < 2) {
+                            return "{$quotedColumn} = {$quotedColumn}";
+                        }
+
+                        $bindKey = "op_{$bindIndex}";
+                        $bindIndex++;
+
+                        $operator = match ($filterType) {
+                            'equals' => '=',
+                            'notEquals' => '!=',
+                            'greaterThan' => '>',
+                            'greaterThanOrEqual' => '>=',
+                            'lessThan' => '<',
+                            'lessThanOrEqual' => '<=',
+                            default => throw new OperatorException('Unsupported filter type: ' . $filterType),
+                        };
+
+                        return "{$quotedColumn} = (
+                            SELECT json_group_array(value)
+                            FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                            WHERE value $operator :$bindKey
+                        )";
+
+                    default:
+                        return "{$quotedColumn} = {$quotedColumn}";
+                }
+
+                // no break
+            case Operator::TYPE_DATE_ADD_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = datetime({$quotedColumn}, :$bindKey || ' days')";
+
+            case Operator::TYPE_DATE_SUB_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+
+                return "{$quotedColumn} = datetime({$quotedColumn}, '-' || abs(:$bindKey) || ' days')";
+
+            case Operator::TYPE_DATE_SET_NOW:
+                return "{$quotedColumn} = datetime('now')";
+
+            default:
+                // Fall back to parent implementation for other operators
+                return parent::getOperatorSQL($column, $operator, $bindIndex);
+        }
     }
 }

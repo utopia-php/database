@@ -8,11 +8,13 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
 class MariaDB extends SQL
@@ -1111,16 +1113,32 @@ class MariaDB extends SQL
              * Update Attributes
              */
             $bindIndex = 0;
+            $operators = [];
+
+            // Separate regular attributes from operators
+            foreach ($attributes as $attribute => $value) {
+                if (Operator::isOperator($value)) {
+                    $operators[$attribute] = $value;
+                }
+            }
+
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
-                $bindKey = 'key_' . $bindIndex;
 
-                if (in_array($attribute, $spatialAttributes)) {
-                    $columns .= "`{$column}`" . '=' . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
+                // Check if this is an operator or regular attribute
+                if (isset($operators[$attribute])) {
+                    $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+                    $columns .= $operatorSQL . ',';
                 } else {
-                    $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+                    $bindKey = 'key_' . $bindIndex;
+
+                    if (in_array($attribute, $spatialAttributes)) {
+                        $columns .= "`{$column}`" . '=' . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
+                    } else {
+                        $columns .= "`{$column}`" . '=:' . $bindKey . ',';
+                    }
+                    $bindIndex++;
                 }
-                $bindIndex++;
             }
 
             $sql = "
@@ -1143,14 +1161,19 @@ class MariaDB extends SQL
 
             $attributeIndex = 0;
             foreach ($attributes as $attribute => $value) {
-                if (is_array($value)) {
-                    $value = json_encode($value);
-                }
+                // Handle operators separately
+                if (isset($operators[$attribute])) {
+                    $this->bindOperatorParams($stmt, $operators[$attribute], $attributeIndex);
+                } else {
+                    if (is_array($value)) {
+                        $value = json_encode($value);
+                    }
 
-                $bindKey = 'key_' . $attributeIndex;
-                $value = (is_bool($value)) ? (int)$value : $value;
-                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $attributeIndex++;
+                    $bindKey = 'key_' . $attributeIndex;
+                    $value = (is_bool($value)) ? (int)$value : $value;
+                    $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                    $attributeIndex++;
+                }
             }
 
             $stmt->execute();
@@ -1176,7 +1199,9 @@ class MariaDB extends SQL
      * @param array<string> $attributes
      * @param array<mixed> $bindValues
      * @param string $attribute
+     * @param array<Operator> $operators
      * @return mixed
+     * @throws DatabaseException
      */
     public function getUpsertStatement(
         string $tableName,
@@ -1185,6 +1210,7 @@ class MariaDB extends SQL
         array $attributes,
         array $bindValues,
         string $attribute = '',
+        array $operators = []
     ): mixed {
         $getUpdateClause = function (string $attribute, bool $increment = false): string {
             $attribute = $this->quote($this->filter($attribute));
@@ -1202,6 +1228,9 @@ class MariaDB extends SQL
             return "{$attribute} = {$new}";
         };
 
+        $updateColumns = [];
+        $bindIndex = count($bindValues);
+
         if (!empty($attribute)) {
             // Increment specific column by its new value in place
             $updateColumns = [
@@ -1209,13 +1238,22 @@ class MariaDB extends SQL
                 $getUpdateClause('_updatedAt'),
             ];
         } else {
-            // Update all columns
-            $updateColumns = [];
+            // Update all columns, handling operators separately
             foreach (\array_keys($attributes) as $attr) {
                 /**
                  * @var string $attr
                  */
-                $updateColumns[] = $getUpdateClause($this->filter($attr));
+                $filteredAttr = $this->filter($attr);
+
+                // Check if this attribute has an operator
+                if (isset($operators[$attr])) {
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $bindIndex);
+                    if ($operatorSQL !== null) {
+                        $updateColumns[] = $operatorSQL;
+                    }
+                } else {
+                    $updateColumns[] = $getUpdateClause($filteredAttr);
+                }
             }
         }
 
@@ -1227,9 +1265,16 @@ class MariaDB extends SQL
                 " . \implode(', ', $updateColumns)
         );
 
+        // Bind regular attribute values
         foreach ($bindValues as $key => $binding) {
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
+
+        // Bind operator parameters
+        foreach ($operators as $attr => $operator) {
+            $this->bindOperatorParams($stmt, $operator, $bindIndex);
+        }
+
         return $stmt;
     }
 
@@ -1804,6 +1849,16 @@ class MariaDB extends SQL
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
+        // Numeric value out of range
+        if ($e->getCode() === '22003' && isset($e->errorInfo[1]) && ($e->errorInfo[1] === 1264 || $e->errorInfo[1] === 1690)) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
+        }
+
+        // Numeric value out of range
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1690) {
+            return new LimitException('Value is out of range', $e->getCode(), $e);
+        }
+
         // Unknown database
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {
             return new NotFoundException('Database not found', $e->getCode(), $e);
@@ -1832,6 +1887,175 @@ class MariaDB extends SQL
     protected function quote(string $string): string
     {
         return "`{$string}`";
+    }
+
+    /**
+     * Get operator SQL
+     * Override to handle MariaDB/MySQL-specific operators
+     *
+     * @param string $column
+     * @param Operator $operator
+     * @param int &$bindIndex
+     * @return ?string
+     */
+    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
+    {
+        $quotedColumn = $this->quote($column);
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            // Numeric operators with NULL handling and overflow prevention
+            case Operator::TYPE_INCREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
+
+            case Operator::TYPE_DECREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
+
+            case Operator::TYPE_MULTIPLY:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
+
+            case Operator::TYPE_DIVIDE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) < :$minKey * :$bindKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
+
+            case Operator::TYPE_MODULO:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
+
+            case Operator::TYPE_POWER:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey * LOG(COALESCE({$quotedColumn}, 1)) > LOG(:$maxKey) THEN :$maxKey
+                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
+                    END";
+                }
+                return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
+
+                // Boolean operator with NULL handling
+            case Operator::TYPE_TOGGLE:
+                return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
+
+            case Operator::TYPE_CONCAT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = CONCAT(COALESCE({$quotedColumn}, ''), :$bindKey)";
+
+            case Operator::TYPE_ARRAY_INSERT:
+                // Use JSON_ARRAY_INSERT for proper array insertion
+                $indexKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_ARRAY_INSERT({$quotedColumn}, CONCAT('$[', :$indexKey, ']'), JSON_EXTRACT(:$valueKey, '$'))";
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(jt1.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
+                    WHERE jt1.value IN (SELECT value FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2)
+                ), JSON_ARRAY())";
+
+            case Operator::TYPE_ARRAY_DIFF:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(jt1.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
+                    WHERE jt1.value NOT IN (SELECT value FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2)
+                ), JSON_ARRAY())";
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(DISTINCT jt.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                ), JSON_ARRAY())";
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                    WHERE value != :$bindKey
+                ), JSON_ARRAY())";
+
+            case Operator::TYPE_ARRAY_FILTER:
+                $conditionKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // Note: parent binds value as JSON-encoded, so we need to unquote it for TEXT comparison
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                    WHERE CASE :$conditionKey
+                        WHEN 'equals' THEN value = JSON_UNQUOTE(:$valueKey)
+                        WHEN 'notEquals' THEN value != JSON_UNQUOTE(:$valueKey)
+                        WHEN 'greaterThan' THEN CAST(value AS SIGNED) > JSON_UNQUOTE(:$valueKey)
+                        WHEN 'lessThan' THEN CAST(value AS SIGNED) < JSON_UNQUOTE(:$valueKey)
+                        WHEN 'null' THEN value IS NULL
+                        WHEN 'notNull' THEN value IS NOT NULL
+                        ELSE TRUE
+                    END
+                ), JSON_ARRAY())";
+
+            default:
+                // Fall back to parent implementation for other operators
+                return parent::getOperatorSQL($column, $operator, $bindIndex);
+        }
     }
 
     public function getSupportForNumericCasting(): bool

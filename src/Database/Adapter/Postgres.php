@@ -2306,12 +2306,7 @@ class Postgres extends SQL
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    // Use CASE to avoid overflow before capping
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$maxKey - COALESCE({$quotedColumn}, 0) < :$bindKey THEN :$maxKey
-                        ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
-                    END";
+                    return "{$quotedColumn} = LEAST(COALESCE({$quotedColumn}, 0) + :$bindKey, :$maxKey)";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
@@ -2321,12 +2316,7 @@ class Postgres extends SQL
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    // Use CASE to avoid underflow before capping
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN COALESCE({$quotedColumn}, 0) - :$minKey < :$bindKey THEN :$minKey
-                        ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
-                    END";
+                    return "{$quotedColumn} = GREATEST(COALESCE({$quotedColumn}, 0) - :$bindKey, :$minKey)";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
@@ -2336,14 +2326,7 @@ class Postgres extends SQL
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    // Use CASE to avoid overflow before capping
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 0
-                        WHEN :$bindKey = 0 THEN 0
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
-                        ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
-                    END";
+                    return "{$quotedColumn} = LEAST(COALESCE({$quotedColumn}, 0) * :$bindKey, :$maxKey)";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
@@ -2353,12 +2336,7 @@ class Postgres extends SQL
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    // Use CASE to avoid underflow before capping
-                    return "{$quotedColumn} = CASE
-                        WHEN :$bindKey = 0 THEN COALESCE({$quotedColumn}, 0)
-                        WHEN COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
-                        ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
-                    END";
+                    return "{$quotedColumn} = GREATEST(COALESCE({$quotedColumn}, 0) / :$bindKey, :$minKey)";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
 
@@ -2366,11 +2344,6 @@ class Postgres extends SQL
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 // PostgreSQL MOD requires compatible types - cast to numeric
-                if (isset($values[1])) {
-                    $minKey = "op_{$bindIndex}";
-                    $bindIndex++;
-                    return "{$quotedColumn} = GREATEST(MOD(COALESCE({$quotedColumn}::numeric, 0), :$bindKey::numeric), :$minKey)";
-                }
                 return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}::numeric, 0), :$bindKey::numeric)";
 
             case Operator::TYPE_POWER:
@@ -2379,14 +2352,7 @@ class Postgres extends SQL
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    // Use CASE to handle edge cases and avoid overflow
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 0
-                        WHEN COALESCE({$quotedColumn}, 0) = 1 THEN 1
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$bindKey <= 0 THEN 1
-                        ELSE LEAST(POWER(COALESCE({$quotedColumn}, 0), :$bindKey), :$maxKey)
-                    END";
+                    return "{$quotedColumn} = LEAST(POWER(COALESCE({$quotedColumn}, 0), :$bindKey), :$maxKey)";
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
@@ -2407,10 +2373,10 @@ class Postgres extends SQL
 
             case Operator::TYPE_ARRAY_UNIQUE:
                 // PostgreSQL-specific implementation for array unique
-                return "{$quotedColumn} = (
+                return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(DISTINCT value)
                     FROM jsonb_array_elements({$quotedColumn}) AS value
-                )";
+                ), '[]'::jsonb)";
 
             case Operator::TYPE_ARRAY_REMOVE:
                 $bindKey = "op_{$bindIndex}";

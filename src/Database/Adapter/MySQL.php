@@ -281,15 +281,24 @@ class MySQL extends MariaDB
         $method = $operator->getMethod();
 
         switch ($method) {
+            case Operator::TYPE_ARRAY_APPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_ARRAY_APPEND(IFNULL({$quotedColumn}, JSON_ARRAY()), '\$', JSON_EXTRACT(:$bindKey, '\$[0]'))";
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
+
             case Operator::TYPE_ARRAY_UNIQUE:
-                // MySQL doesn't support DISTINCT in JSON_ARRAYAGG, use subquery approach
-                return "{$quotedColumn} = (
+                return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(value)
                     FROM (
                         SELECT DISTINCT value
-                        FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt
+                        FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
                     ) AS distinct_values
-                )";
+                ), JSON_ARRAY())";
         }
 
         // For all other operators, use parent implementation

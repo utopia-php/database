@@ -111,25 +111,25 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_POWER:
                 // Numeric operations only work on numeric types
                 if (!\in_array($type, [Database::VAR_INTEGER, Database::VAR_FLOAT])) {
-                    $this->message = "Cannot apply {$method} to non-numeric field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-numeric field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 // Validate the numeric value and optional max/min
                 if (!isset($values[0]) || !\is_numeric($values[0])) {
-                    $this->message = "Numeric operator value must be numeric, got " . gettype($operator->getValue());
+                    $this->message = "Cannot apply {$method} operator: value must be numeric, got " . gettype($operator->getValue());
                     return false;
                 }
 
                 // Special validation for divide/modulo by zero
                 if (($method === DatabaseOperator::TYPE_DIVIDE || $method === DatabaseOperator::TYPE_MODULO) && $values[0] == 0) {
-                    $this->message = ($method === DatabaseOperator::TYPE_DIVIDE ? "Division" : "Modulo") . " by zero is not allowed";
+                    $this->message = "Cannot apply {$method} operator: " . ($method === DatabaseOperator::TYPE_DIVIDE ? "division" : "modulo") . " by zero";
                     return false;
                 }
 
                 // Validate max/min if provided
                 if (\count($values) > 1 && $values[1] !== null && !\is_numeric($values[1])) {
-                    $this->message = "Max/min limit must be numeric, got " . \gettype($values[1]);
+                    $this->message = "Cannot apply {$method} operator: max/min limit must be numeric, got " . \gettype($values[1]);
                     return false;
                 }
 
@@ -148,12 +148,12 @@ class Operator extends Validator
                     };
 
                     if ($predictedResult > Database::INT_MAX) {
-                        $this->message = "Attribute '{$operator->getAttribute()}': invalid type, value must be less than or equal to " . Database::INT_MAX;
+                        $this->message = "Cannot apply {$method} operator: would overflow maximum value of " . Database::INT_MAX;
                         return false;
                     }
 
                     if ($predictedResult < Database::INT_MIN) {
-                        $this->message = "Attribute '{$operator->getAttribute()}': invalid type, value must be greater than or equal to " . Database::INT_MIN;
+                        $this->message = "Cannot apply {$method} operator: would underflow minimum value of " . Database::INT_MIN;
                         return false;
                     }
                 }
@@ -162,7 +162,7 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_ARRAY_APPEND:
             case DatabaseOperator::TYPE_ARRAY_PREPEND:
                 if (!$isArray) {
-                    $this->message = "Cannot apply {$method} to non-array field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
 
@@ -170,7 +170,7 @@ class Operator extends Validator
                     $newItems = \is_array($values[0]) ? $values[0] : $values;
                     foreach ($newItems as $item) {
                         if (\is_numeric($item) && ($item > Database::INT_MAX || $item < Database::INT_MIN)) {
-                            $this->message = "Attribute '{$operator->getAttribute()}': invalid type, array items must be between " . Database::INT_MIN . " and " . Database::INT_MAX;
+                            $this->message = "Cannot apply {$method} operator: array items must be between " . Database::INT_MIN . " and " . Database::INT_MAX;
                             return false;
                         }
                     }
@@ -179,32 +179,32 @@ class Operator extends Validator
                 break;
             case DatabaseOperator::TYPE_ARRAY_UNIQUE:
                 if (!$isArray) {
-                    $this->message = "Cannot apply {$method} to non-array field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 break;
             case DatabaseOperator::TYPE_ARRAY_INSERT:
                 if (!$isArray) {
-                    $this->message = "Cannot use {$method} operator on non-array attribute '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 if (\count($values) !== 2) {
-                    $this->message = "Insert operator requires exactly 2 values: index and value";
+                    $this->message = "Cannot apply {$method} operator: requires exactly 2 values (index and value)";
                     return false;
                 }
 
                 $index = $values[0];
                 if (!\is_int($index) || $index < 0) {
-                    $this->message = "Insert index must be a non-negative integer";
+                    $this->message = "Cannot apply {$method} operator: index must be a non-negative integer";
                     return false;
                 }
 
                 $insertValue = $values[1];
                 if ($type === Database::VAR_INTEGER && \is_numeric($insertValue)) {
                     if ($insertValue > Database::INT_MAX || $insertValue < Database::INT_MIN) {
-                        $this->message = "Attribute '{$operator->getAttribute()}': invalid type, array items must be between " . Database::INT_MIN . " and " . Database::INT_MAX;
+                        $this->message = "Cannot apply {$method} operator: array items must be between " . Database::INT_MIN . " and " . Database::INT_MAX;
                         return false;
                     }
                 }
@@ -216,7 +216,7 @@ class Operator extends Validator
                         $arrayLength = \count($currentArray);
                         // Valid indices are 0 to length (inclusive, as we can append)
                         if ($index > $arrayLength) {
-                            $this->message = "Insert index {$index} is out of bounds for array of length {$arrayLength}";
+                            $this->message = "Cannot apply {$method} operator: index {$index} is out of bounds for array of length {$arrayLength}";
                             return false;
                         }
                     }
@@ -225,12 +225,12 @@ class Operator extends Validator
                 break;
             case DatabaseOperator::TYPE_ARRAY_REMOVE:
                 if (!$isArray) {
-                    $this->message = "Cannot use {$method} operator on non-array attribute '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 if (empty($values)) {
-                    $this->message = "Array remove operator requires a value to remove";
+                    $this->message = "Cannot apply {$method} operator: requires a value to remove";
                     return false;
                 }
 
@@ -238,7 +238,7 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_ARRAY_INTERSECT:
             case DatabaseOperator::TYPE_ARRAY_DIFF:
                 if (!$isArray) {
-                    $this->message = "Cannot use {$method} operator on non-array attribute '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
 
@@ -246,29 +246,29 @@ class Operator extends Validator
                 break;
             case DatabaseOperator::TYPE_ARRAY_FILTER:
                 if (!$isArray) {
-                    $this->message = "Cannot use {$method} operator on non-array attribute '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 if (\count($values) < 1 || \count($values) > 2) {
-                    $this->message = "Array filter operator requires 1 or 2 values: condition and optional comparison value";
+                    $this->message = "Cannot apply {$method} operator: requires 1 or 2 values (condition and optional comparison value)";
                     return false;
                 }
 
                 if (!\is_string($values[0])) {
-                    $this->message = "Array filter condition must be a string";
+                    $this->message = "Cannot apply {$method} operator: condition must be a string";
                     return false;
                 }
 
                 break;
             case DatabaseOperator::TYPE_CONCAT:
                 if ($type !== Database::VAR_STRING || $isArray) {
-                    $this->message = "Concat operator only applies to string fields";
+                    $this->message = "Cannot apply {$method} operator to non-string field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 if (empty($values) || !\is_string($values[0])) {
-                    $this->message = "String concatenation operator requires a string value";
+                    $this->message = "Cannot apply {$method} operator: requires a string value";
                     return false;
                 }
 
@@ -282,7 +282,7 @@ class Operator extends Validator
                         : ($attribute['size'] ?? 0);
 
                     if ($maxSize > 0 && $predictedLength > $maxSize) {
-                        $this->message = "Attribute '{$operator->getAttribute()}': invalid type, value must be no longer than {$maxSize} characters";
+                        $this->message = "Cannot apply {$method} operator: result would exceed maximum length of {$maxSize} characters";
                         return false;
                     }
                 }
@@ -291,12 +291,12 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_REPLACE:
                 // Replace only works on string types
                 if ($type !== Database::VAR_STRING) {
-                    $this->message = "Cannot apply replace to non-string field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-string field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 if (\count($values) !== 2 || !\is_string($values[0]) || !\is_string($values[1])) {
-                    $this->message = "Replace operator requires exactly 2 string values: search and replace";
+                    $this->message = "Cannot apply {$method} operator: requires exactly 2 string values (search and replace)";
                     return false;
                 }
 
@@ -304,7 +304,7 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_TOGGLE:
                 // Toggle only works on boolean types
                 if ($type !== Database::VAR_BOOLEAN) {
-                    $this->message = "Cannot apply toggle to non-boolean field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-boolean field '{$operator->getAttribute()}'";
                     return false;
                 }
 
@@ -312,25 +312,25 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_DATE_ADD_DAYS:
             case DatabaseOperator::TYPE_DATE_SUB_DAYS:
                 if ($type !== Database::VAR_DATETIME) {
-                    $this->message = "Invalid date format in field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-datetime field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 if (empty($values) || !\is_int($values[0])) {
-                    $this->message = "Date operator requires an integer number of days";
+                    $this->message = "Cannot apply {$method} operator: requires an integer number of days";
                     return false;
                 }
 
                 break;
             case DatabaseOperator::TYPE_DATE_SET_NOW:
                 if ($type !== Database::VAR_DATETIME) {
-                    $this->message = "Invalid date format in field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot apply {$method} operator to non-datetime field '{$operator->getAttribute()}'";
                     return false;
                 }
 
                 break;
             default:
-                $this->message = "Unsupported operator method: {$method}";
+                $this->message = "Cannot apply {$method} operator: unsupported operator method";
                 return false;
         }
 

@@ -414,7 +414,7 @@ trait OperatorTests
 
         // Test increment on non-numeric field
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage("Cannot apply increment to non-numeric field 'text_field'");
+        $this->expectExceptionMessage("Cannot apply increment operator to non-numeric field 'text_field'");
 
         $database->updateDocument($collectionId, 'error_test_doc', new Document([
             'text_field' => Operator::increment(1)
@@ -445,7 +445,7 @@ trait OperatorTests
 
         // Test append on non-array field
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage("Cannot apply arrayAppend to non-array field 'text_field'");
+        $this->expectExceptionMessage("Cannot apply arrayAppend operator to non-array field 'text_field'");
 
         $database->updateDocument($collectionId, 'array_error_test_doc', new Document([
             'text_field' => Operator::arrayAppend(['new_item'])
@@ -474,7 +474,7 @@ trait OperatorTests
 
         // Test insert with negative index
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage("Insert index must be a non-negative integer");
+        $this->expectExceptionMessage("Cannot apply arrayInsert operator: index must be a non-negative integer");
 
         $database->updateDocument($collectionId, 'insert_error_test_doc', new Document([
             'array_field' => Operator::arrayInsert(-1, 'new_item')
@@ -522,7 +522,7 @@ trait OperatorTests
             ]));
             $this->fail('Expected exception for increment on string field');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Cannot apply increment to non-numeric field 'string_field'", $e->getMessage());
+            $this->assertStringContainsString("Cannot apply increment operator to non-numeric field 'string_field'", $e->getMessage());
         }
 
         // Test: String operator on numeric field
@@ -532,7 +532,7 @@ trait OperatorTests
             ]));
             $this->fail('Expected exception for concat on integer field');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Cannot apply concat", $e->getMessage());
+            $this->assertStringContainsString("Cannot apply concat operator", $e->getMessage());
         }
 
         // Test: Array operator on non-array field
@@ -542,7 +542,7 @@ trait OperatorTests
             ]));
             $this->fail('Expected exception for arrayAppend on string field');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Cannot apply arrayAppend to non-array field 'string_field'", $e->getMessage());
+            $this->assertStringContainsString("Cannot apply arrayAppend operator to non-array field 'string_field'", $e->getMessage());
         }
 
         // Test: Boolean operator on non-boolean field
@@ -552,7 +552,7 @@ trait OperatorTests
             ]));
             $this->fail('Expected exception for toggle on integer field');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Cannot apply toggle to non-boolean field 'int_field'", $e->getMessage());
+            $this->assertStringContainsString("Cannot apply toggle operator to non-boolean field 'int_field'", $e->getMessage());
         }
 
         // Test: Date operator on non-date field
@@ -563,7 +563,7 @@ trait OperatorTests
             $this->fail('Expected exception for dateAddDays on string field');
         } catch (DatabaseException $e) {
             // Date operators check if string can be parsed as date
-            $this->assertStringContainsString("Invalid date format in field 'string_field'", $e->getMessage());
+            $this->assertStringContainsString("Cannot apply dateAddDays operator to non-datetime field 'string_field'", $e->getMessage());
         }
 
         $database->deleteCollection($collectionId);
@@ -641,7 +641,7 @@ trait OperatorTests
             ]));
             $this->fail('Expected exception for out of bounds insert');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Insert index 10 is out of bounds for array of length 3", $e->getMessage());
+            $this->assertStringContainsString("Cannot apply arrayInsert operator: index 10 is out of bounds for array of length 3", $e->getMessage());
         }
 
         // Test: Insert at valid index (end)
@@ -772,7 +772,7 @@ trait OperatorTests
             ]));
             $this->fail('Expected exception for replace on integer field');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Cannot apply replace to non-string field 'number'", $e->getMessage());
+            $this->assertStringContainsString("Cannot apply replace operator to non-string field 'number'", $e->getMessage());
         }
 
         // Test: Replace with empty string

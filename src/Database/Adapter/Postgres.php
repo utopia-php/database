@@ -147,15 +147,16 @@ class Postgres extends SQL
             ->prepare($sql)
             ->execute();
 
-        // extension for supporting spatial types
-        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis;')->execute();
+        // Enable extensions
+        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis')->execute();
+        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS vector')->execute();
 
         $collation = "
             CREATE COLLATION IF NOT EXISTS utf8_ci_ai (
             provider = icu,
             locale = 'und-u-ks-level1',
             deterministic = false
-            );
+            )
         ";
         $this->getPDO()->prepare($collation)->execute();
         return $dbCreation;
@@ -200,10 +201,6 @@ class Postgres extends SQL
                 $hasVectorAttributes = true;
                 break;
             }
-        }
-
-        if ($hasVectorAttributes) {
-            $this->ensurePgVectorExtension();
         }
 
         /** @var array<string> $attributeStrings */
@@ -461,7 +458,6 @@ class Postgres extends SQL
             if ($size > Database::MAX_VECTOR_DIMENSIONS) {
                 throw new DatabaseException('Vector dimensions cannot exceed ' . Database::MAX_VECTOR_DIMENSIONS);
             }
-            $this->ensurePgVectorExtension();
         }
 
         $name = $this->filter($collection);
@@ -572,7 +568,6 @@ class Postgres extends SQL
             if ($size > Database::MAX_VECTOR_DIMENSIONS) {
                 throw new DatabaseException('Vector dimensions cannot exceed ' . Database::MAX_VECTOR_DIMENSIONS);
             }
-            $this->ensurePgVectorExtension();
         }
 
         $type = $this->getSQLType(
@@ -1836,22 +1831,6 @@ class Postgres extends SQL
         }
 
         return "\"{$this->getDatabase()}\".";
-    }
-
-    /**
-     * Ensure pgvector extension is installed
-     *
-     * @return void
-     * @throws DatabaseException
-     */
-    private function ensurePgVectorExtension(): void
-    {
-        try {
-            $stmt = $this->getPDO()->prepare("CREATE EXTENSION IF NOT EXISTS vector");
-            $this->execute($stmt);
-        } catch (PDOException $e) {
-            throw new DatabaseException('Failed to install pgvector extension: ' . $e->getMessage(), $e->getCode(), $e);
-        }
     }
 
     /**

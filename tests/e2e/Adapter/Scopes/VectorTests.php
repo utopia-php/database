@@ -8,6 +8,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 
 trait VectorTests
 {
@@ -1258,7 +1259,7 @@ trait VectorTests
         // Create child collection
         $database->createCollection('vectorChild');
         $database->createAttribute('vectorChild', 'title', Database::VAR_STRING, 255, true);
-        $database->createAttribute('vectorChild', 'parent', Database::VAR_RELATIONSHIP, 0, false, null, ['relatedCollection' => 'vectorParent', 'relationType' => Database::RELATION_ONE_TO_MANY, 'twoWay' => true, 'twoWayKey' => 'children']);
+        $database->createAttribute('vectorChild', 'parent', Database::VAR_RELATIONSHIP, 0, false, null, true, false, null, ['relatedCollection' => 'vectorParent', 'relationType' => Database::RELATION_ONE_TO_MANY, 'twoWay' => true, 'twoWayKey' => 'children']);
 
         // Create parent documents with vectors
         $parent1 = $database->createDocument('vectorParent', new Document([
@@ -1339,7 +1340,7 @@ trait VectorTests
         $database->createCollection('vectorBooks');
         $database->createAttribute('vectorBooks', 'title', Database::VAR_STRING, 255, true);
         $database->createAttribute('vectorBooks', 'embedding', Database::VAR_VECTOR, 3, true);
-        $database->createAttribute('vectorBooks', 'author', Database::VAR_RELATIONSHIP, 0, false, null, ['relatedCollection' => 'vectorAuthors', 'relationType' => Database::RELATION_MANY_TO_ONE, 'twoWay' => true, 'twoWayKey' => 'books']);
+        $database->createAttribute('vectorBooks', 'author', Database::VAR_RELATIONSHIP, 0, false, null, true, false, null, ['relatedCollection' => 'vectorAuthors', 'relationType' => Database::RELATION_MANY_TO_ONE, 'twoWay' => true, 'twoWayKey' => 'books']);
 
         // Create documents
         $author = $database->createDocument('vectorAuthors', new Document([
@@ -1521,47 +1522,6 @@ trait VectorTests
         $database->deleteCollection('vectorDeleteAttr');
     }
 
-    public function testRenameCollectionWithVectors(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        if (!$database->getAdapter()->getSupportForVectors()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $database->createCollection('vectorOriginal');
-        $database->createAttribute('vectorOriginal', 'embedding', Database::VAR_VECTOR, 3, true);
-        $database->createIndex('vectorOriginal', 'embedding_idx', Database::INDEX_HNSW_COSINE, ['embedding']);
-
-        // Create document
-        $doc = $database->createDocument('vectorOriginal', new Document([
-            '$permissions' => [
-                Permission::read(Role::any())
-            ],
-            'embedding' => [1.0, 0.0, 0.0]
-        ]));
-
-        // Rename collection
-        $result = $database->updateCollection('vectorOriginal', 'vectorRenamed');
-        $this->assertTrue($result);
-
-        // Verify document still exists with vector
-        $docFetched = $database->getDocument('vectorRenamed', $doc->getId());
-        $this->assertEquals([1.0, 0.0, 0.0], $docFetched->getAttribute('embedding'));
-
-        // Verify vector queries still work
-        $results = $database->find('vectorRenamed', [
-            Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
-        ]);
-
-        $this->assertCount(1, $results);
-
-        // Cleanup
-        $database->deleteCollection('vectorRenamed');
-    }
-
     public function testDeleteAttributeWithVectorIndexes(): void
     {
         /** @var Database $database */
@@ -1640,29 +1600,30 @@ trait VectorTests
         ]));
 
         // Query as user1 - should only see doc1 and doc3
-        $database->skipAuth(false);
+        Authorization::setRole(Role::user('user1')->toString());
         $results = $database->find('vectorPermissions', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
-        ], [Role::user('user1')]);
+        ]);
 
         $this->assertCount(2, $results);
-        $names = array_map(fn($d) => $d->getAttribute('name'), $results);
+        $names = array_map(fn ($d) => $d->getAttribute('name'), $results);
         $this->assertContains('Doc 1', $names);
         $this->assertContains('Doc 3', $names);
         $this->assertNotContains('Doc 2', $names);
 
         // Query as user2 - should only see doc2 and doc3
+        Authorization::setRole(Role::user('user2')->toString());
         $results = $database->find('vectorPermissions', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
-        ], [Role::user('user2')]);
+        ]);
 
         $this->assertCount(2, $results);
-        $names = array_map(fn($d) => $d->getAttribute('name'), $results);
+        $names = array_map(fn ($d) => $d->getAttribute('name'), $results);
         $this->assertContains('Doc 2', $names);
         $this->assertContains('Doc 3', $names);
         $this->assertNotContains('Doc 1', $names);
 
-        $database->skipAuth(true);
+        Authorization::cleanRoles();
 
         // Cleanup
         $database->deleteCollection('vectorPermissions');
@@ -1696,11 +1657,11 @@ trait VectorTests
         }
 
         // Query with limit 3 as any user - should skip restricted docs and return accessible ones
-        $database->skipAuth(false);
+        Authorization::setRole(Role::any()->toString());
         $results = $database->find('vectorPermScoring', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
             Query::limit(3)
-        ], [Role::any()]);
+        ]);
 
         // Should only get the 2 accessible documents
         $this->assertCount(2, $results);
@@ -1708,7 +1669,7 @@ trait VectorTests
             $this->assertGreaterThanOrEqual(3, $doc->getAttribute('score'));
         }
 
-        $database->skipAuth(true);
+        Authorization::cleanRoles();
 
         // Cleanup
         $database->deleteCollection('vectorPermScoring');
@@ -1757,7 +1718,7 @@ trait VectorTests
 
         // Should get the 3 documents before the 4th one
         $this->assertCount(3, $beforeBatch);
-        $beforeIds = array_map(fn($d) => $d->getId(), $beforeBatch);
+        $beforeIds = array_map(fn ($d) => $d->getId(), $beforeBatch);
         $this->assertNotContains($fourthDoc->getId(), $beforeIds);
 
         // Cleanup

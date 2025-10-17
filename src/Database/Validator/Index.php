@@ -9,6 +9,8 @@ use Utopia\Validator;
 
 class Index extends Validator
 {
+    protected string $message = 'Invalid index';
+
     /**
      * @var array<Document> $attributes
      */

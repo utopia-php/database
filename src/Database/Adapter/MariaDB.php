@@ -1894,14 +1894,19 @@ class MariaDB extends SQL
         $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators with NULL handling
+            // Numeric operators with NULL handling and overflow prevention
             case Operator::TYPE_INCREMENT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = LEAST(COALESCE({$quotedColumn}, 0) + :$bindKey, :$maxKey)";
+                    // Use CASE to avoid overflow before capping
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN :$maxKey - COALESCE({$quotedColumn}, 0) < :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
+                    END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
@@ -1911,7 +1916,12 @@ class MariaDB extends SQL
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = GREATEST(COALESCE({$quotedColumn}, 0) - :$bindKey, :$minKey)";
+                    // Use CASE to avoid underflow before capping
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) - :$minKey < :$bindKey THEN :$minKey
+                        ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
+                    END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
@@ -1921,7 +1931,13 @@ class MariaDB extends SQL
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = LEAST(COALESCE({$quotedColumn}, 0) * :$bindKey, :$maxKey)";
+                    // Use CASE to avoid overflow
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 0
+                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN :$maxKey / COALESCE({$quotedColumn}, 1) < :$bindKey THEN :$maxKey
+                        ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
+                    END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
@@ -1946,7 +1962,12 @@ class MariaDB extends SQL
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = LEAST(POWER(COALESCE({$quotedColumn}, 0), :$bindKey), :$maxKey)";
+                    // Use CASE to avoid overflow before capping
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$quotedColumn}, 0) = 0 THEN CASE WHEN :$bindKey = 0 THEN 1 ELSE 0 END
+                        WHEN POWER(COALESCE({$quotedColumn}, 0), :$bindKey) > :$maxKey THEN :$maxKey
+                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
+                    END";
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
@@ -1967,24 +1988,53 @@ class MariaDB extends SQL
                 $bindIndex++;
                 return "{$quotedColumn} = COALESCE((
                     SELECT JSON_ARRAYAGG(jt1.value)
-                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value JSON PATH '\$')) AS jt1
-                    WHERE JSON_CONTAINS(JSON_EXTRACT(:$bindKey, '$'), jt1.value)
-                ), CAST('[]' AS JSON))";
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
+                    WHERE jt1.value IN (SELECT value FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2)
+                ), JSON_ARRAY())";
 
             case Operator::TYPE_ARRAY_DIFF:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = COALESCE((
                     SELECT JSON_ARRAYAGG(jt1.value)
-                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value JSON PATH '\$')) AS jt1
-                    WHERE NOT JSON_CONTAINS(JSON_EXTRACT(:$bindKey, '$'), jt1.value)
-                ), CAST('[]' AS JSON))";
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
+                    WHERE jt1.value NOT IN (SELECT value FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2)
+                ), JSON_ARRAY())";
 
             case Operator::TYPE_ARRAY_UNIQUE:
-                return "{$quotedColumn} = (
+                return "{$quotedColumn} = COALESCE((
                     SELECT JSON_ARRAYAGG(DISTINCT jt.value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
-                )";
+                ), JSON_ARRAY())";
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE((
+                    SELECT JSON_ARRAYAGG(value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                    WHERE value != :$bindKey
+                ), JSON_ARRAY())";
+
+            case Operator::TYPE_ARRAY_FILTER:
+                $conditionKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // Note: parent binds value as JSON-encoded, so we need to unquote it for TEXT comparison
+                return "{$quotedColumn} = COALESCE((
+                    SELECT JSON_ARRAYAGG(value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                    WHERE CASE :$conditionKey
+                        WHEN 'equals' THEN value = JSON_UNQUOTE(:$valueKey)
+                        WHEN 'notEquals' THEN value != JSON_UNQUOTE(:$valueKey)
+                        WHEN 'greaterThan' THEN CAST(value AS SIGNED) > JSON_UNQUOTE(:$valueKey)
+                        WHEN 'lessThan' THEN CAST(value AS SIGNED) < JSON_UNQUOTE(:$valueKey)
+                        WHEN 'null' THEN value IS NULL
+                        WHEN 'notNull' THEN value IS NOT NULL
+                        ELSE TRUE
+                    END
+                ), JSON_ARRAY())";
 
             default:
                 // Fall back to parent implementation for other operators

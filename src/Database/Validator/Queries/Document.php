@@ -11,9 +11,10 @@ class Document extends Queries
 {
     /**
      * @param array<mixed> $attributes
+     * @param bool $supportForAttributes
      * @throws Exception
      */
-    public function __construct(array $attributes)
+    public function __construct(array $attributes, bool $supportForAttributes = true)
     {
         $attributes[] = new \Utopia\Database\Document([
             '$id' => '$id',
@@ -35,7 +36,7 @@ class Document extends Queries
         ]);
 
         $validators = [
-            new Select($attributes),
+            new Select($attributes, $supportForAttributes),
         ];
 
         parent::__construct($validators);

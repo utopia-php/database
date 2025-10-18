@@ -106,6 +106,7 @@ class Structure extends Validator
         private readonly string $idAttributeType,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+        private bool $supportForAttributes = true
     ) {
     }
 
@@ -251,7 +252,11 @@ class Structure extends Validator
      */
     protected function checkForAllRequiredValues(array $structure, array $attributes, array &$keys): bool
     {
-        foreach ($attributes as $key => $attribute) { // Check all required attributes are set
+        if (!$this->supportForAttributes) {
+            return true;
+        }
+
+        foreach ($attributes as $attribute) { // Check all required attributes are set
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
 
@@ -276,6 +281,9 @@ class Structure extends Validator
      */
     protected function checkForUnknownAttributes(array $structure, array $keys): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
         foreach ($structure as $key => $value) {
             if (!array_key_exists($key, $keys)) { // Check no unknown attributes are set
                 $this->message = 'Unknown attribute: "'.$key.'"';
@@ -361,8 +369,10 @@ class Structure extends Validator
                     break;
 
                 default:
-                    $this->message = 'Unknown attribute type "'.$type.'"';
-                    return false;
+                    if ($this->supportForAttributes) {
+                        $this->message = 'Unknown attribute type "'.$type.'"';
+                        return false;
+                    }
             }
 
             /** Error message label, either 'format' or 'type' */

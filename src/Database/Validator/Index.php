@@ -18,22 +18,30 @@ class Index extends Validator
 
     /**
      * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @param int $maxLength
      * @param array<string> $reservedKeys
      * @param bool $supportForArrayIndexes
      * @param bool $supportForSpatialIndexNull
      * @param bool $supportForSpatialIndexOrder
      * @param bool $supportForVectorIndexes
+     * @param bool $supportForAttributes
+     * @param bool $supportForMultipleFulltextIndexes
+     * @param bool $supportForIdenticalIndexes
      * @throws DatabaseException
      */
     public function __construct(
         array $attributes,
+        protected array $indexes,
         protected int $maxLength,
         protected array $reservedKeys = [],
         protected bool $supportForArrayIndexes = false,
         protected bool $supportForSpatialIndexNull = false,
         protected bool $supportForSpatialIndexOrder = false,
         protected bool $supportForVectorIndexes = false,
+        protected bool $supportForAttributes = true,
+        protected bool $supportForMultipleFulltextIndexes = true,
+        protected bool $supportForIdenticalIndexes = true,
     ) {
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -61,7 +69,7 @@ class Index extends Validator
     public function checkAttributesNotFound(Document $index): bool
     {
         foreach ($index->getAttribute('attributes', []) as $attribute) {
-            if (!isset($this->attributes[\strtolower($attribute)])) {
+            if ($this->supportForAttributes && !isset($this->attributes[\strtolower($attribute)])) {
                 $this->message = 'Invalid index attribute "' . $attribute . '" not found';
                 return false;
             }
@@ -109,11 +117,14 @@ class Index extends Validator
      */
     public function checkFulltextIndexNonString(Document $index): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
         if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
             foreach ($index->getAttribute('attributes', []) as $attribute) {
                 $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
                 if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
-                    $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a FULLTEXT index, must be of type string';
+                    $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a fulltext index, must be of type string';
                     return false;
                 }
             }
@@ -127,6 +138,9 @@ class Index extends Validator
      */
     public function checkArrayIndex(Document $index): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
         $attributes = $index->getAttribute('attributes', []);
         $orders = $index->getAttribute('orders', []);
         $lengths = $index->getAttribute('lengths', []);
@@ -178,6 +192,10 @@ class Index extends Validator
     public function checkIndexLength(Document $index): bool
     {
         if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
+            return true;
+        }
+
+        if (!$this->supportForAttributes) {
             return true;
         }
 

@@ -72,16 +72,19 @@ jobs:
       matrix:
         adapter:
           [
+            MongoDB,
             MariaDB,
             MySQL,
             Postgres,
             SQLite,
             Mirror,
             Pool,
+            SharedTables/MongoDB,
             SharedTables/MariaDB,
             SharedTables/MySQL,
             SharedTables/Postgres,
             SharedTables/SQLite,
+            Schemaless/MongoDB,
           ]
 
     steps:

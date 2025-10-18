@@ -5371,16 +5371,11 @@ trait DocumentTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        $sequence = '200';
-        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_UUID7) {
-            $sequence = '01890dd5-7331-7f3a-9c1b-123456789abc' ;
-        }
-
         $document->setAttribute('$id', 'caseSensitive');
-        $document->setAttribute('$sequence', $sequence);
-        $database->createDocument($document->getCollection(), $document);
+        $document->removeAttribute('$sequence');
 
         $database->createDocument($document->getCollection(), $document);
+
         $document->setAttribute('$id', 'CaseSensitive');
         $document->removeAttribute('$sequence');
 

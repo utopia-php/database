@@ -6805,7 +6805,7 @@ class Database
      */
     public function purgeCachedDocument(string $collectionId, ?string $id): bool
     {
-        if ($id === null){
+        if ($id === null) {
             return true;
         }
 

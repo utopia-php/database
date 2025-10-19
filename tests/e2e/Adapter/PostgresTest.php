@@ -71,4 +71,5 @@ class PostgresTest extends Base
 
         return true;
     }
+
 }

@@ -6,8 +6,8 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Pools\Pool as UtopiaPool;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Pools\Pool as UtopiaPool;
 
 class Pool extends Adapter
 {

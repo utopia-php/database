@@ -7,6 +7,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Pools\Pool as UtopiaPool;
+use Utopia\Database\Validator\Authorization;
 
 class Pool extends Adapter
 {
@@ -575,7 +576,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function setAuthorization(\Utopia\Database\Validator\Authorization $authorization): self
+    public function setAuthorization(Authorization $authorization): self
     {
         $this->authorization = $authorization;
         return $this;

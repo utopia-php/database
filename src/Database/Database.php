@@ -6799,12 +6799,16 @@ class Database
      * And related document reference in the collection cache.
      *
      * @param string $collectionId
-     * @param string $id
+     * @param string|null $id
      * @return bool
      * @throws Exception
      */
-    public function purgeCachedDocument(string $collectionId, string $id): bool
+    public function purgeCachedDocument(string $collectionId, ?string $id): bool
     {
+        if ($id === null){
+            return true;
+        }
+
         [$collectionKey, $documentKey] = $this->getCacheKeys($collectionId, $id);
 
         $this->cache->purge($collectionKey, $documentKey);

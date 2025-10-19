@@ -1102,7 +1102,7 @@ class Mirror extends Database
 
     public function setAuthorization(Authorization $authorization): self
     {
-     
+
         parent::setAuthorization($authorization);
 
         if (isset($this->source)) {
@@ -1111,7 +1111,7 @@ class Mirror extends Database
         if (isset($this->destination)) {
             $this->destination->setAuthorization($authorization);
         }
-        
+
         return $this;
     }
 }

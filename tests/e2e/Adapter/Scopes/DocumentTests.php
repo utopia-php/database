@@ -3943,7 +3943,7 @@ trait DocumentTests
         $this->assertEquals(2019, $sum);
 
         $this->getDatabase()->getAuthorization()->removeRole('user:x');
-        $this->getDatabase()->getAuthorization()->removeRole('userx');
+    
         $sum = $database->sum('movies', 'year', [Query::equal('year', [2019]),]);
         $this->assertEquals(2019 + 2019, $sum);
         $sum = $database->sum('movies', 'year');

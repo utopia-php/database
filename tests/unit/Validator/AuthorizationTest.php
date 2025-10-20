@@ -49,10 +49,10 @@ class AuthorizationTest extends TestCase
         $this->authorization->addRole(Role::user('456')->toString());
         $this->authorization->addRole(Role::user('123')->toString());
 
-        $this->assertEquals($this->authorization->isRole(Role::user('456')->toString()), true);
-        $this->assertEquals($this->authorization->isRole(Role::user('457')->toString()), false);
-        $this->assertEquals($this->authorization->isRole(''), false);
-        $this->assertEquals($this->authorization->isRole(Role::any()->toString()), true);
+        $this->assertEquals($this->authorization->hasRole(Role::user('456')->toString()), true);
+        $this->assertEquals($this->authorization->hasRole(Role::user('457')->toString()), false);
+        $this->assertEquals($this->authorization->hasRole(''), false);
+        $this->assertEquals($this->authorization->hasRole(Role::any()->toString()), true);
 
         $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), true);
 

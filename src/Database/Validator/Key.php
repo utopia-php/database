@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Database;
 use Utopia\Validator;
 
 class Key extends Validator
@@ -24,8 +25,8 @@ class Key extends Validator
      * Expression constructor
      */
     public function __construct(
-        private readonly bool $allowInternal = false,
-        private readonly int $maxLength = 36,
+        protected readonly bool $allowInternal = false,
+        protected readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH,
     ) {
         $this->message = 'Parameter must contain at most ' . $this->maxLength . ' chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char';
     }

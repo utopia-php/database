@@ -2,12 +2,14 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Database;
+
 class UID extends Key
 {
     /**
      * Expression constructor
      */
-    public function __construct(int $maxLength = 36)
+    public function __construct(int $maxLength = Database::MAX_UID_DEFAULT_LENGTH)
     {
         parent::__construct(false, $maxLength);
     }

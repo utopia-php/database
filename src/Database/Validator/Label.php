@@ -2,10 +2,14 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Database;
+
 class Label extends Key
 {
-    public function __construct(bool $allowInternal = false, int $maxLength = 255)
-    {
+    public function __construct(
+        bool $allowInternal = false,
+        int $maxLength = Database::MAX_UID_DEFAULT_LENGTH
+    ) {
         parent::__construct($allowInternal, $maxLength);
         $this->message = 'Value must be a valid string between 1 and ' . $this->maxLength . ' chars containing only alphanumeric chars';
     }

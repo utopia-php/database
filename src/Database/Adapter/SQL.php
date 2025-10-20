@@ -1850,11 +1850,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * @return int
-     */
-    abstract public function getMaxVarcharLength(): int;
-
-    /**
      * Size of POINT spatial type
      *
      * @return int

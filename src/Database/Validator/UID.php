@@ -7,7 +7,7 @@ class UID extends Key
     /**
      * Expression constructor
      */
-    public function __construct(int $maxLength = 255)
+    public function __construct(int $maxLength = 36)
     {
         parent::__construct(false, $maxLength);
     }

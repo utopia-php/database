@@ -5151,6 +5151,7 @@ class Database
                 $indexes,
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes()
@@ -6710,6 +6711,7 @@ class Database
                 $indexes,
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes()
@@ -6908,6 +6910,7 @@ class Database
                 $indexes,
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes()
@@ -7139,6 +7142,7 @@ class Database
                 $indexes,
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes()
@@ -7204,6 +7208,7 @@ class Database
                 $indexes,
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes()

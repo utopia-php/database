@@ -66,8 +66,8 @@ class KeyTest extends TestCase
         $this->assertEquals(false, $this->object->isValid('as+5dasdasdas'));
         $this->assertEquals(false, $this->object->isValid('as=5dasdasdas'));
 
-        // At most 255 chars
-        $this->assertEquals(true, $this->object->isValid(str_repeat('a', 255)));
+        // At most 36 chars
+        $this->assertEquals(true, $this->object->isValid(str_repeat('a', 36)));
         $this->assertEquals(false, $this->object->isValid(str_repeat('a', 256)));
 
         // Internal keys

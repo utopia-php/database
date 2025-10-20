@@ -621,10 +621,7 @@ class SQLite extends MariaDB
                 $stmtPermissions->execute();
             }
         } catch (PDOException $e) {
-            throw match ($e->getCode()) {
-                "1062", "23000" => new DuplicateException('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            throw $this->processException($e);
         }
 
 
@@ -870,11 +867,7 @@ class SQLite extends MariaDB
                 $stmtAddPermissions->execute();
             }
         } catch (PDOException $e) {
-            throw match ($e->getCode()) {
-                '1062',
-                '23000' => new DuplicateException('Duplicated document: ' . $e->getMessage()),
-                default => $e,
-            };
+            throw $this->processException($e);
         }
 
         return $document;
@@ -1280,11 +1273,6 @@ class SQLite extends MariaDB
         // Duplicate
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1) {
             return new DuplicateException('Document already exists', $e->getCode(), $e);
-        }
-
-        // Numeric value out of range
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 25) {
-            return new LimitException('Value out of range', $e->getCode(), $e);
         }
 
         // String or BLOB exceeds size limit

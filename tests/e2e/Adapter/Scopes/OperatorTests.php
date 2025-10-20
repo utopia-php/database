@@ -2037,7 +2037,7 @@ trait OperatorTests
 
         $this->assertEquals(95, $doc->getAttribute('score'));
 
-        // Test case 1: Small increment that stays within INT_MAX should work
+        // Test case 1: Small increment that stays within MAX_INT should work
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'score' => Operator::increment(5)
         ]));
@@ -2045,37 +2045,37 @@ trait OperatorTests
         $updated = $database->getDocument($collectionId, $doc->getId());
         $this->assertEquals(100, $updated->getAttribute('score'));
 
-        // Test case 2: Increment that would exceed Database::INT_MAX (2147483647)
-        // This is the bug - the operator will create a value > INT_MAX which should be rejected
+        // Test case 2: Increment that would exceed Database::MAX_INT (2147483647)
+        // This is the bug - the operator will create a value > MAX_INT which should be rejected
         // but post-operator validation is missing
         $doc2 = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'score' => Database::INT_MAX - 10 // Start near the maximum
+            'score' => Database::MAX_INT - 10 // Start near the maximum
         ]));
 
-        $this->assertEquals(Database::INT_MAX - 10, $doc2->getAttribute('score'));
+        $this->assertEquals(Database::MAX_INT - 10, $doc2->getAttribute('score'));
 
-        // BUG EXPOSED: This increment will push the value beyond Database::INT_MAX
+        // BUG EXPOSED: This increment will push the value beyond Database::MAX_INT
         // It should throw a StructureException for exceeding the integer range,
         // but currently succeeds because validation happens before operator application
         try {
             $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-                'score' => Operator::increment(20) // Will result in INT_MAX + 10
+                'score' => Operator::increment(20) // Will result in MAX_INT + 10
             ]));
 
             // Refetch to get the actual computed value from the database
             $refetched = $database->getDocument($collectionId, $doc2->getId());
             $finalScore = $refetched->getAttribute('score');
 
-            // Document the bug: The value should not exceed INT_MAX
+            // Document the bug: The value should not exceed MAX_INT
             $this->assertLessThanOrEqual(
-                Database::INT_MAX,
+                Database::MAX_INT,
                 $finalScore,
-                "BUG EXPOSED: INCREMENT pushed score to {$finalScore}, exceeding INT_MAX (" . Database::INT_MAX . "). Post-operator validation is missing!"
+                "BUG EXPOSED: INCREMENT pushed score to {$finalScore}, exceeding MAX_INT (" . Database::MAX_INT . "). Post-operator validation is missing!"
             );
         } catch (StructureException $e) {
             // This is the CORRECT behavior - validation should catch the constraint violation
-            $this->assertStringContainsString('invalid type', $e->getMessage());
+            $this->assertStringContainsString('overflow maximum value', $e->getMessage());
         }
 
         $database->deleteCollection($collectionId);
@@ -2129,7 +2129,7 @@ trait OperatorTests
             );
         } catch (StructureException $e) {
             // This is the CORRECT behavior - validation should catch the length violation
-            $this->assertStringContainsString('invalid type', $e->getMessage());
+            $this->assertStringContainsString('exceed maximum length', $e->getMessage());
         }
 
         $database->deleteCollection($collectionId);
@@ -2149,10 +2149,10 @@ trait OperatorTests
         $collectionId = 'test_multiply_range_violation';
         $database->createCollection($collectionId);
 
-        // Create a signed integer attribute (max value = Database::INT_MAX = 2147483647)
+        // Create a signed integer attribute (max value = Database::MAX_INT = 2147483647)
         $database->createAttribute($collectionId, 'quantity', Database::VAR_INTEGER, 4, false, 1, false, false);
 
-        // Create a document with quantity that when multiplied will exceed INT_MAX
+        // Create a document with quantity that when multiplied will exceed MAX_INT
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'quantity' => 1000000000  // 1 billion
@@ -2160,23 +2160,23 @@ trait OperatorTests
 
         $this->assertEquals(1000000000, $doc->getAttribute('quantity'));
 
-        // BUG EXPOSED: Multiply by 10 to get 10 billion, which exceeds INT_MAX (2.147 billion)
+        // BUG EXPOSED: Multiply by 10 to get 10 billion, which exceeds MAX_INT (2.147 billion)
         // This should throw a StructureException for exceeding the integer range,
         // but currently may succeed or cause overflow because validation is missing
         try {
             $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-                'quantity' => Operator::multiply(10)  // 1,000,000,000 * 10 = 10,000,000,000 > INT_MAX
+                'quantity' => Operator::multiply(10)  // 1,000,000,000 * 10 = 10,000,000,000 > MAX_INT
             ]));
 
             // Refetch to get the actual computed value from the database
             $refetched = $database->getDocument($collectionId, $doc->getId());
             $finalQuantity = $refetched->getAttribute('quantity');
 
-            // Document the bug: The value should not exceed INT_MAX
+            // Document the bug: The value should not exceed MAX_INT
             $this->assertLessThanOrEqual(
-                Database::INT_MAX,
+                Database::MAX_INT,
                 $finalQuantity,
-                "BUG EXPOSED: MULTIPLY created value {$finalQuantity}, exceeding INT_MAX (" . Database::INT_MAX . "). Post-operator validation is missing!"
+                "BUG EXPOSED: MULTIPLY created value {$finalQuantity}, exceeding MAX_INT (" . Database::MAX_INT . "). Post-operator validation is missing!"
             );
 
             // Also verify the value didn't overflow into negative (integer overflow behavior)
@@ -2187,7 +2187,7 @@ trait OperatorTests
             );
         } catch (StructureException $e) {
             // This is the CORRECT behavior - validation should catch the range violation
-            $this->assertStringContainsString('invalid type', $e->getMessage());
+            $this->assertStringContainsString('overflow maximum value', $e->getMessage());
         }
 
         $database->deleteCollection($collectionId);
@@ -2219,7 +2219,7 @@ trait OperatorTests
 
         $this->assertEquals([10, 20, 30], $doc->getAttribute('numbers'));
 
-        // Test case 1: Append integers that exceed INT_MAX
+        // Test case 1: Append integers that exceed MAX_INT
         // BUG EXPOSED: These values exceed the constraint but validation is not applied post-operator
         try {
             // Create a fresh document for this test
@@ -2228,8 +2228,8 @@ trait OperatorTests
                 'numbers' => [100, 200]
             ]));
 
-            // Try to append values that would exceed INT_MAX
-            $hugeValue = Database::INT_MAX + 1000;  // Exceeds integer maximum
+            // Try to append values that would exceed MAX_INT
+            $hugeValue = Database::MAX_INT + 1000;  // Exceeds integer maximum
 
             $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
                 'numbers' => Operator::arrayAppend([$hugeValue])
@@ -2240,15 +2240,15 @@ trait OperatorTests
             $finalNumbers = $refetched->getAttribute('numbers');
             $lastNumber = end($finalNumbers);
 
-            // Document the bug: Array items should not exceed INT_MAX
+            // Document the bug: Array items should not exceed MAX_INT
             $this->assertLessThanOrEqual(
-                Database::INT_MAX,
+                Database::MAX_INT,
                 $lastNumber,
-                "BUG EXPOSED: ARRAY_APPEND added value {$lastNumber} exceeding INT_MAX (" . Database::INT_MAX . "). Post-operator validation is missing!"
+                "BUG EXPOSED: ARRAY_APPEND added value {$lastNumber} exceeding MAX_INT (" . Database::MAX_INT . "). Post-operator validation is missing!"
             );
         } catch (StructureException $e) {
             // This is the CORRECT behavior - validation should catch the constraint violation
-            $this->assertStringContainsString('invalid type', $e->getMessage());
+            $this->assertStringContainsString('array items must be between', $e->getMessage());
         } catch (TypeException $e) {
             // Also acceptable - type validation catches the issue
             $this->assertStringContainsString('Invalid', $e->getMessage());
@@ -2262,8 +2262,8 @@ trait OperatorTests
             ]));
 
             // Append a mix of valid and invalid values
-            // The last value exceeds INT_MAX
-            $mixedValues = [40, 50, Database::INT_MAX + 100];
+            // The last value exceeds MAX_INT
+            $mixedValues = [40, 50, Database::MAX_INT + 100];
 
             $updated = $database->updateDocument($collectionId, $doc3->getId(), new Document([
                 'numbers' => Operator::arrayAppend($mixedValues)
@@ -2276,14 +2276,18 @@ trait OperatorTests
             // Document the bug: ALL array items should be validated
             foreach ($finalNumbers as $num) {
                 $this->assertLessThanOrEqual(
-                    Database::INT_MAX,
+                    Database::MAX_INT,
                     $num,
-                    "BUG EXPOSED: ARRAY_APPEND added invalid value {$num} exceeding INT_MAX (" . Database::INT_MAX . "). Post-operator validation is missing!"
+                    "BUG EXPOSED: ARRAY_APPEND added invalid value {$num} exceeding MAX_INT (" . Database::MAX_INT . "). Post-operator validation is missing!"
                 );
             }
         } catch (StructureException $e) {
             // This is the CORRECT behavior
-            $this->assertStringContainsString('invalid type', $e->getMessage());
+            $this->assertTrue(
+                str_contains($e->getMessage(), 'invalid type') ||
+                str_contains($e->getMessage(), 'array items must be between'),
+                'Expected constraint violation message, got: ' . $e->getMessage()
+            );
         } catch (TypeException $e) {
             // Also acceptable
             $this->assertStringContainsString('Invalid', $e->getMessage());
@@ -3201,6 +3205,218 @@ trait OperatorTests
             'small_int' => Operator::multiply(1000, 5000)
         ]));
         $this->assertEquals(5000, $updated->getAttribute('small_int'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testBulkUpdateWithOperatorsCallbackReceivesFreshData(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Create test collection
+        $collectionId = 'test_bulk_callback';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+
+        // Create multiple test documents
+        for ($i = 1; $i <= 5; $i++) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => "doc_{$i}",
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'count' => $i * 10,
+                'score' => $i * 5.5,
+                'tags' => ["initial_{$i}"]
+            ]));
+        }
+
+        $callbackResults = [];
+        $count = $database->updateDocuments(
+            $collectionId,
+            new Document([
+                'count' => Operator::increment(7),
+                'score' => Operator::multiply(2),
+                'tags' => Operator::arrayAppend(['updated'])
+            ]),
+            [],
+            Database::INSERT_BATCH_SIZE,
+            function (Document $doc, Document $old) use (&$callbackResults) {
+                // Verify callback receives fresh computed values, not Operator objects
+                $this->assertIsInt($doc->getAttribute('count'));
+                $this->assertIsFloat($doc->getAttribute('score'));
+                $this->assertIsArray($doc->getAttribute('tags'));
+
+                // Verify values are actually computed
+                $expectedCount = $old->getAttribute('count') + 7;
+                $expectedScore = $old->getAttribute('score') * 2;
+                $expectedTags = array_merge($old->getAttribute('tags'), ['updated']);
+
+                $this->assertEquals($expectedCount, $doc->getAttribute('count'));
+                $this->assertEquals($expectedScore, $doc->getAttribute('score'));
+                $this->assertEquals($expectedTags, $doc->getAttribute('tags'));
+
+                $callbackResults[] = $doc->getId();
+            }
+        );
+
+        $this->assertEquals(5, $count);
+        $this->assertCount(5, $callbackResults);
+        $this->assertEquals(['doc_1', 'doc_2', 'doc_3', 'doc_4', 'doc_5'], $callbackResults);
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testBulkUpsertWithOperatorsCallbackReceivesFreshData(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Create test collection
+        $collectionId = 'test_upsert_callback';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false, 0.0);
+        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+
+        // Create existing documents
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'existing_1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'count' => 100,
+            'value' => 50.0,
+            'items' => ['item1']
+        ]));
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'existing_2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'count' => 200,
+            'value' => 75.0,
+            'items' => ['item2']
+        ]));
+
+        $callbackResults = [];
+
+        // Upsert documents with operators (update existing, create new)
+        $documents = [
+            new Document([
+                '$id' => 'existing_1',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'count' => Operator::increment(50),
+                'value' => Operator::divide(2),
+                'items' => Operator::arrayAppend(['new_item'])
+            ]),
+            new Document([
+                '$id' => 'existing_2',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'count' => Operator::decrement(25),
+                'value' => Operator::multiply(1.5),
+                'items' => Operator::arrayPrepend(['prepended'])
+            ]),
+            new Document([
+                '$id' => 'new_doc',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'count' => 500,
+                'value' => 100.0,
+                'items' => ['new']
+            ])
+        ];
+
+        $count = $database->upsertDocuments(
+            $collectionId,
+            $documents,
+            Database::INSERT_BATCH_SIZE,
+            function (Document $doc, ?Document $old) use (&$callbackResults) {
+                // Verify callback receives fresh computed values, not Operator objects
+                $this->assertIsInt($doc->getAttribute('count'));
+                $this->assertIsFloat($doc->getAttribute('value'));
+                $this->assertIsArray($doc->getAttribute('items'));
+
+                if ($doc->getId() === 'existing_1' && $old !== null) {
+                    $this->assertEquals(150, $doc->getAttribute('count')); // 100 + 50
+                    $this->assertEquals(25.0, $doc->getAttribute('value')); // 50 / 2
+                    $this->assertEquals(['item1', 'new_item'], $doc->getAttribute('items'));
+                } elseif ($doc->getId() === 'existing_2' && $old !== null) {
+                    $this->assertEquals(175, $doc->getAttribute('count')); // 200 - 25
+                    $this->assertEquals(112.5, $doc->getAttribute('value')); // 75 * 1.5
+                    $this->assertEquals(['prepended', 'item2'], $doc->getAttribute('items'));
+                } elseif ($doc->getId() === 'new_doc' && $old === null) {
+                    $this->assertEquals(500, $doc->getAttribute('count'));
+                    $this->assertEquals(100.0, $doc->getAttribute('value'));
+                    $this->assertEquals(['new'], $doc->getAttribute('items'));
+                }
+
+                $callbackResults[] = $doc->getId();
+            }
+        );
+
+        $this->assertEquals(3, $count);
+        $this->assertCount(3, $callbackResults);
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testSingleUpsertWithOperators(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Create test collection
+        $collectionId = 'test_single_upsert';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+
+        // Test upsert with operators on new document (insert)
+        $doc = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'count' => 100,
+            'score' => 50.0,
+            'tags' => ['tag1', 'tag2']
+        ]));
+
+        $this->assertEquals(100, $doc->getAttribute('count'));
+        $this->assertEquals(50.0, $doc->getAttribute('score'));
+        $this->assertEquals(['tag1', 'tag2'], $doc->getAttribute('tags'));
+
+        // Test upsert with operators on existing document (update)
+        $updated = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'count' => Operator::increment(25),
+            'score' => Operator::multiply(2),
+            'tags' => Operator::arrayAppend(['tag3'])
+        ]));
+
+        // Verify operators were applied correctly
+        $this->assertEquals(125, $updated->getAttribute('count')); // 100 + 25
+        $this->assertEquals(100.0, $updated->getAttribute('score')); // 50 * 2
+        $this->assertEquals(['tag1', 'tag2', 'tag3'], $updated->getAttribute('tags'));
+
+        // Verify values are not Operator objects
+        $this->assertIsInt($updated->getAttribute('count'));
+        $this->assertIsFloat($updated->getAttribute('score'));
+        $this->assertIsArray($updated->getAttribute('tags'));
+
+        // Test another upsert with different operators
+        $updated = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'test_doc',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'count' => Operator::decrement(50),
+            'score' => Operator::divide(4),
+            'tags' => Operator::arrayPrepend(['tag0'])
+        ]));
+
+        $this->assertEquals(75, $updated->getAttribute('count')); // 125 - 50
+        $this->assertEquals(25.0, $updated->getAttribute('score')); // 100 / 4
+        $this->assertEquals(['tag0', 'tag1', 'tag2', 'tag3'], $updated->getAttribute('tags'));
 
         $database->deleteCollection($collectionId);
     }

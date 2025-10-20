@@ -12,7 +12,7 @@ class Operator extends Validator
     protected Document $collection;
 
     /**
-     * @var array<string, array<string, mixed>>
+     * @var array<string, Document|array<string, mixed>>
      */
     protected array $attributes;
 
@@ -147,13 +147,13 @@ class Operator extends Validator
                         DatabaseOperator::TYPE_POWER => $currentValue ** $operatorValue,
                     };
 
-                    if ($predictedResult > Database::INT_MAX) {
-                        $this->message = "Cannot apply {$method} operator: would overflow maximum value of " . Database::INT_MAX;
+                    if ($predictedResult > Database::MAX_INT) {
+                        $this->message = "Cannot apply {$method} operator: would overflow maximum value of " . Database::MAX_INT;
                         return false;
                     }
 
-                    if ($predictedResult < Database::INT_MIN) {
-                        $this->message = "Cannot apply {$method} operator: would underflow minimum value of " . Database::INT_MIN;
+                    if ($predictedResult < Database::MIN_INT) {
+                        $this->message = "Cannot apply {$method} operator: would underflow minimum value of " . Database::MIN_INT;
                         return false;
                     }
                 }
@@ -169,8 +169,8 @@ class Operator extends Validator
                 if (!empty($values) && $type === Database::VAR_INTEGER) {
                     $newItems = \is_array($values[0]) ? $values[0] : $values;
                     foreach ($newItems as $item) {
-                        if (\is_numeric($item) && ($item > Database::INT_MAX || $item < Database::INT_MIN)) {
-                            $this->message = "Cannot apply {$method} operator: array items must be between " . Database::INT_MIN . " and " . Database::INT_MAX;
+                        if (\is_numeric($item) && ($item > Database::MAX_INT || $item < Database::MIN_INT)) {
+                            $this->message = "Cannot apply {$method} operator: array items must be between " . Database::MIN_INT . " and " . Database::MAX_INT;
                             return false;
                         }
                     }
@@ -203,8 +203,8 @@ class Operator extends Validator
 
                 $insertValue = $values[1];
                 if ($type === Database::VAR_INTEGER && \is_numeric($insertValue)) {
-                    if ($insertValue > Database::INT_MAX || $insertValue < Database::INT_MIN) {
-                        $this->message = "Cannot apply {$method} operator: array items must be between " . Database::INT_MIN . " and " . Database::INT_MAX;
+                    if ($insertValue > Database::MAX_INT || $insertValue < Database::MIN_INT) {
+                        $this->message = "Cannot apply {$method} operator: array items must be between " . Database::MIN_INT . " and " . Database::MAX_INT;
                         return false;
                     }
                 }

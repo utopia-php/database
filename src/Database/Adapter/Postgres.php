@@ -1346,6 +1346,9 @@ class Postgres extends SQL
 
             return "{$attribute} = {$new}";
         };
+
+        $bindIndex = count($bindValues);
+
         if (!empty($attribute)) {
             // Increment specific column by its new value in place
             $updateColumns = [
@@ -1353,13 +1356,25 @@ class Postgres extends SQL
                 $getUpdateClause('_updatedAt'),
             ];
         } else {
-            // Update all columns
+            // Update all columns and apply operators
             $updateColumns = [];
             foreach (array_keys($attributes) as $attr) {
                 /**
                  * @var string $attr
                  */
-                $updateColumns[] = $getUpdateClause($this->filter($attr));
+                $filteredAttr = $this->filter($attr);
+
+                // Check if this attribute has an operator
+                if (isset($operators[$attr])) {
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $bindIndex);
+                    if ($operatorSQL !== null) {
+                        $updateColumns[] = $operatorSQL;
+                    }
+                } else {
+                    if (!in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
+                        $updateColumns[] = $getUpdateClause($filteredAttr);
+                    }
+                }
             }
         }
 
@@ -1376,6 +1391,16 @@ class Postgres extends SQL
         foreach ($bindValues as $key => $binding) {
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
+
+        $bindIndex = count($bindValues);
+
+        // Bind operator parameters in the same order used to build SQL
+        foreach (array_keys($attributes) as $attr) {
+            if (isset($operators[$attr])) {
+                $this->bindOperatorParams($stmt, $operators[$attr], $bindIndex);
+            }
+        }
+
         return $stmt;
     }
 

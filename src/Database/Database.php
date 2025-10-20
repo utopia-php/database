@@ -82,6 +82,9 @@ class Database
     public const MAX_VECTOR_DIMENSIONS = 16000;
     public const MAX_ARRAY_INDEX_LENGTH = 255;
 
+    // Min limits
+    public const MIN_INT = -2147483648;
+
     // Global SRID for geographic coordinates (WGS84)
     public const DEFAULT_SRID = 4326;
     public const EARTH_RADIUS = 6371000;
@@ -5295,10 +5298,37 @@ class Database
                 );
             });
 
+            // If operators were used, refetch documents to get computed values
+            if (!empty($operators)) {
+                $docIds = array_map(fn ($doc) => $doc->getId(), $batch);
+
+                // Purge cache for all documents before refetching
+                foreach ($batch as $doc) {
+                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
+                }
+
+                $refetched = Authorization::skip(fn () => $this->silent(
+                    fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
+                ));
+
+                $refetchedMap = [];
+                foreach ($refetched as $doc) {
+                    $refetchedMap[$doc->getId()] = $doc;
+                }
+
+                foreach ($batch as $index => $doc) {
+                    $batch[$index] = $refetchedMap[$doc->getId()] ?? $doc;
+                }
+            }
+
             foreach ($batch as $index => $doc) {
-                $doc->removeAttribute('$skipPermissionsUpdate');
-                $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                $doc = $this->decode($collection, $doc);
+                if (!empty($operators)) {
+                    // Already refetched and decoded
+                } else {
+                    $doc->removeAttribute('$skipPermissionsUpdate');
+                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
+                    $doc = $this->decode($collection, $doc);
+                }
                 try {
                     $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {
@@ -5823,6 +5853,19 @@ class Database
                 )));
             }
 
+            // Extract operators early to avoid comparison issues
+            $documentArray = $document->getArrayCopy();
+            $extracted = Operator::extractOperators($documentArray);
+            $operators = $extracted['operators'];
+            $regularUpdates = $extracted['updates'];
+
+            // Filter out internal attributes from regularUpdates for comparison
+            $internalKeys = \array_map(
+                fn ($attr) => $attr['$id'],
+                self::INTERNAL_ATTRIBUTES
+            );
+            $regularUpdatesUserOnly = array_diff_key($regularUpdates, array_flip($internalKeys));
+
             $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
@@ -5835,11 +5878,47 @@ class Database
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
 
-            if (
-                empty($attribute)
-                && $skipPermissionsUpdate
-                && $old->getAttributes() == $document->getAttributes()
-            ) {
+            // Only skip if no operators and regular attributes haven't changed
+            // Compare only the attributes that are being updated
+            $hasChanges = false;
+            if (!empty($operators)) {
+                $hasChanges = true;
+            } elseif (!empty($attribute)) {
+                $hasChanges = true;
+            } elseif (!$skipPermissionsUpdate) {
+                $hasChanges = true;
+            } else {
+                // Check if any of the provided attributes differ from old document
+                $oldAttributes = $old->getAttributes();
+                foreach ($regularUpdatesUserOnly as $attrKey => $value) {
+                    $oldValue = $oldAttributes[$attrKey] ?? null;
+                    if ($oldValue != $value) {
+                        $hasChanges = true;
+                        break;
+                    }
+                }
+
+                // Also check if old document has attributes that new document doesn't
+                // (i.e., attributes being removed)
+                if (!$hasChanges) {
+                    // Filter out internal attributes from old document for comparison
+                    $internalKeys = \array_map(
+                        fn ($attr) => $attr['$id'],
+                        self::INTERNAL_ATTRIBUTES
+                    );
+                    $oldUserAttributes = array_diff_key($oldAttributes, array_flip($internalKeys));
+
+                    foreach (array_keys($oldUserAttributes) as $oldAttrKey) {
+                        if (!array_key_exists($oldAttrKey, $regularUpdatesUserOnly)) {
+                            // Old document has an attribute that new document doesn't
+                            $hasChanges = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!$hasChanges) {
                 // If not updating a single attribute and the
                 // document is the same as the old one, skip it
                 unset($documents[$key]);
@@ -6005,8 +6084,37 @@ class Database
                 $batch = $this->silent(fn () => $this->populateDocumentsRelationships($batch, $collection, $this->relationshipFetchDepth));
             }
 
+            // Check if any document in the batch contains operators
+            $hasOperators = false;
+            foreach ($batch as $doc) {
+                $extracted = Operator::extractOperators($doc->getArrayCopy());
+                if (!empty($extracted['operators'])) {
+                    $hasOperators = true;
+                    break;
+                }
+            }
+
+            // If operators were used, refetch all documents in a single query
+            if ($hasOperators) {
+                $docIds = array_map(fn ($doc) => $doc->getId(), $batch);
+                $refetched = Authorization::skip(fn () => $this->silent(
+                    fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
+                ));
+
+                $refetchedMap = [];
+                foreach ($refetched as $doc) {
+                    $refetchedMap[$doc->getId()] = $doc;
+                }
+
+                foreach ($batch as $index => $doc) {
+                    $batch[$index] = $refetchedMap[$doc->getId()] ?? $doc;
+                }
+            }
+
             foreach ($batch as $index => $doc) {
-                $doc = $this->decode($collection, $doc);
+                if (!$hasOperators) {
+                    $doc = $this->decode($collection, $doc);
+                }
 
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {

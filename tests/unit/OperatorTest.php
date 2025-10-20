@@ -8,14 +8,6 @@ use Utopia\Database\Operator;
 
 class OperatorTest extends TestCase
 {
-    public function setUp(): void
-    {
-    }
-
-    public function tearDown(): void
-    {
-    }
-
     public function testCreate(): void
     {
         // Test basic construction

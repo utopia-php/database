@@ -7,9 +7,9 @@
  * read-modify-write approaches across different database adapters.
  *
  * @example
- * docker compose exec tests bin/operator --adapter=mariadb --iterations=1000
- * docker compose exec tests bin/operator --adapter=postgres --iterations=1000
- * docker compose exec tests bin/operator --adapter=sqlite --iterations=1000
+ * docker compose exec tests bin/operators --adapter=mariadb --iterations=1000
+ * docker compose exec tests bin/operators --adapter=postgres --iterations=1000
+ * docker compose exec tests bin/operators --adapter=sqlite --iterations=1000
  */
 
 global $cli;

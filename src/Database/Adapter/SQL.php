@@ -2505,6 +2505,163 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Upsert a batch of documents with the same operator signature
+     *
+     * @param string $name
+     * @param string $attribute
+     * @param array<Change> $changes
+     * @param array<string> $spatialAttributes
+     * @return void
+     * @throws DatabaseException
+     */
+    protected function upsertDocumentsBatch(
+        string $name,
+        string $attribute,
+        array $changes,
+        array $spatialAttributes
+    ): void {
+        $bindIndex = 0;
+        $batchKeys = [];
+        $bindValues = [];
+        $operators = [];
+
+        $allColumnNames = [];
+        $documentsData = [];
+
+        foreach ($changes as $change) {
+            if ($change instanceof Change) {
+                $document = $change->getNew();
+            } else {
+                $document = $change;
+            }
+            $attributes = $document->getAttributes();
+
+            // Extract operators before processing attributes
+            $extracted = Operator::extractOperators($attributes);
+            $currentOperators = $extracted['operators'];
+            $currentRegularAttributes = $extracted['updates'];
+
+            // Since all documents in this batch have the same operator signature,
+            // we can safely merge operators (they should have the same keys)
+            if (empty($operators)) {
+                $operators = $currentOperators;
+            }
+
+            $currentRegularAttributes['_uid'] = $document->getId();
+            $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getCreatedAt()) : null;
+            $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getUpdatedAt()) : null;
+            $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
+
+            if (!empty($document->getSequence())) {
+                $currentRegularAttributes['_id'] = $document->getSequence();
+            }
+
+            if ($this->sharedTables) {
+                $currentRegularAttributes['_tenant'] = $document->getTenant();
+            }
+
+            // Collect column names from regular attributes
+            foreach (\array_keys($currentRegularAttributes) as $colName) {
+                $allColumnNames[$colName] = true;
+            }
+
+            // For operator attributes, also add them to the column list
+            // These will be in the INSERT clause but handled specially in UPDATE clause
+            foreach (\array_keys($currentOperators) as $colName) {
+                $allColumnNames[$colName] = true;
+            }
+
+            $documentsData[] = [
+                'regularAttributes' => $currentRegularAttributes,
+                'operators' => $currentOperators
+            ];
+        }
+
+        // Sort column names for consistency
+        $allColumnNames = \array_keys($allColumnNames);
+        \sort($allColumnNames);
+
+        // Build column string
+        $columnsArray = [];
+        foreach ($allColumnNames as $attr) {
+            $columnsArray[] = "{$this->quote($this->filter($attr))}";
+        }
+        $columns = '(' . \implode(', ', $columnsArray) . ')';
+
+        // Second pass: build values for each document using all columns
+        foreach ($documentsData as $docData) {
+            $currentRegularAttributes = $docData['regularAttributes'];
+            $bindKeys = [];
+
+            foreach ($allColumnNames as $attributeKey) {
+                $attrValue = $currentRegularAttributes[$attributeKey] ?? null;
+
+                if (\is_array($attrValue)) {
+                    $attrValue = \json_encode($attrValue);
+                }
+
+                if (in_array($attributeKey, $spatialAttributes) && $attrValue !== null) {
+                    $bindKey = 'key_' . $bindIndex;
+                    $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
+                } else {
+                    $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
+                    $bindKey = 'key_' . $bindIndex;
+                    $bindKeys[] = ':' . $bindKey;
+                }
+                $bindValues[$bindKey] = $attrValue;
+                $bindIndex++;
+            }
+
+            $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+        }
+
+        // Build a unified regularAttributes that includes all columns
+        // For operator columns, we set null as placeholder since the actual operation
+        // is defined in $operators and getUpsertStatement will use that instead
+        $regularAttributes = [];
+
+        foreach ($allColumnNames as $colName) {
+            $regularAttributes[$colName] = null;
+        }
+
+        // Fill in actual values from first document where available
+        if (!empty($documentsData)) {
+            foreach ($documentsData[0]['regularAttributes'] as $key => $value) {
+                $regularAttributes[$key] = $value;
+            }
+        }
+
+        // When we have operators, pass empty string to use operator-based UPDATE clauses
+        // When we have a specific attribute to increment, pass it through
+        // When neither, pass the original attribute parameter
+        $upsertAttribute = !empty($operators) ? '' : $attribute;
+        $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $regularAttributes, $bindValues, $upsertAttribute, $operators);
+
+        try {
+            $stmt->execute();
+        } catch (\PDOException $e) {
+            // Enhanced error message with SQL and bind info for debugging
+            $sqlString = $stmt->queryString ?? 'unknown';
+            $paramCount = count($bindValues);
+            $operatorInfo = [];
+            foreach ($operators as $attr => $op) {
+                $operatorInfo[] = "$attr: " . $op->getMethod();
+            }
+            throw new \PDOException(
+                "Failed to execute upsert statement. Error: {$e->getMessage()}\n" .
+                "SQL: {$sqlString}\n" .
+                "Bind values count: {$paramCount}\n" .
+                "Operators: " . implode(', ', $operatorInfo) . "\n" .
+                "RegularAttributes keys: " . implode(', ', array_keys($regularAttributes)),
+                (int)$e->getCode(),
+                $e
+            );
+        }
+
+        $stmt->closeCursor();
+    }
+
+    /**
      * @param Document $collection
      * @param string $attribute
      * @param array<Change> $changes
@@ -2525,71 +2682,38 @@ abstract class SQL extends Adapter
             $name = $this->filter($collection);
             $attribute = $this->filter($attribute);
 
-            $attributes = [];
-            $bindIndex = 0;
-            $batchKeys = [];
-            $bindValues = [];
-
-            $operators = [];
+            // Separate documents with operators from those without
+            // Documents with operators must be processed individually because each may have
+            // different operator values, and the SQL UPDATE clause is shared across all rows
+            $documentsWithoutOperators = [];
+            $documentsWithOperators = [];
 
             foreach ($changes as $change) {
-                $document = $change->getNew();
+                if ($change instanceof Change) {
+                    $document = $change->getNew();
+                } else {
+                    $document = $change;
+                }
+
                 $attributes = $document->getAttributes();
 
-                // Extract operators before processing attributes
                 $extracted = Operator::extractOperators($attributes);
-                $operators = $extracted['operators'];
-                $regularAttributes = $extracted['updates'];
+                $currentOperators = $extracted['operators'];
 
-                $regularAttributes['_uid'] = $document->getId();
-                $regularAttributes['_createdAt'] = $document->getCreatedAt();
-                $regularAttributes['_updatedAt'] = $document->getUpdatedAt();
-                $regularAttributes['_permissions'] = \json_encode($document->getPermissions());
-
-                if (!empty($document->getSequence())) {
-                    $regularAttributes['_id'] = $document->getSequence();
+                if (empty($currentOperators)) {
+                    $documentsWithoutOperators[] = $change;
+                } else {
+                    $documentsWithOperators[] = $change;
                 }
-
-                if ($this->sharedTables) {
-                    $regularAttributes['_tenant'] = $document->getTenant();
-                }
-
-                \ksort($regularAttributes);
-
-                $columns = [];
-                foreach (\array_keys($regularAttributes) as $key => $attr) {
-                    /**
-                     * @var string $attr
-                     */
-                    $columns[$key] = "{$this->quote($this->filter($attr))}";
-                }
-                $columns = '(' . \implode(', ', $columns) . ')';
-
-                $bindKeys = [];
-
-                foreach ($regularAttributes as $attributeKey => $attrValue) {
-                    if (\is_array($attrValue)) {
-                        $attrValue = \json_encode($attrValue);
-                    }
-
-                    if (in_array($attributeKey, $spatialAttributes)) {
-                        $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
-                    } else {
-                        $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
-                        $bindKey = 'key_' . $bindIndex;
-                        $bindKeys[] = ':' . $bindKey;
-                    }
-                    $bindValues[$bindKey] = $attrValue;
-                    $bindIndex++;
-                }
-
-                $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
             }
 
-            $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $regularAttributes, $bindValues, $attribute, $operators);
-            $stmt->execute();
-            $stmt->closeCursor();
+            if (!empty($documentsWithoutOperators)) {
+                $this->upsertDocumentsBatch($name, $attribute, $documentsWithoutOperators, $spatialAttributes);
+            }
+
+            foreach ($documentsWithOperators as $change) {
+                $this->upsertDocumentsBatch($name, '', [$change], $spatialAttributes);
+            }
 
             $removeQueries = [];
             $removeBindValues = [];
@@ -2597,8 +2721,15 @@ abstract class SQL extends Adapter
             $addBindValues = [];
 
             foreach ($changes as $index => $change) {
-                $old = $change->getOld();
-                $document = $change->getNew();
+                // Support both Change objects and plain Documents
+                if ($change instanceof Change) {
+                    $old = $change->getOld();
+                    $document = $change->getNew();
+                } else {
+                    // Plain Document - treat as insert (no old document)
+                    $old = new Document();
+                    $document = $change;
+                }
 
                 $current = [];
                 foreach (Database::PERMISSIONS as $type) {
@@ -2660,7 +2791,7 @@ abstract class SQL extends Adapter
 
             // Execute permission additions
             if (!empty($addQueries)) {
-                $sqlAddPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission";
+                $sqlAddPermissions = "INSERT IGNORE INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission";
                 if ($this->sharedTables) {
                     $sqlAddPermissions .= ", _tenant";
                 }
@@ -2675,7 +2806,7 @@ abstract class SQL extends Adapter
             throw $this->processException($e);
         }
 
-        return \array_map(fn ($change) => $change->getNew(), $changes);
+        return \array_map(fn ($change) => $change instanceof Change ? $change->getNew() : $change, $changes);
     }
 
     /**

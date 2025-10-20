@@ -5383,7 +5383,7 @@ trait DocumentTests
     /**
      * @depends testCreateDocument
      */
-    public function testEmptyOperatorValues(): void
+    public function testEmptyOperatorValues(Document $document): void
     {
         /** @var Database $database */
         $database = static::getDatabase();

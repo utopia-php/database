@@ -1252,7 +1252,9 @@ class MariaDB extends SQL
                         $updateColumns[] = $operatorSQL;
                     }
                 } else {
-                    $updateColumns[] = $getUpdateClause($filteredAttr);
+                    if (!in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
+                        $updateColumns[] = $getUpdateClause($filteredAttr);
+                    }
                 }
             }
         }
@@ -1270,9 +1272,13 @@ class MariaDB extends SQL
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
 
-        // Bind operator parameters
-        foreach ($operators as $attr => $operator) {
-            $this->bindOperatorParams($stmt, $operator, $bindIndex);
+        $bindIndex = count($bindValues);
+
+        // Bind operator parameters in the same order used to build SQL
+        foreach (array_keys($attributes) as $attr) {
+            if (isset($operators[$attr])) {
+                $this->bindOperatorParams($stmt, $operators[$attr], $bindIndex);
+            }
         }
 
         return $stmt;

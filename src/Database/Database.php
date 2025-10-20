@@ -81,6 +81,7 @@ class Database
     public const MAX_DOUBLE = PHP_FLOAT_MAX;
     public const MAX_VECTOR_DIMENSIONS = 16000;
     public const MAX_ARRAY_INDEX_LENGTH = 255;
+    public const MAX_UID_DEFAULT_LENGTH = 36;
 
     // Global SRID for geographic coordinates (WGS84)
     public const DEFAULT_SRID = 4326;
@@ -5183,6 +5184,7 @@ class Database
                 $indexes,
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes()
@@ -6733,6 +6735,7 @@ class Database
                 $indexes,
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes()
@@ -6935,6 +6938,7 @@ class Database
                 $indexes,
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes()
@@ -7166,6 +7170,7 @@ class Database
                 $indexes,
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes()
@@ -7227,6 +7232,7 @@ class Database
                 $indexes,
                 $this->adapter->getIdAttributeType(),
                 $this->maxQueryValues,
+                $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes()

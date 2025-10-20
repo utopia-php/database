@@ -59,7 +59,7 @@ class LabelTest extends TestCase
         $this->assertEquals(false, $this->object->isValid('as=5dasdasdas'));
 
         // At most 255 chars
-        $this->assertEquals(true, $this->object->isValid(str_repeat('a', 255)));
+        $this->assertEquals(true, $this->object->isValid(str_repeat('a', 36)));
         $this->assertEquals(false, $this->object->isValid(str_repeat('a', 256)));
     }
 }

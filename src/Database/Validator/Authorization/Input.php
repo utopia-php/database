@@ -5,7 +5,7 @@ namespace Utopia\Database\Validator\Authorization;
 class Input
 {
     /**
-     * @var string[] $permissions
+     * @var array<string> $permissions
      */
     protected array $permissions;
     protected string $action;

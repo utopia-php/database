@@ -640,7 +640,6 @@ trait GeneralTests
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
-        $database = $this->getDatabase();
 
         // Write mock data
         $database->createCollection('testRedisFallback', attributes: [

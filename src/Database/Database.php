@@ -5050,15 +5050,15 @@ class Database
                     }
                 }
 
-                $updatePermissions = array_merge(
-                    $collection->getUpdate(),
-                    $documentSecurity ? $old->getUpdate() : []
-                );
+                $updatePermissions = [
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $old->getUpdate() : [])
+                ];
 
-                $readPermissions = array_merge(
-                    $collection->getRead(),
-                    $documentSecurity ? $old->getRead() : []
-                );
+                $readPermissions = [
+                    ...$collection->getRead(),
+                    ...($documentSecurity ? $old->getRead() : [])
+                ];
 
                 if ($shouldUpdate) {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {

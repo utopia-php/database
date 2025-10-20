@@ -49,16 +49,12 @@ class Authorization extends Validator
      *
      * Returns true if valid or false if not.
     */
-    public function isValid(mixed $input): bool // any, CREATE
+    public function isValid(mixed $input): bool
     {
         if (!($input instanceof Input)) {
             $this->message = 'Invalid input provided';
             return false;
         }
-
-        /**
-         * @var Input $input
-         */
 
         $permissions = $input->getPermissions();
         $action = $input->getAction();
@@ -124,7 +120,7 @@ class Authorization extends Validator
      *
      * @return bool
      */
-    public function isRole(string $role): bool
+    public function hasRole(string $role): bool
     {
         return (\array_key_exists($role, $this->roles));
     }

@@ -2,12 +2,17 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\UID;
 
 class Cursor extends Base
 {
+    public function __construct(private readonly int $maxLength = Database::MAX_UID_DEFAULT_LENGTH)
+    {
+    }
+
     /**
      * Is valid.
      *
@@ -33,7 +38,7 @@ class Cursor extends Base
                 $cursor = $cursor->getId();
             }
 
-            $validator = new UID();
+            $validator = new UID($this->maxLength);
             if ($validator->isValid($cursor)) {
                 return true;
             }

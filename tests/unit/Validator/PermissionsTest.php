@@ -248,25 +248,25 @@ class PermissionsTest extends TestCase
         // team:$value, member:$value and user:$value must have valid Key for $value
         // No leading special chars
         $this->assertFalse($object->isValid([Permission::read(Role::user('_1234'))]));
-        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 255 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team('-1234'))]));
-        $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 255 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::member('.1234'))]));
-        $this->assertEquals('Role "member" identifier value is invalid: Parameter must contain at most 255 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertEquals('Role "member" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
 
         // No unsupported special characters
         $this->assertFalse($object->isValid([Permission::read(Role::user('12$4'))]));
-        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 255 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::user('12&4'))]));
-        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 255 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::user('ab(124'))]));
-        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 255 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
 
-        // Shorter than 255 chars
+        // Shorter than 36 chars
 
-        $this->assertTrue($object->isValid([Permission::read(Role::user(ID::custom(str_repeat('a', 255))))]));
+        $this->assertTrue($object->isValid([Permission::read(Role::user(ID::custom(str_repeat('a', 36))))]));
         $this->assertFalse($object->isValid([Permission::read(Role::user(ID::custom(str_repeat('a', 256))))]));
-        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 255 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertEquals('Role "user" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
 
         // Permission role must begin with one of: member, role, team, user
         $this->assertFalse($object->isValid(['update("memmber:1234")']));
@@ -278,7 +278,7 @@ class PermissionsTest extends TestCase
 
         // Team permission
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('_abcd')))]));
-        $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 255 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd/')))]));
         $this->assertEquals('Dimension must not be empty', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom(''), 'abcd'))]));
@@ -288,9 +288,9 @@ class PermissionsTest extends TestCase
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), 'e/fgh'))]));
         $this->assertEquals('Only one dimension can be provided', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('ab&cd3'), 'efgh'))]));
-        $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 255 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertEquals('Role "team" identifier value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
         $this->assertFalse($object->isValid([Permission::read(Role::team(ID::custom('abcd'), 'ef*gh'))]));
-        $this->assertEquals('Role "team" dimension value is invalid: Parameter must contain at most 255 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
+        $this->assertEquals('Role "team" dimension value is invalid: Parameter must contain at most 36 chars. Valid chars are a-z, A-Z, 0-9, period, hyphen, and underscore. Can\'t start with a special char', $object->getDescription());
 
         // Permission-list length must be valid
         $object = new Permissions(100);

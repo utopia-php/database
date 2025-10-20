@@ -7236,10 +7236,7 @@ class Database
             }
         }
 
-        $authorization = new Authorization(self::PERMISSION_READ);
-        if ($authorization->isValid($collection->getRead())) {
-            $skipAuth = true;
-        }
+        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
 
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
@@ -7257,7 +7254,7 @@ class Database
         $queries = $queriesOrNull;
 
         $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max);
-        $sum = $skipAuth ?? false ? Authorization::skip($getSum) : $getSum();
+        $sum = $skipAuth ? $this->authorization->skip($getSum) : $getSum();
 
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);
 

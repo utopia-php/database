@@ -20,7 +20,7 @@ trait SchemalessTests
     public function testSchemalessDocumentOperation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -117,7 +117,7 @@ trait SchemalessTests
     public function testSchemalessDocumentInvalidInteralAttributeValidation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         // test to ensure internal attributes are checked during creating schemaless document
         if ($database->getAdapter()->getSupportForAttributes()) {
@@ -156,7 +156,7 @@ trait SchemalessTests
     public function testSchemalessSelectionOnUnknownAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -203,7 +203,7 @@ trait SchemalessTests
     public function testSchemalessIncrement(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -257,7 +257,7 @@ trait SchemalessTests
     public function testSchemalessDecrement(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -311,7 +311,7 @@ trait SchemalessTests
     public function testSchemalessUpdateDocumentWithQuery(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -369,7 +369,7 @@ trait SchemalessTests
     public function testSchemalessDeleteDocumentWithQuery(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -412,7 +412,7 @@ trait SchemalessTests
     public function testSchemalessUpdateDocumentsWithQuery(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -507,7 +507,7 @@ trait SchemalessTests
     public function testSchemalessDeleteDocumentsWithQuery(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -589,7 +589,7 @@ trait SchemalessTests
     public function testSchemalessOperationsWithCallback(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -677,7 +677,7 @@ trait SchemalessTests
     public function testSchemalessIndexCreateListDelete(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -723,7 +723,7 @@ trait SchemalessTests
     public function testSchemalessIndexDuplicatePrevention(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -754,7 +754,7 @@ trait SchemalessTests
     public function testSchemalessPermissions(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -776,18 +776,18 @@ trait SchemalessTests
         $this->assertFalse($doc->isEmpty());
 
         // Without roles, cannot read
-        Authorization::cleanRoles();
+        $database->getAuthorization()->cleanRoles();
         $empty = $database->getDocument($col, 'd1');
         $this->assertTrue($empty->isEmpty());
 
         // With any role, can read
-        Authorization::setRole(Role::any()->toString());
+        $database->getAuthorization()->addRole(Role::any()->toString());
         $fetched = $database->getDocument($col, 'd1');
         $this->assertEquals('value', $fetched->getAttribute('field'));
 
         // Attempt update without update permission
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::any()->toString());
         try {
             $database->updateDocument($col, 'd1', new Document(['field' => 'updated']));
             $this->fail('Failed to throw exception');
@@ -796,7 +796,7 @@ trait SchemalessTests
         }
 
         // Grant update permission and update
-        Authorization::skip(function () use ($database, $col) {
+        $database->getAuthorization()->skip(function () use ($database, $col) {
             $database->updateDocument($col, 'd1', new Document([
                 '$permissions' => [
                     Permission::read(Role::any()),
@@ -809,7 +809,7 @@ trait SchemalessTests
         $this->assertEquals('updated', $updated->getAttribute('field'));
 
         // Creating without any roles should fail
-        Authorization::cleanRoles();
+        $database->getAuthorization()->cleanRoles();
         try {
             $database->createDocument($col, new Document([
                 'field' => 'x'
@@ -820,13 +820,13 @@ trait SchemalessTests
         }
 
         $database->deleteCollection($col);
-        Authorization::cleanRoles();
+        $database->getAuthorization()->cleanRoles();
     }
 
     public function testSchemalessInternalAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -836,7 +836,7 @@ trait SchemalessTests
         $col = uniqid('sl_internal_full');
         $database->createCollection($col);
 
-        Authorization::setRole(Role::any()->toString());
+        $database->getAuthorization()->addRole(Role::any()->toString());
 
         $doc = $database->createDocument($col, new Document([
             '$id' => 'i1',
@@ -930,13 +930,13 @@ trait SchemalessTests
         $database->setPreserveDates(false);
 
         $database->deleteCollection($col);
-        Authorization::cleanRoles();
+        $database->getAuthorization()->cleanRoles();
     }
 
     public function testSchemalessDates(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if ($database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();

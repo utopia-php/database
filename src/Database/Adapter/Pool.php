@@ -310,6 +310,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getMaxUIDLength(): int
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getMinDateTime(): \DateTime
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -475,7 +480,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    protected function getAttributeProjection(array $selections, string $prefix): string
+    protected function getAttributeProjection(array $selections, string $prefix): mixed
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -529,32 +534,33 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
-    /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-     */
+
     public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
     public function getSupportForSpatialAxisOrder(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * Adapter supports optional spatial attributes with existing rows.
-     *
-     * @return bool
-     */
     public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForMultipleFulltextIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForIdenticalIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForOrderRandom(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -570,6 +576,36 @@ class Pool extends Adapter
     }
 
     public function decodePolygon(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingBefore(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForInternalCasting(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForUTCCasting(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setUTCDatetime(string $value): mixed
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setSupportForAttributes(bool $support): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

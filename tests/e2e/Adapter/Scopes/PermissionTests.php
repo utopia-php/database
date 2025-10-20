@@ -943,6 +943,11 @@ trait PermissionTests
         /** @var Database $database */
         $database = static::getDatabase();
 
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $documents = $database->find(
             $collection->getId()
         );
@@ -1019,6 +1024,11 @@ trait PermissionTests
 
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return [];
+        }
 
         $document = $database->getDocument(
             $collection->getId(),

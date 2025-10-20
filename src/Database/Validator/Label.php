@@ -4,7 +4,11 @@ namespace Utopia\Database\Validator;
 
 class Label extends Key
 {
-    protected string $message = 'Value must be a valid string between 1 and 36 chars containing only alphanumeric chars';
+    public function __construct(bool $allowInternal = false, int $maxLength = 255)
+    {
+        parent::__construct($allowInternal, $maxLength);
+        $this->message = 'Value must be a valid string between 1 and ' . $this->maxLength . ' chars containing only alphanumeric chars';
+    }
 
     /**
      * Is valid.

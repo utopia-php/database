@@ -29,8 +29,9 @@ class Select extends Base
 
     /**
      * @param array<Document> $attributes
+     * @param bool $supportForAttributes
      */
-    public function __construct(array $attributes = [])
+    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
     {
         foreach ($attributes as $attribute) {
             $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
@@ -89,7 +90,7 @@ class Select extends Base
                 continue;
             }
 
-            if (!isset($this->schema[$attribute]) && $attribute !== '*') {
+            if ($this->supportForAttributes && !isset($this->schema[$attribute]) && $attribute !== '*') {
                 $this->message = 'Attribute not found in schema: ' . $attribute;
                 return false;
             }

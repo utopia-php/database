@@ -92,6 +92,11 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $database->setPreserveDates(true);
 
         $database->createCollection('preserve_update_dates');
@@ -186,6 +191,11 @@ trait GeneralTests
 
         /** @var Database $database */
         $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $database->setPreserveDates(true);
 

@@ -979,23 +979,27 @@ trait AttributeTests
             return;
         }
 
+        $limit = floor(($database->getAdapter()->getDocumentSizeLimit() / 4) / $database->getAdapter()->getMaxVarcharLength());
+
         $attributes = [];
 
-        $attributes[] = new Document([
-            '$id' => ID::custom('varchar_16000'),
-            'type' => Database::VAR_STRING,
-            'size' => 16000,
-            'required' => true,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
+        for ($i = 1; $i < $limit; $i++) {
+            $attributes[] = new Document([
+                '$id' => ID::custom('varchar_'.$i),
+                'type' => Database::VAR_STRING,
+                'size' => $database->getAdapter()->getMaxVarcharLength(),
+                'required' => true,
+                'default' => null,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]);
+        }
 
         $attributes[] = new Document([
-            '$id' => ID::custom('varchar_200'),
+            '$id' => ID::custom('breaking'),
             'type' => Database::VAR_STRING,
-            'size' => 200,
+            'size' => $database->getAdapter()->getMaxVarcharLength(),
             'required' => true,
             'default' => null,
             'signed' => true,
@@ -1022,7 +1026,7 @@ trait AttributeTests
         $attribute = new Document([
             '$id' => ID::custom('breaking'),
             'type' => Database::VAR_STRING,
-            'size' => 200,
+            'size' => $database->getAdapter()->getMaxVarcharLength(),
             'required' => true,
             'default' => null,
             'signed' => true,
@@ -1039,7 +1043,7 @@ trait AttributeTests
         }
 
         try {
-            $database->createAttribute($collection->getId(), 'breaking', Database::VAR_STRING, 200, true);
+            $database->createAttribute($collection->getId(), 'breaking', Database::VAR_STRING, $database->getAdapter()->getMaxVarcharLength(), true);
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);

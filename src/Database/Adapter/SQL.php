@@ -1852,10 +1852,7 @@ abstract class SQL extends Adapter
     /**
      * @return int
      */
-    public function getMaxVarcharLength(): int
-    {
-        return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
-    }
+    abstract public function getMaxVarcharLength(): int;
 
     /**
      * Size of POINT spatial type

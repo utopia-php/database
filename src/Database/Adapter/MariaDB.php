@@ -1934,4 +1934,13 @@ class MariaDB extends SQL
     {
         return true;
     }
+
+    /**
+     * @return int
+     */
+    public function getMaxVarcharLength(): int
+    {
+        return $this->getMaxIndexLength();
+        return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
+    }
 }

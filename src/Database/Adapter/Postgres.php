@@ -2327,6 +2327,6 @@ class Postgres extends SQL
      */
     public function getMaxVarcharLength(): int
     {
-        return 16381; // Floor value for Postgres:16383 | MySQL:16381 | MariaDB:16382
+        return 16383;
     }
 }

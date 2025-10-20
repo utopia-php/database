@@ -64,7 +64,7 @@ trait AttributeTests
         $database->createCollection('attributes');
 
         $this->assertEquals(true, $database->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'string2', Database::VAR_STRING, 16382 + 1, true));
+        $this->assertEquals(true, $database->createAttribute('attributes', 'string2', Database::VAR_STRING, 20000, true));
         $this->assertEquals(true, $database->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535 + 1, true));
         $this->assertEquals(true, $database->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215 + 1, true));
         $this->assertEquals(true, $database->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0, true));
@@ -1078,7 +1078,7 @@ trait AttributeTests
         // Go up in size
 
         // 0-16381 to 16382-65535
-        $document = $this->updateStringAttributeSize(16382, $document);
+        $document = $this->updateStringAttributeSize(20000, $document);
 
         // 16382-65535 to 65536-16777215
         $document = $this->updateStringAttributeSize(65536, $document);

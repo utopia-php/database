@@ -84,7 +84,7 @@ class Authorization extends Validator
      * @param string $role
      * @return void
      */
-    public function addRole(string $role): void // user:meldiron, users, any
+    public function addRole(string $role): void
     {
         $this->roles[$role] = true;
     }

@@ -108,9 +108,6 @@ class Index extends Validator
         if (!$this->checkMultipleFulltextIndexes($value)) {
             return false;
         }
-        if (!$this->checkIdenticalIndexes($value)) {
-            return false;
-        }
         if (!$this->checkFulltextIndexNonString($value)) {
             return false;
         }
@@ -130,6 +127,9 @@ class Index extends Validator
             return false;
         }
         if (!$this->checkVectorIndexes($value)) {
+            return false;
+        }
+        if (!$this->checkIdenticalIndexes($value)) {
             return false;
         }
         return true;

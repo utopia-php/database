@@ -108,6 +108,9 @@ class Index extends Validator
         if (!$this->checkMultipleFulltextIndexes($value)) {
             return false;
         }
+        if (!$this->checkIdenticalIndexes($value)) {
+            return false;
+        }
         if (!$this->checkFulltextIndexNonString($value)) {
             return false;
         }

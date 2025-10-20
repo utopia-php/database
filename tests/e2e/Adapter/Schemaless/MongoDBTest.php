@@ -29,7 +29,7 @@ class MongoDBTest extends Base
      * @return Database
      * @throws Exception
      */
-    public  function getDatabase(): Database
+    public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -99,12 +99,12 @@ class MongoDBTest extends Base
         $this->assertTrue(true);
     }
 
-    protected  function deleteColumn(string $collection, string $column): bool
+    protected function deleteColumn(string $collection, string $column): bool
     {
         return true;
     }
 
-    protected  function deleteIndex(string $collection, string $index): bool
+    protected function deleteIndex(string $collection, string $index): bool
     {
         return true;
     }

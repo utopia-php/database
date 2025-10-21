@@ -5336,13 +5336,9 @@ class Database
             }
 
             foreach ($batch as $index => $doc) {
-                if (!empty($operators)) {
-                    // Already refetched and decoded
-                } else {
-                    $doc->removeAttribute('$skipPermissionsUpdate');
-                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                    $doc = $this->decode($collection, $doc);
-                }
+                $doc->removeAttribute('$skipPermissionsUpdate');
+                $this->purgeCachedDocument($collection->getId(), $doc->getId());
+                $doc = $this->decode($collection, $doc);
                 try {
                     $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {

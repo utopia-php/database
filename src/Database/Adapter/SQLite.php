@@ -642,6 +642,7 @@ class SQLite extends MariaDB
      */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
+        $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -805,10 +806,14 @@ class SQLite extends MariaDB
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
 
-            // Check if this is an operator or regular attribute
+            // Check if this is an operator, spatial attribute, or regular attribute
             if (isset($operators[$attribute])) {
                 $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
                 $columns .= $operatorSQL;
+            } elseif (\in_array($attribute, $spatialAttributes, true)) {
+                $bindKey = 'key_' . $bindIndex;
+                $columns .= "`{$column}` = " . $this->getSpatialGeomFromText(':' . $bindKey);
+                $bindIndex++;
             } else {
                 $bindKey = 'key_' . $bindIndex;
                 $columns .= "`{$column}`" . '=:' . $bindKey;
@@ -848,7 +853,12 @@ class SQLite extends MariaDB
                 continue;
             }
 
-            if (is_array($value)) { // arrays & objects should be saved as strings
+            // Convert spatial arrays to WKT, json_encode non-spatial arrays
+            if (\in_array($attribute, $spatialAttributes, true)) {
+                if (\is_array($value)) {
+                    $value = $this->convertArrayToWKT($value);
+                }
+            } elseif (is_array($value)) { // arrays & objects should be saved as strings
                 $value = json_encode($value);
             }
 

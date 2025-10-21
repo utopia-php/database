@@ -2256,6 +2256,146 @@ trait OperatorTests
     }
 
     /**
+     * Test MULTIPLY operator with negative multipliers and max limit
+     * Tests: Negative multipliers should not trigger incorrect overflow checks
+     */
+    public function testOperatorMultiplyWithNegativeMultiplier(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_multiply_negative';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false);
+
+        // Test negative multiplier without max limit
+        $doc1 = $database->createDocument($collectionId, new Document([
+            '$id' => 'negative_multiply',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 10.0
+        ]));
+
+        $updated1 = $database->updateDocument($collectionId, 'negative_multiply', new Document([
+            'value' => Operator::multiply(-2)
+        ]));
+        $this->assertEquals(-20.0, $updated1->getAttribute('value'), 'Multiply by negative should work correctly');
+
+        // Test negative multiplier WITH max limit - should not incorrectly cap
+        $doc2 = $database->createDocument($collectionId, new Document([
+            '$id' => 'negative_with_max',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 10.0
+        ]));
+
+        $updated2 = $database->updateDocument($collectionId, 'negative_with_max', new Document([
+            'value' => Operator::multiply(-2, 100)  // max=100, but result will be -20
+        ]));
+        $this->assertEquals(-20.0, $updated2->getAttribute('value'), 'Negative multiplier with max should not trigger overflow check');
+
+        // Test positive value * negative multiplier - result is negative, should not cap
+        $doc3 = $database->createDocument($collectionId, new Document([
+            '$id' => 'pos_times_neg',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 50.0
+        ]));
+
+        $updated3 = $database->updateDocument($collectionId, 'pos_times_neg', new Document([
+            'value' => Operator::multiply(-3, 100)  // 50 * -3 = -150, should not be capped at 100
+        ]));
+        $this->assertEquals(-150.0, $updated3->getAttribute('value'), 'Positive * negative should compute correctly (result is negative, no cap)');
+
+        // Test negative value * negative multiplier that SHOULD hit max cap
+        $doc4 = $database->createDocument($collectionId, new Document([
+            '$id' => 'negative_overflow',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => -60.0
+        ]));
+
+        $updated4 = $database->updateDocument($collectionId, 'negative_overflow', new Document([
+            'value' => Operator::multiply(-3, 100)  // -60 * -3 = 180, should be capped at 100
+        ]));
+        $this->assertEquals(100.0, $updated4->getAttribute('value'), 'Negative * negative should cap at max when result would exceed it');
+
+        // Test zero multiplier with max
+        $doc5 = $database->createDocument($collectionId, new Document([
+            '$id' => 'zero_multiply',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 50.0
+        ]));
+
+        $updated5 = $database->updateDocument($collectionId, 'zero_multiply', new Document([
+            'value' => Operator::multiply(0, 100)
+        ]));
+        $this->assertEquals(0.0, $updated5->getAttribute('value'), 'Multiply by zero should result in zero');
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Test DIVIDE operator with negative divisors and min limit
+     * Tests: Negative divisors should not trigger incorrect underflow checks
+     */
+    public function testOperatorDivideWithNegativeDivisor(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_divide_negative';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false);
+
+        // Test negative divisor without min limit
+        $doc1 = $database->createDocument($collectionId, new Document([
+            '$id' => 'negative_divide',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 20.0
+        ]));
+
+        $updated1 = $database->updateDocument($collectionId, 'negative_divide', new Document([
+            'value' => Operator::divide(-2)
+        ]));
+        $this->assertEquals(-10.0, $updated1->getAttribute('value'), 'Divide by negative should work correctly');
+
+        // Test negative divisor WITH min limit - should not incorrectly cap
+        $doc2 = $database->createDocument($collectionId, new Document([
+            '$id' => 'negative_with_min',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 20.0
+        ]));
+
+        $updated2 = $database->updateDocument($collectionId, 'negative_with_min', new Document([
+            'value' => Operator::divide(-2, -50)  // min=-50, result will be -10
+        ]));
+        $this->assertEquals(-10.0, $updated2->getAttribute('value'), 'Negative divisor with min should not trigger underflow check');
+
+        // Test positive value / negative divisor - result is negative, should not cap at min
+        $doc3 = $database->createDocument($collectionId, new Document([
+            '$id' => 'pos_div_neg',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 100.0
+        ]));
+
+        $updated3 = $database->updateDocument($collectionId, 'pos_div_neg', new Document([
+            'value' => Operator::divide(-4, -10)  // 100 / -4 = -25, should not be capped at -10
+        ]));
+        $this->assertEquals(-25.0, $updated3->getAttribute('value'), 'Positive / negative should compute correctly (result is negative, no cap)');
+
+        // Test negative value / negative divisor that would go below min
+        $doc4 = $database->createDocument($collectionId, new Document([
+            '$id' => 'negative_underflow',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 40.0
+        ]));
+
+        $updated4 = $database->updateDocument($collectionId, 'negative_underflow', new Document([
+            'value' => Operator::divide(-2, -10)  // 40 / -2 = -20, which is below min -10, so floor at -10
+        ]));
+        $this->assertEquals(-10.0, $updated4->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
+
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
      * Bug #6: Post-Operator Validation Missing
      * Test that ARRAY_APPEND can add items that violate array item constraints
      *
@@ -3604,6 +3744,116 @@ trait OperatorTests
         $this->assertEquals('MultiTest', $doc12->getAttribute('name'));
 
         // Cleanup
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Test that array operators return empty arrays instead of NULL
+     * Tests: ARRAY_UNIQUE, ARRAY_INTERSECT, and ARRAY_DIFF return [] not NULL
+     */
+    public function testOperatorArrayEmptyResultsNotNull(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_array_not_null';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
+
+        // Test ARRAY_UNIQUE on empty array returns [] not NULL
+        $doc1 = $database->createDocument($collectionId, new Document([
+            '$id' => 'empty_unique',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'items' => []
+        ]));
+
+        $updated1 = $database->updateDocument($collectionId, 'empty_unique', new Document([
+            'items' => Operator::arrayUnique()
+        ]));
+        $this->assertIsArray($updated1->getAttribute('items'), 'ARRAY_UNIQUE should return array not NULL');
+        $this->assertEquals([], $updated1->getAttribute('items'), 'ARRAY_UNIQUE on empty array should return []');
+
+        // Test ARRAY_INTERSECT with no matches returns [] not NULL
+        $doc2 = $database->createDocument($collectionId, new Document([
+            '$id' => 'no_intersect',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'items' => ['a', 'b', 'c']
+        ]));
+
+        $updated2 = $database->updateDocument($collectionId, 'no_intersect', new Document([
+            'items' => Operator::arrayIntersect(['x', 'y', 'z'])
+        ]));
+        $this->assertIsArray($updated2->getAttribute('items'), 'ARRAY_INTERSECT should return array not NULL');
+        $this->assertEquals([], $updated2->getAttribute('items'), 'ARRAY_INTERSECT with no matches should return []');
+
+        // Test ARRAY_DIFF removing all elements returns [] not NULL
+        $doc3 = $database->createDocument($collectionId, new Document([
+            '$id' => 'diff_all',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'items' => ['a', 'b', 'c']
+        ]));
+
+        $updated3 = $database->updateDocument($collectionId, 'diff_all', new Document([
+            'items' => Operator::arrayDiff(['a', 'b', 'c'])
+        ]));
+        $this->assertIsArray($updated3->getAttribute('items'), 'ARRAY_DIFF should return array not NULL');
+        $this->assertEquals([], $updated3->getAttribute('items'), 'ARRAY_DIFF removing all elements should return []');
+
+        // Cleanup
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Test that updateDocuments with operators properly invalidates cache
+     * Tests: Cache should be purged after operator updates to prevent stale data
+     */
+    public function testUpdateDocumentsWithOperatorsCacheInvalidation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'test_operator_cache';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 0);
+
+        // Create a document
+        $doc = $database->createDocument($collectionId, new Document([
+            '$id' => 'cache_test',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'counter' => 10
+        ]));
+
+        // First read to potentially cache
+        $fetched1 = $database->getDocument($collectionId, 'cache_test');
+        $this->assertEquals(10, $fetched1->getAttribute('counter'));
+
+        // Use updateDocuments with operator
+        $count = $database->updateDocuments(
+            $collectionId,
+            new Document([
+                'counter' => Operator::increment(5)
+            ]),
+            [Query::equal('$id', ['cache_test'])]
+        );
+
+        $this->assertEquals(1, $count);
+
+        // Read again - should get fresh value, not cached old value
+        $fetched2 = $database->getDocument($collectionId, 'cache_test');
+        $this->assertEquals(15, $fetched2->getAttribute('counter'), 'Cache should be invalidated after operator update');
+
+        // Do another operator update
+        $database->updateDocuments(
+            $collectionId,
+            new Document([
+                'counter' => Operator::multiply(2)
+            ])
+        );
+
+        // Verify cache was invalidated again
+        $fetched3 = $database->getDocument($collectionId, 'cache_test');
+        $this->assertEquals(30, $fetched3->getAttribute('counter'), 'Cache should be invalidated after second operator update');
+
         $database->deleteCollection($collectionId);
     }
 }

@@ -2109,7 +2109,7 @@ abstract class SQL extends Adapter
                 break;
 
             case Operator::TYPE_ARRAY_FILTER:
-                $condition = $values[0] ?? 'equals';
+                $condition = $values[0] ?? 'equal';
                 $value = $values[1] ?? null;
 
                 // SECURITY: Whitelist validation to prevent SQL injection in CASE statements

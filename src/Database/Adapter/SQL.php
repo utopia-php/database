@@ -2138,72 +2138,98 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Compute the result value for an operator applied to a default value.
-     * Used when inserting new documents with only operators to ensure they have proper values.
+     * Apply an operator to a value (used for new documents with only operators).
+     * This method applies the operator logic in PHP to compute what the SQL would compute.
      *
      * @param Operator $operator
-     * @return mixed
+     * @param mixed $value The current value (typically the attribute default)
+     * @return mixed The result after applying the operator
      */
-    protected function computeOperatorDefaultValue(Operator $operator): mixed
+    protected function applyOperatorToValue(Operator $operator, mixed $value): mixed
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators: apply to 0
+            // Numeric operators
             case Operator::TYPE_INCREMENT:
-                return ($values[0] ?? 1);
+                return ($value ?? 0) + ($values[0] ?? 1);
 
             case Operator::TYPE_DECREMENT:
-                return -($values[0] ?? 1);
+                return ($value ?? 0) - ($values[0] ?? 1);
 
             case Operator::TYPE_MULTIPLY:
+                return ($value ?? 0) * ($values[0] ?? 1);
+
             case Operator::TYPE_DIVIDE:
+                $divisor = $values[0] ?? 1;
+                return $divisor != 0 ? ($value ?? 0) / $divisor : ($value ?? 0);
+
             case Operator::TYPE_MODULO:
-                return 0;
+                $divisor = $values[0] ?? 1;
+                return $divisor != 0 ? ($value ?? 0) % $divisor : ($value ?? 0);
 
             case Operator::TYPE_POWER:
-                return ($values[0] ?? 1) === 0 ? 1 : 0;
+                return pow($value ?? 0, $values[0] ?? 1);
 
-            // Array operators: apply to empty array
+            // Array operators
             case Operator::TYPE_ARRAY_APPEND:
-                return $values; // Append to empty array = the values
+                return array_merge($value ?? [], $values);
 
             case Operator::TYPE_ARRAY_PREPEND:
-                return $values; // Prepend to empty array = the values
+                return array_merge($values, $value ?? []);
 
             case Operator::TYPE_ARRAY_INSERT:
-                $value = $values[1] ?? null;
-                return [$value]; // Insert at index 0 in empty array
+                $arr = $value ?? [];
+                $index = $values[0] ?? 0;
+                $item = $values[1] ?? null;
+                array_splice($arr, $index, 0, [$item]);
+                return $arr;
 
             case Operator::TYPE_ARRAY_REMOVE:
-            case Operator::TYPE_ARRAY_UNIQUE:
-            case Operator::TYPE_ARRAY_INTERSECT:
-            case Operator::TYPE_ARRAY_DIFF:
-            case Operator::TYPE_ARRAY_FILTER:
-                return []; // These all return empty array when applied to empty array
+                $arr = $value ?? [];
+                $toRemove = $values[0] ?? null;
+                if (is_array($toRemove)) {
+                    return array_values(array_diff($arr, $toRemove));
+                }
+                return array_values(array_diff($arr, [$toRemove]));
 
-            // String operators: apply to empty string
+            case Operator::TYPE_ARRAY_UNIQUE:
+                return array_values(array_unique($value ?? []));
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                return array_values(array_intersect($value ?? [], $values));
+
+            case Operator::TYPE_ARRAY_DIFF:
+                return array_values(array_diff($value ?? [], $values));
+
+            case Operator::TYPE_ARRAY_FILTER:
+                return $value ?? [];
+
+            // String operators
             case Operator::TYPE_CONCAT:
-                return $values[0] ?? '';
+                return ($value ?? '') . ($values[0] ?? '');
 
             case Operator::TYPE_REPLACE:
-                return ''; // Replace in empty string = empty string
+                $search = $values[0] ?? '';
+                $replace = $values[1] ?? '';
+                return str_replace($search, $replace, $value ?? '');
 
             // Boolean operators
             case Operator::TYPE_TOGGLE:
-                return true; // Toggle false = true
+                return !($value ?? false);
 
             // Date operators
             case Operator::TYPE_DATE_ADD_DAYS:
             case Operator::TYPE_DATE_SUB_DAYS:
-                return null; // Date operations on NULL return NULL
+                // For NULL dates, operators return NULL
+                return $value;
 
             case Operator::TYPE_DATE_SET_NOW:
                 return \Utopia\Database\DateTime::now();
 
             default:
-                return null;
+                return $value;
         }
     }
 
@@ -2618,6 +2644,13 @@ abstract class SQL extends Adapter
         }
         try {
             $spatialAttributes = $this->getSpatialAttributes($collection);
+
+            // Build attribute defaults map before we lose the collection document
+            $attributeDefaults = [];
+            foreach ($collection->getAttribute('attributes', []) as $attr) {
+                $attributeDefaults[$attr['$id']] = $attr['default'] ?? null;
+            }
+
             $collection = $collection->getId();
             $name = $this->filter($collection);
 
@@ -2770,11 +2803,12 @@ abstract class SQL extends Adapter
                         $currentRegularAttributes = $extracted['updates'];
                         $extractedOperators = $extracted['operators'];
 
-                        // For new documents, compute operator default values and add to regular attributes
+                        // For new documents, apply operators to attribute defaults
                         // This ensures operators work even when no regular attributes are present
                         if ($change->getOld()->isEmpty() && !empty($extractedOperators)) {
                             foreach ($extractedOperators as $operatorKey => $operator) {
-                                $currentRegularAttributes[$operatorKey] = $this->computeOperatorDefaultValue($operator);
+                                $default = $attributeDefaults[$operatorKey] ?? null;
+                                $currentRegularAttributes[$operatorKey] = $this->applyOperatorToValue($operator, $default);
                             }
                         }
 

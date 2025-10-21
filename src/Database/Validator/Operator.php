@@ -14,7 +14,7 @@ class Operator extends Validator
     /**
      * @var array<string, Document|array<string, mixed>>
      */
-    protected array $attributes;
+    protected array $attributes = [];
 
     protected string $message = 'Invalid operator';
 

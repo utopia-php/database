@@ -716,7 +716,7 @@ class StructureTest extends TestCase
         );
 
         $sqlId = '1000';
-        $mongoId = '507f1f77bcf86cd799439011';
+        $mongoId = '0198fffb-d664-710a-9765-f922b3e81e3d';
 
         $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -748,7 +748,7 @@ class StructureTest extends TestCase
 
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_UUID
+            Database::VAR_UUID7
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([

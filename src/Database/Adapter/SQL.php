@@ -2232,7 +2232,7 @@ abstract class SQL extends Adapter
             case Operator::TYPE_POWER:
                 return pow($value ?? 0, $values[0] ?? 1);
 
-            // Array operators
+                // Array operators
             case Operator::TYPE_ARRAY_APPEND:
                 return array_merge($value ?? [], $values);
 
@@ -2266,7 +2266,7 @@ abstract class SQL extends Adapter
             case Operator::TYPE_ARRAY_FILTER:
                 return $value ?? [];
 
-            // String operators
+                // String operators
             case Operator::TYPE_CONCAT:
                 return ($value ?? '') . ($values[0] ?? '');
 
@@ -2275,11 +2275,11 @@ abstract class SQL extends Adapter
                 $replace = $values[1] ?? '';
                 return str_replace($search, $replace, $value ?? '');
 
-            // Boolean operators
+                // Boolean operators
             case Operator::TYPE_TOGGLE:
                 return !($value ?? false);
 
-            // Date operators
+                // Date operators
             case Operator::TYPE_DATE_ADD_DAYS:
             case Operator::TYPE_DATE_SUB_DAYS:
                 // For NULL dates, operators return NULL

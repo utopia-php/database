@@ -1398,4 +1398,8 @@ abstract class Adapter
     */
     abstract public function setSupportForAttributes(bool $support): bool;
 
+    /**
+     * @return int
+     */
+    abstract public function getMaxVarcharLength(): int;
 }

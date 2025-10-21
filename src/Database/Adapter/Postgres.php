@@ -2321,4 +2321,12 @@ class Postgres extends SQL
 
         return $rings; // array of rings, each ring is array of [x,y]
     }
+
+    /**
+     * @return int
+     */
+    public function getMaxVarcharLength(): int
+    {
+        return 16383;
+    }
 }

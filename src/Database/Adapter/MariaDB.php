@@ -1934,4 +1934,16 @@ class MariaDB extends SQL
     {
         return true;
     }
+
+    /**
+     * @return int
+     */
+    public function getMaxVarcharLength(): int
+    {
+        /**
+         * Max varchar in MySQL:16381 | MariaDB:16382
+         * Will return the max the index length can use for smaller page size
+         */
+        return $this->getMaxIndexLength();
+    }
 }

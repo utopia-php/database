@@ -3189,4 +3189,9 @@ class Mongo extends Adapter
     {
         return '';
     }
+
+    public function getMaxVarcharLength(): int
+    {
+        return 0;
+    }
 }

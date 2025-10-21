@@ -64,7 +64,7 @@ trait AttributeTests
         $database->createCollection('attributes');
 
         $this->assertEquals(true, $database->createAttribute('attributes', 'string1', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute('attributes', 'string2', Database::VAR_STRING, 16382 + 1, true));
+        $this->assertEquals(true, $database->createAttribute('attributes', 'string2', Database::VAR_STRING, 20000, true));
         $this->assertEquals(true, $database->createAttribute('attributes', 'string3', Database::VAR_STRING, 65535 + 1, true));
         $this->assertEquals(true, $database->createAttribute('attributes', 'string4', Database::VAR_STRING, 16777215 + 1, true));
         $this->assertEquals(true, $database->createAttribute('attributes', 'integer', Database::VAR_INTEGER, 0, true));
@@ -979,23 +979,27 @@ trait AttributeTests
             return;
         }
 
+        $limit = floor(($database->getAdapter()->getDocumentSizeLimit() / 4) / $database->getAdapter()->getMaxVarcharLength());
+
         $attributes = [];
 
-        $attributes[] = new Document([
-            '$id' => ID::custom('varchar_16000'),
-            'type' => Database::VAR_STRING,
-            'size' => 16000,
-            'required' => true,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
+        for ($i = 1; $i < $limit; $i++) {
+            $attributes[] = new Document([
+                '$id' => ID::custom('varchar_'.$i),
+                'type' => Database::VAR_STRING,
+                'size' => $database->getAdapter()->getMaxVarcharLength(),
+                'required' => true,
+                'default' => null,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]);
+        }
 
         $attributes[] = new Document([
-            '$id' => ID::custom('varchar_200'),
+            '$id' => ID::custom('breaking'),
             'type' => Database::VAR_STRING,
-            'size' => 200,
+            'size' => $database->getAdapter()->getMaxVarcharLength(),
             'required' => true,
             'default' => null,
             'signed' => true,
@@ -1022,7 +1026,7 @@ trait AttributeTests
         $attribute = new Document([
             '$id' => ID::custom('breaking'),
             'type' => Database::VAR_STRING,
-            'size' => 200,
+            'size' => $database->getAdapter()->getMaxVarcharLength(),
             'required' => true,
             'default' => null,
             'signed' => true,
@@ -1039,7 +1043,7 @@ trait AttributeTests
         }
 
         try {
-            $database->createAttribute($collection->getId(), 'breaking', Database::VAR_STRING, 200, true);
+            $database->createAttribute($collection->getId(), 'breaking', Database::VAR_STRING, $database->getAdapter()->getMaxVarcharLength(), true);
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
@@ -1074,7 +1078,7 @@ trait AttributeTests
         // Go up in size
 
         // 0-16381 to 16382-65535
-        $document = $this->updateStringAttributeSize(16382, $document);
+        $document = $this->updateStringAttributeSize(20000, $document);
 
         // 16382-65535 to 65536-16777215
         $document = $this->updateStringAttributeSize(65536, $document);

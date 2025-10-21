@@ -1908,7 +1908,7 @@ abstract class SQL extends Adapter
                 return "{$quotedColumn} = JSON_REMOVE({$quotedColumn}, JSON_UNQUOTE(JSON_SEARCH({$quotedColumn}, 'one', :$bindKey)))";
 
             case Operator::TYPE_ARRAY_UNIQUE:
-                return "{$quotedColumn} = (SELECT JSON_ARRAYAGG(DISTINCT value) FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt)";
+                return "{$quotedColumn} = IFNULL((SELECT JSON_ARRAYAGG(DISTINCT value) FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt), '[]')";
 
             case Operator::TYPE_ARRAY_INSERT:
                 $indexKey = "op_{$bindIndex}";
@@ -1920,26 +1920,26 @@ abstract class SQL extends Adapter
             case Operator::TYPE_ARRAY_INTERSECT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = (
+                return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(jt1.value)
                     FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt1
                     WHERE jt1.value IN (
                         SELECT jt2.value
                         FROM JSON_TABLE(:$bindKey, '$[*]' COLUMNS(value JSON PATH '$')) AS jt2
                     )
-                )";
+                ), '[]')";
 
             case Operator::TYPE_ARRAY_DIFF:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = (
+                return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(jt1.value)
                     FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt1
                     WHERE jt1.value NOT IN (
                         SELECT jt2.value
                         FROM JSON_TABLE(:$bindKey, '$[*]' COLUMNS(value JSON PATH '$')) AS jt2
                     )
-                )";
+                ), '[]')";
 
             case Operator::TYPE_ARRAY_FILTER:
                 $conditionKey = "op_{$bindIndex}";

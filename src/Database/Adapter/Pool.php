@@ -6,6 +6,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
 class Pool extends Adapter
@@ -66,6 +67,7 @@ class Pool extends Adapter
             $adapter->setNamespace($this->getNamespace());
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
+            $adapter->setAuthorization($this->authorization);
 
             if ($this->getTimeout() > 0) {
                 $adapter->setTimeout($this->getTimeout());
@@ -608,5 +610,11 @@ class Pool extends Adapter
     public function setSupportForAttributes(bool $support): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+        return $this;
     }
 }

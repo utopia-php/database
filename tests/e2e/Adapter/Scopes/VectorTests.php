@@ -1571,7 +1571,7 @@ trait VectorTests
         }
 
         // Create documents with different permissions inside Authorization::skip
-        Authorization::skip(function () use ($database) {
+        $database->getAuthorization()->skip(function () use ($database) {
             $database->createCollection('vectorPermissions', [], [], [], true);
             $database->createAttribute('vectorPermissions', 'name', Database::VAR_STRING, 255, true);
             $database->createAttribute('vectorPermissions', 'embedding', Database::VAR_VECTOR, 3, true);
@@ -1602,8 +1602,8 @@ trait VectorTests
         });
 
         // Query as user1 - should only see doc1 and doc3
-        Authorization::setRole(Role::user('user1')->toString());
-        Authorization::setRole(Role::any()->toString());
+        $database->getAuthorization()->addRole(Role::user('user1')->toString());
+        $database->getAuthorization()->addRole(Role::any()->toString());
         $results = $database->find('vectorPermissions', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
         ]);
@@ -1615,9 +1615,9 @@ trait VectorTests
         $this->assertNotContains('Doc 2', $names);
 
         // Query as user2 - should only see doc2 and doc3
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::user('user2')->toString());
-        Authorization::setRole(Role::any()->toString());
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::user('user2')->toString());
+        $database->getAuthorization()->addRole(Role::any()->toString());
         $results = $database->find('vectorPermissions', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0])
         ]);
@@ -1628,8 +1628,8 @@ trait VectorTests
         $this->assertContains('Doc 3', $names);
         $this->assertNotContains('Doc 1', $names);
 
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::any()->toString());
 
         // Cleanup
         $database->deleteCollection('vectorPermissions');
@@ -1663,7 +1663,7 @@ trait VectorTests
         }
 
         // Query with limit 3 as any user - should skip restricted docs and return accessible ones
-        Authorization::setRole(Role::any()->toString());
+        $database->getAuthorization()->addRole(Role::any()->toString());
         $results = $database->find('vectorPermScoring', [
             Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
             Query::limit(3)
@@ -1675,7 +1675,7 @@ trait VectorTests
             $this->assertGreaterThanOrEqual(3, $doc->getAttribute('score'));
         }
 
-        Authorization::cleanRoles();
+        $database->getAuthorization()->cleanRoles();
 
         // Cleanup
         $database->deleteCollection('vectorPermScoring');

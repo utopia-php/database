@@ -18,7 +18,7 @@ trait SpatialTests
     public function testSpatialCollection(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $collectionName = "test_spatial_Col";
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -93,7 +93,7 @@ trait SpatialTests
     public function testSpatialTypeDocuments(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -246,7 +246,7 @@ trait SpatialTests
     public function testSpatialRelationshipOneToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -351,7 +351,7 @@ trait SpatialTests
     public function testSpatialAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -399,7 +399,7 @@ trait SpatialTests
     public function testSpatialOneToMany(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -511,7 +511,7 @@ trait SpatialTests
     public function testSpatialManyToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -616,7 +616,7 @@ trait SpatialTests
     public function testSpatialManyToMany(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -721,7 +721,7 @@ trait SpatialTests
     public function testSpatialIndex(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -918,7 +918,7 @@ trait SpatialTests
     public function testComplexGeometricShapes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -1349,7 +1349,7 @@ trait SpatialTests
     public function testSpatialQueryCombinations(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -1480,7 +1480,7 @@ trait SpatialTests
     public function testSpatialBulkOperation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -1783,7 +1783,7 @@ trait SpatialTests
     public function testSptialAggregation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -1871,7 +1871,7 @@ trait SpatialTests
     public function testUpdateSpatialAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -1958,7 +1958,7 @@ trait SpatialTests
     public function testSpatialAttributeDefaults(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2063,7 +2063,7 @@ trait SpatialTests
     public function testInvalidSpatialTypes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2169,7 +2169,7 @@ trait SpatialTests
     public function testSpatialDistanceInMeter(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2240,7 +2240,7 @@ trait SpatialTests
     public function testSpatialDistanceInMeterForMultiDimensionGeometry(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2372,7 +2372,7 @@ trait SpatialTests
     public function testSpatialDistanceInMeterError(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2457,7 +2457,7 @@ trait SpatialTests
         ]);
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2499,7 +2499,7 @@ trait SpatialTests
     public function testSpatialIndexSingleAttributeOnly(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2551,7 +2551,7 @@ trait SpatialTests
     public function testSpatialIndexRequiredToggling(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2586,7 +2586,7 @@ trait SpatialTests
     public function testSpatialIndexOnNonSpatial(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2648,7 +2648,7 @@ trait SpatialTests
     public function testSpatialDocOrder(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2680,7 +2680,7 @@ trait SpatialTests
     public function testInvalidCoordinateDocuments(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2772,7 +2772,7 @@ trait SpatialTests
     public function testCreateSpatialColumnWithExistingData(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;

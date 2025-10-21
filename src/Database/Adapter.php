@@ -1078,6 +1078,13 @@ abstract class Adapter
     abstract public function getSupportForSpatialIndexNull(): bool;
 
     /**
+     * Does the adapter support operators?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOperators(): bool;
+
+    /**
      * Adapter supports optional spatial attributes with existing rows.
      *
      * @return bool

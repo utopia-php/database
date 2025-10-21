@@ -1553,6 +1553,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Does the adapter support operators?
+     *
+     * @return bool
+     */
+    public function getSupportForOperators(): bool
+    {
+        return true;
+    }
+
+    /**
      * Does the adapter support order attribute in spatial indexes?
      *
      * @return bool

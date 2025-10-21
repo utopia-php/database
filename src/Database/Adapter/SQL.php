@@ -22,6 +22,12 @@ abstract class SQL extends Adapter
     protected mixed $pdo;
 
     /**
+     * Maximum array size for array operations to prevent memory exhaustion.
+     * Large arrays in JSON_TABLE operations can cause significant memory usage.
+     */
+    protected const MAX_ARRAY_OPERATOR_SIZE = 10000;
+
+    /**
      * Controls how many fractional digits are used when binding float parameters.
      */
     protected int $floatPrecision = 17;
@@ -1794,7 +1800,6 @@ abstract class SQL extends Adapter
         $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators
             case Operator::TYPE_INCREMENT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -1802,9 +1807,9 @@ abstract class SQL extends Adapter
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = LEAST({$quotedColumn} + :$bindKey, :$maxKey)";
+                    return "{$quotedColumn} = LEAST(COALESCE({$quotedColumn}, 0) + :$bindKey, :$maxKey)";
                 }
-                return "{$quotedColumn} = {$quotedColumn} + :$bindKey";
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
             case Operator::TYPE_DECREMENT:
                 $bindKey = "op_{$bindIndex}";
@@ -1813,9 +1818,9 @@ abstract class SQL extends Adapter
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = GREATEST({$quotedColumn} - :$bindKey, :$minKey)";
+                    return "{$quotedColumn} = GREATEST(COALESCE({$quotedColumn}, 0) - :$bindKey, :$minKey)";
                 }
-                return "{$quotedColumn} = {$quotedColumn} - :$bindKey";
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
             case Operator::TYPE_MULTIPLY:
                 $bindKey = "op_{$bindIndex}";
@@ -1824,9 +1829,9 @@ abstract class SQL extends Adapter
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = LEAST({$quotedColumn} * :$bindKey, :$maxKey)";
+                    return "{$quotedColumn} = LEAST(COALESCE({$quotedColumn}, 0) * :$bindKey, :$maxKey)";
                 }
-                return "{$quotedColumn} = {$quotedColumn} * :$bindKey";
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
             case Operator::TYPE_DIVIDE:
                 $bindKey = "op_{$bindIndex}";
@@ -1835,14 +1840,14 @@ abstract class SQL extends Adapter
                 if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = GREATEST({$quotedColumn} / :$bindKey, :$minKey)";
+                    return "{$quotedColumn} = GREATEST(COALESCE({$quotedColumn}, 0) / :$bindKey, :$minKey)";
                 }
-                return "{$quotedColumn} = {$quotedColumn} / :$bindKey";
+                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
 
             case Operator::TYPE_MODULO:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = MOD({$quotedColumn}, :$bindKey)";
+                return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
             case Operator::TYPE_POWER:
                 $bindKey = "op_{$bindIndex}";
@@ -1851,9 +1856,9 @@ abstract class SQL extends Adapter
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
-                    return "{$quotedColumn} = LEAST(POWER({$quotedColumn}, :$bindKey), :$maxKey)";
+                    return "{$quotedColumn} = LEAST(POWER(COALESCE({$quotedColumn}, 0), :$bindKey), :$maxKey)";
                 }
-                return "{$quotedColumn} = POWER({$quotedColumn}, :$bindKey)";
+                return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
                 // String operators
             case Operator::TYPE_CONCAT:
@@ -1868,9 +1873,9 @@ abstract class SQL extends Adapter
                 $bindIndex++;
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
-                // Boolean operators
+                // Boolean operators with NULL handling
             case Operator::TYPE_TOGGLE:
-                return "{$quotedColumn} = NOT {$quotedColumn}";
+                return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
 
                 // Date operators
             case Operator::TYPE_DATE_ADD_DAYS:
@@ -2052,6 +2057,11 @@ abstract class SQL extends Adapter
                 // Array operators
             case Operator::TYPE_ARRAY_APPEND:
             case Operator::TYPE_ARRAY_PREPEND:
+                // PERFORMANCE: Validate array size to prevent memory exhaustion
+                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                }
+
                 // Bind JSON array
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
@@ -2087,6 +2097,11 @@ abstract class SQL extends Adapter
 
             case Operator::TYPE_ARRAY_INTERSECT:
             case Operator::TYPE_ARRAY_DIFF:
+                // PERFORMANCE: Validate array size to prevent memory exhaustion
+                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
+                }
+
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
                 $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
@@ -2096,6 +2111,18 @@ abstract class SQL extends Adapter
             case Operator::TYPE_ARRAY_FILTER:
                 $condition = $values[0] ?? 'equals';
                 $value = $values[1] ?? null;
+
+                // SECURITY: Whitelist validation to prevent SQL injection in CASE statements
+                // Support all variations used across adapters (SQL, MariaDB, Postgres, SQLite)
+                $validConditions = [
+                    'equal', 'notEqual', 'equals', 'notEquals',  // Comparison
+                    'greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual',  // Numeric
+                    'isNull', 'isNotNull', 'null', 'notNull'  // Null checks
+                ];
+                if (!in_array($condition, $validConditions, true)) {
+                    throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: " . implode(', ', $validConditions));
+                }
+
                 $conditionKey = "op_{$bindIndex}";
                 $stmt->bindValue(':' . $conditionKey, $condition, \PDO::PARAM_STR);
                 $bindIndex++;
@@ -2107,6 +2134,76 @@ abstract class SQL extends Adapter
                 }
                 $bindIndex++;
                 break;
+        }
+    }
+
+    /**
+     * Compute the result value for an operator applied to a default value.
+     * Used when inserting new documents with only operators to ensure they have proper values.
+     *
+     * @param Operator $operator
+     * @return mixed
+     */
+    protected function computeOperatorDefaultValue(Operator $operator): mixed
+    {
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            // Numeric operators: apply to 0
+            case Operator::TYPE_INCREMENT:
+                return ($values[0] ?? 1);
+
+            case Operator::TYPE_DECREMENT:
+                return -($values[0] ?? 1);
+
+            case Operator::TYPE_MULTIPLY:
+            case Operator::TYPE_DIVIDE:
+            case Operator::TYPE_MODULO:
+                return 0;
+
+            case Operator::TYPE_POWER:
+                return ($values[0] ?? 1) === 0 ? 1 : 0;
+
+            // Array operators: apply to empty array
+            case Operator::TYPE_ARRAY_APPEND:
+                return $values; // Append to empty array = the values
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                return $values; // Prepend to empty array = the values
+
+            case Operator::TYPE_ARRAY_INSERT:
+                $value = $values[1] ?? null;
+                return [$value]; // Insert at index 0 in empty array
+
+            case Operator::TYPE_ARRAY_REMOVE:
+            case Operator::TYPE_ARRAY_UNIQUE:
+            case Operator::TYPE_ARRAY_INTERSECT:
+            case Operator::TYPE_ARRAY_DIFF:
+            case Operator::TYPE_ARRAY_FILTER:
+                return []; // These all return empty array when applied to empty array
+
+            // String operators: apply to empty string
+            case Operator::TYPE_CONCAT:
+                return $values[0] ?? '';
+
+            case Operator::TYPE_REPLACE:
+                return ''; // Replace in empty string = empty string
+
+            // Boolean operators
+            case Operator::TYPE_TOGGLE:
+                return true; // Toggle false = true
+
+            // Date operators
+            case Operator::TYPE_DATE_ADD_DAYS:
+            case Operator::TYPE_DATE_SUB_DAYS:
+                return null; // Date operations on NULL return NULL
+
+            case Operator::TYPE_DATE_SET_NOW:
+                return \Utopia\Database\DateTime::now();
+
+            default:
+                return null;
         }
     }
 
@@ -2505,163 +2602,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Upsert a batch of documents with the same operator signature
-     *
-     * @param string $name
-     * @param string $attribute
-     * @param array<Change> $changes
-     * @param array<string> $spatialAttributes
-     * @return void
-     * @throws DatabaseException
-     */
-    protected function upsertDocumentsBatch(
-        string $name,
-        string $attribute,
-        array $changes,
-        array $spatialAttributes
-    ): void {
-        $bindIndex = 0;
-        $batchKeys = [];
-        $bindValues = [];
-        $operators = [];
-
-        $allColumnNames = [];
-        $documentsData = [];
-
-        foreach ($changes as $change) {
-            if ($change instanceof Change) {
-                $document = $change->getNew();
-            } else {
-                $document = $change;
-            }
-            $attributes = $document->getAttributes();
-
-            // Extract operators before processing attributes
-            $extracted = Operator::extractOperators($attributes);
-            $currentOperators = $extracted['operators'];
-            $currentRegularAttributes = $extracted['updates'];
-
-            // Since all documents in this batch have the same operator signature,
-            // we can safely merge operators (they should have the same keys)
-            if (empty($operators)) {
-                $operators = $currentOperators;
-            }
-
-            $currentRegularAttributes['_uid'] = $document->getId();
-            $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getCreatedAt()) : null;
-            $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getUpdatedAt()) : null;
-            $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
-
-            if (!empty($document->getSequence())) {
-                $currentRegularAttributes['_id'] = $document->getSequence();
-            }
-
-            if ($this->sharedTables) {
-                $currentRegularAttributes['_tenant'] = $document->getTenant();
-            }
-
-            // Collect column names from regular attributes
-            foreach (\array_keys($currentRegularAttributes) as $colName) {
-                $allColumnNames[$colName] = true;
-            }
-
-            // For operator attributes, also add them to the column list
-            // These will be in the INSERT clause but handled specially in UPDATE clause
-            foreach (\array_keys($currentOperators) as $colName) {
-                $allColumnNames[$colName] = true;
-            }
-
-            $documentsData[] = [
-                'regularAttributes' => $currentRegularAttributes,
-                'operators' => $currentOperators
-            ];
-        }
-
-        // Sort column names for consistency
-        $allColumnNames = \array_keys($allColumnNames);
-        \sort($allColumnNames);
-
-        // Build column string
-        $columnsArray = [];
-        foreach ($allColumnNames as $attr) {
-            $columnsArray[] = "{$this->quote($this->filter($attr))}";
-        }
-        $columns = '(' . \implode(', ', $columnsArray) . ')';
-
-        // Second pass: build values for each document using all columns
-        foreach ($documentsData as $docData) {
-            $currentRegularAttributes = $docData['regularAttributes'];
-            $bindKeys = [];
-
-            foreach ($allColumnNames as $attributeKey) {
-                $attrValue = $currentRegularAttributes[$attributeKey] ?? null;
-
-                if (\is_array($attrValue)) {
-                    $attrValue = \json_encode($attrValue);
-                }
-
-                if (in_array($attributeKey, $spatialAttributes) && $attrValue !== null) {
-                    $bindKey = 'key_' . $bindIndex;
-                    $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
-                } else {
-                    $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
-                    $bindKey = 'key_' . $bindIndex;
-                    $bindKeys[] = ':' . $bindKey;
-                }
-                $bindValues[$bindKey] = $attrValue;
-                $bindIndex++;
-            }
-
-            $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
-        }
-
-        // Build a unified regularAttributes that includes all columns
-        // For operator columns, we set null as placeholder since the actual operation
-        // is defined in $operators and getUpsertStatement will use that instead
-        $regularAttributes = [];
-
-        foreach ($allColumnNames as $colName) {
-            $regularAttributes[$colName] = null;
-        }
-
-        // Fill in actual values from first document where available
-        if (!empty($documentsData)) {
-            foreach ($documentsData[0]['regularAttributes'] as $key => $value) {
-                $regularAttributes[$key] = $value;
-            }
-        }
-
-        // When we have operators, pass empty string to use operator-based UPDATE clauses
-        // When we have a specific attribute to increment, pass it through
-        // When neither, pass the original attribute parameter
-        $upsertAttribute = !empty($operators) ? '' : $attribute;
-        $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $regularAttributes, $bindValues, $upsertAttribute, $operators);
-
-        try {
-            $stmt->execute();
-        } catch (\PDOException $e) {
-            // Enhanced error message with SQL and bind info for debugging
-            $sqlString = $stmt->queryString ?? 'unknown';
-            $paramCount = count($bindValues);
-            $operatorInfo = [];
-            foreach ($operators as $attr => $op) {
-                $operatorInfo[] = "$attr: " . $op->getMethod();
-            }
-            throw new \PDOException(
-                "Failed to execute upsert statement. Error: {$e->getMessage()}\n" .
-                "SQL: {$sqlString}\n" .
-                "Bind values count: {$paramCount}\n" .
-                "Operators: " . implode(', ', $operatorInfo) . "\n" .
-                "RegularAttributes keys: " . implode(', ', array_keys($regularAttributes)),
-                (int)$e->getCode(),
-                $e
-            );
-        }
-
-        $stmt->closeCursor();
-    }
-
-    /**
      * @param Document $collection
      * @param string $attribute
      * @param array<Change> $changes
@@ -2680,63 +2620,253 @@ abstract class SQL extends Adapter
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $name = $this->filter($collection);
-            $attribute = $this->filter($attribute);
 
-            // Separate documents with operators from those without
-            // Documents with operators must be processed individually because each may have
-            // different operator values, and the SQL UPDATE clause is shared across all rows
-            $documentsWithoutOperators = [];
-            $documentsWithOperators = [];
+            // Fast path: Check if ANY document has operators
+            $hasOperators = false;
+            $firstChange = $changes[0];
+            $firstDoc = $firstChange->getNew();
+            $firstExtracted = Operator::extractOperators($firstDoc->getAttributes());
 
-            foreach ($changes as $change) {
-                if ($change instanceof Change) {
+            if (!empty($firstExtracted['operators'])) {
+                $hasOperators = true;
+            } else {
+                // Check remaining documents
+                foreach ($changes as $change) {
+                    $doc = $change->getNew();
+                    $extracted = Operator::extractOperators($doc->getAttributes());
+                    if (!empty($extracted['operators'])) {
+                        $hasOperators = true;
+                        break;
+                    }
+                }
+            }
+
+            // Fast path for non-operator upserts - ZERO overhead
+            if (!$hasOperators) {
+                // Traditional bulk upsert - original implementation
+                $bindIndex = 0;
+                $batchKeys = [];
+                $bindValues = [];
+                $allColumnNames = [];
+                $documentsData = [];
+
+                foreach ($changes as $change) {
                     $document = $change->getNew();
-                } else {
-                    $document = $change;
+                    $currentRegularAttributes = $document->getAttributes();
+
+                    $currentRegularAttributes['_uid'] = $document->getId();
+                    $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getCreatedAt()) : null;
+                    $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getUpdatedAt()) : null;
+                    $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
+
+                    if (!empty($document->getSequence())) {
+                        $currentRegularAttributes['_id'] = $document->getSequence();
+                    }
+
+                    if ($this->sharedTables) {
+                        $currentRegularAttributes['_tenant'] = $document->getTenant();
+                    }
+
+                    foreach (\array_keys($currentRegularAttributes) as $colName) {
+                        $allColumnNames[$colName] = true;
+                    }
+
+                    $documentsData[] = ['regularAttributes' => $currentRegularAttributes];
                 }
 
-                $attributes = $document->getAttributes();
+                $allColumnNames = \array_keys($allColumnNames);
+                \sort($allColumnNames);
 
-                $extracted = Operator::extractOperators($attributes);
-                $currentOperators = $extracted['operators'];
+                $columnsArray = [];
+                foreach ($allColumnNames as $attr) {
+                    $columnsArray[] = "{$this->quote($this->filter($attr))}";
+                }
+                $columns = '(' . \implode(', ', $columnsArray) . ')';
 
-                if (empty($currentOperators)) {
-                    $documentsWithoutOperators[] = $change;
-                } else {
-                    $documentsWithOperators[] = $change;
+                foreach ($documentsData as $docData) {
+                    $currentRegularAttributes = $docData['regularAttributes'];
+                    $bindKeys = [];
+
+                    foreach ($allColumnNames as $attributeKey) {
+                        $attrValue = $currentRegularAttributes[$attributeKey] ?? null;
+
+                        if (\is_array($attrValue)) {
+                            $attrValue = \json_encode($attrValue);
+                        }
+
+                        if (in_array($attributeKey, $spatialAttributes) && $attrValue !== null) {
+                            $bindKey = 'key_' . $bindIndex;
+                            $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
+                        } else {
+                            $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
+                            $bindKey = 'key_' . $bindIndex;
+                            $bindKeys[] = ':' . $bindKey;
+                        }
+                        $bindValues[$bindKey] = $attrValue;
+                        $bindIndex++;
+                    }
+
+                    $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+                }
+
+                $regularAttributes = [];
+                foreach ($allColumnNames as $colName) {
+                    $regularAttributes[$colName] = null;
+                }
+                foreach ($documentsData[0]['regularAttributes'] as $key => $value) {
+                    $regularAttributes[$key] = $value;
+                }
+
+                $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $regularAttributes, $bindValues, $attribute, []);
+                $stmt->execute();
+                $stmt->closeCursor();
+            } else {
+                // Operator path: Group by operator signature and process in batches
+                $groups = [];
+
+                foreach ($changes as $change) {
+                    $document = $change->getNew();
+                    $extracted = Operator::extractOperators($document->getAttributes());
+                    $operators = $extracted['operators'];
+
+                    // Create signature for grouping
+                    if (empty($operators)) {
+                        $signature = 'no_ops';
+                    } else {
+                        $parts = [];
+                        foreach ($operators as $attr => $op) {
+                            $parts[] = $attr . ':' . $op->getMethod() . ':' . json_encode($op->getValues());
+                        }
+                        sort($parts);
+                        $signature = implode('|', $parts);
+                    }
+
+                    if (!isset($groups[$signature])) {
+                        $groups[$signature] = [
+                            'documents' => [],
+                            'operators' => $operators
+                        ];
+                    }
+
+                    $groups[$signature]['documents'][] = $change;
+                }
+
+                // Process each group
+                foreach ($groups as $group) {
+                    $groupChanges = $group['documents'];
+                    $operators = $group['operators'];
+
+                    $bindIndex = 0;
+                    $batchKeys = [];
+                    $bindValues = [];
+                    $allColumnNames = [];
+                    $documentsData = [];
+
+                    foreach ($groupChanges as $change) {
+                        $document = $change->getNew();
+                        $attributes = $document->getAttributes();
+
+                        $extracted = Operator::extractOperators($attributes);
+                        $currentRegularAttributes = $extracted['updates'];
+                        $extractedOperators = $extracted['operators'];
+
+                        // For new documents, compute operator default values and add to regular attributes
+                        // This ensures operators work even when no regular attributes are present
+                        if ($change->getOld()->isEmpty() && !empty($extractedOperators)) {
+                            foreach ($extractedOperators as $operatorKey => $operator) {
+                                $currentRegularAttributes[$operatorKey] = $this->computeOperatorDefaultValue($operator);
+                            }
+                        }
+
+                        $currentRegularAttributes['_uid'] = $document->getId();
+                        $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getCreatedAt()) : null;
+                        $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getUpdatedAt()) : null;
+                        $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
+
+                        if (!empty($document->getSequence())) {
+                            $currentRegularAttributes['_id'] = $document->getSequence();
+                        }
+
+                        if ($this->sharedTables) {
+                            $currentRegularAttributes['_tenant'] = $document->getTenant();
+                        }
+
+                        foreach (\array_keys($currentRegularAttributes) as $colName) {
+                            $allColumnNames[$colName] = true;
+                        }
+
+                        $documentsData[] = ['regularAttributes' => $currentRegularAttributes];
+                    }
+
+                    // Add operator columns
+                    foreach (\array_keys($operators) as $colName) {
+                        $allColumnNames[$colName] = true;
+                    }
+
+                    $allColumnNames = \array_keys($allColumnNames);
+                    \sort($allColumnNames);
+
+                    $columnsArray = [];
+                    foreach ($allColumnNames as $attr) {
+                        $columnsArray[] = "{$this->quote($this->filter($attr))}";
+                    }
+                    $columns = '(' . \implode(', ', $columnsArray) . ')';
+
+                    foreach ($documentsData as $docData) {
+                        $currentRegularAttributes = $docData['regularAttributes'];
+                        $bindKeys = [];
+
+                        foreach ($allColumnNames as $attributeKey) {
+                            $attrValue = $currentRegularAttributes[$attributeKey] ?? null;
+
+                            if (\is_array($attrValue)) {
+                                $attrValue = \json_encode($attrValue);
+                            }
+
+                            if (in_array($attributeKey, $spatialAttributes) && $attrValue !== null) {
+                                $bindKey = 'key_' . $bindIndex;
+                                $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
+                            } else {
+                                $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
+                                $bindKey = 'key_' . $bindIndex;
+                                $bindKeys[] = ':' . $bindKey;
+                            }
+                            $bindValues[$bindKey] = $attrValue;
+                            $bindIndex++;
+                        }
+
+                        $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
+                    }
+
+                    $regularAttributes = [];
+                    foreach ($allColumnNames as $colName) {
+                        $regularAttributes[$colName] = null;
+                    }
+                    foreach ($documentsData[0]['regularAttributes'] as $key => $value) {
+                        $regularAttributes[$key] = $value;
+                    }
+
+                    $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $regularAttributes, $bindValues, '', $operators);
+                    $stmt->execute();
+                    $stmt->closeCursor();
                 }
             }
 
-            if (!empty($documentsWithoutOperators)) {
-                $this->upsertDocumentsBatch($name, $attribute, $documentsWithoutOperators, $spatialAttributes);
-            }
-
-            foreach ($documentsWithOperators as $change) {
-                $this->upsertDocumentsBatch($name, '', [$change], $spatialAttributes);
-            }
-
+            // Handle permissions (unchanged)
             $removeQueries = [];
             $removeBindValues = [];
             $addQueries = [];
             $addBindValues = [];
 
             foreach ($changes as $index => $change) {
-                // Support both Change objects and plain Documents
-                if ($change instanceof Change) {
-                    $old = $change->getOld();
-                    $document = $change->getNew();
-                } else {
-                    // Plain Document - treat as insert (no old document)
-                    $old = new Document();
-                    $document = $change;
-                }
+                $old = $change->getOld();
+                $document = $change->getNew();
 
                 $current = [];
                 foreach (Database::PERMISSIONS as $type) {
                     $current[$type] = $old->getPermissionsByType($type);
                 }
 
-                // Calculate removals
                 foreach (Database::PERMISSIONS as $type) {
                     $toRemove = \array_diff($current[$type], $document->getPermissionsByType($type));
                     if (!empty($toRemove)) {
@@ -2756,7 +2886,6 @@ abstract class SQL extends Adapter
                     }
                 }
 
-                // Calculate additions
                 foreach (Database::PERMISSIONS as $type) {
                     $toAdd = \array_diff($document->getPermissionsByType($type), $current[$type]);
 
@@ -2779,7 +2908,6 @@ abstract class SQL extends Adapter
                 }
             }
 
-            // Execute permission removals
             if (!empty($removeQueries)) {
                 $removeQuery = \implode(' OR ', $removeQueries);
                 $stmtRemovePermissions = $this->getPDO()->prepare("DELETE FROM {$this->getSQLTable($name . '_perms')} WHERE {$removeQuery}");
@@ -2789,9 +2917,8 @@ abstract class SQL extends Adapter
                 $stmtRemovePermissions->execute();
             }
 
-            // Execute permission additions
             if (!empty($addQueries)) {
-                $sqlAddPermissions = "INSERT IGNORE INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission";
+                $sqlAddPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission";
                 if ($this->sharedTables) {
                     $sqlAddPermissions .= ", _tenant";
                 }
@@ -2806,8 +2933,9 @@ abstract class SQL extends Adapter
             throw $this->processException($e);
         }
 
-        return \array_map(fn ($change) => $change instanceof Change ? $change->getNew() : $change, $changes);
+        return \array_map(fn ($change) => $change->getNew(), $changes);
     }
+
 
     /**
      * Build geometry WKT string from array input for spatial queries

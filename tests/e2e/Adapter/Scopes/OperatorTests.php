@@ -3420,4 +3420,128 @@ trait OperatorTests
 
         $database->deleteCollection($collectionId);
     }
+
+    public function testUpsertOperatorsOnNewDocuments(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Create test collection with all attribute types needed for operators
+        $collectionId = 'test_upsert_new_ops';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'counter', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+        $database->createAttribute($collectionId, 'price', Database::VAR_FLOAT, 0, false, 0.0);
+        $database->createAttribute($collectionId, 'quantity', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'tags', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
+        $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 100, false, '');
+
+        // Test 1: INCREMENT on new document (should use 0 as default)
+        $doc1 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_increment',
+            '$permissions' => [Permission::read(Role::any())],
+            'counter' => Operator::increment(10),
+        ]));
+        $this->assertEquals(10, $doc1->getAttribute('counter'), 'INCREMENT on new doc: 0 + 10 = 10');
+
+        // Test 2: DECREMENT on new document (should use 0 as default)
+        $doc2 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_decrement',
+            '$permissions' => [Permission::read(Role::any())],
+            'counter' => Operator::decrement(5),
+        ]));
+        $this->assertEquals(-5, $doc2->getAttribute('counter'), 'DECREMENT on new doc: 0 - 5 = -5');
+
+        // Test 3: MULTIPLY on new document (should use 0 as default)
+        $doc3 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_multiply',
+            '$permissions' => [Permission::read(Role::any())],
+            'score' => Operator::multiply(5),
+        ]));
+        $this->assertEquals(0.0, $doc3->getAttribute('score'), 'MULTIPLY on new doc: 0 * 5 = 0');
+
+        // Test 4: DIVIDE on new document (should use 0 as default, but may handle division carefully)
+        // Note: 0 / n = 0, so this should work
+        $doc4 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_divide',
+            '$permissions' => [Permission::read(Role::any())],
+            'score' => Operator::divide(2),
+        ]));
+        $this->assertEquals(0.0, $doc4->getAttribute('score'), 'DIVIDE on new doc: 0 / 2 = 0');
+
+        // Test 5: ARRAY_APPEND on new document (should use [] as default)
+        $doc5 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_array_append',
+            '$permissions' => [Permission::read(Role::any())],
+            'tags' => Operator::arrayAppend(['tag1', 'tag2']),
+        ]));
+        $this->assertEquals(['tag1', 'tag2'], $doc5->getAttribute('tags'), 'ARRAY_APPEND on new doc: [] + [tag1, tag2]');
+
+        // Test 6: ARRAY_PREPEND on new document (should use [] as default)
+        $doc6 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_array_prepend',
+            '$permissions' => [Permission::read(Role::any())],
+            'tags' => Operator::arrayPrepend(['first']),
+        ]));
+        $this->assertEquals(['first'], $doc6->getAttribute('tags'), 'ARRAY_PREPEND on new doc: [first] + []');
+
+        // Test 7: ARRAY_INSERT on new document (should use [] as default, insert at position 0)
+        $doc7 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_array_insert',
+            '$permissions' => [Permission::read(Role::any())],
+            'numbers' => Operator::arrayInsert(0, 42),
+        ]));
+        $this->assertEquals([42], $doc7->getAttribute('numbers'), 'ARRAY_INSERT on new doc: insert 42 at position 0');
+
+        // Test 8: ARRAY_REMOVE on new document (should use [] as default, nothing to remove)
+        $doc8 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_array_remove',
+            '$permissions' => [Permission::read(Role::any())],
+            'tags' => Operator::arrayRemove(['nonexistent']),
+        ]));
+        $this->assertEquals([], $doc8->getAttribute('tags'), 'ARRAY_REMOVE on new doc: [] - [nonexistent] = []');
+
+        // Test 9: ARRAY_UNIQUE on new document (should use [] as default)
+        $doc9 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_array_unique',
+            '$permissions' => [Permission::read(Role::any())],
+            'tags' => Operator::arrayUnique(),
+        ]));
+        $this->assertEquals([], $doc9->getAttribute('tags'), 'ARRAY_UNIQUE on new doc: unique([]) = []');
+
+        // Test 10: CONCAT on new document (should use empty string as default)
+        $doc10 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_concat',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => Operator::concat(' World'),
+        ]));
+        $this->assertEquals(' World', $doc10->getAttribute('name'), 'CONCAT on new doc: "" + " World" = " World"');
+
+        // Test 11: REPLACE on new document (should use empty string as default)
+        $doc11 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_replace',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => Operator::replace('old', 'new'),
+        ]));
+        $this->assertEquals('', $doc11->getAttribute('name'), 'REPLACE on new doc: replace("old", "new") in "" = ""');
+
+        // Test 12: Multiple operators on same new document
+        $doc12 = $database->upsertDocument($collectionId, new Document([
+            '$id' => 'doc_multi',
+            '$permissions' => [Permission::read(Role::any())],
+            'counter' => Operator::increment(100),
+            'score' => Operator::increment(50.5),
+            'tags' => Operator::arrayAppend(['multi1', 'multi2']),
+            'name' => Operator::concat('MultiTest'),
+        ]));
+        $this->assertEquals(100, $doc12->getAttribute('counter'));
+        $this->assertEquals(50.5, $doc12->getAttribute('score'));
+        $this->assertEquals(['multi1', 'multi2'], $doc12->getAttribute('tags'));
+        $this->assertEquals('MultiTest', $doc12->getAttribute('name'));
+
+        // Cleanup
+        $database->deleteCollection($collectionId);
+    }
 }

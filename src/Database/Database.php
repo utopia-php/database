@@ -717,6 +717,39 @@ class Database
         }
     }
 
+    /**
+     * Refetch documents after operator updates to get computed values
+     *
+     * @param Document $collection
+     * @param array<Document> $documents
+     * @return array<Document>
+     */
+    protected function refetchDocuments(Document $collection, array $documents): array
+    {
+        if (empty($documents)) {
+            return $documents;
+        }
+
+        $docIds = array_map(fn ($doc) => $doc->getId(), $documents);
+
+        // Fetch fresh copies with computed operator values
+        $refetched = Authorization::skip(fn () => $this->silent(
+            fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
+        ));
+
+        $refetchedMap = [];
+        foreach ($refetched as $doc) {
+            $refetchedMap[$doc->getId()] = $doc;
+        }
+
+        $result = [];
+        foreach ($documents as $doc) {
+            $result[] = $refetchedMap[$doc->getId()] ?? $doc;
+        }
+
+        return $result;
+    }
+
     public function skipRelationshipsExistCheck(callable $callback): mixed
     {
         $previous = $this->checkRelationshipsExist;
@@ -5068,9 +5101,8 @@ class Database
 
             // If operators were used, refetch document to get computed values
             if (!empty($operators)) {
-                $document = Authorization::skip(fn () => $this->silent(
-                    fn () => $this->getDocument($collection->getId(), $id)
-                ));
+                $refetched = $this->refetchDocuments($collection, [$document]);
+                $document = $refetched[0];
             }
 
             return $document;
@@ -5300,25 +5332,7 @@ class Database
 
             // If operators were used, refetch documents to get computed values
             if (!empty($operators)) {
-                $docIds = array_map(fn ($doc) => $doc->getId(), $batch);
-
-                // Purge cache for all documents before refetching
-                foreach ($batch as $doc) {
-                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                }
-
-                $refetched = Authorization::skip(fn () => $this->silent(
-                    fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
-                ));
-
-                $refetchedMap = [];
-                foreach ($refetched as $doc) {
-                    $refetchedMap[$doc->getId()] = $doc;
-                }
-
-                foreach ($batch as $index => $doc) {
-                    $batch[$index] = $refetchedMap[$doc->getId()] ?? $doc;
-                }
+                $batch = $this->refetchDocuments($collection, $batch);
             }
 
             foreach ($batch as $index => $doc) {
@@ -6096,19 +6110,7 @@ class Database
 
             // If operators were used, refetch all documents in a single query
             if ($hasOperators) {
-                $docIds = array_map(fn ($doc) => $doc->getId(), $batch);
-                $refetched = Authorization::skip(fn () => $this->silent(
-                    fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
-                ));
-
-                $refetchedMap = [];
-                foreach ($refetched as $doc) {
-                    $refetchedMap[$doc->getId()] = $doc;
-                }
-
-                foreach ($batch as $index => $doc) {
-                    $batch[$index] = $refetchedMap[$doc->getId()] ?? $doc;
-                }
+                $batch = $this->refetchDocuments($collection, $batch);
             }
 
             foreach ($batch as $index => $doc) {

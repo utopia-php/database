@@ -162,6 +162,7 @@ function setupTestEnvironment(Database $database, string $name): void
     $database->createAttribute('operators_test', 'power_val', Database::VAR_FLOAT, 0, false, 2.0);
 
     // String attributes
+    $database->createAttribute('operators_test', 'name', Database::VAR_STRING, 200, false, 'test');
     $database->createAttribute('operators_test', 'text', Database::VAR_STRING, 500, false, 'initial');
     $database->createAttribute('operators_test', 'description', Database::VAR_STRING, 500, false, 'foo bar baz');
 
@@ -199,6 +200,74 @@ function runAllBenchmarks(Database $database, int $iterations): array
             Console::warning("  ⚠️  {$name} failed: " . $e->getMessage());
         }
     };
+
+    Console::info("=== Operation Type Benchmarks ===\n");
+
+    $safeBenchmark('UPDATE_SINGLE_NO_OPS', fn () => benchmarkOperation(
+        $database,
+        $iterations,
+        'updateDocument',
+        false,
+        false
+    ));
+
+    $safeBenchmark('UPDATE_SINGLE_WITH_OPS', fn () => benchmarkOperation(
+        $database,
+        $iterations,
+        'updateDocument',
+        false,
+        true
+    ));
+
+    $safeBenchmark('UPDATE_BULK_NO_OPS', fn () => benchmarkOperation(
+        $database,
+        $iterations,
+        'updateDocuments',
+        false,
+        false
+    ));
+
+    $safeBenchmark('UPDATE_BULK_WITH_OPS', fn () => benchmarkOperation(
+        $database,
+        $iterations,
+        'updateDocuments',
+        false,
+        true
+    ));
+
+    $safeBenchmark('UPSERT_SINGLE_NO_OPS', fn () => benchmarkOperation(
+        $database,
+        $iterations,
+        'upsertDocument',
+        false,
+        false
+    ));
+
+    $safeBenchmark('UPSERT_SINGLE_WITH_OPS', fn () => benchmarkOperation(
+        $database,
+        $iterations,
+        'upsertDocument',
+        false,
+        true
+    ));
+
+    $safeBenchmark('UPSERT_BULK_NO_OPS', fn () => benchmarkOperation(
+        $database,
+        $iterations,
+        'upsertDocuments',
+        false,
+        false
+    ));
+
+    $safeBenchmark('UPSERT_BULK_WITH_OPS', fn () => benchmarkOperation(
+        $database,
+        $iterations,
+        'upsertDocuments',
+        false,
+        true
+    ));
+
+    Console::info("\n=== Operator Type Benchmarks ===\n");
 
     // Numeric operators
     $safeBenchmark('INCREMENT', fn () => benchmarkOperator(
@@ -494,6 +563,104 @@ function runAllBenchmarks(Database $database, int $iterations): array
 }
 
 /**
+ * Benchmark operation type (update vs upsert, single vs bulk) with and without operators
+ */
+function benchmarkOperation(
+    Database $database,
+    int $iterations,
+    string $operation,
+    bool $isBulk,
+    bool $useOperators
+): array {
+    $displayName = strtoupper($operation) . ($useOperators ? ' (with ops)' : ' (no ops)');
+    Console::info("Benchmarking {$displayName}...");
+
+    $docId = 'bench_op_' . strtolower($operation) . '_' . ($useOperators ? 'ops' : 'noops');
+
+    // Create initial document
+    $baseData = [
+        '$permissions' => [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ],
+        'counter' => 0,
+        'name' => 'test',
+        'score' => 100.0
+    ];
+
+    $database->createDocument('operators_test', new Document(array_merge(['$id' => $docId], $baseData)));
+
+    $memBefore = memory_get_usage(true);
+    $start = microtime(true);
+
+    for ($i = 0; $i < $iterations; $i++) {
+        if ($operation === 'updateDocument') {
+            if ($useOperators) {
+                $database->updateDocument('operators_test', $docId, new Document([
+                    'counter' => Operator::increment(1)
+                ]));
+            } else {
+                $database->updateDocument('operators_test', $docId, new Document([
+                    'counter' => $i + 1
+                ]));
+            }
+        } elseif ($operation === 'updateDocuments') {
+            if ($useOperators) {
+                $database->updateDocuments('operators_test', [
+                    new Document(['$id' => $docId, 'counter' => Operator::increment(1)])
+                ]);
+            } else {
+                $database->updateDocuments('operators_test', [
+                    new Document(['$id' => $docId, 'counter' => $i + 1])
+                ]);
+            }
+        } elseif ($operation === 'upsertDocument') {
+            if ($useOperators) {
+                $database->upsertDocument('operators_test', $docId, new Document([
+                    '$id' => $docId,
+                    'counter' => Operator::increment(1),
+                    'name' => 'test',
+                    'score' => 100.0
+                ]));
+            } else {
+                $database->upsertDocument('operators_test', $docId, new Document([
+                    '$id' => $docId,
+                    'counter' => $i + 1,
+                    'name' => 'test',
+                    'score' => 100.0
+                ]));
+            }
+        } elseif ($operation === 'upsertDocuments') {
+            if ($useOperators) {
+                $database->upsertDocuments('operators_test', '', [
+                    new Document(['$id' => $docId, 'counter' => Operator::increment(1), 'name' => 'test', 'score' => 100.0])
+                ]);
+            } else {
+                $database->upsertDocuments('operators_test', '', [
+                    new Document(['$id' => $docId, 'counter' => $i + 1, 'name' => 'test', 'score' => 100.0])
+                ]);
+            }
+        }
+    }
+
+    $timeOp = microtime(true) - $start;
+    $memOp = memory_get_usage(true) - $memBefore;
+
+    // Cleanup
+    $database->deleteDocument('operators_test', $docId);
+
+    Console::success("  Time: {$timeOp}s | Memory: " . formatBytes($memOp));
+
+    return [
+        'operation' => $operation,
+        'use_operators' => $useOperators,
+        'time' => $timeOp,
+        'memory' => $memOp,
+        'iterations' => $iterations,
+    ];
+}
+
+/**
  * Benchmark a single operator vs traditional approach
  */
 function benchmarkOperator(
@@ -588,6 +755,34 @@ function displayResults(array $results, string $adapter, int $iterations): void
     Console::info("=============================================================");
     Console::info("Adapter: {$adapter}");
     Console::info("Iterations per test: {$iterations}");
+    Console::info("=============================================================\n");
+
+    // ==================================================================
+    // OPERATION TYPE RESULTS
+    // ==================================================================
+    Console::info("=== OPERATION PERFORMANCE (Overhead Check) ===\n");
+    Console::info("This section verifies NO OVERHEAD for non-operator operations:\n");
+
+    $opTypes = ['UPDATE_SINGLE', 'UPDATE_BULK', 'UPSERT_SINGLE', 'UPSERT_BULK'];
+
+    foreach ($opTypes as $opType) {
+        $noOpsKey = $opType . '_NO_OPS';
+        $withOpsKey = $opType . '_WITH_OPS';
+
+        if (isset($results[$noOpsKey]) && isset($results[$withOpsKey])) {
+            $noOps = $results[$noOpsKey];
+            $withOps = $results[$withOpsKey];
+
+            $timeNoOps = number_format($noOps['time'], 4);
+            $timeWithOps = number_format($withOps['time'], 4);
+
+            Console::info(str_pad($opType, 20) . ":");
+            Console::info("  NO operators:   {$timeNoOps}s");
+            Console::info("  WITH operators: {$timeWithOps}s");
+            Console::info("");
+        }
+    }
+
     Console::info("=============================================================\n");
 
     // Calculate column widths

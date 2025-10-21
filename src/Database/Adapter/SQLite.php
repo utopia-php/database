@@ -1707,4 +1707,98 @@ class SQLite extends MariaDB
                 return parent::getOperatorSQL($column, $operator, $bindIndex);
         }
     }
+
+    /**
+     * Override getUpsertStatement to use SQLite's ON CONFLICT syntax instead of MariaDB's ON DUPLICATE KEY UPDATE
+     *
+     * @param string $tableName
+     * @param string $columns
+     * @param array<string> $batchKeys
+     * @param array<string> $attributes
+     * @param array<mixed> $bindValues
+     * @param string $attribute
+     * @param array<string, Operator> $operators
+     * @return mixed
+     */
+    public function getUpsertStatement(
+        string $tableName,
+        string $columns,
+        array $batchKeys,
+        array $attributes,
+        array $bindValues,
+        string $attribute = '',
+        array $operators = [],
+    ): mixed {
+        $getUpdateClause = function (string $attribute, bool $increment = false): string {
+            $attribute = $this->quote($this->filter($attribute));
+            if ($increment) {
+                $new = "{$attribute} + excluded.{$attribute}";
+            } else {
+                $new = "excluded.{$attribute}";
+            }
+
+            if ($this->sharedTables) {
+                return "{$attribute} = CASE WHEN _tenant = excluded._tenant THEN {$new} ELSE {$attribute} END";
+            }
+
+            return "{$attribute} = {$new}";
+        };
+
+        $updateColumns = [];
+        $bindIndex = count($bindValues);
+
+        if (!empty($attribute)) {
+            // Increment specific column by its new value in place
+            $updateColumns = [
+                $getUpdateClause($attribute, increment: true),
+                $getUpdateClause('_updatedAt'),
+            ];
+        } else {
+            // Update all columns, handling operators separately
+            foreach (\array_keys($attributes) as $attr) {
+                /**
+                 * @var string $attr
+                 */
+                $filteredAttr = $this->filter($attr);
+
+                // Check if this attribute has an operator
+                if (isset($operators[$attr])) {
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $bindIndex);
+                    if ($operatorSQL !== null) {
+                        $updateColumns[] = $operatorSQL;
+                    }
+                } else {
+                    if (!in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
+                        $updateColumns[] = $getUpdateClause($filteredAttr);
+                    }
+                }
+            }
+        }
+
+        $conflictKeys = $this->sharedTables ? '(_uid, _tenant)' : '(_uid)';
+
+        $stmt = $this->getPDO()->prepare(
+            "
+            INSERT INTO {$this->getSQLTable($tableName)} {$columns}
+            VALUES " . \implode(', ', $batchKeys) . "
+            ON CONFLICT {$conflictKeys} DO UPDATE
+                SET " . \implode(', ', $updateColumns)
+        );
+
+        // Bind regular attribute values
+        foreach ($bindValues as $key => $binding) {
+            $stmt->bindValue($key, $binding, $this->getPDOType($binding));
+        }
+
+        $bindIndex = count($bindValues);
+
+        // Bind operator parameters in the same order used to build SQL
+        foreach (array_keys($attributes) as $attr) {
+            if (isset($operators[$attr])) {
+                $this->bindOperatorParams($stmt, $operators[$attr], $bindIndex);
+            }
+        }
+
+        return $stmt;
+    }
 }

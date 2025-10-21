@@ -2821,9 +2821,10 @@ trait SpatialTests
 
         try {
             $database->createCollection($collectionName);
+            // Use required=true for spatial attributes to support spatial indexes (MariaDB requires this)
             $database->createAttribute($collectionName, 'location', Database::VAR_POINT, 0, true);
-            $database->createAttribute($collectionName, 'route', Database::VAR_LINESTRING, 0, false);
-            $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, false);
+            $database->createAttribute($collectionName, 'route', Database::VAR_LINESTRING, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true);
+            $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true);
             $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 100, false);
 
             // Create indexes for spatial queries

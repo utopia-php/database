@@ -1953,7 +1953,8 @@ class MariaDB extends SQL
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
+                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
+                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN :$maxKey
                         ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
                     END";
                 }
@@ -1967,7 +1968,8 @@ class MariaDB extends SQL
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
                         WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) < :$minKey * :$bindKey THEN :$minKey
+                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) < :$minKey * :$bindKey THEN :$minKey
+                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) > :$minKey * :$bindKey THEN :$minKey
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }

@@ -242,7 +242,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                if (empty($values) || !\is_array($values[0])) {
+                if (empty($values)) {
                     $this->message = "{$method} operator requires a non-empty array value";
                     return false;
                 }

@@ -2558,8 +2558,8 @@ class Postgres extends SQL
                     WHERE CASE :$conditionKey
                         WHEN 'equals' THEN value = :$valueKey::jsonb
                         WHEN 'notEquals' THEN value != :$valueKey::jsonb
-                        WHEN 'greaterThan' THEN (value::text)::numeric > (:$valueKey::text)::numeric
-                        WHEN 'lessThan' THEN (value::text)::numeric < (:$valueKey::text)::numeric
+                        WHEN 'greaterThan' THEN (value::text)::numeric > trim(both '\"' from :$valueKey::text)::numeric
+                        WHEN 'lessThan' THEN (value::text)::numeric < trim(both '\"' from :$valueKey::text)::numeric
                         WHEN 'null' THEN value = 'null'::jsonb
                         WHEN 'notNull' THEN value != 'null'::jsonb
                         ELSE TRUE

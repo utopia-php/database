@@ -1606,6 +1606,68 @@ trait OperatorTests
 
         $this->assertEquals([3, 4], $updated->getAttribute('numbers'));
 
+        // Success case - lessThan condition (reset array first)
+        $database->updateDocument($collectionId, $doc->getId(), new Document([
+            'numbers' => [1, 2, 3, 2, 4]
+        ]));
+
+        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
+            'numbers' => Operator::arrayFilter('lessThan', 3)
+        ]));
+
+        $this->assertEquals([1, 2, 2], $updated->getAttribute('numbers'));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testOperatorArrayFilterNumericComparisons(): void
+    {
+        $database = static::getDatabase();
+
+        $collectionId = 'operator_filter_numeric_test';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'integers', Database::VAR_INTEGER, 0, false, null, true, true);
+        $database->createAttribute($collectionId, 'floats', Database::VAR_FLOAT, 0, false, null, true, true);
+
+        // Create document with various numeric values
+        $doc = $database->createDocument($collectionId, new Document([
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'integers' => [1, 5, 10, 15, 20, 25],
+            'floats' => [1.5, 5.5, 10.5, 15.5, 20.5, 25.5]
+        ]));
+
+        // Test greaterThan with integers
+        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
+            'integers' => Operator::arrayFilter('greaterThan', 10)
+        ]));
+        $this->assertEquals([15, 20, 25], $updated->getAttribute('integers'));
+
+        // Reset and test lessThan with integers
+        $database->updateDocument($collectionId, $doc->getId(), new Document([
+            'integers' => [1, 5, 10, 15, 20, 25]
+        ]));
+
+        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
+            'integers' => Operator::arrayFilter('lessThan', 15)
+        ]));
+        $this->assertEquals([1, 5, 10], $updated->getAttribute('integers'));
+
+        // Test greaterThan with floats
+        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
+            'floats' => Operator::arrayFilter('greaterThan', 10.5)
+        ]));
+        $this->assertEquals([15.5, 20.5, 25.5], $updated->getAttribute('floats'));
+
+        // Reset and test lessThan with floats
+        $database->updateDocument($collectionId, $doc->getId(), new Document([
+            'floats' => [1.5, 5.5, 10.5, 15.5, 20.5, 25.5]
+        ]));
+
+        $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
+            'floats' => Operator::arrayFilter('lessThan', 15.5)
+        ]));
+        $this->assertEquals([1.5, 5.5, 10.5], $updated->getAttribute('floats'));
+
         $database->deleteCollection($collectionId);
     }
 

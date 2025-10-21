@@ -238,10 +238,14 @@ class Operator extends Validator
             case DatabaseOperator::TYPE_ARRAY_INTERSECT:
             case DatabaseOperator::TYPE_ARRAY_DIFF:
                 if (!$isArray) {
-                    $this->message = "Cannot apply {$method} operator to non-array field '{$operator->getAttribute()}'";
+                    $this->message = "Cannot use {$method} operator on non-array attribute '{$operator->getAttribute()}'";
                     return false;
                 }
 
+                if (empty($values) || !\is_array($values[0])) {
+                    $this->message = "{$method} operator requires a non-empty array value";
+                    return false;
+                }
 
                 break;
             case DatabaseOperator::TYPE_ARRAY_FILTER:

@@ -1717,6 +1717,7 @@ class SQLite extends MariaDB
                             )";
                         }
 
+                        // no break
                     default:
                         return "{$quotedColumn} = {$quotedColumn}";
                 }

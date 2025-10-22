@@ -25,10 +25,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create test collection with various attribute types
         $collectionId = 'test_operators';
@@ -135,10 +131,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create test collection
         $collectionId = 'test_batch_operators';
@@ -216,10 +208,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create comprehensive test collection
         $collectionId = 'test_all_operators_bulk';
@@ -354,10 +342,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create test collection
         $collectionId = 'test_operators_with_queries';
@@ -440,10 +424,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create test collection
         $collectionId = 'test_operator_errors';
@@ -483,10 +463,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create test collection
         $collectionId = 'test_array_operator_errors';
@@ -524,10 +500,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create test collection
         $collectionId = 'test_insert_operator_errors';
@@ -566,10 +538,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create comprehensive test collection
         $collectionId = 'test_operator_edge_cases';
@@ -659,10 +627,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_division_zero';
         $database->createCollection($collectionId);
@@ -719,10 +683,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_array_insert_bounds';
         $database->createCollection($collectionId);
@@ -769,10 +729,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_operator_limits';
         $database->createCollection($collectionId);
@@ -830,10 +786,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_array_filter';
         $database->createCollection($collectionId);
@@ -872,10 +824,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_replace';
         $database->createCollection($collectionId);
@@ -924,10 +872,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_null_handling';
         $database->createCollection($collectionId);
@@ -985,10 +929,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_complex_operators';
         $database->createCollection($collectionId);
@@ -1049,10 +989,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_increment_operator';
         $database->createCollection($collectionId);
@@ -1095,10 +1031,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_string_concat_operator';
         $database->createCollection($collectionId);
@@ -1141,10 +1073,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_modulo_operator';
         $database->createCollection($collectionId);
@@ -1175,10 +1103,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_toggle_operator';
         $database->createCollection($collectionId);
@@ -1217,10 +1141,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_array_unique_operator';
         $database->createCollection($collectionId);
@@ -1256,10 +1176,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Setup collection
         $collectionId = 'operator_increment_test';
@@ -1319,10 +1235,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_decrement_test';
         $database->createCollection($collectionId);
@@ -1368,10 +1280,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_multiply_test';
         $database->createCollection($collectionId);
@@ -1407,10 +1315,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_divide_test';
         $database->createCollection($collectionId);
@@ -1446,10 +1350,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_modulo_test';
         $database->createCollection($collectionId);
@@ -1479,10 +1379,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_power_test';
         $database->createCollection($collectionId);
@@ -1518,10 +1414,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_concat_test';
         $database->createCollection($collectionId);
@@ -1561,10 +1453,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_replace_test';
         $database->createCollection($collectionId);
@@ -1606,10 +1494,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_append_test';
         $database->createCollection($collectionId);
@@ -1659,10 +1543,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_prepend_test';
         $database->createCollection($collectionId);
@@ -1692,10 +1572,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_insert_test';
         $database->createCollection($collectionId);
@@ -1740,10 +1616,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_remove_test';
         $database->createCollection($collectionId);
@@ -1792,10 +1664,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_unique_test';
         $database->createCollection($collectionId);
@@ -1839,10 +1707,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_intersect_test';
         $database->createCollection($collectionId);
@@ -1881,10 +1745,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_diff_test';
         $database->createCollection($collectionId);
@@ -1925,10 +1785,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_filter_test';
         $database->createCollection($collectionId);
@@ -1989,10 +1845,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_filter_numeric_test';
         $database->createCollection($collectionId);
@@ -2050,10 +1902,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_toggle_test';
         $database->createCollection($collectionId);
@@ -2102,10 +1950,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_date_add_test';
         $database->createCollection($collectionId);
@@ -2142,10 +1986,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_date_sub_test';
         $database->createCollection($collectionId);
@@ -2175,10 +2015,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'operator_date_now_test';
         $database->createCollection($collectionId);
@@ -2216,10 +2052,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'mixed_operators_test';
         $database->createCollection($collectionId);
@@ -2265,10 +2097,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'batch_operators_test';
         $database->createCollection($collectionId);
@@ -2528,10 +2356,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_increment_max_violation';
         $database->createCollection($collectionId);
@@ -2620,10 +2444,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_concat_length_violation';
         $database->createCollection($collectionId);
@@ -2683,10 +2503,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_multiply_range_violation';
         $database->createCollection($collectionId);
@@ -2749,10 +2565,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_multiply_negative';
         $database->createCollection($collectionId);
@@ -2835,10 +2647,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_divide_negative';
         $database->createCollection($collectionId);
@@ -2911,10 +2719,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_array_item_type_violation';
         $database->createCollection($collectionId);
@@ -3022,10 +2826,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_extreme_integers';
         $database->createCollection($collectionId);
@@ -3075,10 +2875,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_negative_power';
         $database->createCollection($collectionId);
@@ -3115,10 +2911,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_fractional_power';
         $database->createCollection($collectionId);
@@ -3166,10 +2958,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_empty_strings';
         $database->createCollection($collectionId);
@@ -3227,10 +3015,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_unicode';
         $database->createCollection($collectionId);
@@ -3281,10 +3065,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_empty_arrays';
         $database->createCollection($collectionId);
@@ -3355,10 +3135,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_array_special_values';
         $database->createCollection($collectionId);
@@ -3407,10 +3183,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_negative_modulo';
         $database->createCollection($collectionId);
@@ -3459,10 +3231,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_float_precision';
         $database->createCollection($collectionId);
@@ -3515,10 +3283,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_long_strings';
         $database->createCollection($collectionId);
@@ -3569,10 +3333,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_date_boundaries';
         $database->createCollection($collectionId);
@@ -3646,10 +3406,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_array_insert_boundaries';
         $database->createCollection($collectionId);
@@ -3694,10 +3450,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_sequential_ops';
         $database->createCollection($collectionId);
@@ -3765,10 +3517,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_zero_values';
         $database->createCollection($collectionId);
@@ -3825,10 +3573,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_array_empty_results';
         $database->createCollection($collectionId);
@@ -3879,10 +3623,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_replace_multiple';
         $database->createCollection($collectionId);
@@ -3927,10 +3667,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_precise_floats';
         $database->createCollection($collectionId);
@@ -3975,10 +3711,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_single_element';
         $database->createCollection($collectionId);
@@ -4039,10 +3771,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_toggle_default';
         $database->createCollection($collectionId);
@@ -4086,10 +3814,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_attribute_constraints';
         $database->createCollection($collectionId);
@@ -4131,10 +3855,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create test collection
         $collectionId = 'test_bulk_callback';
@@ -4201,10 +3921,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create test collection
         $collectionId = 'test_upsert_callback';
@@ -4302,10 +4018,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create test collection
         $collectionId = 'test_single_upsert';
@@ -4373,10 +4085,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         // Create test collection with all attribute types needed for operators
         $collectionId = 'test_upsert_new_ops';
@@ -4511,10 +4219,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_array_not_null';
         $database->createCollection($collectionId);
@@ -4577,10 +4281,6 @@ trait OperatorTests
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForOperators()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
 
         $collectionId = 'test_operator_cache';
         $database->createCollection($collectionId);

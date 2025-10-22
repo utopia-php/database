@@ -400,6 +400,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForOperators(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForGetConnectionId(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

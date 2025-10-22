@@ -9,11 +9,13 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
 class Postgres extends SQL
@@ -1090,6 +1092,7 @@ class Postgres extends SQL
      */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
+        $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1238,11 +1241,31 @@ class Postgres extends SQL
          */
 
         $bindIndex = 0;
+        $operators = [];
+
+        // Separate regular attributes from operators
+        foreach ($attributes as $attribute => $value) {
+            if (Operator::isOperator($value)) {
+                $operators[$attribute] = $value;
+            }
+        }
+
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
-            $bindIndex++;
+
+            // Check if this is an operator, spatial attribute, or regular attribute
+            if (isset($operators[$attribute])) {
+                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+                $columns .= $operatorSQL . ',';
+            } elseif (\in_array($attribute, $spatialAttributes, true)) {
+                $bindKey = 'key_' . $bindIndex;
+                $columns .= "\"{$column}\" = " . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
+                $bindIndex++;
+            } else {
+                $bindKey = 'key_' . $bindIndex;
+                $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
+                $bindIndex++;
+            }
         }
 
         $sql = "
@@ -1265,14 +1288,24 @@ class Postgres extends SQL
 
         $attributeIndex = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) {
-                $value = json_encode($value);
-            }
+            // Handle operators separately
+            if (isset($operators[$attribute])) {
+                $this->bindOperatorParams($stmt, $operators[$attribute], $attributeIndex);
+            } else {
+                // Convert spatial arrays to WKT, json_encode non-spatial arrays
+                if (\in_array($attribute, $spatialAttributes, true)) {
+                    if (\is_array($value)) {
+                        $value = $this->convertArrayToWKT($value);
+                    }
+                } elseif (is_array($value)) {
+                    $value = json_encode($value);
+                }
 
-            $bindKey = 'key_' . $attributeIndex;
-            $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
+                $bindKey = 'key_' . $attributeIndex;
+                $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
+                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                $attributeIndex++;
+            }
         }
 
         try {
@@ -1297,6 +1330,7 @@ class Postgres extends SQL
      * @param array<string> $attributes
      * @param array<mixed> $bindValues
      * @param string $attribute
+     * @param array<Operator> $operators
      * @return mixed
      */
     protected function getUpsertStatement(
@@ -1306,6 +1340,7 @@ class Postgres extends SQL
         array $attributes,
         array $bindValues,
         string $attribute = '',
+        array $operators = [],
     ): mixed {
         $getUpdateClause = function (string $attribute, bool $increment = false): string {
             $attribute = $this->quote($this->filter($attribute));
@@ -1321,6 +1356,9 @@ class Postgres extends SQL
 
             return "{$attribute} = {$new}";
         };
+
+        $bindIndex = count($bindValues);
+
         if (!empty($attribute)) {
             // Increment specific column by its new value in place
             $updateColumns = [
@@ -1328,13 +1366,25 @@ class Postgres extends SQL
                 $getUpdateClause('_updatedAt'),
             ];
         } else {
-            // Update all columns
+            // Update all columns and apply operators
             $updateColumns = [];
             foreach (array_keys($attributes) as $attr) {
                 /**
                  * @var string $attr
                  */
-                $updateColumns[] = $getUpdateClause($this->filter($attr));
+                $filteredAttr = $this->filter($attr);
+
+                // Check if this attribute has an operator
+                if (isset($operators[$attr])) {
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $bindIndex, useTargetPrefix: true);
+                    if ($operatorSQL !== null) {
+                        $updateColumns[] = $operatorSQL;
+                    }
+                } else {
+                    if (!in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
+                        $updateColumns[] = $getUpdateClause($filteredAttr);
+                    }
+                }
             }
         }
 
@@ -1351,6 +1401,16 @@ class Postgres extends SQL
         foreach ($bindValues as $key => $binding) {
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
+
+        $bindIndex = count($bindValues);
+
+        // Bind operator parameters in the same order used to build SQL
+        foreach (array_keys($attributes) as $attr) {
+            if (isset($operators[$attr])) {
+                $this->bindOperatorParams($stmt, $operators[$attr], $bindIndex);
+            }
+        }
+
         return $stmt;
     }
 
@@ -1997,6 +2057,16 @@ class Postgres extends SQL
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
         }
 
+        // Numeric value out of range (overflow/underflow from operators)
+        if ($e->getCode() === '22003' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new LimitException('Numeric value out of range', $e->getCode(), $e);
+        }
+
+        // Datetime field overflow
+        if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new LimitException('Datetime field overflow', $e->getCode(), $e);
+        }
+
         // Unknown column
         if ($e->getCode() === "42703" && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new NotFoundException('Attribute not found', $e->getCode(), $e);
@@ -2320,5 +2390,264 @@ class Postgres extends SQL
         }
 
         return $rings; // array of rings, each ring is array of [x,y]
+    }
+
+    /**
+     * Get SQL expression for operator
+     *
+     * @param string $column
+     * @param Operator $operator
+     * @param int &$bindIndex
+     * @return ?string
+     */
+    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex, bool $useTargetPrefix = false): ?string
+    {
+        $quotedColumn = $this->quote($column);
+        $columnRef = $useTargetPrefix ? "target.{$quotedColumn}" : $quotedColumn;
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            // Numeric operators with NULL handling
+            case Operator::TYPE_INCREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$columnRef}, 0) >= CAST(:$maxKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        WHEN COALESCE({$columnRef}, 0) > CAST(:$maxKey AS NUMERIC) - CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        ELSE COALESCE({$columnRef}, 0) + CAST(:$bindKey AS NUMERIC)
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$columnRef}, 0) + :$bindKey";
+
+            case Operator::TYPE_DECREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$columnRef}, 0) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        WHEN COALESCE({$columnRef}, 0) < CAST(:$minKey AS NUMERIC) + CAST(:$bindKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        ELSE COALESCE({$columnRef}, 0) - CAST(:$bindKey AS NUMERIC)
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$columnRef}, 0) - :$bindKey";
+
+            case Operator::TYPE_MULTIPLY:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$columnRef}, 0) >= CAST(:$maxKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        WHEN CAST(:$bindKey AS NUMERIC) > 0 AND COALESCE({$columnRef}, 0) > CAST(:$maxKey AS NUMERIC) / CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        WHEN CAST(:$bindKey AS NUMERIC) < 0 AND COALESCE({$columnRef}, 0) < CAST(:$maxKey AS NUMERIC) / CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        ELSE COALESCE({$columnRef}, 0) * CAST(:$bindKey AS NUMERIC)
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$columnRef}, 0) * :$bindKey";
+
+            case Operator::TYPE_DIVIDE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN CAST(:$bindKey AS NUMERIC) != 0 AND COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        ELSE COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC)
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$columnRef}, 0) / :$bindKey";
+
+            case Operator::TYPE_MODULO:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // PostgreSQL MOD requires compatible types - cast to numeric
+                return "{$quotedColumn} = MOD(COALESCE({$columnRef}::numeric, 0), :$bindKey::numeric)";
+
+            case Operator::TYPE_POWER:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$columnRef}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN COALESCE({$columnRef}, 0) <= 1 THEN COALESCE({$columnRef}, 0)
+                        WHEN :$bindKey * LN(COALESCE({$columnRef}, 1)) > LN(:$maxKey) THEN :$maxKey
+                        ELSE POWER(COALESCE({$columnRef}, 0), :$bindKey)
+                    END";
+                }
+                return "{$quotedColumn} = POWER(COALESCE({$columnRef}, 0), :$bindKey)";
+
+            case Operator::TYPE_CONCAT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = CONCAT(COALESCE({$columnRef}, ''), :$bindKey)";
+
+            case Operator::TYPE_ARRAY_APPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE({$columnRef}, '[]'::jsonb) || :$bindKey::jsonb";
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = :$bindKey::jsonb || COALESCE({$columnRef}, '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                // PostgreSQL-specific implementation for array unique
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(DISTINCT value)
+                    FROM jsonb_array_elements({$columnRef}) AS value
+                ), '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$columnRef}) AS value
+                    WHERE value != :$bindKey::jsonb
+                ), '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_INSERT:
+                $indexKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // PostgreSQL implementation using jsonb functions with row numbering
+                return "{$quotedColumn} = (
+                    SELECT jsonb_agg(value ORDER BY idx)
+                    FROM (
+                        SELECT value, idx
+                        FROM jsonb_array_elements({$columnRef}) WITH ORDINALITY AS t(value, idx)
+                        WHERE idx - 1 < :$indexKey
+                        UNION ALL
+                        SELECT :$valueKey::jsonb AS value, :$indexKey + 1 AS idx
+                        UNION ALL
+                        SELECT value, idx + 1
+                        FROM jsonb_array_elements({$columnRef}) WITH ORDINALITY AS t(value, idx)
+                        WHERE idx - 1 >= :$indexKey
+                    ) AS combined
+                )";
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$columnRef}) AS value
+                    WHERE value IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
+                ), '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_DIFF:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$columnRef}) AS value
+                    WHERE value NOT IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
+                ), '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_FILTER:
+                $conditionKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                // PostgreSQL-specific implementation using jsonb_array_elements
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$columnRef}) AS value
+                    WHERE CASE :$conditionKey
+                        WHEN 'equals' THEN value = :$valueKey::jsonb
+                        WHEN 'notEquals' THEN value != :$valueKey::jsonb
+                        WHEN 'greaterThan' THEN (value::text)::numeric > trim(both '\"' from :$valueKey::text)::numeric
+                        WHEN 'lessThan' THEN (value::text)::numeric < trim(both '\"' from :$valueKey::text)::numeric
+                        WHEN 'null' THEN value = 'null'::jsonb
+                        WHEN 'notNull' THEN value != 'null'::jsonb
+                        ELSE TRUE
+                    END
+                ), '[]'::jsonb)";
+
+            case Operator::TYPE_REPLACE:
+                $searchKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $replaceKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = REPLACE(COALESCE({$columnRef}, ''), :$searchKey, :$replaceKey)";
+
+            case Operator::TYPE_TOGGLE:
+                return "{$quotedColumn} = NOT COALESCE({$columnRef}, FALSE)";
+
+            case Operator::TYPE_DATE_ADD_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = {$quotedColumn} + (:$bindKey || ' days')::INTERVAL";
+
+            case Operator::TYPE_DATE_SUB_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = {$quotedColumn} - (:$bindKey || ' days')::INTERVAL";
+
+            case Operator::TYPE_DATE_SET_NOW:
+                return "{$quotedColumn} = NOW()";
+
+            default:
+                // Fall back to parent implementation for other operators
+                return parent::getOperatorSQL($column, $operator, $bindIndex);
+        }
+    }
+
+    /**
+     * Bind operator parameters to statement
+     * Override to handle PostgreSQL-specific JSON binding
+     *
+     * @param \PDOStatement $stmt
+     * @param Operator $operator
+     * @param int &$bindIndex
+     * @return void
+     */
+    protected function bindOperatorParams(\PDOStatement $stmt, Operator $operator, int &$bindIndex): void
+    {
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            case Operator::TYPE_ARRAY_APPEND:
+            case Operator::TYPE_ARRAY_PREPEND:
+                $arrayValue = json_encode($values);
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $value = $values[0] ?? null;
+                $bindKey = "op_{$bindIndex}";
+                // Always JSON encode for PostgreSQL jsonb comparison
+                $stmt->bindValue(':' . $bindKey, json_encode($value), \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+            case Operator::TYPE_ARRAY_DIFF:
+                $arrayValue = json_encode($values);
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            default:
+                // Use parent implementation for other operators
+                parent::bindOperatorParams($stmt, $operator, $bindIndex);
+                break;
+        }
     }
 }

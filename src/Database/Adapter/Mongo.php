@@ -2890,6 +2890,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Does the adapter support operators?
+     *
+     * @return bool
+     */
+    public function getSupportForOperators(): bool
+    {
+        return false;
+    }
+
+    /**
      * Does the adapter includes boundary during spatial contains?
      *
      * @return bool

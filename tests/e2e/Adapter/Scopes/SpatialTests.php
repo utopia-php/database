@@ -2877,7 +2877,7 @@ trait SpatialTests
 
             // Test spatial queries work with updated data
             $results = $database->find($collectionName, [
-                Query::equal('location', [[$newPoint]])
+                Query::equal('location', [$newPoint])
             ]);
             $this->assertCount(1, $results, 'Should find document by exact point match');
             $this->assertEquals('spatial_doc', $results[0]->getId());

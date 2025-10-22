@@ -1967,9 +1967,7 @@ class MariaDB extends SQL
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) < :$minKey * :$bindKey THEN :$minKey
-                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) > :$minKey * :$bindKey THEN :$minKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }
@@ -2057,8 +2055,8 @@ class MariaDB extends SQL
                     WHERE CASE :$conditionKey
                         WHEN 'equals' THEN value = JSON_UNQUOTE(:$valueKey)
                         WHEN 'notEquals' THEN value != JSON_UNQUOTE(:$valueKey)
-                        WHEN 'greaterThan' THEN CAST(value AS SIGNED) > JSON_UNQUOTE(:$valueKey)
-                        WHEN 'lessThan' THEN CAST(value AS SIGNED) < JSON_UNQUOTE(:$valueKey)
+                        WHEN 'greaterThan' THEN CAST(value AS DECIMAL(65,30)) > CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
+                        WHEN 'lessThan' THEN CAST(value AS DECIMAL(65,30)) < CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
                         WHEN 'null' THEN value IS NULL
                         WHEN 'notNull' THEN value IS NOT NULL
                         ELSE TRUE

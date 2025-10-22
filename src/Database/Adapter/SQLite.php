@@ -1280,9 +1280,24 @@ class SQLite extends MariaDB
             return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 
-        // Duplicate
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1) {
-            return new DuplicateException('Document already exists', $e->getCode(), $e);
+        // Duplicate - SQLite uses various error codes for constraint violations:
+        // - Error code 19 is SQLITE_CONSTRAINT (includes UNIQUE violations)
+        // - Error code 1 is also used for some duplicate cases
+        // - SQL state '23000' is integrity constraint violation
+        if (
+            ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && ($e->errorInfo[1] === 1 || $e->errorInfo[1] === 19)) ||
+            $e->getCode() === '23000'
+        ) {
+            // Check if it's actually a duplicate/unique constraint violation
+            $message = $e->getMessage();
+            if (
+                (isset($e->errorInfo[1]) && $e->errorInfo[1] === 19) ||
+                $e->getCode() === '23000' ||
+                stripos($message, 'unique') !== false ||
+                stripos($message, 'duplicate') !== false
+            ) {
+                return new DuplicateException('Document already exists', $e->getCode(), $e);
+            }
         }
 
         // String or BLOB exceeds size limit
@@ -1501,9 +1516,7 @@ class SQLite extends MariaDB
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) < :$minKey * :$bindKey THEN :$minKey
-                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) > :$minKey * :$bindKey THEN :$minKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }
@@ -1688,11 +1701,21 @@ class SQLite extends MariaDB
                             default => throw new OperatorException('Unsupported filter type: ' . $filterType),
                         };
 
-                        return "{$quotedColumn} = (
-                            SELECT json_group_array(value)
-                            FROM json_each(IFNULL({$quotedColumn}, '[]'))
-                            WHERE value $operator :$bindKey
-                        )";
+                        // For numeric comparisons, cast to REAL; for equals/notEquals, use text comparison
+                        $isNumericComparison = \in_array($filterType, ['greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual']);
+                        if ($isNumericComparison) {
+                            return "{$quotedColumn} = (
+                                SELECT json_group_array(value)
+                                FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                                WHERE CAST(value AS REAL) $operator CAST(:$bindKey AS REAL)
+                            )";
+                        } else {
+                            return "{$quotedColumn} = (
+                                SELECT json_group_array(value)
+                                FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                                WHERE value $operator :$bindKey
+                            )";
+                        }
 
                     default:
                         return "{$quotedColumn} = {$quotedColumn}";

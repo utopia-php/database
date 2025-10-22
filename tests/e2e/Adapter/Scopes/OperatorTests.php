@@ -25,6 +25,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         // Create test collection with various attribute types
         $collectionId = 'test_operators';
         $database->createCollection($collectionId);
@@ -130,6 +135,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         // Create test collection
         $collectionId = 'test_batch_operators';
         $database->createCollection($collectionId);
@@ -200,6 +210,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -339,6 +354,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         // Create test collection
         $collectionId = 'test_operators_with_queries';
         $database->createCollection($collectionId);
@@ -420,6 +440,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         // Create test collection
         $collectionId = 'test_operator_errors';
         $database->createCollection($collectionId);
@@ -452,6 +477,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -494,6 +524,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         // Create test collection
         $collectionId = 'test_insert_operator_errors';
         $database->createCollection($collectionId);
@@ -525,6 +560,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -619,6 +659,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_division_zero';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'number', Database::VAR_FLOAT, 0, false, 100.0);
@@ -674,6 +719,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_array_insert_bounds';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
@@ -713,6 +763,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -775,6 +830,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_array_filter';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
@@ -806,6 +866,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -853,6 +918,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -909,6 +979,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -974,6 +1049,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_increment_operator';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
@@ -1009,6 +1089,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1056,6 +1141,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_modulo_operator';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'number', Database::VAR_INTEGER, 0, false, 0);
@@ -1079,6 +1169,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1122,6 +1217,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_array_unique_operator';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
@@ -1150,6 +1250,11 @@ trait OperatorTests
     public function testOperatorIncrementComprehensive(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1214,6 +1319,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_decrement_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false);
@@ -1258,6 +1368,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_multiply_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false);
@@ -1286,6 +1401,11 @@ trait OperatorTests
     public function testOperatorDivideComprehensive(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1326,6 +1446,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_modulo_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'number', Database::VAR_INTEGER, 0, false);
@@ -1348,6 +1473,11 @@ trait OperatorTests
     public function testOperatorPowerComprehensive(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1382,6 +1512,11 @@ trait OperatorTests
     public function testOperatorStringConcatComprehensive(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1426,6 +1561,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_replace_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false);
@@ -1460,6 +1600,11 @@ trait OperatorTests
     public function testOperatorArrayAppendComprehensive(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1514,6 +1659,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_prepend_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
@@ -1536,6 +1686,11 @@ trait OperatorTests
     public function testOperatorArrayInsertComprehensive(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1579,6 +1734,11 @@ trait OperatorTests
     public function testOperatorArrayRemoveComprehensive(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1632,6 +1792,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_unique_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
@@ -1668,6 +1833,11 @@ trait OperatorTests
     public function testOperatorArrayIntersectComprehensive(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1711,6 +1881,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_diff_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
@@ -1744,6 +1919,11 @@ trait OperatorTests
     public function testOperatorArrayFilterComprehensive(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -1809,6 +1989,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_filter_numeric_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'integers', Database::VAR_INTEGER, 0, false, null, true, true);
@@ -1865,6 +2050,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_toggle_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, false);
@@ -1912,6 +2102,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_date_add_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'date', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
@@ -1947,6 +2142,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'operator_date_sub_test';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'date', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
@@ -1969,6 +2169,11 @@ trait OperatorTests
     public function testOperatorDateSetNowComprehensive(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -2005,6 +2210,11 @@ trait OperatorTests
     public function testMixedOperators(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -2049,6 +2259,11 @@ trait OperatorTests
     public function testOperatorsBatch(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -2101,6 +2316,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_array_insert_beginning';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
@@ -2138,6 +2358,11 @@ trait OperatorTests
     public function testArrayInsertAtMiddle(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $collectionId = 'test_array_insert_middle';
         $database->createCollection($collectionId);
@@ -2177,6 +2402,11 @@ trait OperatorTests
     {
         $database = static::getDatabase();
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_array_insert_end';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
@@ -2215,6 +2445,11 @@ trait OperatorTests
     public function testArrayInsertMultipleOperations(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $collectionId = 'test_array_insert_multiple';
         $database->createCollection($collectionId);
@@ -2287,6 +2522,11 @@ trait OperatorTests
     public function testOperatorIncrementExceedsMaxValue(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -2380,6 +2620,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_concat_length_violation';
         $database->createCollection($collectionId);
 
@@ -2432,6 +2677,11 @@ trait OperatorTests
     public function testOperatorMultiplyViolatesRange(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -2493,6 +2743,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -2580,6 +2835,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_divide_negative';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, false);
@@ -2616,9 +2876,9 @@ trait OperatorTests
         ]));
 
         $updated3 = $database->updateDocument($collectionId, 'pos_div_neg', new Document([
-            'value' => Operator::divide(-4, -10)  // 100 / -4 = -25, should not be capped at -10
+            'value' => Operator::divide(-4, -10)  // 100 / -4 = -25, which is below min -10, so floor at -10
         ]));
-        $this->assertEquals(-25.0, $updated3->getAttribute('value'), 'Positive / negative should compute correctly (result is negative, no cap)');
+        $this->assertEquals(-10.0, $updated3->getAttribute('value'), 'Positive / negative should floor at min when result would be below it');
 
         // Test negative value / negative divisor that would go below min
         $doc4 = $database->createDocument($collectionId, new Document([
@@ -2645,6 +2905,11 @@ trait OperatorTests
     public function testOperatorArrayAppendViolatesItemConstraints(): void
     {
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -2757,6 +3022,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_extreme_integers';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'bigint_max', Database::VAR_INTEGER, 8, true);
@@ -2805,6 +3075,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_negative_power';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
@@ -2834,6 +3109,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -2880,6 +3160,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -2942,6 +3227,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_unicode';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 500, false, '');
@@ -2985,6 +3275,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -3060,6 +3355,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_array_special_values';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'mixed', Database::VAR_STRING, 50, false, null, true, true);
@@ -3107,6 +3407,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_negative_modulo';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'value', Database::VAR_INTEGER, 0, true);
@@ -3148,6 +3453,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -3205,6 +3515,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_long_strings';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 70000, false, '');
@@ -3248,6 +3563,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -3326,6 +3646,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_array_insert_boundaries';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
@@ -3363,6 +3688,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -3435,6 +3765,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_zero_values';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
@@ -3490,6 +3825,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_array_empty_results';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
@@ -3539,6 +3879,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_replace_multiple';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'text', Database::VAR_STRING, 255, false, '');
@@ -3582,6 +3927,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_precise_floats';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'value', Database::VAR_FLOAT, 0, true);
@@ -3619,6 +3969,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -3684,6 +4039,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_toggle_default';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'flag', Database::VAR_BOOLEAN, 0, false, false);
@@ -3726,6 +4086,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_attribute_constraints';
         $database->createCollection($collectionId);
         // Integer with size 0 (32-bit INT)
@@ -3760,6 +4125,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -3825,6 +4195,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -3927,6 +4302,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         // Create test collection
         $collectionId = 'test_single_upsert';
         $database->createCollection($collectionId);
@@ -3987,6 +4367,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();
@@ -4126,6 +4511,11 @@ trait OperatorTests
             return;
         }
 
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'test_array_not_null';
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
@@ -4181,6 +4571,11 @@ trait OperatorTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         if (!$database->getAdapter()->getSupportForOperators()) {
             $this->expectNotToPerformAssertions();

@@ -2459,9 +2459,7 @@ class Postgres extends SQL
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$columnRef}, 0) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
-                        WHEN CAST(:$bindKey AS NUMERIC) > 0 AND COALESCE({$columnRef}, 0) < CAST(:$minKey AS NUMERIC) * CAST(:$bindKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
-                        WHEN CAST(:$bindKey AS NUMERIC) < 0 AND COALESCE({$columnRef}, 0) > CAST(:$minKey AS NUMERIC) * CAST(:$bindKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        WHEN CAST(:$bindKey AS NUMERIC) != 0 AND COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
                         ELSE COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC)
                     END";
                 }

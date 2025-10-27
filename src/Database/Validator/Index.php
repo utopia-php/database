@@ -28,7 +28,7 @@ class Index extends Validator
      * @param bool $supportForAttributes
      * @param bool $supportForMultipleFulltextIndexes
      * @param bool $supportForIdenticalIndexes
-     * @param bool $objectIndexSupport
+     * @param bool $supportForObjectIndexes
      * @throws DatabaseException
      */
     public function __construct(
@@ -43,7 +43,7 @@ class Index extends Validator
         protected bool $supportForAttributes = true,
         protected bool $supportForMultipleFulltextIndexes = true,
         protected bool $supportForIdenticalIndexes = true,
-        protected bool $objectIndexSupport = false
+        protected bool $supportForObjectIndexes = false
     ) {
         foreach ($attributes as $attribute) {
             $key = \strtolower($attribute->getAttribute('key', $attribute->getAttribute('$id')));
@@ -132,6 +132,9 @@ class Index extends Validator
             return false;
         }
         if (!$this->checkIdenticalIndexes($value)) {
+            return false;
+        }
+        if (!$this->checkObjectIndexes($value)) {
             return false;
         }
         return true;
@@ -536,29 +539,29 @@ class Index extends Validator
      * @param Document $index
      * @return bool
     */
-    public function checkGinIndex(Document $index): bool
+    public function checkObjectIndexes(Document $index): bool
     {
         $type = $index->getAttribute('type');
 
         $attributes = $index->getAttribute('attributes', []);
         $orders     = $index->getAttribute('orders', []);
 
-        if ($type !== Database::INDEX_GIN) {
+        if ($type !== Database::Index_Object) {
             return true;
         }
 
-        if (!$this->objectIndexSupport) {
-            $this->message = 'GIN indexes are not supported';
+        if (!$this->supportForObjectIndexes) {
+            $this->message = 'Object indexes are not supported';
             return false;
         }
 
         if (count($attributes) !== 1) {
-            $this->message = 'GIN index can be created on a single object attribute';
+            $this->message = 'Object index can be created on a single object attribute';
             return false;
         }
 
         if (!empty($orders)) {
-            $this->message = 'GIN indexes do not support explicit orders. Remove the orders to create this index.';
+            $this->message = 'Object index do not support explicit orders. Remove the orders to create this index.';
             return false;
         }
 
@@ -567,7 +570,7 @@ class Index extends Validator
         $attributeType = $attribute->getAttribute('type', '');
 
         if ($attributeType !== Database::TYPE_OBJECT) {
-            $this->message = 'GIN index can only be created on object attributes. Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
+            $this->message = 'Object index can only be created on object attributes. Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
             return false;
         }
 

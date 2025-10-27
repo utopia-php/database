@@ -555,8 +555,8 @@ trait ObjectAttributeTests
         // Create object attribute
         $this->assertEquals(true, $database->createAttribute($collectionId, 'data', Database::TYPE_OBJECT, 0, false));
 
-        // Test 1: Create GIN index on object attribute
-        $ginIndex = $database->createIndex($collectionId, 'idx_data_gin', Database::INDEX_GIN, ['data']);
+        // Test 1: Create Object index on object attribute
+        $ginIndex = $database->createIndex($collectionId, 'idx_data_gin', Database::Index_Object, ['data']);
         $this->assertTrue($ginIndex);
 
         // Test 2: Create documents with JSONB data
@@ -590,7 +590,7 @@ trait ObjectAttributeTests
         $results = $database->find($collectionId, [
             Query::equal('data', [['env' => 'production']])
         ]);
-        $this->assertCount(0, $results); // Note: GIN index doesn't make equal queries work differently
+        $this->assertCount(0, $results); // Note: Object index doesn't make equal queries work differently
 
         // Test 4: Query with contains on indexed JSONB column
         $results = $database->find($collectionId, [
@@ -599,49 +599,49 @@ trait ObjectAttributeTests
         $this->assertCount(1, $results);
         $this->assertEquals('gin1', $results[0]->getId());
 
-        // Test 5: Verify GIN index improves performance for containment queries
+        // Test 5: Verify Object index improves performance for containment queries
         $results = $database->find($collectionId, [
             Query::contains('data', [['tags' => 'kotlin']])
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('gin2', $results[0]->getId());
 
-        // Test 6: Try to create GIN index on non-object attribute (should fail)
+        // Test 6: Try to create Object index on non-object attribute (should fail)
         $database->createAttribute($collectionId, 'name', Database::VAR_STRING, 255, false);
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_name_gin', Database::INDEX_GIN, ['name']);
+            $database->createIndex($collectionId, 'idx_name_gin', Database::Index_Object, ['name']);
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
-            $this->assertStringContainsString('GIN index can only be created on object attributes', $e->getMessage());
+            $this->assertStringContainsString('Object index can only be created on object attributes', $e->getMessage());
         }
-        $this->assertTrue($exceptionThrown, 'Expected Index exception for GIN index on non-object attribute');
+        $this->assertTrue($exceptionThrown, 'Expected Index exception for Object index on non-object attribute');
 
-        // Test 7: Try to create GIN index on multiple attributes (should fail)
+        // Test 7: Try to create Object index on multiple attributes (should fail)
         $database->createAttribute($collectionId, 'metadata', Database::TYPE_OBJECT, 0, false);
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_multi_gin', Database::INDEX_GIN, ['data', 'metadata']);
+            $database->createIndex($collectionId, 'idx_multi_gin', Database::Index_Object, ['data', 'metadata']);
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
-            $this->assertStringContainsString('GIN index can be created on a single object attribute', $e->getMessage());
+            $this->assertStringContainsString('Object index can be created on a single object attribute', $e->getMessage());
         }
-        $this->assertTrue($exceptionThrown, 'Expected Index exception for GIN index on multiple attributes');
+        $this->assertTrue($exceptionThrown, 'Expected Index exception for Object index on multiple attributes');
 
-        // Test 8: Try to create GIN index with orders (should fail)
+        // Test 8: Try to create Object index with orders (should fail)
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_ordered_gin', Database::INDEX_GIN, ['metadata'], [], [Database::ORDER_ASC]);
+            $database->createIndex($collectionId, 'idx_ordered_gin', Database::Index_Object, ['metadata'], [], [Database::ORDER_ASC]);
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
-            $this->assertStringContainsString('GIN indexes do not support explicit orders', $e->getMessage());
+            $this->assertStringContainsString('Object indexes do not support explicit orders', $e->getMessage());
         }
-        $this->assertTrue($exceptionThrown, 'Expected Index exception for GIN index with orders');
+        $this->assertTrue($exceptionThrown, 'Expected Index exception for Object index with orders');
 
         // Clean up
         $database->deleteCollection($collectionId);

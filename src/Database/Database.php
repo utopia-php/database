@@ -73,7 +73,8 @@ class Database
     public const INDEX_FULLTEXT = 'fulltext';
     public const INDEX_UNIQUE = 'unique';
     public const INDEX_SPATIAL = 'spatial';
-    public const INDEX_GIN = 'gin';
+    // keeping
+    public const Index_Object = 'object';
     public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';
     public const INDEX_HNSW_DOT = 'hnsw_dot';
@@ -3489,14 +3490,14 @@ class Database
                 }
                 break;
 
-            case self::INDEX_GIN:
+            case self::Index_Object:
                 if (!$this->adapter->getSupportForObject()) {
-                    throw new DatabaseException('GIN indexes are not supported');
+                    throw new DatabaseException('Object indexes are not supported');
                 }
                 break;
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_GIN . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::Index_Object . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
         }
 
         /** @var array<Document> $collectionAttributes */
@@ -3528,9 +3529,9 @@ class Database
             }
         }
 
-        if ($type === self::INDEX_GIN) {
+        if ($type === self::Index_Object) {
             if (count($attributes) !== 1) {
-                throw new IndexException('GIN index can be created on a single object attribute');
+                throw new IndexException('Object index can be created on a single object attribute');
             }
 
             foreach ($attributes as $attr) {
@@ -3540,12 +3541,12 @@ class Database
 
                 $attributeType = $indexAttributesWithTypes[$attr];
                 if ($attributeType !== self::TYPE_OBJECT) {
-                    throw new IndexException('GIN index can only be created on object attributes. Attribute "' . $attr . '" is of type "' . $attributeType . '"');
+                    throw new IndexException('Object index can only be created on object attributes. Attribute "' . $attr . '" is of type "' . $attributeType . '"');
                 }
             }
 
             if (!empty($orders)) {
-                throw new IndexException('GIN indexes do not support explicit orders. Remove the orders to create this index.');
+                throw new IndexException('Object indexes do not support explicit orders. Remove the orders to create this index.');
             }
         }
 

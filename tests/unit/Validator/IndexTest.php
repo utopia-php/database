@@ -273,56 +273,56 @@ class IndexTest extends TestCase
             'indexes' => []
         ]);
 
-        // Validator with objectIndexSupport enabled
-        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, true);
+        // Validator with supportForObjectIndexes enabled
+        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, supportForObjectIndexes:true);
 
-        // Valid: GIN index on single TYPE_OBJECT attribute
+        // Valid: Object index on single TYPE_OBJECT attribute
         $validIndex = new Document([
             '$id' => ID::custom('idx_gin_valid'),
-            'type' => Database::INDEX_GIN,
+            'type' => Database::Index_Object,
             'attributes' => ['data'],
             'lengths' => [],
             'orders' => [],
         ]);
         $this->assertTrue($validator->isValid($validIndex));
 
-        // Invalid: GIN index on non-object attribute
+        // Invalid: Object index on non-object attribute
         $invalidIndexType = new Document([
             '$id' => ID::custom('idx_gin_invalid_type'),
-            'type' => Database::INDEX_GIN,
+            'type' => Database::Index_Object,
             'attributes' => ['name'],
             'lengths' => [],
             'orders' => [],
         ]);
         $this->assertFalse($validator->isValid($invalidIndexType));
-        $this->assertStringContainsString('GIN index can only be created on object attributes', $validator->getDescription());
+        $this->assertStringContainsString('Object index can only be created on object attributes', $validator->getDescription());
 
-        // Invalid: GIN index on multiple attributes
+        // Invalid: Object index on multiple attributes
         $invalidIndexMulti = new Document([
             '$id' => ID::custom('idx_gin_multi'),
-            'type' => Database::INDEX_GIN,
+            'type' => Database::Index_Object,
             'attributes' => ['data', 'name'],
             'lengths' => [],
             'orders' => [],
         ]);
         $this->assertFalse($validator->isValid($invalidIndexMulti));
-        $this->assertStringContainsString('GIN index can be created on a single object attribute', $validator->getDescription());
+        $this->assertStringContainsString('Object index can be created on a single object attribute', $validator->getDescription());
 
-        // Invalid: GIN index with orders
+        // Invalid: Object index with orders
         $invalidIndexOrder = new Document([
             '$id' => ID::custom('idx_gin_order'),
-            'type' => Database::INDEX_GIN,
+            'type' => Database::Index_Object,
             'attributes' => ['data'],
             'lengths' => [],
             'orders' => ['asc'],
         ]);
         $this->assertFalse($validator->isValid($invalidIndexOrder));
-        $this->assertStringContainsString('GIN indexes do not support explicit orders', $validator->getDescription());
+        $this->assertStringContainsString('Object index do not support explicit orders', $validator->getDescription());
 
-        // Validator with objectIndexSupport disabled should reject GIN
+        // Validator with supportForObjectIndexes disabled should reject GIN
         $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false);
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
-        $this->assertEquals('GIN indexes are not supported', $validatorNoSupport->getDescription());
+        $this->assertEquals('Object indexes are not supported', $validatorNoSupport->getDescription());
     }
 
     /**

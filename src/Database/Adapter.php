@@ -66,9 +66,9 @@ abstract class Adapter
     }
 
     public function getAuthorization(): Authorization
-        {
-            return $this->authorization;
-        }
+    {
+        return $this->authorization;
+    }
     /**
      * @param string $key
      * @param mixed $value

@@ -30,7 +30,11 @@ class Pool extends Adapter
             }
 
             // Run setters in case the pooled adapter has its own config
-            $this->setAuthorization($resource->getAuthorization());
+            try {
+                $this->setAuthorization($resource->getAuthorization());
+            } catch (\Error $e) {
+                // Authorization not initialized yet, so skip it.
+            }
             $this->setDatabase($resource->getDatabase());
             $this->setNamespace($resource->getNamespace());
             $this->setSharedTables($resource->getSharedTables());

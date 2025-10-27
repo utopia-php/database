@@ -274,7 +274,7 @@ class IndexTest extends TestCase
         ]);
 
         // Validator with objectIndexSupport enabled
-        $validator = new Index($collection->getAttribute('attributes'), 768, [], false, false, false, false, true);
+        $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, true);
 
         // Valid: GIN index on single TYPE_OBJECT attribute
         $validIndex = new Document([
@@ -320,7 +320,7 @@ class IndexTest extends TestCase
         $this->assertStringContainsString('GIN indexes do not support explicit orders', $validator->getDescription());
 
         // Validator with objectIndexSupport disabled should reject GIN
-        $validatorNoSupport = new Index($collection->getAttribute('attributes'), 768, [], false, false, false, false, false);
+        $validatorNoSupport = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, false);
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
         $this->assertEquals('GIN indexes are not supported', $validatorNoSupport->getDescription());
     }

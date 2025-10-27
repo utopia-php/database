@@ -11,6 +11,7 @@ use Tests\E2E\Adapter\Scopes\IndexTests;
 use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
+use Tests\E2E\Adapter\Scopes\SchemalessTests;
 use Tests\E2E\Adapter\Scopes\SpatialTests;
 use Tests\E2E\Adapter\Scopes\VectorTests;
 use Utopia\Database\Database;
@@ -27,6 +28,7 @@ abstract class Base extends TestCase
     use PermissionTests;
     use RelationshipTests;
     use SpatialTests;
+    use SchemalessTests;
     use ObjectAttributeTests;
     use VectorTests;
     use GeneralTests;

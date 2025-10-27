@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Validator\Queries;
 
-use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Validator\IndexedQueries;
@@ -16,20 +15,24 @@ use Utopia\Database\Validator\Query\Select;
 class Documents extends IndexedQueries
 {
     /**
-     * Expression constructor
-     *
      * @param array<mixed> $attributes
      * @param array<mixed> $indexes
      * @param string $idAttributeType
-     * @throws Exception
+     * @param int $maxValuesCount
+     * @param \DateTime $minAllowedDate
+     * @param \DateTime $maxAllowedDate
+     * @param bool $supportForAttributes
+     * @throws \Utopia\Database\Exception
      */
     public function __construct(
         array $attributes,
         array $indexes,
         string $idAttributeType,
         int $maxValuesCount = 5000,
+        int $maxUIDLength = 36,
         \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+        bool $supportForAttributes = true
     ) {
         $attributes[] = new Document([
             '$id' => '$id',
@@ -59,16 +62,17 @@ class Documents extends IndexedQueries
         $validators = [
             new Limit(),
             new Offset(),
-            new Cursor(),
+            new Cursor($maxUIDLength),
             new Filter(
                 $attributes,
                 $idAttributeType,
                 $maxValuesCount,
                 $minAllowedDate,
                 $maxAllowedDate,
+                $supportForAttributes
             ),
-            new Order($attributes),
-            new Select($attributes),
+            new Order($attributes, $supportForAttributes),
+            new Select($attributes, $supportForAttributes),
         ];
 
         parent::__construct($attributes, $indexes, $validators);

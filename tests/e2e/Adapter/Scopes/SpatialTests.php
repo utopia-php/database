@@ -2065,7 +2065,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_invalid_spatial_types';
@@ -2170,7 +2171,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_distance_meters_';
@@ -2240,11 +2242,13 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         if (!$database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
-            $this->markTestSkipped('Adapter does not support spatial distance(in meter) for multidimension');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $multiCollection = 'spatial_distance_meters_multi_';
@@ -2370,11 +2374,13 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         if ($database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
-            $this->markTestSkipped('Adapter supports spatial distance (in meter) for multidimension geometries');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collection = 'spatial_distance_error_test';
@@ -2453,7 +2459,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
         $point = "POINT(1 2)";
         $line = "LINESTRING(1 2, 1 2)";
@@ -2643,7 +2650,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_spatial_order_axis';
@@ -2674,7 +2682,8 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_invalid_coord_';

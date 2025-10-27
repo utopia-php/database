@@ -18,23 +18,31 @@ class Index extends Validator
 
     /**
      * @param array<Document> $attributes
+     * @param array<Document> $indexes
      * @param int $maxLength
      * @param array<string> $reservedKeys
      * @param bool $supportForArrayIndexes
      * @param bool $supportForSpatialIndexNull
      * @param bool $supportForSpatialIndexOrder
      * @param bool $supportForVectorIndexes
+     * @param bool $supportForAttributes
+     * @param bool $supportForMultipleFulltextIndexes
+     * @param bool $supportForIdenticalIndexes
      * @param bool $objectIndexSupport
      * @throws DatabaseException
      */
     public function __construct(
         array $attributes,
+        protected array $indexes,
         protected int $maxLength,
         protected array $reservedKeys = [],
         protected bool $supportForArrayIndexes = false,
         protected bool $supportForSpatialIndexNull = false,
         protected bool $supportForSpatialIndexOrder = false,
         protected bool $supportForVectorIndexes = false,
+        protected bool $supportForAttributes = true,
+        protected bool $supportForMultipleFulltextIndexes = true,
+        protected bool $supportForIdenticalIndexes = true,
         protected bool $objectIndexSupport = false
     ) {
         foreach ($attributes as $attribute) {
@@ -48,6 +56,18 @@ class Index extends Validator
     }
 
     /**
+     * Get Type
+     *
+     * Returns validator type.
+     *
+     * @return string
+     */
+    public function getType(): string
+    {
+        return self::TYPE_OBJECT;
+    }
+
+    /**
      * Returns validator description
      * @return string
      */
@@ -57,13 +77,74 @@ class Index extends Validator
     }
 
     /**
+     * Is array
+     *
+     * Function will return true if object is array.
+     *
+     * @return bool
+     */
+    public function isArray(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Is valid.
+     *
+     * Returns true index if valid.
+     * @param Document $value
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function isValid($value): bool
+    {
+        if (!$this->checkValidAttributes($value)) {
+            return false;
+        }
+        if (!$this->checkEmptyIndexAttributes($value)) {
+            return false;
+        }
+        if (!$this->checkDuplicatedAttributes($value)) {
+            return false;
+        }
+        if (!$this->checkMultipleFulltextIndexes($value)) {
+            return false;
+        }
+        if (!$this->checkFulltextIndexNonString($value)) {
+            return false;
+        }
+        if (!$this->checkArrayIndexes($value)) {
+            return false;
+        }
+        if (!$this->checkIndexLengths($value)) {
+            return false;
+        }
+        if (!$this->checkReservedNames($value)) {
+            return false;
+        }
+        if (!$this->checkSpatialIndexes($value)) {
+            return false;
+        }
+        if (!$this->checkNonSpatialIndexOnSpatialAttributes($value)) {
+            return false;
+        }
+        if (!$this->checkVectorIndexes($value)) {
+            return false;
+        }
+        if (!$this->checkIdenticalIndexes($value)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * @param Document $index
      * @return bool
      */
-    public function checkAttributesNotFound(Document $index): bool
+    public function checkValidAttributes(Document $index): bool
     {
         foreach ($index->getAttribute('attributes', []) as $attribute) {
-            if (!isset($this->attributes[\strtolower($attribute)])) {
+            if ($this->supportForAttributes && !isset($this->attributes[\strtolower($attribute)])) {
                 $this->message = 'Invalid index attribute "' . $attribute . '" not found';
                 return false;
             }
@@ -111,11 +192,14 @@ class Index extends Validator
      */
     public function checkFulltextIndexNonString(Document $index): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
         if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
             foreach ($index->getAttribute('attributes', []) as $attribute) {
                 $attribute = $this->attributes[\strtolower($attribute)] ?? new Document();
                 if ($attribute->getAttribute('type', '') !== Database::VAR_STRING) {
-                    $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a FULLTEXT index, must be of type string';
+                    $this->message = 'Attribute "' . $attribute->getAttribute('key', $attribute->getAttribute('$id')) . '" cannot be part of a fulltext index, must be of type string';
                     return false;
                 }
             }
@@ -127,8 +211,11 @@ class Index extends Validator
      * @param Document $index
      * @return bool
      */
-    public function checkArrayIndex(Document $index): bool
+    public function checkArrayIndexes(Document $index): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
         $attributes = $index->getAttribute('attributes', []);
         $orders = $index->getAttribute('orders', []);
         $lengths = $index->getAttribute('lengths', []);
@@ -177,9 +264,13 @@ class Index extends Validator
      * @param Document $index
      * @return bool
      */
-    public function checkIndexLength(Document $index): bool
+    public function checkIndexLengths(Document $index): bool
     {
         if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
+            return true;
+        }
+
+        if (!$this->supportForAttributes) {
             return true;
         }
 
@@ -255,7 +346,7 @@ class Index extends Validator
      * @param Document $index
      * @return bool
      */
-    public function checkSpatialIndex(Document $index): bool
+    public function checkSpatialIndexes(Document $index): bool
     {
         $type = $index->getAttribute('type');
 
@@ -299,7 +390,7 @@ class Index extends Validator
      * @param Document $index
      * @return bool
      */
-    public function checkNonSpatialIndexOnSpatialAttribute(Document $index): bool
+    public function checkNonSpatialIndexOnSpatialAttributes(Document $index): bool
     {
         $type = $index->getAttribute('type');
 
@@ -328,7 +419,7 @@ class Index extends Validator
      * @return bool
      * @throws DatabaseException
      */
-    public function checkVectorIndex(Document $index): bool
+    public function checkVectorIndexes(Document $index): bool
     {
         $type = $index->getAttribute('type');
 
@@ -369,74 +460,76 @@ class Index extends Validator
     }
 
     /**
-     * Is valid.
-     *
-     * Returns true index if valid.
-     * @param Document $value
+     * @param Document $index
      * @return bool
-     * @throws DatabaseException
      */
-    public function isValid($value): bool
+    public function checkMultipleFulltextIndexes(Document $index): bool
     {
-        if (!$this->checkAttributesNotFound($value)) {
-            return false;
+        if ($this->supportForMultipleFulltextIndexes) {
+            return true;
         }
-        if (!$this->checkEmptyIndexAttributes($value)) {
-            return false;
-        }
-        if (!$this->checkDuplicatedAttributes($value)) {
-            return false;
-        }
-        if (!$this->checkFulltextIndexNonString($value)) {
-            return false;
-        }
-        if (!$this->checkArrayIndex($value)) {
-            return false;
-        }
-        if (!$this->checkIndexLength($value)) {
-            return false;
-        }
-        if (!$this->checkReservedNames($value)) {
-            return false;
-        }
-        if (!$this->checkSpatialIndex($value)) {
-            return false;
-        }
-        if (!$this->checkNonSpatialIndexOnSpatialAttribute($value)) {
-            return false;
-        }
-        if (!$this->checkVectorIndex($value)) {
-            return false;
-        }
-        if (!$this->checkGinIndex($value)) {
-            return false;
+
+        if ($index->getAttribute('type') === Database::INDEX_FULLTEXT) {
+            foreach ($this->indexes as $existingIndex) {
+                if ($existingIndex->getId() === $index->getId()) {
+                    continue;
+                }
+                if ($existingIndex->getAttribute('type') === Database::INDEX_FULLTEXT) {
+                    $this->message = 'There is already a fulltext index in the collection';
+                    return false;
+                }
+            }
         }
 
         return true;
     }
 
     /**
-     * Is array
-     *
-     * Function will return true if object is array.
-     *
+     * @param Document $index
      * @return bool
      */
-    public function isArray(): bool
+    public function checkIdenticalIndexes(Document $index): bool
     {
-        return false;
-    }
+        if ($this->supportForIdenticalIndexes) {
+            return true;
+        }
 
-    /**
-     * Get Type
-     *
-     * Returns validator type.
-     *
-     * @return string
-     */
-    public function getType(): string
-    {
-        return self::TYPE_OBJECT;
+        $indexAttributes = $index->getAttribute('attributes', []);
+        $indexOrders = $index->getAttribute('orders', []);
+        $indexType = $index->getAttribute('type', '');
+
+        foreach ($this->indexes as $existingIndex) {
+            $existingAttributes = $existingIndex->getAttribute('attributes', []);
+            $existingOrders = $existingIndex->getAttribute('orders', []);
+            $existingType = $existingIndex->getAttribute('type', '');
+
+            $attributesMatch = false;
+            if (empty(\array_diff($existingAttributes, $indexAttributes)) &&
+                empty(\array_diff($indexAttributes, $existingAttributes))) {
+                $attributesMatch = true;
+            }
+
+            $ordersMatch = false;
+            if (empty(\array_diff($existingOrders, $indexOrders)) &&
+                empty(\array_diff($indexOrders, $existingOrders))) {
+                $ordersMatch = true;
+            }
+
+            if ($attributesMatch && $ordersMatch) {
+                // Allow fulltext + key/unique combinations (different purposes)
+                $regularTypes = [Database::INDEX_KEY, Database::INDEX_UNIQUE];
+                $isRegularIndex = \in_array($indexType, $regularTypes);
+                $isRegularExisting = \in_array($existingType, $regularTypes);
+
+                // Only reject if both are regular index types (key or unique)
+                if ($isRegularIndex && $isRegularExisting) {
+                    $this->message = 'There is already an index with the same attributes and orders';
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**

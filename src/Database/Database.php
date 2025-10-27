@@ -4913,8 +4913,15 @@ class Database
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
             $createdAt = $document->getCreatedAt();
-
-            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+            if ($this->adapter->getSupportForAttributes()) {
+                $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+            } else {
+                $oldArray = $old->getArrayCopy();
+                $newArray = $document->getArrayCopy();
+                $internalKeys = array_map(fn ($attr) => $attr['$id'], self::INTERNAL_ATTRIBUTES);
+                $internalAttrs = array_intersect_key($oldArray, array_flip($internalKeys));
+                $document = array_merge($internalAttrs, $newArray);
+            }
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
@@ -5019,6 +5026,17 @@ class Database
                     if ($value !== $oldValue) {
                         $shouldUpdate = true;
                         break;
+                    }
+                }
+
+                // to check addition and removal of fields in case of schemaless
+                if (!$this->adapter->getSupportForAttributes()) {
+                    $internalFields = array_map(fn ($attr) => $attr['$id'], self::INTERNAL_ATTRIBUTES);
+
+                    $oldKeys = array_keys(array_diff_key($old->getArrayCopy(), array_flip($internalFields)));
+                    $newKeys = array_keys(array_diff_key($document->getArrayCopy(), array_flip($internalFields)));
+                    if (count($oldKeys) !== count($newKeys) || array_diff($oldKeys, $newKeys)) {
+                        $shouldUpdate = true;
                     }
                 }
 

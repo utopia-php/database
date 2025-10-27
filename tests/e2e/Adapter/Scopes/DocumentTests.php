@@ -6561,7 +6561,11 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-
+        // // skipping as schemaless doesn't look to the attributes metadata
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
         $collectionId = 'successive_update_single';
         Authorization::cleanRoles();
         Authorization::setRole(Role::any()->toString());

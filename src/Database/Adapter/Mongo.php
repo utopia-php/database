@@ -1447,9 +1447,9 @@ class Mongo extends Adapter
             unset($record['_id']); // Don't update _id
 
             $options = $this->getTransactionOptions();
-            $updateQuery = [
+            $updateQuery = $this->getSupportForAttributes() ? [
                 '$set' => $record,
-            ];
+            ] : $record;
             $this->client->update($name, $filters, $updateQuery, $options);
         } catch (MongoException $e) {
             throw $this->processException($e);

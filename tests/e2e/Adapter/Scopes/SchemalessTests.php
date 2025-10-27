@@ -345,8 +345,8 @@ trait SchemalessTests
         $this->assertEquals('updated', $updatedDoc->getAttribute('status'));
         $this->assertEquals('2023-01-01', $updatedDoc->getAttribute('lastModified'));
         $this->assertEquals('added', $updatedDoc->getAttribute('newAttribute'));
-        $this->assertEquals('user', $updatedDoc->getAttribute('type')); // Existing attributes preserved
-        $this->assertEquals(100, $updatedDoc->getAttribute('score'));
+        $this->assertArrayNotHasKey('score', $updatedDoc);
+        $this->assertArrayNotHasKey('type', $updatedDoc);
 
         $retrievedDoc = $database->getDocument($colName, 'doc1');
         $this->assertEquals('updated', $retrievedDoc->getAttribute('status'));
@@ -361,7 +361,7 @@ trait SchemalessTests
         $this->assertEquals('value1', $updatedDoc2->getAttribute('customField1'));
         $this->assertEquals(42, $updatedDoc2->getAttribute('customField2'));
         $this->assertEquals(['array', 'of', 'values'], $updatedDoc2->getAttribute('customField3'));
-        $this->assertEquals('admin', $updatedDoc2->getAttribute('type')); // Original attributes preserved
+        $this->assertArrayNotHasKey('type', $updatedDoc2);
 
         $database->deleteCollection($colName);
     }
@@ -1152,6 +1152,49 @@ trait SchemalessTests
         $this->assertTrue(is_string($afterDecFetched->getAttribute('curDate')));
         $this->assertTrue(is_string($afterDecFetched->getAttribute('$createdAt')));
         $this->assertTrue(is_string($afterDecFetched->getAttribute('$updatedAt')));
+
+        $database->deleteCollection($col);
+    }
+
+    public function testSchemalessRemoveAttributesByUpdate(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // in schemaless, if attributes are created and then if values are not provided then they are replaced with the default attribute automatically in the encode
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = uniqid('sl_update_remove');
+        $database->createCollection($col);
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::write(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any())
+        ];
+
+        $single = $database->createDocument($col, new Document(['$id' => 'docS', 'key' => 'single', 'extra' => 'yes', '$permissions' => $permissions]));
+        $this->assertEquals('docS', $single->getId());
+        $this->assertEquals('yes', $single->getAttribute('extra'));
+        $this->assertEquals('single', $single->getAttribute('key'));
+
+        // before removing attribute
+        $doc = $database->getDocument($col, 'docS');
+        $this->assertEquals('yes', $doc->getAttribute('extra'));
+        $this->assertEquals('single', $doc->getAttribute('key'));
+
+        // removing attribute
+        $doc = $database->updateDocument($col, 'docS', new Document(['$id' => 'docS','key' => 'single2']));
+        $this->assertEquals('single2', $doc->getAttribute('key'));
+        $this->assertArrayNotHasKey('extra', $doc);
+
+        $doc = $database->getDocument($col, 'docS');
+        $this->assertEquals('single2', $doc->getAttribute('key'));
+        $this->assertArrayNotHasKey('extra', $doc);
 
         $database->deleteCollection($col);
     }

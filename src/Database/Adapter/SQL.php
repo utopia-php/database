@@ -1126,6 +1126,15 @@ abstract class SQL extends Adapter
                     $total += 7;
                     break;
 
+                case Database::TYPE_OBJECT:
+                    /**
+                     * JSONB/JSON type
+                     * Only the pointer contributes 20 bytes to the row size
+                     * Data is stored externally
+                     */
+                    $total += 20;
+                    break;
+
                 case Database::VAR_POINT:
                     $total += $this->getMaxPointSize();
                     break;

@@ -90,6 +90,11 @@ abstract class SQL extends Adapter
             return false;
         }
 
+        if (!$this->getPDO()->inTransaction()) {
+            $this->inTransaction = 0;
+            return false;
+        }
+
         if ($this->inTransaction > 1) {
             $this->inTransaction--;
             return true;

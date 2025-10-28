@@ -269,6 +269,16 @@ class Operator extends Validator
                     $this->message = "Cannot apply {$method} operator: condition must be a string";
                     return false;
                 }
+                
+                $validConditions = [
+                    'equal', 'notEqual',  // Comparison
+                    'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
+                    'isNull', 'isNotNull' // Null checks
+                ];
+                if (!\in_array($values[0], $validConditions, true)) {
+                    $this->message = "Invalid array filter condition '{$values[0]}'. Must be one of: " . \implode(', ', $validConditions);
+                    return false;
+                }
 
                 break;
             case DatabaseOperator::TYPE_CONCAT:

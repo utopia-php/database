@@ -793,7 +793,8 @@ class SQLite extends MariaDB
         /**
          * Update Attributes
          */
-        $bindIndex = 0;
+        $keyIndex = 0;
+        $opIndex = 0;
         $operators = [];
 
         // Separate regular attributes from operators
@@ -808,16 +809,16 @@ class SQLite extends MariaDB
 
             // Check if this is an operator, spatial attribute, or regular attribute
             if (isset($operators[$attribute])) {
-                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
                 $columns .= $operatorSQL;
             } elseif (\in_array($attribute, $spatialAttributes, true)) {
-                $bindKey = 'key_' . $bindIndex;
+                $bindKey = 'key_' . $keyIndex;
                 $columns .= "`{$column}` = " . $this->getSpatialGeomFromText(':' . $bindKey);
-                $bindIndex++;
+                $keyIndex++;
             } else {
-                $bindKey = 'key_' . $bindIndex;
+                $bindKey = 'key_' . $keyIndex;
                 $columns .= "`{$column}`" . '=:' . $bindKey;
-                $bindIndex++;
+                $keyIndex++;
             }
 
             $columns .= ',';
@@ -845,11 +846,12 @@ class SQLite extends MariaDB
         }
 
         // Bind values for non-operator attributes and operator parameters
-        $bindIndexForBinding = 0;
+        $keyIndex = 0;
+        $opIndexForBinding = 0;
         foreach ($attributes as $attribute => $value) {
             // Handle operators separately
             if (isset($operators[$attribute])) {
-                $this->bindOperatorParams($stmt, $operators[$attribute], $bindIndexForBinding);
+                $this->bindOperatorParams($stmt, $operators[$attribute], $opIndexForBinding);
                 continue;
             }
 
@@ -862,10 +864,10 @@ class SQLite extends MariaDB
                 $value = json_encode($value);
             }
 
-            $bindKey = 'key_' . $bindIndexForBinding;
+            $bindKey = 'key_' . $keyIndex;
             $value = (is_bool($value)) ? (int)$value : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $bindIndexForBinding++;
+            $keyIndex++;
         }
 
         try {
@@ -1413,7 +1415,7 @@ class SQLite extends MariaDB
                 $filterValue = $values[1];
 
                 // Only bind if we support this filter type (all comparison operators need binding)
-                $comparisonTypes = ['equals', 'notEquals', 'greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual'];
+                $comparisonTypes = ['equal', 'notEqual', 'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual'];
                 if (in_array($filterType, $comparisonTypes)) {
                     $bindKey = "op_{$bindIndex}";
                     $value = (is_bool($filterValue)) ? (int)$filterValue : $filterValue;
@@ -1667,10 +1669,18 @@ class SQLite extends MariaDB
                     return "{$quotedColumn} = {$quotedColumn}";
                 }
 
-                $filterType = $values[0]; // 'equals', 'notEquals', 'notNull', 'greaterThan', etc.
+                $filterType = $values[0]; // 'equal', 'notEqual', 'isNull', 'isNotNull', 'greaterThan', etc.
 
                 switch ($filterType) {
-                    case 'notNull':
+                    case 'isNull':
+                        // Filter for null values - no bind parameter needed
+                        return "{$quotedColumn} = (
+                            SELECT json_group_array(value)
+                            FROM json_each(IFNULL({$quotedColumn}, '[]'))
+                            WHERE value IS NULL
+                        )";
+
+                    case 'isNotNull':
                         // Filter out null values - no bind parameter needed
                         return "{$quotedColumn} = (
                             SELECT json_group_array(value)
@@ -1678,12 +1688,12 @@ class SQLite extends MariaDB
                             WHERE value IS NOT NULL
                         )";
 
-                    case 'equals':
-                    case 'notEquals':
+                    case 'equal':
+                    case 'notEqual':
                     case 'greaterThan':
-                    case 'greaterThanOrEqual':
+                    case 'greaterThanEqual':
                     case 'lessThan':
-                    case 'lessThanOrEqual':
+                    case 'lessThanEqual':
                         if (\count($values) < 2) {
                             return "{$quotedColumn} = {$quotedColumn}";
                         }
@@ -1692,17 +1702,17 @@ class SQLite extends MariaDB
                         $bindIndex++;
 
                         $operator = match ($filterType) {
-                            'equals' => '=',
-                            'notEquals' => '!=',
+                            'equal' => '=',
+                            'notEqual' => '!=',
                             'greaterThan' => '>',
-                            'greaterThanOrEqual' => '>=',
+                            'greaterThanEqual' => '>=',
                             'lessThan' => '<',
-                            'lessThanOrEqual' => '<=',
+                            'lessThanEqual' => '<=',
                             default => throw new OperatorException('Unsupported filter type: ' . $filterType),
                         };
 
-                        // For numeric comparisons, cast to REAL; for equals/notEquals, use text comparison
-                        $isNumericComparison = \in_array($filterType, ['greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual']);
+                        // For numeric comparisons, cast to REAL; for equal/notEqual, use text comparison
+                        $isNumericComparison = \in_array($filterType, ['greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual']);
                         if ($isNumericComparison) {
                             return "{$quotedColumn} = (
                                 SELECT json_group_array(value)
@@ -1781,7 +1791,7 @@ class SQLite extends MariaDB
         };
 
         $updateColumns = [];
-        $bindIndex = count($bindValues);
+        $opIndex = 0;
 
         if (!empty($attribute)) {
             // Increment specific column by its new value in place
@@ -1799,7 +1809,7 @@ class SQLite extends MariaDB
 
                 // Check if this attribute has an operator
                 if (isset($operators[$attr])) {
-                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $bindIndex);
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $opIndex);
                     if ($operatorSQL !== null) {
                         $updateColumns[] = $operatorSQL;
                     }
@@ -1826,12 +1836,12 @@ class SQLite extends MariaDB
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
 
-        $bindIndex = count($bindValues);
+        $opIndexForBinding = 0;
 
         // Bind operator parameters in the same order used to build SQL
         foreach (array_keys($attributes) as $attr) {
             if (isset($operators[$attr])) {
-                $this->bindOperatorParams($stmt, $operators[$attr], $bindIndex);
+                $this->bindOperatorParams($stmt, $operators[$attr], $opIndexForBinding);
             }
         }
 

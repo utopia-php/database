@@ -483,7 +483,8 @@ abstract class SQL extends Adapter
             return 0;
         }
 
-        $bindIndex = 0;
+        $keyIndex = 0;
+        $opIndex = 0;
         $columns = '';
         $operators = [];
 
@@ -499,13 +500,13 @@ abstract class SQL extends Adapter
 
             // Check if this is an operator, spatial attribute, or regular attribute
             if (isset($operators[$attribute])) {
-                $columns .= $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+                $columns .= $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
             } elseif (\in_array($attribute, $spatialAttributes)) {
-                $columns .= "{$this->quote($column)} = " . $this->getSpatialGeomFromText(":key_{$bindIndex}");
-                $bindIndex++;
+                $columns .= "{$this->quote($column)} = " . $this->getSpatialGeomFromText(":key_{$keyIndex}");
+                $keyIndex++;
             } else {
-                $columns .= "{$this->quote($column)} = :key_{$bindIndex}";
-                $bindIndex++;
+                $columns .= "{$this->quote($column)} = :key_{$keyIndex}";
+                $keyIndex++;
             }
 
             if ($attribute !== \array_key_last($attributes)) {
@@ -541,11 +542,12 @@ abstract class SQL extends Adapter
             $stmt->bindValue(":_id_{$id}", $value);
         }
 
-        $attributeIndex = 0;
+        $keyIndex = 0;
+        $opIndexForBinding = 0;
         foreach ($attributes as $attributeName => $value) {
             // Skip operators as they don't need value binding
             if (isset($operators[$attributeName])) {
-                $this->bindOperatorParams($stmt, $operators[$attributeName], $attributeIndex);
+                $this->bindOperatorParams($stmt, $operators[$attributeName], $opIndexForBinding);
                 continue;
             }
 
@@ -558,13 +560,13 @@ abstract class SQL extends Adapter
                 $value = \json_encode($value);
             }
 
-            $bindKey = 'key_' . $attributeIndex;
+            $bindKey = 'key_' . $keyIndex;
             // For PostgreSQL, preserve boolean values directly
             if (!($this instanceof \Utopia\Database\Adapter\Postgres && \is_bool($value))) {
                 $value = (\is_bool($value)) ? (int)$value : $value;
             }
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
+            $keyIndex++;
         }
 
         try {
@@ -2183,11 +2185,10 @@ abstract class SQL extends Adapter
                 $value = $values[1] ?? null;
 
                 // SECURITY: Whitelist validation to prevent SQL injection in CASE statements
-                // Support all variations used across adapters (SQL, MariaDB, Postgres, SQLite)
                 $validConditions = [
-                    'equal', 'notEqual', 'equals', 'notEquals',  // Comparison
-                    'greaterThan', 'greaterThanOrEqual', 'lessThan', 'lessThanOrEqual',  // Numeric
-                    'isNull', 'isNotNull', 'null', 'notNull'  // Null checks
+                    'equal', 'notEqual',  // Comparison
+                    'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
+                    'isNull', 'isNotNull'  // Null checks
                 ];
                 if (!in_array($condition, $validConditions, true)) {
                     throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: " . implode(', ', $validConditions));

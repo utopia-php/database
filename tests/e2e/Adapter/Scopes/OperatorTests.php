@@ -801,13 +801,13 @@ trait OperatorTests
 
         // Test: Filter with equals condition on numbers
         $updated = $database->updateDocument($collectionId, 'filter_test_doc', new Document([
-            'numbers' => Operator::arrayFilter('equals', 3) // Keep only 3
+            'numbers' => Operator::arrayFilter('equal', 3) // Keep only 3
         ]));
         $this->assertEquals([3], $updated->getAttribute('numbers'));
 
         // Test: Filter with not-equals condition on strings
         $updated = $database->updateDocument($collectionId, 'filter_test_doc', new Document([
-            'tags' => Operator::arrayFilter('notEquals', 'banana') // Remove 'banana'
+            'tags' => Operator::arrayFilter('notEqual', 'banana') // Remove 'banana'
         ]));
         $this->assertEquals(['apple', 'cherry'], $updated->getAttribute('tags'));
 
@@ -1799,14 +1799,14 @@ trait OperatorTests
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'numbers' => Operator::arrayFilter('equals', 2)
+            'numbers' => Operator::arrayFilter('equal', 2)
         ]));
 
         $this->assertEquals([2, 2], $updated->getAttribute('numbers'));
 
-        // Success case - notNull condition
+        // Success case - isNotNull condition
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'mixed' => Operator::arrayFilter('notNull')
+            'mixed' => Operator::arrayFilter('isNotNull')
         ]));
 
         $this->assertEquals(['a', 'b', 'c'], $updated->getAttribute('mixed'));

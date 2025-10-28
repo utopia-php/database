@@ -1240,7 +1240,8 @@ class Postgres extends SQL
          * Update Attributes
          */
 
-        $bindIndex = 0;
+        $keyIndex = 0;
+        $opIndex = 0;
         $operators = [];
 
         // Separate regular attributes from operators
@@ -1255,16 +1256,16 @@ class Postgres extends SQL
 
             // Check if this is an operator, spatial attribute, or regular attribute
             if (isset($operators[$attribute])) {
-                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
                 $columns .= $operatorSQL . ',';
             } elseif (\in_array($attribute, $spatialAttributes, true)) {
-                $bindKey = 'key_' . $bindIndex;
+                $bindKey = 'key_' . $keyIndex;
                 $columns .= "\"{$column}\" = " . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
-                $bindIndex++;
+                $keyIndex++;
             } else {
-                $bindKey = 'key_' . $bindIndex;
+                $bindKey = 'key_' . $keyIndex;
                 $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
-                $bindIndex++;
+                $keyIndex++;
             }
         }
 
@@ -1286,11 +1287,12 @@ class Postgres extends SQL
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        $attributeIndex = 0;
+        $keyIndex = 0;
+        $opIndexForBinding = 0;
         foreach ($attributes as $attribute => $value) {
             // Handle operators separately
             if (isset($operators[$attribute])) {
-                $this->bindOperatorParams($stmt, $operators[$attribute], $attributeIndex);
+                $this->bindOperatorParams($stmt, $operators[$attribute], $opIndexForBinding);
             } else {
                 // Convert spatial arrays to WKT, json_encode non-spatial arrays
                 if (\in_array($attribute, $spatialAttributes, true)) {
@@ -1301,10 +1303,10 @@ class Postgres extends SQL
                     $value = json_encode($value);
                 }
 
-                $bindKey = 'key_' . $attributeIndex;
+                $bindKey = 'key_' . $keyIndex;
                 $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
                 $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $attributeIndex++;
+                $keyIndex++;
             }
         }
 
@@ -1357,7 +1359,7 @@ class Postgres extends SQL
             return "{$attribute} = {$new}";
         };
 
-        $bindIndex = count($bindValues);
+        $opIndex = 0;
 
         if (!empty($attribute)) {
             // Increment specific column by its new value in place
@@ -1376,7 +1378,7 @@ class Postgres extends SQL
 
                 // Check if this attribute has an operator
                 if (isset($operators[$attr])) {
-                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $bindIndex, useTargetPrefix: true);
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $opIndex, useTargetPrefix: true);
                     if ($operatorSQL !== null) {
                         $updateColumns[] = $operatorSQL;
                     }
@@ -1402,12 +1404,12 @@ class Postgres extends SQL
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
 
-        $bindIndex = count($bindValues);
+        $opIndexForBinding = 0;
 
         // Bind operator parameters in the same order used to build SQL
         foreach (array_keys($attributes) as $attr) {
             if (isset($operators[$attr])) {
-                $this->bindOperatorParams($stmt, $operators[$attr], $bindIndex);
+                $this->bindOperatorParams($stmt, $operators[$attr], $opIndexForBinding);
             }
         }
 
@@ -2566,12 +2568,12 @@ class Postgres extends SQL
                     SELECT jsonb_agg(value)
                     FROM jsonb_array_elements({$columnRef}) AS value
                     WHERE CASE :$conditionKey
-                        WHEN 'equals' THEN value = :$valueKey::jsonb
-                        WHEN 'notEquals' THEN value != :$valueKey::jsonb
+                        WHEN 'equal' THEN value = :$valueKey::jsonb
+                        WHEN 'notEqual' THEN value != :$valueKey::jsonb
                         WHEN 'greaterThan' THEN (value::text)::numeric > trim(both '\"' from :$valueKey::text)::numeric
                         WHEN 'lessThan' THEN (value::text)::numeric < trim(both '\"' from :$valueKey::text)::numeric
-                        WHEN 'null' THEN value = 'null'::jsonb
-                        WHEN 'notNull' THEN value != 'null'::jsonb
+                        WHEN 'isNull' THEN value = 'null'::jsonb
+                        WHEN 'isNotNull' THEN value != 'null'::jsonb
                         ELSE TRUE
                     END
                 ), '[]'::jsonb)";

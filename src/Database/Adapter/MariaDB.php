@@ -1112,7 +1112,8 @@ class MariaDB extends SQL
             /**
              * Update Attributes
              */
-            $bindIndex = 0;
+            $keyIndex = 0;
+            $opIndex = 0;
             $operators = [];
 
             // Separate regular attributes from operators
@@ -1127,17 +1128,17 @@ class MariaDB extends SQL
 
                 // Check if this is an operator or regular attribute
                 if (isset($operators[$attribute])) {
-                    $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $bindIndex);
+                    $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
                     $columns .= $operatorSQL . ',';
                 } else {
-                    $bindKey = 'key_' . $bindIndex;
+                    $bindKey = 'key_' . $keyIndex;
 
                     if (in_array($attribute, $spatialAttributes)) {
                         $columns .= "`{$column}`" . '=' . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
                     } else {
                         $columns .= "`{$column}`" . '=:' . $bindKey . ',';
                     }
-                    $bindIndex++;
+                    $keyIndex++;
                 }
             }
 
@@ -1159,11 +1160,12 @@ class MariaDB extends SQL
                 $stmt->bindValue(':_tenant', $this->tenant);
             }
 
-            $attributeIndex = 0;
+            $keyIndex = 0;
+            $opIndexForBinding = 0;
             foreach ($attributes as $attribute => $value) {
                 // Handle operators separately
                 if (isset($operators[$attribute])) {
-                    $this->bindOperatorParams($stmt, $operators[$attribute], $attributeIndex);
+                    $this->bindOperatorParams($stmt, $operators[$attribute], $opIndexForBinding);
                 } else {
                     // Convert spatial arrays to WKT, json_encode non-spatial arrays
                     if (\in_array($attribute, $spatialAttributes, true)) {
@@ -1174,10 +1176,10 @@ class MariaDB extends SQL
                         $value = json_encode($value);
                     }
 
-                    $bindKey = 'key_' . $attributeIndex;
+                    $bindKey = 'key_' . $keyIndex;
                     $value = (is_bool($value)) ? (int)$value : $value;
                     $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                    $attributeIndex++;
+                    $keyIndex++;
                 }
             }
 
@@ -1234,7 +1236,7 @@ class MariaDB extends SQL
         };
 
         $updateColumns = [];
-        $bindIndex = count($bindValues);
+        $opIndex = 0;
 
         if (!empty($attribute)) {
             // Increment specific column by its new value in place
@@ -1252,7 +1254,7 @@ class MariaDB extends SQL
 
                 // Check if this attribute has an operator
                 if (isset($operators[$attr])) {
-                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $bindIndex);
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $opIndex);
                     if ($operatorSQL !== null) {
                         $updateColumns[] = $operatorSQL;
                     }
@@ -1277,12 +1279,12 @@ class MariaDB extends SQL
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
 
-        $bindIndex = count($bindValues);
+        $opIndexForBinding = 0;
 
         // Bind operator parameters in the same order used to build SQL
         foreach (array_keys($attributes) as $attr) {
             if (isset($operators[$attr])) {
-                $this->bindOperatorParams($stmt, $operators[$attr], $bindIndex);
+                $this->bindOperatorParams($stmt, $operators[$attr], $opIndexForBinding);
             }
         }
 
@@ -2053,12 +2055,12 @@ class MariaDB extends SQL
                     SELECT JSON_ARRAYAGG(value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
                     WHERE CASE :$conditionKey
-                        WHEN 'equals' THEN value = JSON_UNQUOTE(:$valueKey)
-                        WHEN 'notEquals' THEN value != JSON_UNQUOTE(:$valueKey)
+                        WHEN 'equal' THEN value = JSON_UNQUOTE(:$valueKey)
+                        WHEN 'notEqual' THEN value != JSON_UNQUOTE(:$valueKey)
                         WHEN 'greaterThan' THEN CAST(value AS DECIMAL(65,30)) > CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
                         WHEN 'lessThan' THEN CAST(value AS DECIMAL(65,30)) < CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
-                        WHEN 'null' THEN value IS NULL
-                        WHEN 'notNull' THEN value IS NOT NULL
+                        WHEN 'isNull' THEN value IS NULL
+                        WHEN 'isNotNull' THEN value IS NOT NULL
                         ELSE TRUE
                     END
                 ), JSON_ARRAY())";

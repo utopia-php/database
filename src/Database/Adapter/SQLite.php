@@ -811,7 +811,7 @@ class SQLite extends MariaDB
             if (isset($operators[$attribute])) {
                 $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
                 $columns .= $operatorSQL;
-            } elseif (\in_array($attribute, $spatialAttributes, true)) {
+            } elseif ($this->getSupportForSpatialAttributes() && \in_array($attribute, $spatialAttributes, true)) {
                 $bindKey = 'key_' . $keyIndex;
                 $columns .= "`{$column}` = " . $this->getSpatialGeomFromText(':' . $bindKey);
                 $keyIndex++;
@@ -1010,6 +1010,19 @@ class SQLite extends MariaDB
     public function getSupportForSpatialIndexNull(): bool
     {
         return false; // SQLite doesn't have native spatial support
+    }
+
+    /**
+     * Override getSpatialGeomFromText to return placeholder unchanged for SQLite
+     * SQLite does not support ST_GeomFromText, so we return the raw placeholder
+     *
+     * @param string $wktPlaceholder
+     * @param int|null $srid
+     * @return string
+     */
+    protected function getSpatialGeomFromText(string $wktPlaceholder, ?int $srid = null): string
+    {
+        return $wktPlaceholder;
     }
 
     /**

@@ -1030,7 +1030,6 @@ class Postgres extends SQL
             }
 
             $bindKey = 'key_' . $attributeIndex;
-            $value = (\is_bool($value)) ? ($value ? "true" : "false") : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }
@@ -1304,7 +1303,6 @@ class Postgres extends SQL
                 }
 
                 $bindKey = 'key_' . $keyIndex;
-                $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
                 $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
                 $keyIndex++;
             }
@@ -2571,7 +2569,9 @@ class Postgres extends SQL
                         WHEN 'equal' THEN value = :$valueKey::jsonb
                         WHEN 'notEqual' THEN value != :$valueKey::jsonb
                         WHEN 'greaterThan' THEN (value::text)::numeric > trim(both '\"' from :$valueKey::text)::numeric
+                        WHEN 'greaterThanEqual' THEN (value::text)::numeric >= trim(both '\"' from :$valueKey::text)::numeric
                         WHEN 'lessThan' THEN (value::text)::numeric < trim(both '\"' from :$valueKey::text)::numeric
+                        WHEN 'lessThanEqual' THEN (value::text)::numeric <= trim(both '\"' from :$valueKey::text)::numeric
                         WHEN 'isNull' THEN value = 'null'::jsonb
                         WHEN 'isNotNull' THEN value != 'null'::jsonb
                         ELSE TRUE

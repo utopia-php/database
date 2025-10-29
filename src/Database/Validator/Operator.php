@@ -269,7 +269,7 @@ class Operator extends Validator
                     $this->message = "Cannot apply {$method} operator: condition must be a string";
                     return false;
                 }
-                
+
                 $validConditions = [
                     'equal', 'notEqual',  // Comparison
                     'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric

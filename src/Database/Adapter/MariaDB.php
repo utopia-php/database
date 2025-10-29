@@ -2058,7 +2058,9 @@ class MariaDB extends SQL
                         WHEN 'equal' THEN value = JSON_UNQUOTE(:$valueKey)
                         WHEN 'notEqual' THEN value != JSON_UNQUOTE(:$valueKey)
                         WHEN 'greaterThan' THEN CAST(value AS DECIMAL(65,30)) > CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
+                        WHEN 'greaterThanEqual' THEN CAST(value AS DECIMAL(65,30)) >= CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
                         WHEN 'lessThan' THEN CAST(value AS DECIMAL(65,30)) < CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
+                        WHEN 'lessThanEqual' THEN CAST(value AS DECIMAL(65,30)) <= CAST(JSON_UNQUOTE(:$valueKey) AS DECIMAL(65,30))
                         WHEN 'isNull' THEN value IS NULL
                         WHEN 'isNotNull' THEN value IS NOT NULL
                         ELSE TRUE

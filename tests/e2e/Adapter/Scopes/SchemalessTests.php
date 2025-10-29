@@ -1196,6 +1196,70 @@ trait SchemalessTests
         $this->assertEquals('single2', $doc->getAttribute('key'));
         $this->assertArrayNotHasKey('extra', $doc);
 
+        // Test updateDocuments - bulk update with attribute removal
+        $docs = [
+            new Document(['$id' => 'docA', 'key' => 'keepA', 'extra' => 'removeA', '$permissions' => $permissions]),
+            new Document(['$id' => 'docB', 'key' => 'keepB', 'extra' => 'removeB', 'more' => 'data', '$permissions' => $permissions]),
+            new Document(['$id' => 'docC', 'key' => 'keepC', 'extra' => 'removeC', '$permissions' => $permissions]),
+        ];
+        $this->assertEquals(3, $database->createDocuments($col, $docs));
+
+        // Verify all documents have both 'key' and 'extra'
+        $allDocs = $database->find($col);
+        $this->assertCount(4, $allDocs); // 3 new + 1 old (docS)
+
+        foreach ($allDocs as $doc) {
+            if (in_array($doc->getId(), ['docA', 'docB', 'docC'])) {
+                $this->assertArrayHasKey('extra', $doc->getAttributes());
+            }
+        }
+
+        // Bulk update all new docs: keep 'key', remove 'extra' and 'more'
+        $updatedCount = $database->updateDocuments($col, new Document(['key' => 'updatedBulk']), [Query::startsWith('$id', 'doc'),Query::notEqual('$id', 'docS')]);
+        $this->assertEquals(3, $updatedCount);
+
+        // Verify 'extra' and 'more' fields are removed from all updated docs
+        $updatedDocs = $database->find($col, [Query::startsWith('$id', 'doc'),Query::notEqual('$id', 'docS')]);
+        $this->assertCount(3, $updatedDocs);
+
+        foreach ($updatedDocs as $doc) {
+            $this->assertEquals('updatedBulk', $doc->getAttribute('key'));
+            $this->assertArrayNotHasKey('extra', $doc->getAttributes());
+            if ($doc->getId() === 'docB') {
+                $this->assertArrayNotHasKey('more', $doc->getAttributes());
+            }
+        }
+
+        // Verify docS (not in update query) is unchanged
+        $docS = $database->getDocument($col, 'docS');
+        $this->assertEquals('single2', $docS->getAttribute('key'));
+        $this->assertArrayNotHasKey('extra', $docS);
+
+        // Update documents with query filter - partial update
+        $database->updateDocuments(
+            $col,
+            new Document(['label' => 'tagged']),
+            [Query::equal('$id', ['docA', 'docC'])]
+        );
+
+        $docA = $database->getDocument($col, 'docA');
+        $docB = $database->getDocument($col, 'docB');
+        $docC = $database->getDocument($col, 'docC');
+
+        $this->assertEquals('tagged', $docA->getAttribute('label'));
+        $this->assertArrayNotHasKey('label', $docB->getAttributes());
+        $this->assertEquals('tagged', $docC->getAttribute('label'));
+
+        // Verify 'key' is still preserved in docB and not in others
+        $this->assertEquals('updatedBulk', $docB->getAttribute('key'));
+
+        foreach (['docA','docC'] as $doc) {
+            $this->assertArrayNotHasKey('key', $database->getDocument($col, $doc)->getAttributes());
+        }
+
+        // verify docs is still preserved(untouched)
+        $docS = $database->getDocument($col, 'docS');
+        $this->assertEquals('single2', $docS->getAttribute('key'));
         $database->deleteCollection($col);
     }
 }

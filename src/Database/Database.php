@@ -4913,15 +4913,7 @@ class Database
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
             $createdAt = $document->getCreatedAt();
-            if ($this->adapter->getSupportForAttributes()) {
-                $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-            } else {
-                $oldArray = $old->getArrayCopy();
-                $newArray = $document->getArrayCopy();
-                $internalKeys = array_map(fn ($attr) => $attr['$id'], self::INTERNAL_ATTRIBUTES);
-                $internalAttrs = array_intersect_key($oldArray, array_flip($internalKeys));
-                $document = array_merge($internalAttrs, $newArray);
-            }
+            $document = $this->mergeDocuments($old, $document);
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
@@ -8376,6 +8368,29 @@ class Database
 
             default:
                 throw new DatabaseException('Unknown spatial type: ' . $type);
+        }
+    }
+
+    /**
+     * @param Document $old
+     * @param Document $new
+     * @return array<mixed>
+     */
+    protected function mergeDocuments(Document $old, Document $new): array
+    {
+        switch (true) {
+            case $this->adapter->getSupportForAttributes():
+                return \array_merge($old->getArrayCopy(), $new->getArrayCopy());
+
+                // schemaless behaviour
+            default:
+                $oldArray = $old->getArrayCopy();
+                $newArray = $new->getArrayCopy();
+
+                $internalKeys = array_map(fn ($attr) => $attr['$id'], self::INTERNAL_ATTRIBUTES);
+                $internalAttrs = array_intersect_key($oldArray, array_flip($internalKeys));
+
+                return array_merge($internalAttrs, $newArray);
         }
     }
 }

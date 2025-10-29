@@ -1445,11 +1445,12 @@ class Mongo extends Adapter
 
         try {
             unset($record['_id']); // Don't update _id
-
             $options = $this->getTransactionOptions();
-            $updateQuery = $this->getSupportForAttributes() ? [
-                '$set' => $record,
-            ] : $record;
+            $updates = match (true) {
+                $this->getSupportForAttributes() => ['$set' => $record],
+                default => $record,
+            };
+            $updateQuery = $updates;
             $this->client->update($name, $filters, $updateQuery, $options);
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -1486,20 +1487,23 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenantFilters($collection->getId());
         }
 
-        $record = $updates->getArrayCopy();
-        $record = $this->replaceChars('$', '_', $record);
-
-        $updateQuery = [
-            '$set' => $record,
-        ];
+        $record = $this->replaceChars('$', '_', $updates->getArrayCopy());
 
         try {
+            if (!$this->getSupportForAttributes()) {
+                return $this->updateDocumentsForSchemaless($name, $documents, $record, $filters, $options);
+            }
+
+            $updateQuery = [
+                '$set' => $record,
+            ];
+
             return $this->client->update(
                 $name,
                 $filters,
                 $updateQuery,
                 options: $options,
-                multi: true,
+                multi: true
             );
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -3188,5 +3192,51 @@ class Mongo extends Adapter
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
         return '';
+    }
+
+    /**
+     * @param string $collection
+     * @param array<Document> $oldDocuments
+     * @param array<mixed> $updates
+     * @param array<mixed> $filters
+     * @param array<mixed> $options
+     * @return int
+     */
+    private function updateDocumentsForSchemaless(string $collection, array $oldDocuments, array $updates, array $filters, array $options): int
+    {
+        $internalKeys = array_map(
+            fn ($attr) => str_replace('$', '_', $attr['$id']),
+            Database::INTERNAL_ATTRIBUTES
+        );
+        $unsetUnion = [];
+
+        foreach ($oldDocuments as $doc) {
+            if ($doc->offsetExists('$skipPermissionsUpdate')) {
+                $doc->removeAttribute('$skipPermissionsUpdate');
+            }
+            $attrs = $doc->getAttributes();
+            $attributes = $this->replaceChars('$', '_', $attrs);
+            foreach (array_keys($attributes) as $attributeKey) {
+                if (!array_key_exists($attributeKey, $updates) && !in_array($attributeKey, $internalKeys, true)) {
+                    $unsetUnion[$attributeKey] = 1;
+                }
+            }
+        }
+
+        $updateQuery = [
+            '$set' => $updates,
+        ];
+
+        if (!empty($unsetUnion)) {
+            $updateQuery['$unset'] = $unsetUnion;
+        }
+
+        return $this->client->update(
+            $collection,
+            $filters,
+            $updateQuery,
+            options: $options,
+            multi: true
+        );
     }
 }

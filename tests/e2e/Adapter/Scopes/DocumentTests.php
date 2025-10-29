@@ -6170,14 +6170,26 @@ trait DocumentTests
         $this->assertEquals(2, $database->updateDocuments($colName, new Document(['key' => 'new doc'])));
         $doc = $database->getDocument($colName, 'doc4');
         $this->assertEquals('doc4', $doc->getId());
-        $this->assertEquals('value', $doc->getAttribute('value'));
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            // not assertArrayNotHasKey as createAttribute is done previously
+            // value would be returned in attributes but schemaless updateDocuments do replace the old document with new document
+            // so null
+            $this->assertNull($doc->getAttribute('value'));
+        } else {
+            $this->assertEquals('value', $doc->getAttribute('value'));
+
+        }
 
         $addedDocs = $database->find($colName);
         $this->assertCount(2, $addedDocs);
         foreach ($addedDocs as $doc) {
             $this->assertNotEmpty($doc->getPermissions());
             $this->assertCount(3, $doc->getPermissions());
-            $this->assertEquals('value', $doc->getAttribute('value'));
+            if (!$database->getAdapter()->getSupportForAttributes()) {
+                $this->assertNull($doc->getAttribute('value'));
+            } else {
+                $this->assertEquals('value', $doc->getAttribute('value'));
+            }
         }
         $database->deleteCollection($colName);
     }

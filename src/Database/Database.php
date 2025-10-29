@@ -4913,8 +4913,7 @@ class Database
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
             $createdAt = $document->getCreatedAt();
-
-            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
+            $document = $this->mergeDocuments($old, $document);
             $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
@@ -5019,6 +5018,17 @@ class Database
                     if ($value !== $oldValue) {
                         $shouldUpdate = true;
                         break;
+                    }
+                }
+
+                // to check addition and removal of fields in case of schemaless
+                if (!$this->adapter->getSupportForAttributes()) {
+                    $internalFields = array_map(fn ($attr) => $attr['$id'], self::INTERNAL_ATTRIBUTES);
+
+                    $oldKeys = array_keys(array_diff_key($old->getArrayCopy(), array_flip($internalFields)));
+                    $newKeys = array_keys(array_diff_key($document->getArrayCopy(), array_flip($internalFields)));
+                    if (count($oldKeys) !== count($newKeys) || array_diff($oldKeys, $newKeys)) {
+                        $shouldUpdate = true;
                     }
                 }
 
@@ -8358,6 +8368,29 @@ class Database
 
             default:
                 throw new DatabaseException('Unknown spatial type: ' . $type);
+        }
+    }
+
+    /**
+     * @param Document $old
+     * @param Document $new
+     * @return array<mixed>
+     */
+    protected function mergeDocuments(Document $old, Document $new): array
+    {
+        switch (true) {
+            case $this->adapter->getSupportForAttributes():
+                return \array_merge($old->getArrayCopy(), $new->getArrayCopy());
+
+                // schemaless behaviour
+            default:
+                $oldArray = $old->getArrayCopy();
+                $newArray = $new->getArrayCopy();
+
+                $internalKeys = array_map(fn ($attr) => $attr['$id'], self::INTERNAL_ATTRIBUTES);
+                $internalAttrs = array_intersect_key($oldArray, array_flip($internalKeys));
+
+                return array_merge($internalAttrs, $newArray);
         }
     }
 }

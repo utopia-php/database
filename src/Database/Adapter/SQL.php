@@ -1981,7 +1981,7 @@ abstract class SQL extends Adapter
             case Operator::TYPE_ARRAY_REMOVE:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = JSON_REMOVE({$quotedColumn}, JSON_UNQUOTE(JSON_SEARCH({$quotedColumn}, 'one', :$bindKey)))";
+                return "{$quotedColumn} = COALESCE(JSON_REMOVE({$quotedColumn}, JSON_UNQUOTE(JSON_SEARCH({$quotedColumn}, 'one', :$bindKey))), {$quotedColumn})";
 
             case Operator::TYPE_ARRAY_UNIQUE:
                 return "{$quotedColumn} = IFNULL((SELECT JSON_ARRAYAGG(DISTINCT value) FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt), '[]')";

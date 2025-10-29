@@ -226,6 +226,10 @@ trait OperatorTests
         $database->createAttribute($collectionId, 'categories', Database::VAR_STRING, 50, false, null, true, true);
         $database->createAttribute($collectionId, 'items', Database::VAR_STRING, 50, false, null, true, true);
         $database->createAttribute($collectionId, 'duplicates', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
+        $database->createAttribute($collectionId, 'intersect_items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, 'diff_items', Database::VAR_STRING, 50, false, null, true, true);
+        $database->createAttribute($collectionId, 'filter_numbers', Database::VAR_INTEGER, 0, false, null, true, true);
         $database->createAttribute($collectionId, 'active', Database::VAR_BOOLEAN, 0, false, false);
         $database->createAttribute($collectionId, 'last_update', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
         $database->createAttribute($collectionId, 'next_update', Database::VAR_DATETIME, 0, false, null, true, false, null, [], ['datetime']);
@@ -249,6 +253,10 @@ trait OperatorTests
                 'categories' => ["cat_{$i}", "test"],
                 'items' => ["item_{$i}", "shared", "item_{$i}"],
                 'duplicates' => ["a", "b", "a", "c", "b", "d"],
+                'numbers' => [1, 2, 3, 4, 5],
+                'intersect_items' => ["a", "b", "c", "d"],
+                'diff_items' => ["x", "y", "z", "w"],
+                'filter_numbers' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                 'active' => $i % 2 === 0,
                 'last_update' => DateTime::addSeconds(new \DateTime(), -86400),
                 'next_update' => DateTime::addSeconds(new \DateTime(), 86400)
@@ -271,6 +279,10 @@ trait OperatorTests
                 'categories' => Operator::arrayPrepend(['priority']), // Array
                 'items' => Operator::arrayRemove('shared'),        // Array
                 'duplicates' => Operator::arrayUnique(),           // Array
+                'numbers' => Operator::arrayInsert(2, 99),         // Array insert at index 2
+                'intersect_items' => Operator::arrayIntersect(['b', 'c', 'e']), // Array intersect
+                'diff_items' => Operator::arrayDiff(['y', 'z']),   // Array diff (remove y, z)
+                'filter_numbers' => Operator::arrayFilter('greaterThan', 5), // Array filter
                 'active' => Operator::toggle(),                    // Boolean
                 'last_update' => Operator::dateAddDays(1),         // Date
                 'next_update' => Operator::dateSubDays(1),         // Date
@@ -298,6 +310,10 @@ trait OperatorTests
         $this->assertContains('priority', $doc1->getAttribute('categories'));
         $this->assertNotContains('shared', $doc1->getAttribute('items'));
         $this->assertCount(4, $doc1->getAttribute('duplicates')); // Should have unique values
+        $this->assertEquals([1, 2, 99, 3, 4, 5], $doc1->getAttribute('numbers')); // arrayInsert at index 2
+        $this->assertEquals(['b', 'c'], $doc1->getAttribute('intersect_items')); // arrayIntersect
+        $this->assertEquals(['x', 'w'], $doc1->getAttribute('diff_items')); // arrayDiff (removed y, z)
+        $this->assertEquals([6, 7, 8, 9, 10], $doc1->getAttribute('filter_numbers')); // arrayFilter greaterThan 5
         $this->assertEquals(true, $doc1->getAttribute('active'));         // Was false, toggled to true
 
         // Check bulk_doc_2
@@ -4202,6 +4218,236 @@ trait OperatorTests
         $this->assertEquals('MultiTest', $doc12->getAttribute('name'));
 
         // Cleanup
+        $database->deleteCollection($collectionId);
+    }
+
+    /**
+     * Test bulk upsertDocuments with ALL operators
+     */
+    public function testUpsertDocumentsWithAllOperators(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'test_upsert_all_operators';
+        $attributes = [
+            new Document(['$id' => 'counter', 'type' => Database::VAR_INTEGER, 'size' => 0, 'required' => false, 'default' => 10, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'score', 'type' => Database::VAR_FLOAT, 'size' => 0, 'required' => false, 'default' => 5.0, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'multiplier', 'type' => Database::VAR_FLOAT, 'size' => 0, 'required' => false, 'default' => 2.0, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'divisor', 'type' => Database::VAR_FLOAT, 'size' => 0, 'required' => false, 'default' => 100.0, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'remainder', 'type' => Database::VAR_INTEGER, 'size' => 0, 'required' => false, 'default' => 20, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'power_val', 'type' => Database::VAR_FLOAT, 'size' => 0, 'required' => false, 'default' => 2.0, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'title', 'type' => Database::VAR_STRING, 'size' => 255, 'required' => false, 'default' => 'Title', 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'content', 'type' => Database::VAR_STRING, 'size' => 500, 'required' => false, 'default' => 'old content', 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'tags', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'categories', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'items', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'duplicates', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'numbers', 'type' => Database::VAR_INTEGER, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'intersect_items', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'diff_items', 'type' => Database::VAR_STRING, 'size' => 50, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'filter_numbers', 'type' => Database::VAR_INTEGER, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => true]),
+            new Document(['$id' => 'active', 'type' => Database::VAR_BOOLEAN, 'size' => 0, 'required' => false, 'default' => false, 'signed' => true, 'array' => false]),
+            new Document(['$id' => 'date_field1', 'type' => Database::VAR_DATETIME, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => false, 'format' => '', 'filters' => ['datetime']]),
+            new Document(['$id' => 'date_field2', 'type' => Database::VAR_DATETIME, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => false, 'format' => '', 'filters' => ['datetime']]),
+            new Document(['$id' => 'date_field3', 'type' => Database::VAR_DATETIME, 'size' => 0, 'required' => false, 'default' => null, 'signed' => true, 'array' => false, 'format' => '', 'filters' => ['datetime']]),
+        ];
+        $database->createCollection($collectionId, $attributes);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'upsert_doc_1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'counter' => 10,
+            'score' => 1.5,
+            'multiplier' => 1.0,
+            'divisor' => 50.0,
+            'remainder' => 7,
+            'power_val' => 2.0,
+            'title' => 'Title 1',
+            'content' => 'old content 1',
+            'tags' => ['tag_1', 'common'],
+            'categories' => ['cat_1', 'test'],
+            'items' => ['item_1', 'shared', 'item_1'],
+            'duplicates' => ['a', 'b', 'a', 'c', 'b', 'd'],
+            'numbers' => [1, 2, 3, 4, 5],
+            'intersect_items' => ['a', 'b', 'c', 'd'],
+            'diff_items' => ['x', 'y', 'z', 'w'],
+            'filter_numbers' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            'active' => false,
+            'date_field1' => DateTime::addSeconds(new \DateTime(), -86400),
+            'date_field2' => DateTime::addSeconds(new \DateTime(), 86400)
+        ]));
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'upsert_doc_2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'counter' => 20,
+            'score' => 3.0,
+            'multiplier' => 2.0,
+            'divisor' => 100.0,
+            'remainder' => 14,
+            'power_val' => 3.0,
+            'title' => 'Title 2',
+            'content' => 'old content 2',
+            'tags' => ['tag_2', 'common'],
+            'categories' => ['cat_2', 'test'],
+            'items' => ['item_2', 'shared', 'item_2'],
+            'duplicates' => ['a', 'b', 'a', 'c', 'b', 'd'],
+            'numbers' => [1, 2, 3, 4, 5],
+            'intersect_items' => ['a', 'b', 'c', 'd'],
+            'diff_items' => ['x', 'y', 'z', 'w'],
+            'filter_numbers' => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            'active' => true,
+            'date_field1' => DateTime::addSeconds(new \DateTime(), -86400),
+            'date_field2' => DateTime::addSeconds(new \DateTime(), 86400)
+        ]));
+
+        // Prepare upsert documents: 2 updates + 1 new insert with ALL operators
+        $documents = [
+            // Update existing doc 1
+            new Document([
+                '$id' => 'upsert_doc_1',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'counter' => Operator::increment(5, 50),
+                'score' => Operator::decrement(0.5, 0),
+                'multiplier' => Operator::multiply(2, 100),
+                'divisor' => Operator::divide(2, 10),
+                'remainder' => Operator::modulo(5),
+                'power_val' => Operator::power(2, 100),
+                'title' => Operator::concat(' - Updated'),
+                'content' => Operator::replace('old', 'new'),
+                'tags' => Operator::arrayAppend(['upsert']),
+                'categories' => Operator::arrayPrepend(['priority']),
+                'items' => Operator::arrayRemove('shared'),
+                'duplicates' => Operator::arrayUnique(),
+                'numbers' => Operator::arrayInsert(2, 99),
+                'intersect_items' => Operator::arrayIntersect(['b', 'c', 'e']),
+                'diff_items' => Operator::arrayDiff(['y', 'z']),
+                'filter_numbers' => Operator::arrayFilter('greaterThan', 5),
+                'active' => Operator::toggle(),
+                'date_field1' => Operator::dateAddDays(1),
+                'date_field2' => Operator::dateSubDays(1),
+                'date_field3' => Operator::dateSetNow()
+            ]),
+            // Update existing doc 2
+            new Document([
+                '$id' => 'upsert_doc_2',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'counter' => Operator::increment(5, 50),
+                'score' => Operator::decrement(0.5, 0),
+                'multiplier' => Operator::multiply(2, 100),
+                'divisor' => Operator::divide(2, 10),
+                'remainder' => Operator::modulo(5),
+                'power_val' => Operator::power(2, 100),
+                'title' => Operator::concat(' - Updated'),
+                'content' => Operator::replace('old', 'new'),
+                'tags' => Operator::arrayAppend(['upsert']),
+                'categories' => Operator::arrayPrepend(['priority']),
+                'items' => Operator::arrayRemove('shared'),
+                'duplicates' => Operator::arrayUnique(),
+                'numbers' => Operator::arrayInsert(2, 99),
+                'intersect_items' => Operator::arrayIntersect(['b', 'c', 'e']),
+                'diff_items' => Operator::arrayDiff(['y', 'z']),
+                'filter_numbers' => Operator::arrayFilter('greaterThan', 5),
+                'active' => Operator::toggle(),
+                'date_field1' => Operator::dateAddDays(1),
+                'date_field2' => Operator::dateSubDays(1),
+                'date_field3' => Operator::dateSetNow()
+            ]),
+            // Insert new doc 3 (operators should use default values)
+            new Document([
+                '$id' => 'upsert_doc_3',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'counter' => 100,
+                'score' => 50.0,
+                'multiplier' => 5.0,
+                'divisor' => 200.0,
+                'remainder' => 30,
+                'power_val' => 4.0,
+                'title' => 'New Title',
+                'content' => 'new content',
+                'tags' => ['new_tag'],
+                'categories' => ['new_cat'],
+                'items' => ['new_item'],
+                'duplicates' => ['x', 'y', 'z'],
+                'numbers' => [10, 20, 30],
+                'intersect_items' => ['p', 'q'],
+                'diff_items' => ['m', 'n'],
+                'filter_numbers' => [11, 12, 13],
+                'active' => true,
+                'date_field1' => DateTime::now(),
+                'date_field2' => DateTime::now()
+            ])
+        ];
+
+        // Execute bulk upsert
+        $count = $database->upsertDocuments($collectionId, $documents);
+        $this->assertEquals(3, $count);
+
+        // Verify all operators worked correctly on updated documents
+        $updated = $database->find($collectionId, [Query::orderAsc('$id')]);
+        $this->assertCount(3, $updated);
+
+        // Check upsert_doc_1 (was updated with operators)
+        $doc1 = $updated[0];
+        $this->assertEquals(15, $doc1->getAttribute('counter'));          // 10 + 5
+        $this->assertEquals(1.0, $doc1->getAttribute('score'));           // 1.5 - 0.5
+        $this->assertEquals(2.0, $doc1->getAttribute('multiplier'));      // 1.0 * 2
+        $this->assertEquals(25.0, $doc1->getAttribute('divisor'));        // 50.0 / 2
+        $this->assertEquals(2, $doc1->getAttribute('remainder'));         // 7 % 5
+        $this->assertEquals(4.0, $doc1->getAttribute('power_val'));       // 2^2
+        $this->assertEquals('Title 1 - Updated', $doc1->getAttribute('title'));
+        $this->assertEquals('new content 1', $doc1->getAttribute('content'));
+        $this->assertContains('upsert', $doc1->getAttribute('tags'));
+        $this->assertContains('priority', $doc1->getAttribute('categories'));
+        $this->assertNotContains('shared', $doc1->getAttribute('items'));
+        $this->assertCount(4, $doc1->getAttribute('duplicates')); // Should have unique values
+        $this->assertEquals([1, 2, 99, 3, 4, 5], $doc1->getAttribute('numbers')); // arrayInsert at index 2
+        $this->assertEquals(['b', 'c'], $doc1->getAttribute('intersect_items')); // arrayIntersect
+        $this->assertEquals(['x', 'w'], $doc1->getAttribute('diff_items')); // arrayDiff (removed y, z)
+        $this->assertEquals([6, 7, 8, 9, 10], $doc1->getAttribute('filter_numbers')); // arrayFilter greaterThan 5
+        $this->assertEquals(true, $doc1->getAttribute('active'));         // Was false, toggled to true
+        $this->assertNotNull($doc1->getAttribute('date_field1'));         // dateAddDays
+        $this->assertNotNull($doc1->getAttribute('date_field2'));         // dateSubDays
+        $this->assertNotNull($doc1->getAttribute('date_field3'));         // dateSetNow
+
+        // Check upsert_doc_2 (was updated with operators)
+        $doc2 = $updated[1];
+        $this->assertEquals(25, $doc2->getAttribute('counter'));          // 20 + 5
+        $this->assertEquals(2.5, $doc2->getAttribute('score'));           // 3.0 - 0.5
+        $this->assertEquals(4.0, $doc2->getAttribute('multiplier'));      // 2.0 * 2
+        $this->assertEquals(50.0, $doc2->getAttribute('divisor'));        // 100.0 / 2
+        $this->assertEquals(4, $doc2->getAttribute('remainder'));         // 14 % 5
+        $this->assertEquals(9.0, $doc2->getAttribute('power_val'));       // 3^2
+        $this->assertEquals('Title 2 - Updated', $doc2->getAttribute('title'));
+        $this->assertEquals('new content 2', $doc2->getAttribute('content'));
+        $this->assertEquals(false, $doc2->getAttribute('active'));        // Was true, toggled to false
+
+        // Check upsert_doc_3 (was inserted without operators)
+        $doc3 = $updated[2];
+        $this->assertEquals(100, $doc3->getAttribute('counter'));
+        $this->assertEquals(50.0, $doc3->getAttribute('score'));
+        $this->assertEquals(5.0, $doc3->getAttribute('multiplier'));
+        $this->assertEquals(200.0, $doc3->getAttribute('divisor'));
+        $this->assertEquals(30, $doc3->getAttribute('remainder'));
+        $this->assertEquals(4.0, $doc3->getAttribute('power_val'));
+        $this->assertEquals('New Title', $doc3->getAttribute('title'));
+        $this->assertEquals('new content', $doc3->getAttribute('content'));
+        $this->assertEquals(['new_tag'], $doc3->getAttribute('tags'));
+        $this->assertEquals(['new_cat'], $doc3->getAttribute('categories'));
+        $this->assertEquals(['new_item'], $doc3->getAttribute('items'));
+        $this->assertEquals(['x', 'y', 'z'], $doc3->getAttribute('duplicates'));
+        $this->assertEquals([10, 20, 30], $doc3->getAttribute('numbers'));
+        $this->assertEquals(['p', 'q'], $doc3->getAttribute('intersect_items'));
+        $this->assertEquals(['m', 'n'], $doc3->getAttribute('diff_items'));
+        $this->assertEquals([11, 12, 13], $doc3->getAttribute('filter_numbers'));
+        $this->assertEquals(true, $doc3->getAttribute('active'));
+
         $database->deleteCollection($collectionId);
     }
 

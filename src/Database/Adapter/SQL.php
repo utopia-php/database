@@ -95,14 +95,16 @@ abstract class SQL extends Adapter
     {
         if ($this->inTransaction === 0) {
             return false;
-        } elseif ($this->inTransaction > 1) {
-            $this->inTransaction--;
-            return true;
         }
 
         if (!$this->getPDO()->inTransaction()) {
             $this->inTransaction = 0;
             return false;
+        }
+
+        if ($this->inTransaction > 1) {
+            $this->inTransaction--;
+            return true;
         }
 
         try {
@@ -137,6 +139,7 @@ abstract class SQL extends Adapter
                 $this->inTransaction = 0;
             }
         } catch (PDOException $e) {
+            $this->inTransaction = 0;
             throw new DatabaseException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
@@ -160,6 +163,7 @@ abstract class SQL extends Adapter
     public function reconnect(): void
     {
         $this->getPDO()->reconnect();
+        $this->inTransaction = 0;
     }
 
     /**

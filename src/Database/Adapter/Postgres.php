@@ -1997,6 +1997,11 @@ class Postgres extends SQL
         return false;
     }
 
+    public function getSupportForIntegerBooleans(): bool
+    {
+        return false; // Postgres has native boolean type
+    }
+
     /**
      * Is get schema attributes supported?
      *
@@ -2591,12 +2596,12 @@ class Postgres extends SQL
             case Operator::TYPE_DATE_ADD_DAYS:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = {$quotedColumn} + (:$bindKey || ' days')::INTERVAL";
+                return "{$quotedColumn} = {$columnRef} + (:$bindKey || ' days')::INTERVAL";
 
             case Operator::TYPE_DATE_SUB_DAYS:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = {$quotedColumn} - (:$bindKey || ' days')::INTERVAL";
+                return "{$quotedColumn} = {$columnRef} - (:$bindKey || ' days')::INTERVAL";
 
             case Operator::TYPE_DATE_SET_NOW:
                 return "{$quotedColumn} = NOW()";

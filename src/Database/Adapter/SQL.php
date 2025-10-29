@@ -2810,7 +2810,9 @@ abstract class SQL extends Adapter
                             $bindKey = 'key_' . $bindIndex;
                             $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
                         } else {
-                            $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
+                            if ($this->getSupportForIntegerBooleans()) {
+                                $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
+                            }
                             $bindKey = 'key_' . $bindIndex;
                             $bindKeys[] = ':' . $bindKey;
                         }
@@ -2940,7 +2942,9 @@ abstract class SQL extends Adapter
                                 $bindKey = 'key_' . $bindIndex;
                                 $bindKeys[] = $this->getSpatialGeomFromText(":" . $bindKey);
                             } else {
-                                $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
+                                if ($this->getSupportForIntegerBooleans()) {
+                                    $attrValue = (\is_bool($attrValue)) ? (int)$attrValue : $attrValue;
+                                }
                                 $bindKey = 'key_' . $bindIndex;
                                 $bindKeys[] = ':' . $bindKey;
                             }

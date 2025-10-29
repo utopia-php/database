@@ -2900,6 +2900,16 @@ class Mongo extends Adapter
     }
 
     /**
+     * Does the adapter require booleans to be converted to integers (0/1)?
+     *
+     * @return bool
+     */
+    public function getSupportForIntegerBooleans(): bool
+    {
+        return false;
+    }
+
+    /**
      * Does the adapter includes boundary during spatial contains?
      *
      * @return bool

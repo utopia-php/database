@@ -1405,4 +1405,11 @@ abstract class Adapter
     */
     abstract public function setSupportForAttributes(bool $support): bool;
 
+    /**
+     * Does the adapter require booleans to be converted to integers (0/1)?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForIntegerBooleans(): bool;
+
 }

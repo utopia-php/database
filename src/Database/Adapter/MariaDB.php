@@ -1770,6 +1770,11 @@ class MariaDB extends SQL
         return true;
     }
 
+    public function getSupportForIntegerBooleans(): bool
+    {
+        return true; // MySQL/MariaDB use tinyint(1) for booleans
+    }
+
     /**
      * Are timeouts supported?
      *

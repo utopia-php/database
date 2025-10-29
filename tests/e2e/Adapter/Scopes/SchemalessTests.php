@@ -1260,6 +1260,69 @@ trait SchemalessTests
         // verify docs is still preserved(untouched)
         $docS = $database->getDocument($col, 'docS');
         $this->assertEquals('single2', $docS->getAttribute('key'));
+
+        // 1) Null Value Preservation vs Removal
+        $docNull = $database->createDocument($col, new Document([
+            '$id' => 'docNull',
+            '$permissions' => $permissions,
+            'keepMe' => 'k1',
+            'removeMe' => 'r1',
+            'nullable' => 'n1'
+        ]));
+        $this->assertEquals('docNull', $docNull->getId());
+
+        $docNullUpdated = $database->updateDocument($col, 'docNull', new Document([
+            'keepMe' => 'k2',
+            'nullable' => null // explicitly set null should be preserved as key with null value
+        ]));
+        $this->assertEquals('k2', $docNullUpdated->getAttribute('keepMe'));
+        $this->assertArrayHasKey('nullable', $docNullUpdated->getAttributes());
+        $this->assertNull($docNullUpdated->getAttribute('nullable'));
+        $this->assertArrayNotHasKey('removeMe', $docNullUpdated->getAttributes());
+
+        $docNullRefetch = $database->getDocument($col, 'docNull');
+        $this->assertEquals('k2', $docNullRefetch->getAttribute('keepMe'));
+        $this->assertArrayHasKey('nullable', $docNullRefetch->getAttributes());
+        $this->assertNull($docNullRefetch->getAttribute('nullable'));
+        $this->assertArrayNotHasKey('removeMe', $docNullRefetch->getAttributes());
+
+        // 2) Internal attributes preservation ($id, $sequence, $permissions)
+        $before = $database->getDocument($col, 'docS');
+        $this->assertEquals('docS', $before->getId());
+        $beforeSequence = $before->getSequence();
+        $beforePermissions = $before->getPermissions();
+        $this->assertNotEmpty($beforeSequence);
+        $this->assertGreaterThanOrEqual(1, count($beforePermissions));
+
+        $after = $database->updateDocument($col, 'docS', new Document(['key' => 'single3']));
+        $this->assertEquals('docS', $after->getId());
+        $this->assertEquals('single3', $after->getAttribute('key'));
+        $this->assertEquals($beforeSequence, $after->getSequence());
+        foreach ($beforePermissions as $perm) {
+            $this->assertContains($perm, $after->getPermissions());
+        }
+
+        $afterRefetch = $database->getDocument($col, 'docS');
+        $this->assertEquals('docS', $afterRefetch->getId());
+        $this->assertEquals($beforeSequence, $afterRefetch->getSequence());
+        foreach ($beforePermissions as $perm) {
+            $this->assertContains($perm, $afterRefetch->getPermissions());
+        }
+
+        // 3) Update with empty document (removes all non-internal attributes)
+        $noOp = $database->updateDocument($col, 'docS', new Document([]));
+        $this->assertEquals('docS', $noOp->getId());
+        $this->assertArrayNotHasKey('key', $noOp->getAttributes());
+
+        $noOpRefetch = $database->getDocument($col, 'docS');
+        $this->assertArrayNotHasKey('key', $noOpRefetch->getAttributes());
+        // Internal attributes should still be present
+        $this->assertEquals('docS', $noOpRefetch->getId());
+        $this->assertNotEmpty($noOpRefetch->getSequence());
+        $this->assertEquals($col, $noOpRefetch->getCollection());
+        $this->assertTrue(is_string($noOpRefetch->getAttribute('$createdAt')));
+        $this->assertTrue(is_string($noOpRefetch->getAttribute('$updatedAt')));
+        $this->assertGreaterThanOrEqual(1, count($noOpRefetch->getPermissions()));
         $database->deleteCollection($col);
     }
 }

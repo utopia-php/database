@@ -11,6 +11,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
@@ -18,17 +19,16 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
+/**
+ * Differences between MariaDB and Postgres
+ *
+ * 1. Need to use CASCADE to DROP schema
+ * 2. Quotes are different ` vs "
+ * 3. DATETIME is TIMESTAMP
+ * 4. Full-text search is different - to_tsvector() and to_tsquery()
+ */
 class Postgres extends SQL
 {
-    /**
-     * Differences between MariaDB and Postgres
-     *
-     * 1. Need to use CASCADE to DROP schema
-     * 2. Quotes are different ` vs "
-     * 3. DATETIME is TIMESTAMP
-     * 4. Full-text search is different - to_tsvector() and to_tsquery()
-     */
-
     /**
      * @inheritDoc
      */
@@ -2413,7 +2413,7 @@ class Postgres extends SQL
         $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators with NULL handling
+            // Numeric operators
             case Operator::TYPE_INCREMENT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2473,7 +2473,6 @@ class Postgres extends SQL
             case Operator::TYPE_MODULO:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
-                // PostgreSQL MOD requires compatible types - cast to numeric
                 return "{$quotedColumn} = MOD(COALESCE({$columnRef}::numeric, 0), :$bindKey::numeric)";
 
             case Operator::TYPE_POWER:
@@ -2491,11 +2490,24 @@ class Postgres extends SQL
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$columnRef}, 0), :$bindKey)";
 
-            case Operator::TYPE_CONCAT:
+                // String operators
+            case Operator::TYPE_STRING_CONCAT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = CONCAT(COALESCE({$columnRef}, ''), :$bindKey)";
 
+            case Operator::TYPE_STRING_REPLACE:
+                $searchKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $replaceKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = REPLACE(COALESCE({$columnRef}, ''), :$searchKey, :$replaceKey)";
+
+                // Boolean operators
+            case Operator::TYPE_TOGGLE:
+                return "{$quotedColumn} = NOT COALESCE({$columnRef}, FALSE)";
+
+                // Array operators
             case Operator::TYPE_ARRAY_APPEND:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2507,7 +2519,6 @@ class Postgres extends SQL
                 return "{$quotedColumn} = :$bindKey::jsonb || COALESCE({$columnRef}, '[]'::jsonb)";
 
             case Operator::TYPE_ARRAY_UNIQUE:
-                // PostgreSQL-specific implementation for array unique
                 return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(DISTINCT value)
                     FROM jsonb_array_elements({$columnRef}) AS value
@@ -2527,7 +2538,6 @@ class Postgres extends SQL
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
                 $bindIndex++;
-                // PostgreSQL implementation using jsonb functions with row numbering
                 return "{$quotedColumn} = (
                     SELECT jsonb_agg(value ORDER BY idx)
                     FROM (
@@ -2566,7 +2576,6 @@ class Postgres extends SQL
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
                 $bindIndex++;
-                // PostgreSQL-specific implementation using jsonb_array_elements
                 return "{$quotedColumn} = COALESCE((
                     SELECT jsonb_agg(value)
                     FROM jsonb_array_elements({$columnRef}) AS value
@@ -2583,16 +2592,7 @@ class Postgres extends SQL
                     END
                 ), '[]'::jsonb)";
 
-            case Operator::TYPE_REPLACE:
-                $searchKey = "op_{$bindIndex}";
-                $bindIndex++;
-                $replaceKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = REPLACE(COALESCE({$columnRef}, ''), :$searchKey, :$replaceKey)";
-
-            case Operator::TYPE_TOGGLE:
-                return "{$quotedColumn} = NOT COALESCE({$columnRef}, FALSE)";
-
+                // Date operators
             case Operator::TYPE_DATE_ADD_DAYS:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2607,8 +2607,7 @@ class Postgres extends SQL
                 return "{$quotedColumn} = NOW()";
 
             default:
-                // Fall back to parent implementation for other operators
-                return parent::getOperatorSQL($column, $operator, $bindIndex);
+                throw new OperatorException("Invalid operator: {$method}");
         }
     }
 

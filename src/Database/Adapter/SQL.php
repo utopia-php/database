@@ -1863,182 +1863,14 @@ abstract class SQL extends Adapter
 
     /**
      * Generate SQL expression for operator
+     * Each adapter must implement operators specific to their SQL dialect
      *
      * @param string $column
-     * @param \Utopia\Database\Operator $operator
+     * @param Operator $operator
      * @param int &$bindIndex
      * @return string|null Returns null if operator can't be expressed in SQL
      */
-    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
-    {
-        $quotedColumn = $this->quote($column);
-        $method = $operator->getMethod();
-        $values = $operator->getValues();
-
-        switch ($method) {
-            case Operator::TYPE_INCREMENT:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                // Handle max limit if provided
-                if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $bindIndex++;
-                    return "{$quotedColumn} = LEAST(COALESCE({$quotedColumn}, 0) + :$bindKey, :$maxKey)";
-                }
-                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
-
-            case Operator::TYPE_DECREMENT:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                // Handle min limit if provided
-                if (isset($values[1])) {
-                    $minKey = "op_{$bindIndex}";
-                    $bindIndex++;
-                    return "{$quotedColumn} = GREATEST(COALESCE({$quotedColumn}, 0) - :$bindKey, :$minKey)";
-                }
-                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
-
-            case Operator::TYPE_MULTIPLY:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                // Handle max limit if provided
-                if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $bindIndex++;
-                    return "{$quotedColumn} = LEAST(COALESCE({$quotedColumn}, 0) * :$bindKey, :$maxKey)";
-                }
-                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
-
-            case Operator::TYPE_DIVIDE:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                // Handle min limit if provided
-                if (isset($values[1])) {
-                    $minKey = "op_{$bindIndex}";
-                    $bindIndex++;
-                    return "{$quotedColumn} = GREATEST(COALESCE({$quotedColumn}, 0) / :$bindKey, :$minKey)";
-                }
-                return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
-
-            case Operator::TYPE_MODULO:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
-
-            case Operator::TYPE_POWER:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                // Handle max limit if provided
-                if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $bindIndex++;
-                    return "{$quotedColumn} = LEAST(POWER(COALESCE({$quotedColumn}, 0), :$bindKey), :$maxKey)";
-                }
-                return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
-
-                // String operators
-            case Operator::TYPE_CONCAT:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = CONCAT(IFNULL({$quotedColumn}, ''), :$bindKey)";
-
-            case Operator::TYPE_REPLACE:
-                $searchKey = "op_{$bindIndex}";
-                $bindIndex++;
-                $replaceKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
-
-                // Boolean operators with NULL handling
-            case Operator::TYPE_TOGGLE:
-                return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
-
-                // Date operators
-            case Operator::TYPE_DATE_ADD_DAYS:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = DATE_ADD({$quotedColumn}, INTERVAL :$bindKey DAY)";
-
-            case Operator::TYPE_DATE_SUB_DAYS:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = DATE_SUB({$quotedColumn}, INTERVAL :$bindKey DAY)";
-
-            case Operator::TYPE_DATE_SET_NOW:
-                return "{$quotedColumn} = NOW()";
-
-                // Array operators (using JSON functions)
-            case Operator::TYPE_ARRAY_APPEND:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, '[]'), :$bindKey)";
-
-            case Operator::TYPE_ARRAY_PREPEND:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, '[]'))";
-
-            case Operator::TYPE_ARRAY_REMOVE:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = COALESCE(JSON_REMOVE({$quotedColumn}, JSON_UNQUOTE(JSON_SEARCH({$quotedColumn}, 'one', :$bindKey))), {$quotedColumn})";
-
-            case Operator::TYPE_ARRAY_UNIQUE:
-                return "{$quotedColumn} = IFNULL((SELECT JSON_ARRAYAGG(DISTINCT value) FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt), '[]')";
-
-            case Operator::TYPE_ARRAY_INSERT:
-                $indexKey = "op_{$bindIndex}";
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = JSON_INSERT({$quotedColumn}, CONCAT('$[', :$indexKey, ']'), :$valueKey)";
-
-            case Operator::TYPE_ARRAY_INTERSECT:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = IFNULL((
-                    SELECT JSON_ARRAYAGG(jt1.value)
-                    FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt1
-                    WHERE jt1.value IN (
-                        SELECT jt2.value
-                        FROM JSON_TABLE(:$bindKey, '$[*]' COLUMNS(value JSON PATH '$')) AS jt2
-                    )
-                ), '[]')";
-
-            case Operator::TYPE_ARRAY_DIFF:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = IFNULL((
-                    SELECT JSON_ARRAYAGG(jt1.value)
-                    FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt1
-                    WHERE jt1.value NOT IN (
-                        SELECT jt2.value
-                        FROM JSON_TABLE(:$bindKey, '$[*]' COLUMNS(value JSON PATH '$')) AS jt2
-                    )
-                ), '[]')";
-
-            case Operator::TYPE_ARRAY_FILTER:
-                $conditionKey = "op_{$bindIndex}";
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = (
-                    SELECT JSON_ARRAYAGG(value)
-                    FROM JSON_TABLE({$quotedColumn}, '$[*]' COLUMNS(value JSON PATH '$')) AS jt
-                    WHERE CASE :$conditionKey
-                        WHEN 'equal' THEN value = :$valueKey
-                        WHEN 'notEqual' THEN value != :$valueKey
-                        WHEN 'greaterThan' THEN CAST(value AS SIGNED) > CAST(:$valueKey AS SIGNED)
-                        WHEN 'lessThan' THEN CAST(value AS SIGNED) < CAST(:$valueKey AS SIGNED)
-                        WHEN 'isNull' THEN value IS NULL
-                        WHEN 'isNotNull' THEN value IS NOT NULL
-                        ELSE TRUE
-                    END
-                )";
-            default:
-                throw new DatabaseException("Unsupported operator type: {$method}");
-        }
-    }
+    abstract protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string;
 
     /**
      * Bind operator parameters to prepared statement
@@ -2094,14 +1926,14 @@ abstract class SQL extends Adapter
                 break;
 
                 // String operators
-            case Operator::TYPE_CONCAT:
+            case Operator::TYPE_STRING_CONCAT:
                 $value = $values[0] ?? '';
                 $bindKey = "op_{$bindIndex}";
                 $stmt->bindValue(':' . $bindKey, $value, \PDO::PARAM_STR);
                 $bindIndex++;
                 break;
 
-            case Operator::TYPE_REPLACE:
+            case Operator::TYPE_STRING_REPLACE:
                 $search = $values[0] ?? '';
                 $replace = $values[1] ?? '';
                 $searchKey = "op_{$bindIndex}";
@@ -2282,10 +2114,10 @@ abstract class SQL extends Adapter
                 return $value ?? [];
 
                 // String operators
-            case Operator::TYPE_CONCAT:
+            case Operator::TYPE_STRING_CONCAT:
                 return ($value ?? '') . ($values[0] ?? '');
 
-            case Operator::TYPE_REPLACE:
+            case Operator::TYPE_STRING_REPLACE:
                 $search = $values[0] ?? '';
                 $replace = $values[1] ?? '';
                 return str_replace($search, $replace, $value ?? '');

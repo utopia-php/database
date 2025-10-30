@@ -1468,11 +1468,7 @@ class SQLite extends MariaDB
         $method = $operator->getMethod();
 
         switch ($method) {
-            case Operator::TYPE_CONCAT:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = IFNULL({$quotedColumn}, '') || :$bindKey";
-
+            // Numeric operators
             case Operator::TYPE_INCREMENT:
                 $values = $operator->getValues();
                 $bindKey = "op_{$bindIndex}";
@@ -1566,17 +1562,25 @@ class SQLite extends MariaDB
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
-            case Operator::TYPE_TOGGLE:
-                // SQLite: toggle boolean (0 or 1), treat NULL as 0
-                return "{$quotedColumn} = CASE WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 1 ELSE 0 END";
+                // String operators
+            case Operator::TYPE_STRING_CONCAT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = IFNULL({$quotedColumn}, '') || :$bindKey";
 
-            case Operator::TYPE_REPLACE:
+            case Operator::TYPE_STRING_REPLACE:
                 $searchKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $replaceKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
+                // Boolean operators
+            case Operator::TYPE_TOGGLE:
+                // SQLite: toggle boolean (0 or 1), treat NULL as 0
+                return "{$quotedColumn} = CASE WHEN COALESCE({$quotedColumn}, 0) = 0 THEN 1 ELSE 0 END";
+
+                // Array operators
             case Operator::TYPE_ARRAY_APPEND:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -1745,6 +1749,7 @@ class SQLite extends MariaDB
                         return "{$quotedColumn} = {$quotedColumn}";
                 }
 
+                // Date operators
                 // no break
             case Operator::TYPE_DATE_ADD_DAYS:
                 $bindKey = "op_{$bindIndex}";

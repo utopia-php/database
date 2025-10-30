@@ -1498,7 +1498,7 @@ class Mongo extends Adapter
                 $name,
                 $filters,
                 $updateQuery,
-                options: $options,
+                $options,
                 multi: true,
             );
         } catch (MongoException $e) {

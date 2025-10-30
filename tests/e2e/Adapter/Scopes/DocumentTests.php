@@ -5808,6 +5808,7 @@ trait DocumentTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
             return;
         }
 
@@ -6074,6 +6075,7 @@ trait DocumentTests
         $database = static::getDatabase();
 
         if (!$database->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
             return;
         }
 

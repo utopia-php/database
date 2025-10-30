@@ -122,7 +122,7 @@ class Operator extends Validator
                 }
 
                 // Special validation for divide/modulo by zero
-                if (($method === DatabaseOperator::TYPE_DIVIDE || $method === DatabaseOperator::TYPE_MODULO) && $values[0] == 0) {
+                if (($method === DatabaseOperator::TYPE_DIVIDE || $method === DatabaseOperator::TYPE_MODULO) && (float)$values[0] === 0.0) {
                     $this->message = "Cannot apply {$method} operator: " . ($method === DatabaseOperator::TYPE_DIVIDE ? "division" : "modulo") . " by zero";
                     return false;
                 }
@@ -142,8 +142,8 @@ class Operator extends Validator
                         DatabaseOperator::TYPE_INCREMENT => $currentValue + $operatorValue,
                         DatabaseOperator::TYPE_DECREMENT => $currentValue - $operatorValue,
                         DatabaseOperator::TYPE_MULTIPLY => $currentValue * $operatorValue,
-                        DatabaseOperator::TYPE_DIVIDE => $operatorValue != 0 ? $currentValue / $operatorValue : $currentValue,
-                        DatabaseOperator::TYPE_MODULO => $operatorValue != 0 ? $currentValue % $operatorValue : $currentValue,
+                        DatabaseOperator::TYPE_DIVIDE => $currentValue / $operatorValue,
+                        DatabaseOperator::TYPE_MODULO => $currentValue % $operatorValue,
                         DatabaseOperator::TYPE_POWER => $currentValue ** $operatorValue,
                     };
 
@@ -281,7 +281,7 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_CONCAT:
+            case DatabaseOperator::TYPE_STRING_CONCAT:
                 if ($type !== Database::VAR_STRING || $isArray) {
                     $this->message = "Cannot apply {$method} operator to non-string field '{$operator->getAttribute()}'";
                     return false;
@@ -308,7 +308,7 @@ class Operator extends Validator
                 }
 
                 break;
-            case DatabaseOperator::TYPE_REPLACE:
+            case DatabaseOperator::TYPE_STRING_REPLACE:
                 // Replace only works on string types
                 if ($type !== Database::VAR_STRING) {
                     $this->message = "Cannot apply {$method} operator to non-string field '{$operator->getAttribute()}'";

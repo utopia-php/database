@@ -46,13 +46,13 @@ class OperatorTest extends TestCase
         $this->assertEquals(1, $operator->getValue());
 
         // Test string helpers
-        $operator = Operator::concat(' - Updated');
-        $this->assertEquals(Operator::TYPE_CONCAT, $operator->getMethod());
+        $operator = Operator::stringConcat(' - Updated');
+        $this->assertEquals(Operator::TYPE_STRING_CONCAT, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([' - Updated'], $operator->getValues());
 
-        $operator = Operator::replace('old', 'new');
-        $this->assertEquals(Operator::TYPE_REPLACE, $operator->getMethod());
+        $operator = Operator::stringReplace('old', 'new');
+        $this->assertEquals(Operator::TYPE_STRING_REPLACE, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals(['old', 'new'], $operator->getValues());
 
@@ -79,8 +79,8 @@ class OperatorTest extends TestCase
         $this->assertEquals([], $operator->getValues());
 
         // Test concat helper
-        $operator = Operator::concat(' - Updated');
-        $this->assertEquals(Operator::TYPE_CONCAT, $operator->getMethod());
+        $operator = Operator::stringConcat(' - Updated');
+        $this->assertEquals(Operator::TYPE_STRING_CONCAT, $operator->getMethod());
         $this->assertEquals('', $operator->getAttribute());
         $this->assertEquals([' - Updated'], $operator->getValues());
 
@@ -149,17 +149,17 @@ class OperatorTest extends TestCase
         $this->assertFalse($decrementOp->isArrayOperation());
 
         // Test string operations
-        $concatOp = Operator::concat('suffix');
+        $concatOp = Operator::stringConcat('suffix');
         $this->assertFalse($concatOp->isNumericOperation());
         $this->assertFalse($concatOp->isArrayOperation());
         $this->assertTrue($concatOp->isStringOperation());
 
-        $concatOp = Operator::concat('suffix'); // Deprecated
+        $concatOp = Operator::stringConcat('suffix'); // Deprecated
         $this->assertFalse($concatOp->isNumericOperation());
         $this->assertFalse($concatOp->isArrayOperation());
         $this->assertTrue($concatOp->isStringOperation());
 
-        $replaceOp = Operator::replace('old', 'new');
+        $replaceOp = Operator::stringReplace('old', 'new');
         $this->assertFalse($replaceOp->isNumericOperation());
         $this->assertFalse($replaceOp->isArrayOperation());
         $this->assertTrue($replaceOp->isStringOperation());
@@ -202,10 +202,10 @@ class OperatorTest extends TestCase
         $this->assertTrue(Operator::isMethod(Operator::TYPE_DECREMENT));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_MULTIPLY));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_DIVIDE));
-        $this->assertTrue(Operator::isMethod(Operator::TYPE_CONCAT));
-        $this->assertTrue(Operator::isMethod(Operator::TYPE_REPLACE));
+        $this->assertTrue(Operator::isMethod(Operator::TYPE_STRING_CONCAT));
+        $this->assertTrue(Operator::isMethod(Operator::TYPE_STRING_REPLACE));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_TOGGLE));
-        $this->assertTrue(Operator::isMethod(Operator::TYPE_CONCAT));
+        $this->assertTrue(Operator::isMethod(Operator::TYPE_STRING_CONCAT));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_DATE_SET_NOW));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_MODULO));
         $this->assertTrue(Operator::isMethod(Operator::TYPE_POWER));
@@ -456,13 +456,13 @@ class OperatorTest extends TestCase
             'items' => Operator::arrayPrepend(['first']),
             'list' => Operator::arrayInsert(2, 'value'),
             'blacklist' => Operator::arrayRemove('spam'),
-            'title' => Operator::concat(' - Updated'),
-            'content' => Operator::replace('old', 'new'),
+            'title' => Operator::stringConcat(' - Updated'),
+            'content' => Operator::stringReplace('old', 'new'),
             'views' => Operator::multiply(2, 1000),
             'rating' => Operator::divide(2, 1),
             'featured' => Operator::toggle(),
             'last_modified' => Operator::dateSetNow(),
-            'title_prefix' => Operator::concat(' - Updated'),
+            'title_prefix' => Operator::stringConcat(' - Updated'),
             'views_modulo' => Operator::modulo(3),
             'score_power' => Operator::power(2, 1000),
             'age' => 30
@@ -486,8 +486,8 @@ class OperatorTest extends TestCase
         $this->assertEquals(Operator::TYPE_ARRAY_REMOVE, $operators['blacklist']->getMethod());
 
         // Check string operators
-        $this->assertEquals(Operator::TYPE_CONCAT, $operators['title']->getMethod());
-        $this->assertEquals(Operator::TYPE_REPLACE, $operators['content']->getMethod());
+        $this->assertEquals(Operator::TYPE_STRING_CONCAT, $operators['title']->getMethod());
+        $this->assertEquals(Operator::TYPE_STRING_REPLACE, $operators['content']->getMethod());
 
         // Check math operators
         $this->assertEquals(Operator::TYPE_MULTIPLY, $operators['views']->getMethod());
@@ -497,7 +497,7 @@ class OperatorTest extends TestCase
         $this->assertEquals(Operator::TYPE_TOGGLE, $operators['featured']->getMethod());
 
         // Check new operators
-        $this->assertEquals(Operator::TYPE_CONCAT, $operators['title_prefix']->getMethod());
+        $this->assertEquals(Operator::TYPE_STRING_CONCAT, $operators['title_prefix']->getMethod());
         $this->assertEquals(Operator::TYPE_MODULO, $operators['views_modulo']->getMethod());
         $this->assertEquals(Operator::TYPE_POWER, $operators['score_power']->getMethod());
 
@@ -668,8 +668,8 @@ class OperatorTest extends TestCase
             'decrementWithMin' => Operator::decrement(2, 0),
             'multiply' => Operator::multiply(3, 100),
             'divide' => Operator::divide(2, 1),
-            'concat' => Operator::concat(' suffix'),
-            'replace' => Operator::replace('old', 'new'),
+            'concat' => Operator::stringConcat(' suffix'),
+            'replace' => Operator::stringReplace('old', 'new'),
             'toggle' => Operator::toggle(),
             'dateSetNow' => Operator::dateSetNow(),
             'modulo' => Operator::modulo(3),
@@ -692,11 +692,11 @@ class OperatorTest extends TestCase
         $this->assertEquals([3, 100], $operators['multiply']->getValues());
         $this->assertEquals(Operator::TYPE_DIVIDE, $operators['divide']->getMethod());
         $this->assertEquals([2, 1], $operators['divide']->getValues());
-        $this->assertEquals(Operator::TYPE_CONCAT, $operators['concat']->getMethod());
-        $this->assertEquals(Operator::TYPE_REPLACE, $operators['replace']->getMethod());
+        $this->assertEquals(Operator::TYPE_STRING_CONCAT, $operators['concat']->getMethod());
+        $this->assertEquals(Operator::TYPE_STRING_REPLACE, $operators['replace']->getMethod());
         $this->assertEquals(Operator::TYPE_TOGGLE, $operators['toggle']->getMethod());
         $this->assertEquals(Operator::TYPE_DATE_SET_NOW, $operators['dateSetNow']->getMethod());
-        $this->assertEquals(Operator::TYPE_CONCAT, $operators['concat']->getMethod());
+        $this->assertEquals(Operator::TYPE_STRING_CONCAT, $operators['concat']->getMethod());
         $this->assertEquals(Operator::TYPE_MODULO, $operators['modulo']->getMethod());
         $this->assertEquals(Operator::TYPE_POWER, $operators['power']->getMethod());
         $this->assertEquals(Operator::TYPE_ARRAY_REMOVE, $operators['remove']->getMethod());
@@ -723,10 +723,10 @@ class OperatorTest extends TestCase
         $this->assertFalse(Operator::divide(2)->isArrayOperation());
 
         // Test string operations
-        $this->assertTrue(Operator::concat('test')->isStringOperation());
-        $this->assertTrue(Operator::replace('old', 'new')->isStringOperation());
-        $this->assertFalse(Operator::concat('test')->isNumericOperation());
-        $this->assertFalse(Operator::replace('old', 'new')->isArrayOperation());
+        $this->assertTrue(Operator::stringConcat('test')->isStringOperation());
+        $this->assertTrue(Operator::stringReplace('old', 'new')->isStringOperation());
+        $this->assertFalse(Operator::stringConcat('test')->isNumericOperation());
+        $this->assertFalse(Operator::stringReplace('old', 'new')->isArrayOperation());
 
         // Test boolean operations
         $this->assertTrue(Operator::toggle()->isBooleanOperation());
@@ -744,21 +744,21 @@ class OperatorTest extends TestCase
     public function testStringOperators(): void
     {
         // Test concat operator
-        $operator = Operator::concat(' - Updated');
-        $this->assertEquals(Operator::TYPE_CONCAT, $operator->getMethod());
+        $operator = Operator::stringConcat(' - Updated');
+        $this->assertEquals(Operator::TYPE_STRING_CONCAT, $operator->getMethod());
         $this->assertEquals([' - Updated'], $operator->getValues());
         $this->assertEquals(' - Updated', $operator->getValue());
         $this->assertEquals('', $operator->getAttribute());
 
         // Test concat with different values
-        $operator = Operator::concat('prefix-');
-        $this->assertEquals(Operator::TYPE_CONCAT, $operator->getMethod());
+        $operator = Operator::stringConcat('prefix-');
+        $this->assertEquals(Operator::TYPE_STRING_CONCAT, $operator->getMethod());
         $this->assertEquals(['prefix-'], $operator->getValues());
         $this->assertEquals('prefix-', $operator->getValue());
 
         // Test replace operator
-        $operator = Operator::replace('old', 'new');
-        $this->assertEquals(Operator::TYPE_REPLACE, $operator->getMethod());
+        $operator = Operator::stringReplace('old', 'new');
+        $this->assertEquals(Operator::TYPE_STRING_REPLACE, $operator->getMethod());
         $this->assertEquals(['old', 'new'], $operator->getValues());
         $this->assertEquals('old', $operator->getValue());
     }
@@ -839,9 +839,9 @@ class OperatorTest extends TestCase
     {
         // Test parsing all new operators
         $operators = [
-            ['method' => Operator::TYPE_CONCAT, 'attribute' => 'title', 'values' => [' - Updated']],
-            ['method' => Operator::TYPE_CONCAT, 'attribute' => 'subtitle', 'values' => [' - Updated']], // Deprecated
-            ['method' => Operator::TYPE_REPLACE, 'attribute' => 'content', 'values' => ['old', 'new']],
+            ['method' => Operator::TYPE_STRING_CONCAT, 'attribute' => 'title', 'values' => [' - Updated']],
+            ['method' => Operator::TYPE_STRING_CONCAT, 'attribute' => 'subtitle', 'values' => [' - Updated']], // Deprecated
+            ['method' => Operator::TYPE_STRING_REPLACE, 'attribute' => 'content', 'values' => ['old', 'new']],
             ['method' => Operator::TYPE_MULTIPLY, 'attribute' => 'score', 'values' => [2, 100]],
             ['method' => Operator::TYPE_DIVIDE, 'attribute' => 'rating', 'values' => [2, 1]],
             ['method' => Operator::TYPE_MODULO, 'attribute' => 'remainder', 'values' => [3]],
@@ -869,9 +869,9 @@ class OperatorTest extends TestCase
     {
         // Test cloning all new operator types
         $operators = [
-            Operator::concat(' suffix'),
-            Operator::concat(' suffix'), // Deprecated
-            Operator::replace('old', 'new'),
+            Operator::stringConcat(' suffix'),
+            Operator::stringConcat(' suffix'), // Deprecated
+            Operator::stringReplace('old', 'new'),
             Operator::multiply(2, 100),
             Operator::divide(2, 1),
             Operator::modulo(3),
@@ -905,15 +905,15 @@ class OperatorTest extends TestCase
         $this->assertEquals([0.5, 0.1], $operator->getValues());
 
         // Test concat with empty string
-        $operator = Operator::concat('');
+        $operator = Operator::stringConcat('');
         $this->assertEquals('', $operator->getValue());
 
         // Test concat with empty string (deprecated)
-        $operator = Operator::concat('');
+        $operator = Operator::stringConcat('');
         $this->assertEquals('', $operator->getValue());
 
         // Test replace with same strings
-        $operator = Operator::replace('same', 'same');
+        $operator = Operator::stringReplace('same', 'same');
         $this->assertEquals(['same', 'same'], $operator->getValues());
 
         // Test modulo edge cases

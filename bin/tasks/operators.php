@@ -28,6 +28,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Operator;
 use Utopia\Database\PDO;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
@@ -270,7 +271,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
     Console::info("\n=== Operator Type Benchmarks ===\n");
 
     // Numeric operators
-    $safeBenchmark('INCREMENT', fn () => benchmarkOperator(
+    $safeBenchmark('INCREMENT', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'INCREMENT',
@@ -283,7 +284,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['counter' => 0]
     ));
 
-    $safeBenchmark('DECREMENT', fn () => benchmarkOperator(
+    $safeBenchmark('DECREMENT', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'DECREMENT',
@@ -296,7 +297,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['counter' => 100]
     ));
 
-    $safeBenchmark('MULTIPLY', fn () => benchmarkOperator(
+    $safeBenchmark('MULTIPLY', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'MULTIPLY',
@@ -309,7 +310,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['multiplier' => 1.0]
     ));
 
-    $safeBenchmark('DIVIDE', fn () => benchmarkOperator(
+    $safeBenchmark('DIVIDE', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'DIVIDE',
@@ -322,7 +323,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['divider' => 100.0]
     ));
 
-    $safeBenchmark('MODULO', fn () => benchmarkOperator(
+    $safeBenchmark('MODULO', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'MODULO',
@@ -336,7 +337,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['modulo_val' => 100]
     ));
 
-    $safeBenchmark('POWER', fn () => benchmarkOperator(
+    $safeBenchmark('POWER', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'POWER',
@@ -350,12 +351,12 @@ function runAllBenchmarks(Database $database, int $iterations): array
     ));
 
     // String operators
-    $safeBenchmark('CONCAT', fn () => benchmarkOperator(
+    $safeBenchmark('CONCAT', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'CONCAT',
         'text',
-        Operator::concat('x'),
+        Operator::stringConcat('x'),
         function ($doc) {
             $doc->setAttribute('text', $doc->getAttribute('text', 'initial') . 'x');
             return $doc;
@@ -363,12 +364,12 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['text' => 'initial']
     ));
 
-    $safeBenchmark('REPLACE', fn () => benchmarkOperator(
+    $safeBenchmark('REPLACE', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'REPLACE',
         'description',
-        Operator::replace('foo', 'bar'),
+        Operator::stringReplace('foo', 'bar'),
         function ($doc) {
             $doc->setAttribute('description', str_replace('foo', 'bar', $doc->getAttribute('description', 'foo bar baz')));
             return $doc;
@@ -377,7 +378,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
     ));
 
     // Boolean operators
-    $safeBenchmark('TOGGLE', fn () => benchmarkOperator(
+    $safeBenchmark('TOGGLE', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'TOGGLE',
@@ -391,7 +392,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
     ));
 
     // Array operators
-    $safeBenchmark('ARRAY_APPEND', fn () => benchmarkOperator(
+    $safeBenchmark('ARRAY_APPEND', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'ARRAY_APPEND',
@@ -406,7 +407,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['initial']]
     ));
 
-    $safeBenchmark('ARRAY_PREPEND', fn () => benchmarkOperator(
+    $safeBenchmark('ARRAY_PREPEND', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'ARRAY_PREPEND',
@@ -421,7 +422,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['initial']]
     ));
 
-    $safeBenchmark('ARRAY_INSERT', fn () => benchmarkOperator(
+    $safeBenchmark('ARRAY_INSERT', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'ARRAY_INSERT',
@@ -436,7 +437,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['numbers' => [1, 2, 3]]
     ));
 
-    $safeBenchmark('ARRAY_REMOVE', fn () => benchmarkOperator(
+    $safeBenchmark('ARRAY_REMOVE', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'ARRAY_REMOVE',
@@ -451,7 +452,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['keep', 'unwanted', 'also']]
     ));
 
-    $safeBenchmark('ARRAY_UNIQUE', fn () => benchmarkOperator(
+    $safeBenchmark('ARRAY_UNIQUE', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'ARRAY_UNIQUE',
@@ -465,7 +466,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['a', 'b', 'a', 'c', 'b']]
     ));
 
-    $safeBenchmark('ARRAY_INTERSECT', fn () => benchmarkOperator(
+    $safeBenchmark('ARRAY_INTERSECT', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'ARRAY_INTERSECT',
@@ -479,7 +480,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['keep', 'remove', 'this']]
     ));
 
-    $safeBenchmark('ARRAY_DIFF', fn () => benchmarkOperator(
+    $safeBenchmark('ARRAY_DIFF', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'ARRAY_DIFF',
@@ -493,7 +494,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['tags' => ['keep', 'remove', 'this']]
     ));
 
-    $safeBenchmark('ARRAY_FILTER', fn () => benchmarkOperator(
+    $safeBenchmark('ARRAY_FILTER', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'ARRAY_FILTER',
@@ -508,7 +509,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
     ));
 
     // Date operators
-    $safeBenchmark('DATE_ADD_DAYS', fn () => benchmarkOperator(
+    $safeBenchmark('DATE_ADD_DAYS', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'DATE_ADD_DAYS',
@@ -523,7 +524,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['created_at' => DateTime::now()]
     ));
 
-    $safeBenchmark('DATE_SUB_DAYS', fn () => benchmarkOperator(
+    $safeBenchmark('DATE_SUB_DAYS', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'DATE_SUB_DAYS',
@@ -538,7 +539,7 @@ function runAllBenchmarks(Database $database, int $iterations): array
         ['updated_at' => DateTime::now()]
     ));
 
-    $safeBenchmark('DATE_SET_NOW', fn () => benchmarkOperator(
+    $safeBenchmark('DATE_SET_NOW', fn () => benchmarkOperatorAcrossOperations(
         $database,
         $iterations,
         'DATE_SET_NOW',
@@ -606,24 +607,28 @@ function benchmarkOperation(
             }
         } elseif ($operation === 'updateDocuments') {
             if ($useOperators) {
-                $database->updateDocuments('operators_test', [
-                    new Document(['$id' => $docId, 'counter' => Operator::increment(1)])
-                ]);
+                $updates = new Document(['counter' => Operator::increment(1)]);
+                // For a single doc benchmark, just use that one ID
+                $queries = [Query::equal('$id', [$docId])];
+                $database->updateDocuments('operators_test', $updates, $queries);
             } else {
-                $database->updateDocuments('operators_test', [
-                    new Document(['$id' => $docId, 'counter' => $i + 1])
-                ]);
+                // Without operators, we need to read and update individually
+                // because updateDocuments with queries would apply the same value to all matching docs
+                $doc = $database->getDocument('operators_test', $docId);
+                $database->updateDocument('operators_test', $docId, new Document([
+                    'counter' => $i + 1
+                ]));
             }
         } elseif ($operation === 'upsertDocument') {
             if ($useOperators) {
-                $database->upsertDocument('operators_test', $docId, new Document([
+                $database->upsertDocument('operators_test', new Document([
                     '$id' => $docId,
                     'counter' => Operator::increment(1),
                     'name' => 'test',
                     'score' => 100.0
                 ]));
             } else {
-                $database->upsertDocument('operators_test', $docId, new Document([
+                $database->upsertDocument('operators_test', new Document([
                     '$id' => $docId,
                     'counter' => $i + 1,
                     'name' => 'test',
@@ -632,11 +637,11 @@ function benchmarkOperation(
             }
         } elseif ($operation === 'upsertDocuments') {
             if ($useOperators) {
-                $database->upsertDocuments('operators_test', '', [
+                $database->upsertDocuments('operators_test', [
                     new Document(['$id' => $docId, 'counter' => Operator::increment(1), 'name' => 'test', 'score' => 100.0])
                 ]);
             } else {
-                $database->upsertDocuments('operators_test', '', [
+                $database->upsertDocuments('operators_test', [
                     new Document(['$id' => $docId, 'counter' => $i + 1, 'name' => 'test', 'score' => 100.0])
                 ]);
             }
@@ -661,9 +666,9 @@ function benchmarkOperation(
 }
 
 /**
- * Benchmark a single operator vs traditional approach
+ * Benchmark an operator across all operation types (update, bulk update, upsert, bulk upsert)
  */
-function benchmarkOperator(
+function benchmarkOperatorAcrossOperations(
     Database $database,
     int $iterations,
     string $operatorName,
@@ -672,76 +677,171 @@ function benchmarkOperator(
     callable $traditionalModifier,
     array $initialData
 ): array {
-    Console::info("Benchmarking {$operatorName}...");
+    $results = [];
+    $operationTypes = [
+        'UPDATE' => 'updateDocument',
+        'BULK_UPDATE' => 'updateDocuments',
+        'UPSERT' => 'upsertDocument',
+        'BULK_UPSERT' => 'upsertDocuments',
+    ];
 
-    // Prepare test documents
-    $docIdWith = 'bench_with_' . strtolower($operatorName);
-    $docIdWithout = 'bench_without_' . strtolower($operatorName);
+    Console::info("Benchmarking {$operatorName} across all operation types...");
 
-    // Create fresh documents for this test
-    $baseData = array_merge([
-        '$permissions' => [
-            Permission::read(Role::any()),
-            Permission::update(Role::any()),
-        ],
-    ], $initialData);
+    foreach ($operationTypes as $opType => $method) {
+        // Skip upsert operations if not supported
+        if (str_contains($method, 'upsert') && !$database->getAdapter()->getSupportForUpserts()) {
+            Console::warning("  Skipping {$opType} (not supported by adapter)");
+            continue;
+        }
 
-    $database->createDocument('operators_test', new Document(array_merge(['$id' => $docIdWith], $baseData)));
-    $database->createDocument('operators_test', new Document(array_merge(['$id' => $docIdWithout], $baseData)));
+        $isBulk = str_contains($method, 'Documents');
+        $docCount = $isBulk ? 10 : 1;
 
-    // Benchmark WITH operator
-    $memBefore = memory_get_usage(true);
-    $start = microtime(true);
+        // Prepare test documents
+        $baseData = array_merge([
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ], $initialData);
 
-    for ($i = 0; $i < $iterations; $i++) {
-        $database->updateDocument('operators_test', $docIdWith, new Document([
-            $attribute => $operator
-        ]));
-    }
+        // Create documents for with-operator test
+        $docIdsWith = [];
+        for ($i = 0; $i < $docCount; $i++) {
+            $docId = 'bench_with_' . strtolower($operatorName) . '_' . strtolower($opType) . '_' . $i;
+            $docIdsWith[] = $docId;
+            $database->createDocument('operators_test', new Document(array_merge(['$id' => $docId], $baseData)));
+        }
 
-    $timeWith = microtime(true) - $start;
-    $memWith = memory_get_usage(true) - $memBefore;
+        // Create documents for without-operator test
+        $docIdsWithout = [];
+        for ($i = 0; $i < $docCount; $i++) {
+            $docId = 'bench_without_' . strtolower($operatorName) . '_' . strtolower($opType) . '_' . $i;
+            $docIdsWithout[] = $docId;
+            $database->createDocument('operators_test', new Document(array_merge(['$id' => $docId], $baseData)));
+        }
 
-    // Benchmark WITHOUT operator (traditional read-modify-write)
-    $memBefore = memory_get_usage(true);
-    $start = microtime(true);
+        // Benchmark WITH operator
+        $memBefore = memory_get_usage(true);
+        $start = microtime(true);
 
-    for ($i = 0; $i < $iterations; $i++) {
-        $doc = $database->getDocument('operators_test', $docIdWithout);
-        $doc = $traditionalModifier($doc);
-        $database->updateDocument('operators_test', $docIdWithout, $doc);
-    }
+        for ($i = 0; $i < $iterations; $i++) {
+            if ($method === 'updateDocument') {
+                $database->updateDocument('operators_test', $docIdsWith[0], new Document([
+                    $attribute => $operator
+                ]));
+            } elseif ($method === 'updateDocuments') {
+                $updates = new Document([$attribute => $operator]);
+                // Pass all doc IDs in a single query
+                $queries = [Query::equal('$id', $docIdsWith)];
+                $database->updateDocuments('operators_test', $updates, $queries);
+            } elseif ($method === 'upsertDocument') {
+                $database->upsertDocument('operators_test', new Document(array_merge(
+                    ['$id' => $docIdsWith[0]],
+                    $baseData,
+                    [$attribute => $operator]
+                )));
+            } elseif ($method === 'upsertDocuments') {
+                $docs = [];
+                foreach ($docIdsWith as $docId) {
+                    $docs[] = new Document(array_merge(
+                        ['$id' => $docId],
+                        $baseData,
+                        [$attribute => $operator]
+                    ));
+                }
+                $database->upsertDocuments('operators_test', $docs);
+            }
+        }
 
-    $timeWithout = microtime(true) - $start;
-    $memWithout = memory_get_usage(true) - $memBefore;
+        $timeWith = microtime(true) - $start;
+        $memWith = memory_get_usage(true) - $memBefore;
 
-    // Cleanup test documents
-    $database->deleteDocument('operators_test', $docIdWith);
-    $database->deleteDocument('operators_test', $docIdWithout);
+        // Benchmark WITHOUT operator (traditional read-modify-write)
+        $memBefore = memory_get_usage(true);
+        $start = microtime(true);
 
-    // Calculate metrics
-    $speedup = $timeWithout / $timeWith;
-    $improvement = (($timeWithout - $timeWith) / $timeWithout) * 100;
+        for ($i = 0; $i < $iterations; $i++) {
+            if ($method === 'updateDocument') {
+                $doc = $database->getDocument('operators_test', $docIdsWithout[0]);
+                $doc = $traditionalModifier($doc);
+                $database->updateDocument('operators_test', $docIdsWithout[0], $doc);
+            } elseif ($method === 'updateDocuments') {
+                // Bulk read all documents at once
+                $docs = $database->find('operators_test', [Query::equal('$id', $docIdsWithout)]);
 
-    // Color code the speedup output
-    if ($speedup > 1.0) {
-        Console::success("  WITH operator: {$timeWith}s | WITHOUT operator: {$timeWithout}s | Speedup: {$speedup}x");
-    } elseif ($speedup >= 0.85) {
-        Console::warning("  WITH operator: {$timeWith}s | WITHOUT operator: {$timeWithout}s | Speedup: {$speedup}x");
-    } else {
-        Console::error("  WITH operator: {$timeWith}s | WITHOUT operator: {$timeWithout}s | Speedup: {$speedup}x");
+                // Apply modifications
+                $modifiedDocs = [];
+                foreach ($docs as $doc) {
+                    $modifiedDocs[] = $traditionalModifier($doc);
+                }
+
+                // Update each document individually (updateDocuments can't handle different values per doc)
+                foreach ($modifiedDocs as $doc) {
+                    $database->updateDocument('operators_test', $doc->getId(), $doc);
+                }
+            } elseif ($method === 'upsertDocument') {
+                $doc = $database->getDocument('operators_test', $docIdsWithout[0]);
+                $doc = $traditionalModifier($doc);
+                $database->upsertDocument('operators_test', $doc);
+            } elseif ($method === 'upsertDocuments') {
+                // Bulk read all documents at once
+                $docs = $database->find('operators_test', [Query::equal('$id', $docIdsWithout)]);
+
+                // Apply modifications
+                $modifiedDocs = [];
+                foreach ($docs as $doc) {
+                    $modifiedDocs[] = $traditionalModifier($doc);
+                }
+
+                // Bulk upsert
+                $database->upsertDocuments('operators_test', $modifiedDocs);
+            }
+        }
+
+        $timeWithout = microtime(true) - $start;
+        $memWithout = memory_get_usage(true) - $memBefore;
+
+        // Cleanup test documents
+        foreach ($docIdsWith as $docId) {
+            $database->deleteDocument('operators_test', $docId);
+        }
+        foreach ($docIdsWithout as $docId) {
+            $database->deleteDocument('operators_test', $docId);
+        }
+
+        // Calculate metrics
+        $speedup = $timeWithout > 0 ? $timeWithout / $timeWith : 0;
+        $improvement = $timeWithout > 0 ? (($timeWithout - $timeWith) / $timeWithout) * 100 : 0;
+
+        // Color code the speedup output
+        $speedupStr = number_format($speedup, 2);
+        if ($speedup > 1.0) {
+            Console::success("  {$opType}: {$timeWith}s vs {$timeWithout}s | Speedup: {$speedupStr}x");
+        } elseif ($speedup >= 0.85) {
+            Console::warning("  {$opType}: {$timeWith}s vs {$timeWithout}s | Speedup: {$speedupStr}x");
+        } else {
+            Console::error("  {$opType}: {$timeWith}s vs {$timeWithout}s | Speedup: {$speedupStr}x");
+        }
+
+        $results[$opType] = [
+            'operation_type' => $opType,
+            'method' => $method,
+            'time_with' => $timeWith,
+            'time_without' => $timeWithout,
+            'memory_with' => $memWith,
+            'memory_without' => $memWithout,
+            'speedup' => $speedup,
+            'improvement_percent' => $improvement,
+            'iterations' => $iterations,
+            'document_count' => $docCount,
+        ];
     }
 
     return [
         'operator' => $operatorName,
         'attribute' => $attribute,
-        'time_with' => $timeWith,
-        'time_without' => $timeWithout,
-        'memory_with' => $memWith,
-        'memory_without' => $memWithout,
-        'speedup' => $speedup,
-        'improvement_percent' => $improvement,
-        'iterations' => $iterations,
+        'operations' => $results,
     ];
 }
 
@@ -831,38 +931,44 @@ function displayResults(array $results, string $adapter, int $iterations): void
 
             $result = $results[$operatorName];
 
-            $timeWith = number_format($result['time_with'], 4);
-            $timeWithout = number_format($result['time_without'], 4);
-            $speedup = number_format($result['speedup'], 2);
-            $improvement = number_format($result['improvement_percent'], 1);
-            $memDiff = formatBytes($result['memory_without'] - $result['memory_with']);
+            Console::info("\n  {$operatorName}:");
 
-            // Color code based on performance
-            // Red: <0.85x (regression), Yellow: 0.85-1.0x (slower), Green: >1.0x (faster)
-            $speedupDisplay = $result['speedup'] > 1.0 ? "\033[32m{$speedup}x\033[0m" :
-                             ($result['speedup'] >= 0.85 ? "\033[33m{$speedup}x\033[0m" :
-                             "\033[31m{$speedup}x\033[0m");
+            if (!isset($result['operations'])) {
+                Console::warning("    No results (benchmark failed)");
+                continue;
+            }
 
-            // Color improvement percent consistently with speedup
-            // Green: >0% (faster), Yellow: -15% to 0% (slower but acceptable), Red: <-15% (regression)
-            $improvementDisplay = $result['improvement_percent'] > 0 ? "\033[32m+{$improvement}%\033[0m" :
-                                 ($result['improvement_percent'] >= -15 ? "\033[33m{$improvement}%\033[0m" :
-                                 "\033[31m{$improvement}%\033[0m");
+            foreach ($result['operations'] as $opType => $opResult) {
+                $timeWith = number_format($opResult['time_with'], 4);
+                $timeWithout = number_format($opResult['time_without'], 4);
+                $speedup = number_format($opResult['speedup'], 2);
+                $improvement = number_format($opResult['improvement_percent'], 1);
+                $memDiff = formatBytes($opResult['memory_without'] - $opResult['memory_with']);
 
-            $row = sprintf(
-                "  %-{$colWidths['operator']}s %-{$colWidths['with']}s %-{$colWidths['without']}s %-{$colWidths['speedup']}s %-{$colWidths['improvement']}s %-{$colWidths['mem_diff']}s",
-                $operatorName,
-                $timeWith,
-                $timeWithout,
-                $speedupDisplay,
-                $improvementDisplay,
-                $memDiff
-            );
+                // Color code based on performance
+                $speedupDisplay = $opResult['speedup'] > 1.0 ? "\033[32m{$speedup}x\033[0m" :
+                                 ($opResult['speedup'] >= 0.85 ? "\033[33m{$speedup}x\033[0m" :
+                                 "\033[31m{$speedup}x\033[0m");
 
-            Console::log($row);
+                $improvementDisplay = $opResult['improvement_percent'] > 0 ? "\033[32m+{$improvement}%\033[0m" :
+                                     ($opResult['improvement_percent'] >= -15 ? "\033[33m{$improvement}%\033[0m" :
+                                     "\033[31m{$improvement}%\033[0m");
 
-            $totalSpeedup += $result['speedup'];
-            $totalCount++;
+                $row = sprintf(
+                    "    %-16s %-{$colWidths['with']}s %-{$colWidths['without']}s %-{$colWidths['speedup']}s %-{$colWidths['improvement']}s %-{$colWidths['mem_diff']}s",
+                    $opType,
+                    $timeWith,
+                    $timeWithout,
+                    $speedupDisplay,
+                    $improvementDisplay,
+                    $memDiff
+                );
+
+                Console::log($row);
+
+                $totalSpeedup += $opResult['speedup'];
+                $totalCount++;
+            }
         }
     }
 
@@ -878,24 +984,40 @@ function displayResults(array $results, string $adapter, int $iterations): void
     Console::info("\n" . str_repeat('=', array_sum($colWidths) + 5));
     Console::info("PERFORMANCE INSIGHTS:");
 
-    $fastest = array_reduce(
-        $results,
-        fn ($carry, $item) =>
-        $carry === null || $item['speedup'] > $carry['speedup'] ? $item : $carry
-    );
-
-    $slowest = array_reduce(
-        $results,
-        fn ($carry, $item) =>
-        $carry === null || $item['speedup'] < $carry['speedup'] ? $item : $carry
-    );
-
-    if ($fastest) {
-        Console::success("  Fastest operator: {$fastest['operator']} (" . number_format($fastest['speedup'], 2) . "x speedup)");
+    // Flatten results for fastest/slowest calculation
+    $flattenedResults = [];
+    foreach ($results as $operatorName => $result) {
+        if (isset($result['operations'])) {
+            foreach ($result['operations'] as $opType => $opResult) {
+                $flattenedResults[] = [
+                    'operator' => $operatorName,
+                    'operation' => $opType,
+                    'speedup' => $opResult['speedup'],
+                ];
+            }
+        }
     }
 
-    if ($slowest) {
-        Console::warning("  Slowest operator: {$slowest['operator']} (" . number_format($slowest['speedup'], 2) . "x speedup)");
+    if (!empty($flattenedResults)) {
+        $fastest = array_reduce(
+            $flattenedResults,
+            fn ($carry, $item) =>
+            $carry === null || $item['speedup'] > $carry['speedup'] ? $item : $carry
+        );
+
+        $slowest = array_reduce(
+            $flattenedResults,
+            fn ($carry, $item) =>
+            $carry === null || $item['speedup'] < $carry['speedup'] ? $item : $carry
+        );
+
+        if ($fastest) {
+            Console::success("  Fastest: {$fastest['operator']} ({$fastest['operation']}) - " . number_format($fastest['speedup'], 2) . "x speedup");
+        }
+
+        if ($slowest) {
+            Console::warning("  Slowest: {$slowest['operator']} ({$slowest['operation']}) - " . number_format($slowest['speedup'], 2) . "x speedup");
+        }
     }
 
     Console::info("\n=============================================================\n");

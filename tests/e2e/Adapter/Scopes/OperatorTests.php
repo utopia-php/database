@@ -273,8 +273,8 @@ trait OperatorTests
                 'divisor' => Operator::divide(2, 10),              // Math with limit
                 'remainder' => Operator::modulo(5),                // Math
                 'power_val' => Operator::power(2, 100),            // Math with limit
-                'title' => Operator::concat(' - Updated'),         // String
-                'content' => Operator::replace('old', 'new'),      // String
+                'title' => Operator::stringConcat(' - Updated'),         // String
+                'content' => Operator::stringReplace('old', 'new'),      // String
                 'tags' => Operator::arrayAppend(['bulk']),         // Array
                 'categories' => Operator::arrayPrepend(['priority']), // Array
                 'items' => Operator::arrayRemove('shared'),        // Array
@@ -592,11 +592,11 @@ trait OperatorTests
         // Test: String operator on numeric field
         try {
             $database->updateDocument($collectionId, 'edge_test_doc', new Document([
-                'int_field' => Operator::concat(' suffix')
+                'int_field' => Operator::stringConcat(' suffix')
             ]));
             $this->fail('Expected exception for concat on integer field');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Cannot apply concat operator", $e->getMessage());
+            $this->assertStringContainsString("Cannot apply stringConcat operator", $e->getMessage());
         }
 
         // Test: Array operator on non-array field
@@ -855,23 +855,23 @@ trait OperatorTests
 
         // Test: Valid replace operation
         $updated = $database->updateDocument($collectionId, 'replace_test_doc', new Document([
-            'text' => Operator::replace('quick', 'slow')
+            'text' => Operator::stringReplace('quick', 'slow')
         ]));
         $this->assertEquals('The slow brown fox', $updated->getAttribute('text'));
 
         // Test: Replace on non-string field
         try {
             $database->updateDocument($collectionId, 'replace_test_doc', new Document([
-                'number' => Operator::replace('4', '5')
+                'number' => Operator::stringReplace('4', '5')
             ]));
             $this->fail('Expected exception for replace on integer field');
         } catch (DatabaseException $e) {
-            $this->assertStringContainsString("Cannot apply replace operator to non-string field 'number'", $e->getMessage());
+            $this->assertStringContainsString("Cannot apply stringReplace operator to non-string field 'number'", $e->getMessage());
         }
 
         // Test: Replace with empty string
         $updated = $database->updateDocument($collectionId, 'replace_test_doc', new Document([
-            'text' => Operator::replace('slow', '')
+            'text' => Operator::stringReplace('slow', '')
         ]));
         $this->assertEquals('The  brown fox', $updated->getAttribute('text')); // Two spaces where 'slow' was
 
@@ -911,7 +911,7 @@ trait OperatorTests
 
         // Test: Concat on null string field (should treat as empty string)
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
-            'nullable_string' => Operator::concat('hello')
+            'nullable_string' => Operator::stringConcat('hello')
         ]));
         $this->assertEquals('hello', $updated->getAttribute('nullable_string'));
 
@@ -928,7 +928,7 @@ trait OperatorTests
         $this->assertEquals(10, $updated->getAttribute('nullable_int'));
 
         $updated = $database->updateDocument($collectionId, 'null_test_doc', new Document([
-            'nullable_string' => Operator::replace('hello', 'hi')
+            'nullable_string' => Operator::stringReplace('hello', 'hi')
         ]));
         $this->assertEquals('hi', $updated->getAttribute('nullable_string'));
 
@@ -1059,7 +1059,7 @@ trait OperatorTests
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'title' => Operator::concat(' World')
+            'title' => Operator::stringConcat(' World')
         ]));
 
         $this->assertEquals('Hello World', $updated->getAttribute('title'));
@@ -1071,7 +1071,7 @@ trait OperatorTests
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'title' => Operator::concat('Test')
+            'title' => Operator::stringConcat('Test')
         ]));
 
         $this->assertEquals('Test', $updated->getAttribute('title'));
@@ -1442,7 +1442,7 @@ trait OperatorTests
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'text' => Operator::concat(' World')
+            'text' => Operator::stringConcat(' World')
         ]));
 
         $this->assertEquals('Hello World', $updated->getAttribute('text'));
@@ -1453,7 +1453,7 @@ trait OperatorTests
             'text' => null
         ]));
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'text' => Operator::concat('Test')
+            'text' => Operator::stringConcat('Test')
         ]));
         $this->assertEquals('Test', $updated->getAttribute('text'));
 
@@ -1481,7 +1481,7 @@ trait OperatorTests
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-            'text' => Operator::replace('World', 'Universe')
+            'text' => Operator::stringReplace('World', 'Universe')
         ]));
 
         $this->assertEquals('Hello Universe', $updated->getAttribute('text'));
@@ -1493,7 +1493,7 @@ trait OperatorTests
         ]));
 
         $updated = $database->updateDocument($collectionId, $doc2->getId(), new Document([
-            'text' => Operator::replace('test', 'demo')
+            'text' => Operator::stringReplace('test', 'demo')
         ]));
 
         $this->assertEquals('demo demo demo', $updated->getAttribute('text'));
@@ -2091,7 +2091,7 @@ trait OperatorTests
             'count' => Operator::increment(3),
             'score' => Operator::multiply(1.5),
             'tags' => Operator::arrayAppend(['new', 'item']),
-            'name' => Operator::concat(' Document'),
+            'name' => Operator::stringConcat(' Document'),
             'active' => Operator::toggle()
         ]));
 
@@ -2481,7 +2481,7 @@ trait OperatorTests
         // but currently succeeds because validation only checks the input, not the result
         try {
             $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
-                'title' => Operator::concat(' - Extended Title')  // Adding 18 chars = 29 total
+                'title' => Operator::stringConcat(' - Extended Title')  // Adding 18 chars = 29 total
             ]));
 
             // Refetch to get the actual computed value from the database
@@ -2987,13 +2987,13 @@ trait OperatorTests
 
         // Test concatenation to empty string
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
-            'text' => Operator::concat('hello')
+            'text' => Operator::stringConcat('hello')
         ]));
         $this->assertEquals('hello', $updated->getAttribute('text'));
 
         // Test concatenation of empty string
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
-            'text' => Operator::concat('')
+            'text' => Operator::stringConcat('')
         ]));
         $this->assertEquals('hello', $updated->getAttribute('text'));
 
@@ -3003,14 +3003,14 @@ trait OperatorTests
         ]));
 
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
-            'text' => Operator::replace('', 'X')
+            'text' => Operator::stringReplace('', 'X')
         ]));
         // Empty search should not change the string
         $this->assertEquals('test', $updated->getAttribute('text'));
 
         // Test replace with empty replace string (deletion)
         $updated = $database->updateDocument($collectionId, 'empty_str_doc', new Document([
-            'text' => Operator::replace('t', '')
+            'text' => Operator::stringReplace('t', '')
         ]));
         $this->assertEquals('es', $updated->getAttribute('text'));
 
@@ -3044,13 +3044,13 @@ trait OperatorTests
 
         // Test concatenation with emoji
         $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
-            'text' => Operator::concat('👋🌍')
+            'text' => Operator::stringConcat('👋🌍')
         ]));
         $this->assertEquals('你好👋🌍', $updated->getAttribute('text'));
 
         // Test replace with Chinese characters
         $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
-            'text' => Operator::replace('你好', '再见')
+            'text' => Operator::stringReplace('你好', '再见')
         ]));
         $this->assertEquals('再见👋🌍', $updated->getAttribute('text'));
 
@@ -3060,7 +3060,7 @@ trait OperatorTests
         ]));
 
         $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
-            'text' => Operator::concat(' ☕')
+            'text' => Operator::stringConcat(' ☕')
         ]));
         $this->assertStringContainsString('☕', $updated->getAttribute('text'));
 
@@ -3315,7 +3315,7 @@ trait OperatorTests
 
         // Concat another 10k
         $updated = $database->updateDocument($collectionId, 'long_str_doc', new Document([
-            'text' => Operator::concat(str_repeat('B', 10000))
+            'text' => Operator::stringConcat(str_repeat('B', 10000))
         ]));
 
         $result = $updated->getAttribute('text');
@@ -3325,7 +3325,7 @@ trait OperatorTests
 
         // Test replace on long string
         $updated = $database->updateDocument($collectionId, 'long_str_doc', new Document([
-            'text' => Operator::replace('A', 'X')
+            'text' => Operator::stringReplace('A', 'X')
         ]));
 
         $result = $updated->getAttribute('text');
@@ -3502,17 +3502,17 @@ trait OperatorTests
 
         // Sequential string operations
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
-            'text' => Operator::concat('-middle')
+            'text' => Operator::stringConcat('-middle')
         ]));
         $this->assertEquals('start-middle', $updated->getAttribute('text'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
-            'text' => Operator::concat('-end')
+            'text' => Operator::stringConcat('-end')
         ]));
         $this->assertEquals('start-middle-end', $updated->getAttribute('text'));
 
         $updated = $database->updateDocument($collectionId, 'sequential_doc', new Document([
-            'text' => Operator::replace('-', '_')
+            'text' => Operator::stringReplace('-', '_')
         ]));
         $this->assertEquals('start_middle_end', $updated->getAttribute('text'));
 
@@ -3652,7 +3652,7 @@ trait OperatorTests
 
         // Replace all occurrences of 'the'
         $updated = $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
-            'text' => Operator::replace('the', 'a')
+            'text' => Operator::stringReplace('the', 'a')
         ]));
         $this->assertEquals('a cat and a dog', $updated->getAttribute('text'));
 
@@ -3662,7 +3662,7 @@ trait OperatorTests
         ]));
 
         $updated = $database->updateDocument($collectionId, 'replace_multi_doc', new Document([
-            'text' => Operator::replace('aaa', 'X')
+            'text' => Operator::stringReplace('aaa', 'X')
         ]));
         $this->assertEquals('X bbb X ccc X', $updated->getAttribute('text'));
 
@@ -4191,7 +4191,7 @@ trait OperatorTests
         $doc10 = $database->upsertDocument($collectionId, new Document([
             '$id' => 'doc_concat',
             '$permissions' => [Permission::read(Role::any())],
-            'name' => Operator::concat(' World'),
+            'name' => Operator::stringConcat(' World'),
         ]));
         $this->assertEquals(' World', $doc10->getAttribute('name'), 'CONCAT on new doc: "" + " World" = " World"');
 
@@ -4199,7 +4199,7 @@ trait OperatorTests
         $doc11 = $database->upsertDocument($collectionId, new Document([
             '$id' => 'doc_replace',
             '$permissions' => [Permission::read(Role::any())],
-            'name' => Operator::replace('old', 'new'),
+            'name' => Operator::stringReplace('old', 'new'),
         ]));
         $this->assertEquals('', $doc11->getAttribute('name'), 'REPLACE on new doc: replace("old", "new") in "" = ""');
 
@@ -4210,7 +4210,7 @@ trait OperatorTests
             'counter' => Operator::increment(100),
             'score' => Operator::increment(50.5),
             'tags' => Operator::arrayAppend(['multi1', 'multi2']),
-            'name' => Operator::concat('MultiTest'),
+            'name' => Operator::stringConcat('MultiTest'),
         ]));
         $this->assertEquals(100, $doc12->getAttribute('counter'));
         $this->assertEquals(50.5, $doc12->getAttribute('score'));
@@ -4319,8 +4319,8 @@ trait OperatorTests
                 'divisor' => Operator::divide(2, 10),
                 'remainder' => Operator::modulo(5),
                 'power_val' => Operator::power(2, 100),
-                'title' => Operator::concat(' - Updated'),
-                'content' => Operator::replace('old', 'new'),
+                'title' => Operator::stringConcat(' - Updated'),
+                'content' => Operator::stringReplace('old', 'new'),
                 'tags' => Operator::arrayAppend(['upsert']),
                 'categories' => Operator::arrayPrepend(['priority']),
                 'items' => Operator::arrayRemove('shared'),
@@ -4344,8 +4344,8 @@ trait OperatorTests
                 'divisor' => Operator::divide(2, 10),
                 'remainder' => Operator::modulo(5),
                 'power_val' => Operator::power(2, 100),
-                'title' => Operator::concat(' - Updated'),
-                'content' => Operator::replace('old', 'new'),
+                'title' => Operator::stringConcat(' - Updated'),
+                'content' => Operator::stringReplace('old', 'new'),
                 'tags' => Operator::arrayAppend(['upsert']),
                 'categories' => Operator::arrayPrepend(['priority']),
                 'items' => Operator::arrayRemove('shared'),

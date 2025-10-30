@@ -32,8 +32,8 @@ class Operator
     public const TYPE_ARRAY_FILTER = 'arrayFilter';
 
     // String operation types
-    public const TYPE_CONCAT = 'concat';
-    public const TYPE_REPLACE = 'replace';
+    public const TYPE_STRING_CONCAT = 'stringConcat';
+    public const TYPE_STRING_REPLACE = 'stringReplace';
 
     // Boolean operation types
     public const TYPE_TOGGLE = 'toggle';
@@ -50,8 +50,8 @@ class Operator
         self::TYPE_DIVIDE,
         self::TYPE_MODULO,
         self::TYPE_POWER,
-        self::TYPE_CONCAT,
-        self::TYPE_REPLACE,
+        self::TYPE_STRING_CONCAT,
+        self::TYPE_STRING_REPLACE,
         self::TYPE_ARRAY_APPEND,
         self::TYPE_ARRAY_PREPEND,
         self::TYPE_ARRAY_INSERT,
@@ -87,8 +87,8 @@ class Operator
     ];
 
     protected const STRING_TYPES = [
-        self::TYPE_CONCAT,
-        self::TYPE_REPLACE,
+        self::TYPE_STRING_CONCAT,
+        self::TYPE_STRING_REPLACE,
     ];
 
     protected const BOOLEAN_TYPES = [
@@ -232,8 +232,8 @@ class Operator
             self::TYPE_DIVIDE,
             self::TYPE_MODULO,
             self::TYPE_POWER,
-            self::TYPE_CONCAT,
-            self::TYPE_REPLACE,
+            self::TYPE_STRING_CONCAT,
+            self::TYPE_STRING_REPLACE,
             self::TYPE_ARRAY_APPEND,
             self::TYPE_ARRAY_PREPEND,
             self::TYPE_ARRAY_INSERT,
@@ -483,9 +483,9 @@ class Operator
      * @param mixed $value Value to concatenate (string or array)
      * @return Operator
      */
-    public static function concat(mixed $value): self
+    public static function stringConcat(mixed $value): self
     {
-        return new self(self::TYPE_CONCAT, '', [$value]);
+        return new self(self::TYPE_STRING_CONCAT, '', [$value]);
     }
 
     /**
@@ -495,9 +495,9 @@ class Operator
      * @param string $replace
      * @return Operator
      */
-    public static function replace(string $search, string $replace): self
+    public static function stringReplace(string $search, string $replace): self
     {
-        return new self(self::TYPE_REPLACE, '', [$search, $replace]);
+        return new self(self::TYPE_STRING_REPLACE, '', [$search, $replace]);
     }
 
     /**

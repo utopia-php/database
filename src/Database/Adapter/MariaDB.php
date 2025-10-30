@@ -10,6 +10,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
@@ -1923,7 +1924,7 @@ class MariaDB extends SQL
         $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators with NULL handling and overflow prevention
+            // Numeric operators
             case Operator::TYPE_INCREMENT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
@@ -2000,46 +2001,44 @@ class MariaDB extends SQL
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
-                // Boolean operator with NULL handling
-            case Operator::TYPE_TOGGLE:
-                return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
-
-            case Operator::TYPE_CONCAT:
+                // String operators
+            case Operator::TYPE_STRING_CONCAT:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 return "{$quotedColumn} = CONCAT(COALESCE({$quotedColumn}, ''), :$bindKey)";
 
+            case Operator::TYPE_STRING_REPLACE:
+                $searchKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $replaceKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
+
+                // Boolean operators
+            case Operator::TYPE_TOGGLE:
+                return "{$quotedColumn} = NOT COALESCE({$quotedColumn}, FALSE)";
+
+                // Array operators
+            case Operator::TYPE_ARRAY_APPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
+
             case Operator::TYPE_ARRAY_INSERT:
-                // Use JSON_ARRAY_INSERT for proper array insertion
                 $indexKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
                 $bindIndex++;
-                return "{$quotedColumn} = JSON_ARRAY_INSERT({$quotedColumn}, CONCAT('$[', :$indexKey, ']'), JSON_EXTRACT(:$valueKey, '$'))";
-
-            case Operator::TYPE_ARRAY_INTERSECT:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = IFNULL((
-                    SELECT JSON_ARRAYAGG(jt1.value)
-                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
-                    WHERE jt1.value IN (SELECT value FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2)
-                ), JSON_ARRAY())";
-
-            case Operator::TYPE_ARRAY_DIFF:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
-                return "{$quotedColumn} = IFNULL((
-                    SELECT JSON_ARRAYAGG(jt1.value)
-                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
-                    WHERE jt1.value NOT IN (SELECT value FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2)
-                ), JSON_ARRAY())";
-
-            case Operator::TYPE_ARRAY_UNIQUE:
-                return "{$quotedColumn} = IFNULL((
-                    SELECT JSON_ARRAYAGG(DISTINCT jt.value)
-                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
-                ), JSON_ARRAY())";
+                return "{$quotedColumn} = JSON_ARRAY_INSERT(
+                    {$quotedColumn}, 
+                    CONCAT('$[', :$indexKey, ']'), 
+                    JSON_EXTRACT(:$valueKey, '$')
+                )";
 
             case Operator::TYPE_ARRAY_REMOVE:
                 $bindKey = "op_{$bindIndex}";
@@ -2050,12 +2049,41 @@ class MariaDB extends SQL
                     WHERE value != :$bindKey
                 ), JSON_ARRAY())";
 
+            case Operator::TYPE_ARRAY_UNIQUE:
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(DISTINCT jt.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                ), JSON_ARRAY())";
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(jt1.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
+                    WHERE jt1.value IN (
+                        SELECT value
+                        FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2
+                    )
+                ), JSON_ARRAY())";
+
+            case Operator::TYPE_ARRAY_DIFF:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(jt1.value)
+                    FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
+                    WHERE jt1.value NOT IN (
+                        SELECT value
+                        FROM JSON_TABLE(:$bindKey, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt2
+                    )
+                ), JSON_ARRAY())";
+
             case Operator::TYPE_ARRAY_FILTER:
                 $conditionKey = "op_{$bindIndex}";
                 $bindIndex++;
                 $valueKey = "op_{$bindIndex}";
                 $bindIndex++;
-                // Note: parent binds value as JSON-encoded, so we need to unquote it for TEXT comparison
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
@@ -2072,9 +2100,22 @@ class MariaDB extends SQL
                     END
                 ), JSON_ARRAY())";
 
+                // Date operators
+            case Operator::TYPE_DATE_ADD_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = DATE_ADD({$quotedColumn}, INTERVAL :$bindKey DAY)";
+
+            case Operator::TYPE_DATE_SUB_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = DATE_SUB({$quotedColumn}, INTERVAL :$bindKey DAY)";
+
+            case Operator::TYPE_DATE_SET_NOW:
+                return "{$quotedColumn} = NOW()";
+
             default:
-                // Fall back to parent implementation for other operators
-                return parent::getOperatorSQL($column, $operator, $bindIndex);
+                throw new OperatorException("Invalid operator: {$method}");
         }
     }
 

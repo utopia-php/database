@@ -8,8 +8,11 @@
  *
  * @example
  * docker compose exec tests bin/operators --adapter=mariadb --iterations=1000
- * docker compose exec tests bin/operators --adapter=postgres --iterations=1000
- * docker compose exec tests bin/operators --adapter=sqlite --iterations=1000
+ * docker compose exec tests bin/operators --adapter=postgres --iterations=1000 --seed=10000
+ * docker compose exec tests bin/operators --adapter=sqlite --iterations=1000 --seed=5000
+ *
+ * The --seed parameter allows you to pre-populate the collection with a specified
+ * number of documents to test how operators perform with varying amounts of existing data.
  */
 
 global $cli;
@@ -38,8 +41,9 @@ $cli
     ->desc('Benchmark operator performance vs traditional read-modify-write')
     ->param('adapter', '', new Text(0), 'Database adapter (mariadb, postgres, sqlite)')
     ->param('iterations', 1000, new Integer(true), 'Number of iterations per test', true)
+    ->param('seed', 0, new Integer(true), 'Number of documents to pre-seed the collection with', true)
     ->param('name', 'operator_benchmark_' . uniqid(), new Text(0), 'Name of test database', true)
-    ->action(function (string $adapter, int $iterations, string $name) {
+    ->action(function (string $adapter, int $iterations, int $seed, string $name) {
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
@@ -48,6 +52,7 @@ $cli
         Console::info("=============================================================");
         Console::info("Adapter: {$adapter}");
         Console::info("Iterations: {$iterations}");
+        Console::info("Seed Documents: {$seed}");
         Console::info("Database: {$name}");
         Console::info("=============================================================\n");
 
@@ -110,13 +115,13 @@ $cli
                 ->setNamespace($namespace);
 
             // Setup test environment
-            setupTestEnvironment($database, $name);
+            setupTestEnvironment($database, $name, $seed);
 
             // Run all benchmarks
             $results = runAllBenchmarks($database, $iterations);
 
             // Display results
-            displayResults($results, $adapter, $iterations);
+            displayResults($results, $adapter, $iterations, $seed);
 
             // Cleanup
             cleanup($database, $name);
@@ -133,7 +138,7 @@ $cli
 /**
  * Setup test environment with collections and sample data
  */
-function setupTestEnvironment(Database $database, string $name): void
+function setupTestEnvironment(Database $database, string $name, int $seed): void
 {
     Console::info("Setting up test environment...");
 
@@ -179,7 +184,67 @@ function setupTestEnvironment(Database $database, string $name): void
     $database->createAttribute('operators_test', 'created_at', Database::VAR_DATETIME, 0, false, null, false, false, null, [], ['datetime']);
     $database->createAttribute('operators_test', 'updated_at', Database::VAR_DATETIME, 0, false, null, false, false, null, [], ['datetime']);
 
+    // Seed documents if requested
+    if ($seed > 0) {
+        seedDocuments($database, $seed);
+    }
+
     Console::success("Test environment setup complete.\n");
+}
+
+/**
+ * Seed the collection with a specified number of documents
+ */
+function seedDocuments(Database $database, int $count): void
+{
+    Console::info("Seeding {$count} documents...");
+
+    $batchSize = 100; // Insert in batches for better performance
+    $batches = (int) ceil($count / $batchSize);
+
+    $seedStart = microtime(true);
+
+    for ($batch = 0; $batch < $batches; $batch++) {
+        $docs = [];
+        $remaining = min($batchSize, $count - ($batch * $batchSize));
+
+        for ($i = 0; $i < $remaining; $i++) {
+            $docNum = ($batch * $batchSize) + $i;
+            $docs[] = new Document([
+                '$id' => 'seed_' . $docNum,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'counter' => rand(0, 1000),
+                'score' => round(rand(0, 10000) / 100, 2),
+                'multiplier' => round(rand(50, 200) / 100, 2),
+                'divider' => round(rand(5000, 15000) / 100, 2),
+                'modulo_val' => rand(50, 200),
+                'power_val' => round(rand(100, 300) / 100, 2),
+                'name' => 'seed_doc_' . $docNum,
+                'text' => 'Seed text for document ' . $docNum,
+                'description' => 'This is seed document ' . $docNum . ' with some foo bar baz content',
+                'active' => (bool) rand(0, 1),
+                'tags' => ['seed', 'tag' . ($docNum % 10), 'category' . ($docNum % 5)],
+                'numbers' => [rand(1, 10), rand(11, 20), rand(21, 30)],
+                'items' => ['item' . ($docNum % 3), 'item' . ($docNum % 7)],
+                'created_at' => DateTime::now(),
+                'updated_at' => DateTime::now(),
+            ]);
+        }
+
+        // Bulk insert documents
+        $database->createDocuments('operators_test', $docs);
+
+        // Show progress
+        $progress = (($batch + 1) * $batchSize);
+        $current = min($progress, $count);
+        Console::log("  Seeded {$current}/{$count} documents...");
+    }
+
+    $seedTime = microtime(true) - $seedStart;
+    Console::success("Seeding completed in " . number_format($seedTime, 2) . "s\n");
 }
 
 /**
@@ -848,13 +913,14 @@ function benchmarkOperatorAcrossOperations(
 /**
  * Display formatted results table
  */
-function displayResults(array $results, string $adapter, int $iterations): void
+function displayResults(array $results, string $adapter, int $iterations, int $seed): void
 {
     Console::info("\n=============================================================");
     Console::info("  BENCHMARK RESULTS");
     Console::info("=============================================================");
     Console::info("Adapter: {$adapter}");
     Console::info("Iterations per test: {$iterations}");
+    Console::info("Seeded documents: {$seed}");
     Console::info("=============================================================\n");
 
     // ==================================================================

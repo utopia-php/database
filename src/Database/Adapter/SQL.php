@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
+use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Adapter;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
@@ -1876,12 +1877,12 @@ abstract class SQL extends Adapter
     /**
      * Bind operator parameters to prepared statement
      *
-     * @param \PDOStatement $stmt
+     * @param \PDOStatement|PDOStatementProxy $stmt
      * @param \Utopia\Database\Operator $operator
      * @param int &$bindIndex
      * @return void
      */
-    protected function bindOperatorParams(\PDOStatement $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParams(\PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();

@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -1403,12 +1404,12 @@ class SQLite extends MariaDB
      * Bind operator parameters to statement
      * Override to handle SQLite-specific operator bindings
      *
-     * @param \PDOStatement $stmt
+     * @param \PDOStatement|PDOStatementProxy $stmt
      * @param Operator $operator
      * @param int &$bindIndex
      * @return void
      */
-    protected function bindOperatorParams(\PDOStatement $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParams(\PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
 

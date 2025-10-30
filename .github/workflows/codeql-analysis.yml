@@ -16,5 +16,5 @@ jobs:
 
       - name: Run CodeQL
         run: |
-          docker run --rm -v $PWD:/app composer sh -c \
+          docker run --rm -v $PWD:/app phpswoole/swoole:5.1.8-php8.3-alpine sh -c \
           "composer install --profile --ignore-platform-reqs && composer check"

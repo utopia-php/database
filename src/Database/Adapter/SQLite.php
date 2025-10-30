@@ -1353,7 +1353,7 @@ class SQLite extends MariaDB
     }
 
     /**
-     * Adapter supports optionalspatial attributes with existing rows.
+     * Adapter supports optional spatial attributes with existing rows.
      *
      * @return bool
      */
@@ -1474,7 +1474,7 @@ class SQLite extends MariaDB
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
-                if (isset($values[1]) && $values[1] !== null) {
+                if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
@@ -1490,7 +1490,7 @@ class SQLite extends MariaDB
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
-                if (isset($values[1]) && $values[1] !== null) {
+                if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
@@ -1506,7 +1506,7 @@ class SQLite extends MariaDB
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
-                if (isset($values[1]) && $values[1] !== null) {
+                if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
@@ -1523,7 +1523,7 @@ class SQLite extends MariaDB
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
-                if (isset($values[1]) && $values[1] !== null) {
+                if (isset($values[1])) {
                     $minKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE
@@ -1550,7 +1550,7 @@ class SQLite extends MariaDB
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
-                if (isset($values[1]) && $values[1] !== null) {
+                if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
                     return "{$quotedColumn} = CASE

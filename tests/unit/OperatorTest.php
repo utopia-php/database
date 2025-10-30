@@ -154,11 +154,6 @@ class OperatorTest extends TestCase
         $this->assertFalse($concatOp->isArrayOperation());
         $this->assertTrue($concatOp->isStringOperation());
 
-        $concatOp = Operator::stringConcat('suffix'); // Deprecated
-        $this->assertFalse($concatOp->isNumericOperation());
-        $this->assertFalse($concatOp->isArrayOperation());
-        $this->assertTrue($concatOp->isStringOperation());
-
         $replaceOp = Operator::stringReplace('old', 'new');
         $this->assertFalse($replaceOp->isNumericOperation());
         $this->assertFalse($replaceOp->isArrayOperation());
@@ -870,7 +865,6 @@ class OperatorTest extends TestCase
         // Test cloning all new operator types
         $operators = [
             Operator::stringConcat(' suffix'),
-            Operator::stringConcat(' suffix'), // Deprecated
             Operator::stringReplace('old', 'new'),
             Operator::multiply(2, 100),
             Operator::divide(2, 1),
@@ -905,10 +899,6 @@ class OperatorTest extends TestCase
         $this->assertEquals([0.5, 0.1], $operator->getValues());
 
         // Test concat with empty string
-        $operator = Operator::stringConcat('');
-        $this->assertEquals('', $operator->getValue());
-
-        // Test concat with empty string (deprecated)
         $operator = Operator::stringConcat('');
         $this->assertEquals('', $operator->getValue());
 

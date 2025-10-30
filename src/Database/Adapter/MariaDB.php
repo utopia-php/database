@@ -1246,14 +1246,12 @@ class MariaDB extends SQL
                 $getUpdateClause('_updatedAt'),
             ];
         } else {
-            // Update all columns, handling operators separately
             foreach (\array_keys($attributes) as $attr) {
                 /**
                  * @var string $attr
                  */
                 $filteredAttr = $this->filter($attr);
 
-                // Check if this attribute has an operator
                 if (isset($operators[$attr])) {
                     $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $opIndex);
                     if ($operatorSQL !== null) {
@@ -1275,15 +1273,12 @@ class MariaDB extends SQL
                 " . \implode(', ', $updateColumns)
         );
 
-        // Bind regular attribute values
         foreach ($bindValues as $key => $binding) {
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
 
         $opIndexForBinding = 0;
-
-        // Bind operator parameters in the same order used to build SQL
-        foreach (array_keys($attributes) as $attr) {
+        foreach (\array_keys($attributes) as $attr) {
             if (isset($operators[$attr])) {
                 $this->bindOperatorParams($stmt, $operators[$attr], $opIndexForBinding);
             }
@@ -1773,7 +1768,7 @@ class MariaDB extends SQL
 
     public function getSupportForIntegerBooleans(): bool
     {
-        return true; // MySQL/MariaDB use tinyint(1) for booleans
+        return true;
     }
 
     /**

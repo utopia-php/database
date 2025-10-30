@@ -4958,7 +4958,6 @@ class Database
             $operators = $extracted['operators'];
             $updates = $extracted['updates'];
 
-            // Validate operators against attribute types (with current document for runtime checks)
             $operatorValidator = new OperatorValidator($collection, $old);
             foreach ($operators as $attribute => $operator) {
                 if (!$operatorValidator->isValid($operator)) {
@@ -4967,11 +4966,11 @@ class Database
             }
 
             $document = \array_merge($old->getArrayCopy(), $updates);
-            $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
+            $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
+                $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
             }
             $document = new Document($document);
 
@@ -4990,19 +4989,17 @@ class Database
                     $relationships[$relationship->getAttribute('key')] = $relationship;
                 }
 
-                // If there are operators, we definitely need to update
                 if (!empty($operators)) {
                     $shouldUpdate = true;
                 }
 
                 // Compare if the document has any changes
                 foreach ($document as $key => $value) {
-                    // Skip the nested documents as they will be checked later in recursions.
                     if (\array_key_exists($key, $relationships)) {
-                        // No need to compare nested documents more than max depth.
-                        if (count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
+                        if (\count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
                             continue;
                         }
+
                         $relationType = (string)$relationships[$key]['options']['relationType'];
                         $side = (string)$relationships[$key]['options']['side'];
                         switch ($relationType) {
@@ -5316,7 +5313,6 @@ class Database
 
             $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions, $operators) {
                 foreach ($batch as $index => $document) {
-                    // Validate operators against attribute types (with current document for runtime checks)
                     if (!empty($operators)) {
                         $operatorValidator = new OperatorValidator($collection, $document);
                         foreach ($operators as $attribute => $operator) {
@@ -5364,7 +5360,6 @@ class Database
                     $batch[$index] = $this->adapter->castingBefore($collection, $encoded);
                 }
 
-                // Adapter will handle all operators efficiently using SQL expressions
                 $this->adapter->updateDocuments(
                     $collection,
                     $updates,
@@ -5374,7 +5369,6 @@ class Database
 
             $updates = $this->adapter->castingBefore($collection, $updates);
 
-            // If operators were used, refetch documents to get computed values
             if (!empty($operators)) {
                 $batch = $this->refetchDocuments($collection, $batch);
             }
@@ -5914,12 +5908,12 @@ class Database
             $operators = $extracted['operators'];
             $regularUpdates = $extracted['updates'];
 
-            // Filter out internal attributes from regularUpdates for comparison
             $internalKeys = \array_map(
                 fn ($attr) => $attr['$id'],
                 self::INTERNAL_ATTRIBUTES
             );
-            $regularUpdatesUserOnly = array_diff_key($regularUpdates, array_flip($internalKeys));
+
+            $regularUpdatesUserOnly = \array_diff_key($regularUpdates, \array_flip($internalKeys));
 
             $skipPermissionsUpdate = true;
 
@@ -5934,7 +5928,6 @@ class Database
             }
 
             // Only skip if no operators and regular attributes haven't changed
-            // Compare only the attributes that are being updated
             $hasChanges = false;
             if (!empty($operators)) {
                 $hasChanges = true;
@@ -5954,13 +5947,12 @@ class Database
                 }
 
                 // Also check if old document has attributes that new document doesn't
-                // (i.e., attributes being removed)
                 if (!$hasChanges) {
-                    // Filter out internal attributes from old document for comparison
                     $internalKeys = \array_map(
                         fn ($attr) => $attr['$id'],
                         self::INTERNAL_ATTRIBUTES
                     );
+
                     $oldUserAttributes = array_diff_key($oldAttributes, array_flip($internalKeys));
 
                     foreach (array_keys($oldUserAttributes) as $oldAttrKey) {
@@ -5974,8 +5966,7 @@ class Database
             }
 
             if (!$hasChanges) {
-                // If not updating a single attribute and the
-                // document is the same as the old one, skip it
+                // If not updating a single attribute and the document is the same as the old one, skip it
                 unset($documents[$key]);
                 continue;
             }
@@ -6044,13 +6035,12 @@ class Database
                 }
             }
 
-            // Extract operators for validation - operators remain in document for adapter
+            // Extract operators for validation
             $documentArray = $document->getArrayCopy();
             $extracted = Operator::extractOperators($documentArray);
             $operators = $extracted['operators'];
             $regularUpdates = $extracted['updates'];
 
-            // Validate operators against attribute types
             $operatorValidator = new OperatorValidator($collection, $old->isEmpty() ? null : $old);
             foreach ($operators as $attribute => $operator) {
                 if (!$operatorValidator->isValid($operator)) {
@@ -6104,7 +6094,6 @@ class Database
             }
 
             $seenIds[] = $document->getId();
-
             $old = $this->adapter->castingBefore($collection, $old);
             $document = $this->adapter->castingBefore($collection, $document);
 
@@ -6153,7 +6142,6 @@ class Database
                 }
             }
 
-            // If operators were used, refetch all documents in a single query
             if ($hasOperators) {
                 $batch = $this->refetchDocuments($collection, $batch);
             }

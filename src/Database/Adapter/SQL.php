@@ -7,6 +7,7 @@ use PDOException;
 use Utopia\Database\Adapter;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -2020,7 +2021,6 @@ abstract class SQL extends Adapter
                 $condition = $values[0] ?? 'equal';
                 $value = $values[1] ?? null;
 
-                // SECURITY: Whitelist validation to prevent SQL injection in CASE statements
                 $validConditions = [
                     'equal', 'notEqual',  // Comparison
                     'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
@@ -2070,11 +2070,11 @@ abstract class SQL extends Adapter
 
             case Operator::TYPE_DIVIDE:
                 $divisor = $values[0] ?? 1;
-                return $divisor != 0 ? ($value ?? 0) / $divisor : ($value ?? 0);
+                return (float)$divisor !== 0.0 ? ($value ?? 0) / $divisor : ($value ?? 0);
 
             case Operator::TYPE_MODULO:
                 $divisor = $values[0] ?? 1;
-                return $divisor != 0 ? ($value ?? 0) % $divisor : ($value ?? 0);
+                return (float)$divisor !== 0.0 ? ($value ?? 0) % $divisor : ($value ?? 0);
 
             case Operator::TYPE_POWER:
                 return pow($value ?? 0, $values[0] ?? 1);
@@ -2133,7 +2133,7 @@ abstract class SQL extends Adapter
                 return $value;
 
             case Operator::TYPE_DATE_SET_NOW:
-                return \Utopia\Database\DateTime::now();
+                return DateTime::now();
 
             default:
                 return $value;
@@ -2560,7 +2560,6 @@ abstract class SQL extends Adapter
         try {
             $spatialAttributes = $this->getSpatialAttributes($collection);
 
-            // Build attribute defaults map before we lose the collection document
             $attributeDefaults = [];
             foreach ($collection->getAttribute('attributes', []) as $attr) {
                 $attributeDefaults[$attr['$id']] = $attr['default'] ?? null;
@@ -2569,7 +2568,6 @@ abstract class SQL extends Adapter
             $collection = $collection->getId();
             $name = $this->filter($collection);
 
-            // Fast path: Check if ANY document has operators
             $hasOperators = false;
             $firstChange = $changes[0];
             $firstDoc = $firstChange->getNew();
@@ -2578,7 +2576,6 @@ abstract class SQL extends Adapter
             if (!empty($firstExtracted['operators'])) {
                 $hasOperators = true;
             } else {
-                // Check remaining documents
                 foreach ($changes as $change) {
                     $doc = $change->getNew();
                     $extracted = Operator::extractOperators($doc->getAttributes());
@@ -2589,9 +2586,7 @@ abstract class SQL extends Adapter
                 }
             }
 
-            // Fast path for non-operator upserts - ZERO overhead
             if (!$hasOperators) {
-                // Traditional bulk upsert - original implementation
                 $bindIndex = 0;
                 $batchKeys = [];
                 $bindValues = [];
@@ -2603,8 +2598,8 @@ abstract class SQL extends Adapter
                     $currentRegularAttributes = $document->getAttributes();
 
                     $currentRegularAttributes['_uid'] = $document->getId();
-                    $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getCreatedAt()) : null;
-                    $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getUpdatedAt()) : null;
+                    $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? DateTime::setTimezone($document->getCreatedAt()) : null;
+                    $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? DateTime::setTimezone($document->getUpdatedAt()) : null;
                     $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
 
                     if (!empty($document->getSequence())) {
@@ -2671,7 +2666,6 @@ abstract class SQL extends Adapter
                 $stmt->execute();
                 $stmt->closeCursor();
             } else {
-                // Operator path: Group by operator signature and process in batches
                 $groups = [];
 
                 foreach ($changes as $change) {
@@ -2679,7 +2673,6 @@ abstract class SQL extends Adapter
                     $extracted = Operator::extractOperators($document->getAttributes());
                     $operators = $extracted['operators'];
 
-                    // Create signature for grouping
                     if (empty($operators)) {
                         $signature = 'no_ops';
                     } else {
@@ -2701,7 +2694,6 @@ abstract class SQL extends Adapter
                     $groups[$signature]['documents'][] = $change;
                 }
 
-                // Process each group
                 foreach ($groups as $group) {
                     $groupChanges = $group['documents'];
                     $operators = $group['operators'];
@@ -2721,7 +2713,6 @@ abstract class SQL extends Adapter
                         $extractedOperators = $extracted['operators'];
 
                         // For new documents, apply operators to attribute defaults
-                        // This ensures operators work even when no regular attributes are present
                         if ($change->getOld()->isEmpty() && !empty($extractedOperators)) {
                             foreach ($extractedOperators as $operatorKey => $operator) {
                                 $default = $attributeDefaults[$operatorKey] ?? null;
@@ -2730,8 +2721,8 @@ abstract class SQL extends Adapter
                         }
 
                         $currentRegularAttributes['_uid'] = $document->getId();
-                        $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getCreatedAt()) : null;
-                        $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? \Utopia\Database\DateTime::setTimezone($document->getUpdatedAt()) : null;
+                        $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? $document->getCreatedAt() : null;
+                        $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? $document->getUpdatedAt() : null;
                         $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
 
                         if (!empty($document->getSequence())) {
@@ -2749,7 +2740,6 @@ abstract class SQL extends Adapter
                         $documentsData[] = ['regularAttributes' => $currentRegularAttributes];
                     }
 
-                    // Add operator columns
                     foreach (\array_keys($operators) as $colName) {
                         $allColumnNames[$colName] = true;
                     }
@@ -2799,13 +2789,21 @@ abstract class SQL extends Adapter
                         $regularAttributes[$key] = $value;
                     }
 
-                    $stmt = $this->getUpsertStatement($name, $columns, $batchKeys, $regularAttributes, $bindValues, '', $operators);
+                    $stmt = $this->getUpsertStatement(
+                        $name,
+                        $columns,
+                        $batchKeys,
+                        $regularAttributes,
+                        $bindValues,
+                        '',
+                        $operators
+                    );
+
                     $stmt->execute();
                     $stmt->closeCursor();
                 }
             }
 
-            // Handle permissions (unchanged)
             $removeQueries = [];
             $removeBindValues = [];
             $addQueries = [];
@@ -2888,7 +2886,6 @@ abstract class SQL extends Adapter
 
         return \array_map(fn ($change) => $change->getNew(), $changes);
     }
-
 
     /**
      * Build geometry WKT string from array input for spatial queries

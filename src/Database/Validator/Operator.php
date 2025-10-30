@@ -60,8 +60,12 @@ class Operator extends Validator
     public function isValid($value): bool
     {
         if (!$value instanceof DatabaseOperator) {
-            $this->message = 'Value must be an instance of Operator';
-            return false;
+            try {
+                $value = DatabaseOperator::parse($value);
+            } catch (\Throwable $e) {
+                $this->message = 'Invalid operator: ' . $e->getMessage();
+                return false;
+            }
         }
 
         $method = $value->getMethod();

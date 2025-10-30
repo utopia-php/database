@@ -7,7 +7,9 @@ use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Operator;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Operator as OperatorValidator;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
@@ -106,7 +108,8 @@ class Structure extends Validator
         private readonly string $idAttributeType,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
-        private bool $supportForAttributes = true
+        private bool $supportForAttributes = true,
+        private readonly ?Document $currentDocument = null
     ) {
     }
 
@@ -305,6 +308,18 @@ class Structure extends Validator
     protected function checkForInvalidAttributeValues(array $structure, array $keys): bool
     {
         foreach ($structure as $key => $value) {
+            if (Operator::isOperator($value)) {
+                // Set the attribute name on the operator for validation
+                $value->setAttribute($key);
+
+                $operatorValidator = new OperatorValidator($this->collection, $this->currentDocument);
+                if (!$operatorValidator->isValid($value)) {
+                    $this->message = $operatorValidator->getDescription();
+                    return false;
+                }
+                continue;
+            }
+
             $attribute = $keys[$key] ?? [];
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;

@@ -4952,20 +4952,7 @@ class Database
             }
             $createdAt = $document->getCreatedAt();
 
-            // Extract operators from the document before merging
-            $documentArray = $document->getArrayCopy();
-            $extracted = Operator::extractOperators($documentArray);
-            $operators = $extracted['operators'];
-            $updates = $extracted['updates'];
-
-            $operatorValidator = new OperatorValidator($collection, $old);
-            foreach ($operators as $attribute => $operator) {
-                if (!$operatorValidator->isValid($operator)) {
-                    throw new StructureException($operatorValidator->getDescription());
-                }
-            }
-
-            $document = \array_merge($old->getArrayCopy(), $updates);
+            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
@@ -4989,8 +4976,11 @@ class Database
                     $relationships[$relationship->getAttribute('key')] = $relationship;
                 }
 
-                if (!empty($operators)) {
-                    $shouldUpdate = true;
+                foreach ($document as $key => $value) {
+                    if (Operator::isOperator($value)) {
+                        $shouldUpdate = true;
+                        break;
+                    }
                 }
 
                 // Compare if the document has any changes
@@ -5110,7 +5100,8 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $old
             );
             if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                 throw new StructureException($structureValidator->getDescription());
@@ -5120,13 +5111,7 @@ class Database
                 $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
             }
 
-
             $document = $this->adapter->castingBefore($collection, $document);
-
-            // Re-add operators to document for adapter processing
-            foreach ($operators as $key => $operator) {
-                $document->setAttribute($key, $operator);
-            }
 
             $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
 
@@ -5135,7 +5120,15 @@ class Database
             $this->purgeCachedDocument($collection->getId(), $id);
 
             // If operators were used, refetch document to get computed values
-            if (!empty($operators)) {
+            $hasOperators = false;
+            foreach ($document->getArrayCopy() as $value) {
+                if (Operator::isOperator($value)) {
+                    $hasOperators = true;
+                    break;
+                }
+            }
+
+            if ($hasOperators) {
                 $refetched = $this->refetchDocuments($collection, [$document]);
                 $document = $refetched[0];
             }
@@ -5258,24 +5251,17 @@ class Database
             applyDefaults: false
         );
 
-        // Separate operators from regular updates for validation
-        $extracted = Operator::extractOperators($updates->getArrayCopy());
-        $operators = $extracted['operators'];
-        $regularUpdates = $extracted['updates'];
+        $validator = new PartialStructure(
+            $collection,
+            $this->adapter->getIdAttributeType(),
+            $this->adapter->getMinDateTime(),
+            $this->adapter->getMaxDateTime(),
+            $this->adapter->getSupportForAttributes(),
+            null // No old document available in bulk updates
+        );
 
-        // Only validate regular updates, not operators
-        if (!empty($regularUpdates)) {
-            $validator = new PartialStructure(
-                $collection,
-                $this->adapter->getIdAttributeType(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
-            );
-
-            if (!$validator->isValid(new Document($regularUpdates))) {
-                throw new StructureException($validator->getDescription());
-            }
+        if (!$validator->isValid($updates)) {
+            throw new StructureException($validator->getDescription());
         }
 
         $originalLimit = $limit;
@@ -5311,17 +5297,8 @@ class Database
             $currentPermissions = $updates->getPermissions();
             sort($currentPermissions);
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions, $operators) {
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
                 foreach ($batch as $index => $document) {
-                    if (!empty($operators)) {
-                        $operatorValidator = new OperatorValidator($collection, $document);
-                        foreach ($operators as $attribute => $operator) {
-                            if (!$operatorValidator->isValid($operator)) {
-                                throw new StructureException($operatorValidator->getDescription());
-                            }
-                        }
-                    }
-
                     $skipPermissionsUpdate = true;
 
                     if ($updates->offsetExists('$permissions')) {
@@ -5369,7 +5346,15 @@ class Database
 
             $updates = $this->adapter->castingBefore($collection, $updates);
 
-            if (!empty($operators)) {
+            $hasOperators = false;
+            foreach ($updates->getArrayCopy() as $value) {
+                if (Operator::isOperator($value)) {
+                    $hasOperators = true;
+                    break;
+                }
+            }
+
+            if ($hasOperators) {
                 $batch = $this->refetchDocuments($collection, $batch);
             }
 
@@ -6035,45 +6020,19 @@ class Database
                 }
             }
 
-            // Extract operators for validation
-            $documentArray = $document->getArrayCopy();
-            $extracted = Operator::extractOperators($documentArray);
-            $operators = $extracted['operators'];
-            $regularUpdates = $extracted['updates'];
-
-            $operatorValidator = new OperatorValidator($collection, $old->isEmpty() ? null : $old);
-            foreach ($operators as $attribute => $operator) {
-                if (!$operatorValidator->isValid($operator)) {
-                    throw new StructureException($operatorValidator->getDescription());
-                }
-            }
-
-            // Create a temporary document with only regular updates for encoding and validation
-            $tempDocument = new Document($regularUpdates);
-            $tempDocument->setAttribute('$id', $document->getId());
-            $tempDocument->setAttribute('$collection', $document->getAttribute('$collection'));
-            $tempDocument->setAttribute('$createdAt', $document->getAttribute('$createdAt'));
-            $tempDocument->setAttribute('$updatedAt', $document->getAttribute('$updatedAt'));
-            $tempDocument->setAttribute('$permissions', $document->getAttribute('$permissions'));
-            if ($this->adapter->getSharedTables()) {
-                $tempDocument->setAttribute('$tenant', $document->getAttribute('$tenant'));
-            }
-
-            $encodedTemp = $this->encode($collection, $tempDocument);
-
             $validator = new Structure(
                 $collection,
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $old->isEmpty() ? null : $old
             );
 
-            if (!$validator->isValid($encodedTemp)) {
+            if (!$validator->isValid($document)) {
                 throw new StructureException($validator->getDescription());
             }
 
-            // Now encode the full document with operators for the adapter
             $document = $this->encode($collection, $document);
 
             if (!$old->isEmpty()) {

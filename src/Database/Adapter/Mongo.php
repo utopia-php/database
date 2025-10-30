@@ -1498,7 +1498,7 @@ class Mongo extends Adapter
                 $name,
                 $filters,
                 $updateQuery,
-                options: $options,
+                $options,
                 multi: true,
             );
         } catch (MongoException $e) {
@@ -2885,6 +2885,26 @@ class Mongo extends Adapter
      * @return bool
      */
     public function getSupportForSpatialIndexNull(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter support operators?
+     *
+     * @return bool
+     */
+    public function getSupportForOperators(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter require booleans to be converted to integers (0/1)?
+     *
+     * @return bool
+     */
+    public function getSupportForIntegerBooleans(): bool
     {
         return false;
     }

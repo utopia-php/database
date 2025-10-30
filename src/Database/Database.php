@@ -27,6 +27,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
+use Utopia\Database\Validator\Operator as OperatorValidator;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
@@ -81,6 +82,9 @@ class Database
     public const MAX_VECTOR_DIMENSIONS = 16000;
     public const MAX_ARRAY_INDEX_LENGTH = 255;
     public const MAX_UID_DEFAULT_LENGTH = 36;
+
+    // Min limits
+    public const MIN_INT = -2147483648;
 
     // Global SRID for geographic coordinates (WGS84)
     public const DEFAULT_SRID = 4326;
@@ -712,6 +716,39 @@ class Database
         } finally {
             $this->resolveRelationships = $previous;
         }
+    }
+
+    /**
+     * Refetch documents after operator updates to get computed values
+     *
+     * @param Document $collection
+     * @param array<Document> $documents
+     * @return array<Document>
+     */
+    protected function refetchDocuments(Document $collection, array $documents): array
+    {
+        if (empty($documents)) {
+            return $documents;
+        }
+
+        $docIds = array_map(fn ($doc) => $doc->getId(), $documents);
+
+        // Fetch fresh copies with computed operator values
+        $refetched = Authorization::skip(fn () => $this->silent(
+            fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
+        ));
+
+        $refetchedMap = [];
+        foreach ($refetched as $doc) {
+            $refetchedMap[$doc->getId()] = $doc;
+        }
+
+        $result = [];
+        foreach ($documents as $doc) {
+            $result[] = $refetchedMap[$doc->getId()] ?? $doc;
+        }
+
+        return $result;
     }
 
     public function skipRelationshipsExistCheck(callable $callback): mixed
@@ -3592,9 +3629,10 @@ class Database
      * @param string $collection
      * @param string $id
      * @param Query[] $queries
-     *
+     * @param bool $forUpdate
      * @return Document
-     * @throws DatabaseException
+     * @throws NotFoundException
+     * @throws QueryException
      * @throws Exception
      */
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
@@ -4914,12 +4952,25 @@ class Database
             }
             $createdAt = $document->getCreatedAt();
 
-            $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-            $document['$collection'] = $old->getAttribute('$collection');   // Make sure user doesn't switch collection ID
+            // Extract operators from the document before merging
+            $documentArray = $document->getArrayCopy();
+            $extracted = Operator::extractOperators($documentArray);
+            $operators = $extracted['operators'];
+            $updates = $extracted['updates'];
+
+            $operatorValidator = new OperatorValidator($collection, $old);
+            foreach ($operators as $attribute => $operator) {
+                if (!$operatorValidator->isValid($operator)) {
+                    throw new StructureException($operatorValidator->getDescription());
+                }
+            }
+
+            $document = \array_merge($old->getArrayCopy(), $updates);
+            $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant();                   // Make sure user doesn't switch tenant
+                $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
             }
             $document = new Document($document);
 
@@ -4938,14 +4989,17 @@ class Database
                     $relationships[$relationship->getAttribute('key')] = $relationship;
                 }
 
+                if (!empty($operators)) {
+                    $shouldUpdate = true;
+                }
+
                 // Compare if the document has any changes
                 foreach ($document as $key => $value) {
-                    // Skip the nested documents as they will be checked later in recursions.
                     if (\array_key_exists($key, $relationships)) {
-                        // No need to compare nested documents more than max depth.
-                        if (count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
+                        if (\count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
                             continue;
                         }
+
                         $relationType = (string)$relationships[$key]['options']['relationType'];
                         $side = (string)$relationships[$key]['options']['side'];
                         switch ($relationType) {
@@ -5069,11 +5123,22 @@ class Database
 
             $document = $this->adapter->castingBefore($collection, $document);
 
+            // Re-add operators to document for adapter processing
+            foreach ($operators as $key => $operator) {
+                $document->setAttribute($key, $operator);
+            }
+
             $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate);
 
             $document = $this->adapter->castingAfter($collection, $document);
 
             $this->purgeCachedDocument($collection->getId(), $id);
+
+            // If operators were used, refetch document to get computed values
+            if (!empty($operators)) {
+                $refetched = $this->refetchDocuments($collection, [$document]);
+                $document = $refetched[0];
+            }
 
             return $document;
         });
@@ -5193,17 +5258,24 @@ class Database
             applyDefaults: false
         );
 
-        // Check new document structure
-        $validator = new PartialStructure(
-            $collection,
-            $this->adapter->getIdAttributeType(),
-            $this->adapter->getMinDateTime(),
-            $this->adapter->getMaxDateTime(),
-            $this->adapter->getSupportForAttributes()
-        );
+        // Separate operators from regular updates for validation
+        $extracted = Operator::extractOperators($updates->getArrayCopy());
+        $operators = $extracted['operators'];
+        $regularUpdates = $extracted['updates'];
 
-        if (!$validator->isValid($updates)) {
-            throw new StructureException($validator->getDescription());
+        // Only validate regular updates, not operators
+        if (!empty($regularUpdates)) {
+            $validator = new PartialStructure(
+                $collection,
+                $this->adapter->getIdAttributeType(),
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
+            );
+
+            if (!$validator->isValid(new Document($regularUpdates))) {
+                throw new StructureException($validator->getDescription());
+            }
         }
 
         $originalLimit = $limit;
@@ -5239,8 +5311,17 @@ class Database
             $currentPermissions = $updates->getPermissions();
             sort($currentPermissions);
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions, $operators) {
                 foreach ($batch as $index => $document) {
+                    if (!empty($operators)) {
+                        $operatorValidator = new OperatorValidator($collection, $document);
+                        foreach ($operators as $attribute => $operator) {
+                            if (!$operatorValidator->isValid($operator)) {
+                                throw new StructureException($operatorValidator->getDescription());
+                            }
+                        }
+                    }
+
                     $skipPermissionsUpdate = true;
 
                     if ($updates->offsetExists('$permissions')) {
@@ -5249,7 +5330,8 @@ class Database
                         }
 
                         $originalPermissions = $document->getPermissions();
-                        sort($originalPermissions);
+
+                        \sort($originalPermissions);
 
                         $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
                     }
@@ -5287,6 +5369,9 @@ class Database
 
             $updates = $this->adapter->castingBefore($collection, $updates);
 
+            if (!empty($operators)) {
+                $batch = $this->refetchDocuments($collection, $batch);
+            }
 
             foreach ($batch as $index => $doc) {
                 $doc = $this->adapter->castingAfter($collection, $doc);
@@ -5817,6 +5902,19 @@ class Database
                 )));
             }
 
+            // Extract operators early to avoid comparison issues
+            $documentArray = $document->getArrayCopy();
+            $extracted = Operator::extractOperators($documentArray);
+            $operators = $extracted['operators'];
+            $regularUpdates = $extracted['updates'];
+
+            $internalKeys = \array_map(
+                fn ($attr) => $attr['$id'],
+                self::INTERNAL_ATTRIBUTES
+            );
+
+            $regularUpdatesUserOnly = \array_diff_key($regularUpdates, \array_flip($internalKeys));
+
             $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
@@ -5829,13 +5927,46 @@ class Database
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
 
-            if (
-                empty($attribute)
-                && $skipPermissionsUpdate
-                && $old->getAttributes() == $document->getAttributes()
-            ) {
-                // If not updating a single attribute and the
-                // document is the same as the old one, skip it
+            // Only skip if no operators and regular attributes haven't changed
+            $hasChanges = false;
+            if (!empty($operators)) {
+                $hasChanges = true;
+            } elseif (!empty($attribute)) {
+                $hasChanges = true;
+            } elseif (!$skipPermissionsUpdate) {
+                $hasChanges = true;
+            } else {
+                // Check if any of the provided attributes differ from old document
+                $oldAttributes = $old->getAttributes();
+                foreach ($regularUpdatesUserOnly as $attrKey => $value) {
+                    $oldValue = $oldAttributes[$attrKey] ?? null;
+                    if ($oldValue != $value) {
+                        $hasChanges = true;
+                        break;
+                    }
+                }
+
+                // Also check if old document has attributes that new document doesn't
+                if (!$hasChanges) {
+                    $internalKeys = \array_map(
+                        fn ($attr) => $attr['$id'],
+                        self::INTERNAL_ATTRIBUTES
+                    );
+
+                    $oldUserAttributes = array_diff_key($oldAttributes, array_flip($internalKeys));
+
+                    foreach (array_keys($oldUserAttributes) as $oldAttrKey) {
+                        if (!array_key_exists($oldAttrKey, $regularUpdatesUserOnly)) {
+                            // Old document has an attribute that new document doesn't
+                            $hasChanges = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!$hasChanges) {
+                // If not updating a single attribute and the document is the same as the old one, skip it
                 unset($documents[$key]);
                 continue;
             }
@@ -5904,7 +6035,31 @@ class Database
                 }
             }
 
-            $document = $this->encode($collection, $document);
+            // Extract operators for validation
+            $documentArray = $document->getArrayCopy();
+            $extracted = Operator::extractOperators($documentArray);
+            $operators = $extracted['operators'];
+            $regularUpdates = $extracted['updates'];
+
+            $operatorValidator = new OperatorValidator($collection, $old->isEmpty() ? null : $old);
+            foreach ($operators as $attribute => $operator) {
+                if (!$operatorValidator->isValid($operator)) {
+                    throw new StructureException($operatorValidator->getDescription());
+                }
+            }
+
+            // Create a temporary document with only regular updates for encoding and validation
+            $tempDocument = new Document($regularUpdates);
+            $tempDocument->setAttribute('$id', $document->getId());
+            $tempDocument->setAttribute('$collection', $document->getAttribute('$collection'));
+            $tempDocument->setAttribute('$createdAt', $document->getAttribute('$createdAt'));
+            $tempDocument->setAttribute('$updatedAt', $document->getAttribute('$updatedAt'));
+            $tempDocument->setAttribute('$permissions', $document->getAttribute('$permissions'));
+            if ($this->adapter->getSharedTables()) {
+                $tempDocument->setAttribute('$tenant', $document->getAttribute('$tenant'));
+            }
+
+            $encodedTemp = $this->encode($collection, $tempDocument);
 
             $validator = new Structure(
                 $collection,
@@ -5914,9 +6069,12 @@ class Database
                 $this->adapter->getSupportForAttributes()
             );
 
-            if (!$validator->isValid($document)) {
+            if (!$validator->isValid($encodedTemp)) {
                 throw new StructureException($validator->getDescription());
             }
+
+            // Now encode the full document with operators for the adapter
+            $document = $this->encode($collection, $document);
 
             if (!$old->isEmpty()) {
                 // Check if document was updated after the request timestamp
@@ -5936,7 +6094,6 @@ class Database
             }
 
             $seenIds[] = $document->getId();
-
             $old = $this->adapter->castingBefore($collection, $old);
             $document = $this->adapter->castingBefore($collection, $document);
 
@@ -5975,9 +6132,25 @@ class Database
                 $batch = $this->silent(fn () => $this->populateDocumentsRelationships($batch, $collection, $this->relationshipFetchDepth));
             }
 
+            // Check if any document in the batch contains operators
+            $hasOperators = false;
+            foreach ($batch as $doc) {
+                $extracted = Operator::extractOperators($doc->getArrayCopy());
+                if (!empty($extracted['operators'])) {
+                    $hasOperators = true;
+                    break;
+                }
+            }
+
+            if ($hasOperators) {
+                $batch = $this->refetchDocuments($collection, $batch);
+            }
+
             foreach ($batch as $index => $doc) {
                 $doc = $this->adapter->castingAfter($collection, $doc);
-                $doc = $this->decode($collection, $doc);
+                if (!$hasOperators) {
+                    $doc = $this->decode($collection, $doc);
+                }
 
                 if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                     $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
@@ -7307,6 +7480,11 @@ class Database
                 continue;
             }
 
+            // Skip encoding for Operator objects
+            if ($value instanceof Operator) {
+                continue;
+            }
+
             // Assign default only if no value provided
             // False positive "Call to function is_null() with mixed will always evaluate to false"
             // @phpstan-ignore-next-line
@@ -7396,6 +7574,11 @@ class Database
                 if (!\is_null($value)) {
                     $document->removeAttribute($this->adapter->filter($key));
                 }
+            }
+
+            // Skip decoding for Operator objects (shouldn't happen, but safety check)
+            if ($value instanceof Operator) {
+                continue;
             }
 
             $value = ($array) ? $value : [$value];
@@ -7516,11 +7699,12 @@ class Database
         return $document;
     }
 
+
     /**
      * Encode Attribute
      *
      * Passes the attribute $value, and $document context to a predefined filter
-     *  that allow you to manipulate the input format of the given attribute.
+     * that allow you to manipulate the input format of the given attribute.
      *
      * @param string $name
      * @param mixed $value
@@ -7557,9 +7741,9 @@ class Database
      * @param string $filter
      * @param mixed $value
      * @param Document $document
-     *
+     * @param string $attribute
      * @return mixed
-     * @throws DatabaseException
+     * @throws NotFoundException
      */
     protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {

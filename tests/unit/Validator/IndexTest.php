@@ -249,7 +249,7 @@ class IndexTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => ID::custom('data'),
-                    'type' => Database::TYPE_OBJECT,
+                    'type' => Database::VAR_OBJECT,
                     'format' => '',
                     'size' => 0,
                     'signed' => false,
@@ -276,10 +276,10 @@ class IndexTest extends TestCase
         // Validator with supportForObjectIndexes enabled
         $validator = new Index($collection->getAttribute('attributes'), $collection->getAttribute('indexes', []), 768, [], false, false, false, false, supportForObjectIndexes:true);
 
-        // Valid: Object index on single TYPE_OBJECT attribute
+        // Valid: Object index on single VAR_OBJECT attribute
         $validIndex = new Document([
             '$id' => ID::custom('idx_gin_valid'),
-            'type' => Database::Index_Object,
+            'type' => Database::INDEX_OBJECT,
             'attributes' => ['data'],
             'lengths' => [],
             'orders' => [],
@@ -289,7 +289,7 @@ class IndexTest extends TestCase
         // Invalid: Object index on non-object attribute
         $invalidIndexType = new Document([
             '$id' => ID::custom('idx_gin_invalid_type'),
-            'type' => Database::Index_Object,
+            'type' => Database::INDEX_OBJECT,
             'attributes' => ['name'],
             'lengths' => [],
             'orders' => [],
@@ -300,7 +300,7 @@ class IndexTest extends TestCase
         // Invalid: Object index on multiple attributes
         $invalidIndexMulti = new Document([
             '$id' => ID::custom('idx_gin_multi'),
-            'type' => Database::Index_Object,
+            'type' => Database::INDEX_OBJECT,
             'attributes' => ['data', 'name'],
             'lengths' => [],
             'orders' => [],
@@ -311,7 +311,7 @@ class IndexTest extends TestCase
         // Invalid: Object index with orders
         $invalidIndexOrder = new Document([
             '$id' => ID::custom('idx_gin_order'),
-            'type' => Database::Index_Object,
+            'type' => Database::INDEX_OBJECT,
             'attributes' => ['data'],
             'lengths' => [],
             'orders' => ['asc'],

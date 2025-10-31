@@ -982,7 +982,7 @@ class Query
      */
     public function isObjectAttribute(): bool
     {
-        return $this->attributeType === Database::TYPE_OBJECT;
+        return $this->attributeType === Database::VAR_OBJECT;
     }
 
     // Spatial query methods

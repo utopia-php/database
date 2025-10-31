@@ -27,7 +27,7 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'meta', Database::TYPE_OBJECT, 0, false));
+        $this->assertEquals(true, $database->createAttribute($collectionId, 'meta', Database::VAR_OBJECT, 0, false));
 
         // Test 1: Create and read document with object attribute
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -553,10 +553,10 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'data', Database::TYPE_OBJECT, 0, false));
+        $this->assertEquals(true, $database->createAttribute($collectionId, 'data', Database::VAR_OBJECT, 0, false));
 
         // Test 1: Create Object index on object attribute
-        $ginIndex = $database->createIndex($collectionId, 'idx_data_gin', Database::Index_Object, ['data']);
+        $ginIndex = $database->createIndex($collectionId, 'idx_data_gin', Database::INDEX_OBJECT, ['data']);
         $this->assertTrue($ginIndex);
 
         // Test 2: Create documents with JSONB data
@@ -611,7 +611,7 @@ trait ObjectAttributeTests
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_name_gin', Database::Index_Object, ['name']);
+            $database->createIndex($collectionId, 'idx_name_gin', Database::INDEX_OBJECT, ['name']);
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -620,11 +620,11 @@ trait ObjectAttributeTests
         $this->assertTrue($exceptionThrown, 'Expected Index exception for Object index on non-object attribute');
 
         // Test 7: Try to create Object index on multiple attributes (should fail)
-        $database->createAttribute($collectionId, 'metadata', Database::TYPE_OBJECT, 0, false);
+        $database->createAttribute($collectionId, 'metadata', Database::VAR_OBJECT, 0, false);
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_multi_gin', Database::Index_Object, ['data', 'metadata']);
+            $database->createIndex($collectionId, 'idx_multi_gin', Database::INDEX_OBJECT, ['data', 'metadata']);
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -635,7 +635,7 @@ trait ObjectAttributeTests
         // Test 8: Try to create Object index with orders (should fail)
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, 'idx_ordered_gin', Database::Index_Object, ['metadata'], [], [Database::ORDER_ASC]);
+            $database->createIndex($collectionId, 'idx_ordered_gin', Database::INDEX_OBJECT, ['metadata'], [], [Database::ORDER_ASC]);
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -661,7 +661,7 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // Create object attribute
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'meta', Database::TYPE_OBJECT, 0, false));
+        $this->assertEquals(true, $database->createAttribute($collectionId, 'meta', Database::VAR_OBJECT, 0, false));
 
         // Test 1: Try to create document with string instead of object (should fail)
         $exceptionThrown = false;
@@ -828,7 +828,7 @@ trait ObjectAttributeTests
 
         // Test 16: with multiple json
         $defaultSettings = ['config' => ['theme' => 'light', 'lang' => 'en']];
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'settings', Database::TYPE_OBJECT, 0, false, $defaultSettings));
+        $this->assertEquals(true, $database->createAttribute($collectionId, 'settings', Database::VAR_OBJECT, 0, false, $defaultSettings));
         $database->createDocument($collectionId, new Document(['$permissions' => [Permission::read(Role::any())]]));
         $database->createDocument($collectionId, new Document(['settings' => ['config' => ['theme' => 'dark', 'lang' => 'en']],'$permissions' => [Permission::read(Role::any())]]));
         $results = $database->find($collectionId, [
@@ -860,20 +860,20 @@ trait ObjectAttributeTests
         $database->createCollection($collectionId);
 
         // 1) Default empty object
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'metaDefaultEmpty', Database::TYPE_OBJECT, 0, false, []));
+        $this->assertEquals(true, $database->createAttribute($collectionId, 'metaDefaultEmpty', Database::VAR_OBJECT, 0, false, []));
 
         // 2) Default nested object
         $defaultSettings = ['config' => ['theme' => 'light', 'lang' => 'en']];
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'settings', Database::TYPE_OBJECT, 0, false, $defaultSettings));
+        $this->assertEquals(true, $database->createAttribute($collectionId, 'settings', Database::VAR_OBJECT, 0, false, $defaultSettings));
 
         // 3) Required without default (should fail when missing)
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'profile', Database::TYPE_OBJECT, 0, true, null));
+        $this->assertEquals(true, $database->createAttribute($collectionId, 'profile', Database::VAR_OBJECT, 0, true, null));
 
         // 4) Required with default (should auto-populate)
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'profile2', Database::TYPE_OBJECT, 0, false, ['name' => 'anon']));
+        $this->assertEquals(true, $database->createAttribute($collectionId, 'profile2', Database::VAR_OBJECT, 0, false, ['name' => 'anon']));
 
         // 5) Explicit null default
-        $this->assertEquals(true, $database->createAttribute($collectionId, 'misc', Database::TYPE_OBJECT, 0, false, null));
+        $this->assertEquals(true, $database->createAttribute($collectionId, 'misc', Database::VAR_OBJECT, 0, false, null));
 
         // Create document missing all above attributes
         $exceptionThrown = false;

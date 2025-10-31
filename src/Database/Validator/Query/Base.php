@@ -48,7 +48,7 @@ abstract class Base extends Validator
      */
     public function getType(): string
     {
-        return self::TYPE_OBJECT;
+        return self::VAR_OBJECT;
     }
 
     /**

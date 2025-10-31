@@ -886,8 +886,8 @@ class Postgres extends SQL
             Database::INDEX_HNSW_COSINE,
             Database::INDEX_HNSW_DOT => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            Database::Index_Object => 'INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::Index_Object . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
+            Database::INDEX_OBJECT => 'INDEX',
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
         };
 
         $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
@@ -906,7 +906,7 @@ class Postgres extends SQL
             Database::INDEX_HNSW_EUCLIDEAN => " USING HNSW ({$attributes} vector_l2_ops)",
             Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
             Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
-            Database::Index_Object => " USING GIN ({$attributes})",
+            Database::INDEX_OBJECT => " USING GIN ({$attributes})",
             default => " ({$attributes})",
         };
 
@@ -1855,7 +1855,7 @@ class Postgres extends SQL
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
 
-            case Database::TYPE_OBJECT:
+            case Database::VAR_OBJECT:
                 return 'JSONB';
 
             case Database::VAR_POINT:
@@ -1871,7 +1871,7 @@ class Postgres extends SQL
                 return "VECTOR({$size})";
 
             default:
-                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::TYPE_OBJECT . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
+                throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_OBJECT . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
         }
     }
 

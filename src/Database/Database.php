@@ -48,7 +48,7 @@ class Database
     public const VAR_UUID7 = 'uuid7';
 
     // object type
-    public const TYPE_OBJECT = 'object';
+    public const VAR_OBJECT = 'object';
 
     // Vector types
     public const VAR_VECTOR = 'vector';
@@ -74,7 +74,7 @@ class Database
     public const INDEX_UNIQUE = 'unique';
     public const INDEX_SPATIAL = 'spatial';
     // keeping
-    public const Index_Object = 'object';
+    public const INDEX_OBJECT = 'object';
     public const INDEX_HNSW_EUCLIDEAN = 'hnsw_euclidean';
     public const INDEX_HNSW_COSINE = 'hnsw_cosine';
     public const INDEX_HNSW_DOT = 'hnsw_dot';
@@ -2016,7 +2016,7 @@ class Database
             case self::VAR_DATETIME:
             case self::VAR_RELATIONSHIP:
                 break;
-            case self::TYPE_OBJECT:
+            case self::VAR_OBJECT:
                 if (!$this->adapter->getSupportForObject()) {
                     throw new DatabaseException('Object attributes are not supported');
                 }
@@ -2135,7 +2135,7 @@ class Database
 
         if ($defaultType === 'array') {
             // Spatial types require the array itself
-            if (!in_array($type, Database::SPATIAL_TYPES) && $type != Database::TYPE_OBJECT) {
+            if (!in_array($type, Database::SPATIAL_TYPES) && $type != Database::VAR_OBJECT) {
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value);
                 }
@@ -2432,7 +2432,7 @@ class Database
                     }
                     break;
 
-                case self::TYPE_OBJECT:
+                case self::VAR_OBJECT:
                     if (!$this->adapter->getSupportForObject()) {
                         throw new DatabaseException('Object attributes are not supported');
                     }
@@ -2491,7 +2491,7 @@ class Database
                         self::VAR_FLOAT,
                         self::VAR_BOOLEAN,
                         self::VAR_DATETIME,
-                        self::VAR_RELATIONSHIP . ', ' . self::TYPE_OBJECT
+                        self::VAR_RELATIONSHIP . ', ' . self::VAR_OBJECT
                     ];
                     if ($this->adapter->getSupportForVectors()) {
                         $supportedTypes[] = self::VAR_VECTOR;
@@ -3490,14 +3490,14 @@ class Database
                 }
                 break;
 
-            case self::Index_Object:
+            case self::INDEX_OBJECT:
                 if (!$this->adapter->getSupportForObject()) {
                     throw new DatabaseException('Object indexes are not supported');
                 }
                 break;
 
             default:
-                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::Index_Object . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
+                throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_OBJECT . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT);
         }
 
         /** @var array<Document> $collectionAttributes */
@@ -3529,7 +3529,7 @@ class Database
             }
         }
 
-        if ($type === self::Index_Object) {
+        if ($type === self::INDEX_OBJECT) {
             if (count($attributes) !== 1) {
                 throw new IndexException('Object index can be created on a single object attribute');
             }
@@ -3540,7 +3540,7 @@ class Database
                 }
 
                 $attributeType = $indexAttributesWithTypes[$attr];
-                if ($attributeType !== self::TYPE_OBJECT) {
+                if ($attributeType !== self::VAR_OBJECT) {
                     throw new IndexException('Object index can only be created on object attributes. Attribute "' . $attr . '" is of type "' . $attributeType . '"');
                 }
             }
@@ -7561,7 +7561,7 @@ class Database
                     case self::VAR_FLOAT:
                         $node = (float)$node;
                         break;
-                    case self::TYPE_OBJECT:
+                    case self::VAR_OBJECT:
                         // Decode JSONB string to array
                         if (is_string($node)) {
                             $node = json_decode($node, true);

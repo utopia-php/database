@@ -64,7 +64,7 @@ class Index extends Validator
      */
     public function getType(): string
     {
-        return self::TYPE_OBJECT;
+        return self::VAR_OBJECT;
     }
 
     /**
@@ -546,7 +546,7 @@ class Index extends Validator
         $attributes = $index->getAttribute('attributes', []);
         $orders     = $index->getAttribute('orders', []);
 
-        if ($type !== Database::Index_Object) {
+        if ($type !== Database::INDEX_OBJECT) {
             return true;
         }
 
@@ -569,7 +569,7 @@ class Index extends Validator
         $attribute     = $this->attributes[\strtolower($attributeName)] ?? new Document();
         $attributeType = $attribute->getAttribute('type', '');
 
-        if ($attributeType !== Database::TYPE_OBJECT) {
+        if ($attributeType !== Database::VAR_OBJECT) {
             $this->message = 'Object index can only be created on object attributes. Attribute "' . $attributeName . '" is of type "' . $attributeType . '"';
             return false;
         }

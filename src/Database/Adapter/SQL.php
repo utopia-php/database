@@ -1126,7 +1126,7 @@ abstract class SQL extends Adapter
                     $total += 7;
                     break;
 
-                case Database::TYPE_OBJECT:
+                case Database::VAR_OBJECT:
                     /**
                      * JSONB/JSON type
                      * Only the pointer contributes 20 bytes to the row size

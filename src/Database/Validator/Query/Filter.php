@@ -162,7 +162,7 @@ class Filter extends Base
                     $validator = new Text(255, 0); // The query is always on uid
                     break;
 
-                case Database::TYPE_OBJECT:
+                case Database::VAR_OBJECT:
                     // For JSONB/object queries, value must be an array
                     if (!is_array($value)) {
                         $this->message = 'Query value for object type must be an array';
@@ -244,7 +244,7 @@ class Filter extends Base
             !$array &&
             in_array($method, [Query::TYPE_CONTAINS, Query::TYPE_NOT_CONTAINS]) &&
             $attributeSchema['type'] !== Database::VAR_STRING &&
-            $attributeSchema['type'] !== Database::TYPE_OBJECT &&
+            $attributeSchema['type'] !== Database::VAR_OBJECT &&
             !in_array($attributeSchema['type'], Database::SPATIAL_TYPES)
         ) {
             $queryType = $method === Query::TYPE_NOT_CONTAINS ? 'notContains' : 'contains';

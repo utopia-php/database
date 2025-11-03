@@ -742,7 +742,7 @@ class Database
         $docIds = array_map(fn ($doc) => $doc->getId(), $documents);
 
         // Fetch fresh copies with computed operator values
-        $refetched = Authorization::skip(fn () => $this->silent(
+        $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
             fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
         ));
 

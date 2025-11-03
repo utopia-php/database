@@ -80,6 +80,6 @@ class IndexDependency extends Validator
      */
     public function getType(): string
     {
-        return self::VAR_OBJECT;
+        return self::TYPE_OBJECT;
     }
 }

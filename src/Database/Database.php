@@ -415,6 +415,12 @@ class Database
     protected array $relationshipDeleteStack = [];
 
     /**
+     * Type mapping for collections to custom document classes
+     * @var array<string, class-string<Document>>
+     */
+    protected array $documentTypes = [];
+
+    /**
      * @param Adapter $adapter
      * @param Cache $cache
      * @param array<string, array{encode: callable, decode: callable}> $filters
@@ -1201,6 +1207,78 @@ class Database
         }
 
         return $this;
+    }
+    /**
+     * Set custom document class for a collection
+     *
+     * @param string $collection Collection ID
+     * @param class-string<Document> $className Fully qualified class name that extends Document
+     * @return static
+     * @throws DatabaseException
+     */
+    public function setDocumentType(string $collection, string $className): static
+    {
+        if (!\class_exists($className)) {
+            throw new DatabaseException("Class {$className} does not exist");
+        }
+
+        if (!\is_subclass_of($className, Document::class)) {
+            throw new DatabaseException("Class {$className} must extend " . Document::class);
+        }
+
+        $this->documentTypes[$collection] = $className;
+
+        return $this;
+    }
+
+    /**
+     * Get custom document class for a collection
+     *
+     * @param string $collection Collection ID
+     * @return class-string<Document>|null
+     */
+    public function getDocumentType(string $collection): ?string
+    {
+        return $this->documentTypes[$collection] ?? null;
+    }
+
+    /**
+     * Clear document type mapping for a collection
+     *
+     * @param string $collection Collection ID
+     * @return static
+     */
+    public function clearDocumentType(string $collection): static
+    {
+        unset($this->documentTypes[$collection]);
+
+        return $this;
+    }
+
+    /**
+     * Clear all document type mappings
+     *
+     * @return static
+     */
+    public function clearAllDocumentTypes(): static
+    {
+        $this->documentTypes = [];
+
+        return $this;
+    }
+
+    /**
+     * Create a document instance of the appropriate type
+     *
+     * @param string $collection Collection ID
+     * @param array<string, mixed> $data Document data
+     * @return Document
+     */
+    protected function createDocumentInstance(string $collection, array $data): Document
+    {
+        $className = $this->documentTypes[$collection] ?? Document::class;
+
+        return new $className($data);
     }
 
     public function getPreserveDates(): bool
@@ -3642,11 +3720,12 @@ class Database
     /**
      * Get Document
      *
+     * @template T of Document
      * @param string $collection
      * @param string $id
      * @param Query[] $queries
      * @param bool $forUpdate
-     * @return Document
+     * @return T|Document
      * @throws NotFoundException
      * @throws QueryException
      * @throws Exception
@@ -3708,14 +3787,14 @@ class Database
         }
 
         if ($cached) {
-            $document = new Document($cached);
+            $document = $this->createDocumentInstance($collection->getId(), $cached);
 
             if ($collection->getId() !== self::METADATA) {
                 if (!$validator->isValid([
                     ...$collection->getRead(),
                     ...($documentSecurity ? $document->getRead() : [])
                 ])) {
-                    return new Document();
+                    return $this->createDocumentInstance($collection->getId(), []);
                 }
             }
 
@@ -3732,10 +3811,15 @@ class Database
         );
 
         if ($document->isEmpty()) {
-            return $document;
+            return $this->createDocumentInstance($collection->getId(), []);
         }
 
         $document = $this->adapter->castingAfter($collection, $document);
+
+        // Convert to custom document type if mapped
+        if (isset($this->documentTypes[$collection->getId()])) {
+            $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
+        }
 
         $document->setAttribute('$collection', $collection->getId());
 
@@ -3744,7 +3828,7 @@ class Database
                 ...$collection->getRead(),
                 ...($documentSecurity ? $document->getRead() : [])
             ])) {
-                return new Document();
+                return $this->createDocumentInstance($collection->getId(), []);
             }
         }
 
@@ -4376,11 +4460,10 @@ class Database
     /**
      * Create Document
      *
+     * @template T of Document
      * @param string $collection
      * @param Document $document
-     *
-     * @return Document
-     *
+     * @return T|Document
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws StructureException
@@ -4480,6 +4563,11 @@ class Database
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
+
+        // Convert to custom document type if mapped
+        if (isset($this->documentTypes[$collection->getId()])) {
+            $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
+        }
 
         $this->trigger(self::EVENT_DOCUMENT_CREATE, $document);
 
@@ -4932,11 +5020,11 @@ class Database
     /**
      * Update Document
      *
+     * @template T of Document
      * @param string $collection
      * @param string $id
      * @param Document $document
-     * @return Document
-     *
+     * @return T|Document
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
@@ -5168,6 +5256,11 @@ class Database
         }
 
         $document = $this->decode($collection, $document);
+
+        // Convert to custom document type if mapped
+        if (isset($this->documentTypes[$collection->getId()])) {
+            $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
+        }
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
@@ -7044,11 +7137,11 @@ class Database
     /**
      * Find Documents
      *
+     * @template T of Document
      * @param string $collection
      * @param array<Query> $queries
      * @param string $forPermission
-     *
-     * @return array<Document>
+     * @return array<T|Document>
      * @throws DatabaseException
      * @throws QueryException
      * @throws TimeoutException
@@ -7183,6 +7276,11 @@ class Database
             $node = $this->adapter->castingAfter($collection, $node);
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
+
+            // Convert to custom document type if mapped
+            if (isset($this->documentTypes[$collection->getId()])) {
+                $node = $this->createDocumentInstance($collection->getId(), $node->getArrayCopy());
+            }
 
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());

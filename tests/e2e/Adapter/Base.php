@@ -8,6 +8,7 @@ use Tests\E2E\Adapter\Scopes\CollectionTests;
 use Tests\E2E\Adapter\Scopes\DocumentTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
+use Tests\E2E\Adapter\Scopes\OperatorTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
 use Tests\E2E\Adapter\Scopes\RelationshipTests;
 use Tests\E2E\Adapter\Scopes\SchemalessTests;
@@ -24,6 +25,7 @@ abstract class Base extends TestCase
     use DocumentTests;
     use AttributeTests;
     use IndexTests;
+    use OperatorTests;
     use PermissionTests;
     use RelationshipTests;
     use SpatialTests;

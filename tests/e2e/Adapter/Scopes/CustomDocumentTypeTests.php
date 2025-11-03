@@ -72,18 +72,18 @@ trait CustomDocumentTypeTests
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('does not exist');
-
+        
+        // @phpstan-ignore-next-line - Testing with invalid class name
         $database->setDocumentType('users', 'NonExistentClass');
-    }
-
-    public function testSetDocumentTypeWithNonDocumentClass(): void
+    }    public function testSetDocumentTypeWithNonDocumentClass(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('must extend');
-
+        
+        // @phpstan-ignore-next-line - Testing with non-Document class
         $database->setDocumentType('users', \stdClass::class);
     }
 

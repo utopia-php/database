@@ -3704,12 +3704,11 @@ class Database
     /**
      * Get Document
      *
-     * @template T of Document
      * @param string $collection
      * @param string $id
      * @param Query[] $queries
      * @param bool $forUpdate
-     * @return T|Document
+     * @return Document
      * @throws NotFoundException
      * @throws QueryException
      * @throws Exception
@@ -4444,10 +4443,9 @@ class Database
     /**
      * Create Document
      *
-     * @template T of Document
      * @param string $collection
      * @param Document $document
-     * @return T|Document
+     * @return Document
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws StructureException
@@ -5000,11 +4998,10 @@ class Database
     /**
      * Update Document
      *
-     * @template T of Document
      * @param string $collection
      * @param string $id
      * @param Document $document
-     * @return T|Document
+     * @return Document
      * @throws AuthorizationException
      * @throws ConflictException
      * @throws DatabaseException
@@ -7111,11 +7108,10 @@ class Database
     /**
      * Find Documents
      *
-     * @template T of Document
      * @param string $collection
      * @param array<Query> $queries
      * @param string $forPermission
-     * @return array<T|Document>
+     * @return array<Document>
      * @throws DatabaseException
      * @throws QueryException
      * @throws TimeoutException

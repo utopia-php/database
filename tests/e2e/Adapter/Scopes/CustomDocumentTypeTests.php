@@ -55,6 +55,9 @@ trait CustomDocumentTypeTests
             TestUser::class,
             $database->getDocumentType('users')
         );
+
+        // Cleanup
+        $database->clearDocumentType('users');
     }
 
     public function testGetDocumentTypeReturnsNull(): void
@@ -63,6 +66,8 @@ trait CustomDocumentTypeTests
         $database = static::getDatabase();
 
         $this->assertNull($database->getDocumentType('nonexistent_collection'));
+
+        // No cleanup needed - no types were set
     }
 
     public function testSetDocumentTypeWithInvalidClass(): void
@@ -131,6 +136,9 @@ trait CustomDocumentTypeTests
 
         $this->assertEquals(TestUser::class, $database->getDocumentType('users'));
         $this->assertEquals(TestPost::class, $database->getDocumentType('posts'));
+
+        // Cleanup to prevent test pollution
+        $database->clearAllDocumentTypes();
     }
 
     public function testCustomDocumentTypeWithGetDocument(): void

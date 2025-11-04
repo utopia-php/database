@@ -6196,8 +6196,6 @@ trait DocumentTests
         }
 
         $collectionId = 'successive_update_single';
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
 
         $database->createCollection($collectionId);
         $database->createAttribute($collectionId, 'attrA', Database::VAR_STRING, 50, true);

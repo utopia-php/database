@@ -56,7 +56,7 @@ trait IndexTests
     public function testCreateDeleteIndex(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('indexes');
 
@@ -99,7 +99,7 @@ trait IndexTests
 
         // Test delete index when index does not exist
         $this->assertEquals(true, $database->createIndex('indexes', 'index1', Database::INDEX_KEY, ['string', 'integer'], [128], [Database::ORDER_ASC]));
-        $this->assertEquals(true, static::deleteIndex('indexes', 'index1'));
+        $this->assertEquals(true, $this->deleteIndex('indexes', 'index1'));
         $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
 
         // Test delete index when attribute does not exist
@@ -160,7 +160,7 @@ trait IndexTests
         ]);
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $validator = new Index(
             $attributes,
@@ -331,7 +331,8 @@ trait IndexTests
     public function testIndexLengthZero(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
+
         if (!$database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -362,7 +363,7 @@ trait IndexTests
 
     public function testRenameIndex(): void
     {
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $numbers = $database->createCollection('numbers');
         $database->createAttribute('numbers', 'verbose', Database::VAR_STRING, 128, true);
@@ -389,7 +390,7 @@ trait IndexTests
     */
     public function testRenameIndexMissing(): void
     {
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $this->expectExceptionMessage('Index not found');
         $index = $database->renameIndex('numbers', 'index1', 'index4');
     }
@@ -400,7 +401,7 @@ trait IndexTests
     */
     public function testRenameIndexExisting(): void
     {
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $this->expectExceptionMessage('Index name already used');
         $index = $database->renameIndex('numbers', 'index3', 'index2');
     }
@@ -409,7 +410,7 @@ trait IndexTests
     public function testExceptionIndexLimit(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('indexLimit');
 
@@ -438,7 +439,7 @@ trait IndexTests
         }
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createIndex('documents', 'string', Database::INDEX_FULLTEXT, ['string']);
         $database->createDocument('documents', new Document([
@@ -473,7 +474,7 @@ trait IndexTests
     public function testMaxQueriesValues(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $max = $database->getMaxQueryValues();
 
@@ -502,7 +503,7 @@ trait IndexTests
         }
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $documents = $database->find('documents', [
             Query::search('string', ''),
@@ -530,7 +531,7 @@ trait IndexTests
         }
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $collectionId = 'multiple_fulltext_test';
         try {
@@ -568,7 +569,7 @@ trait IndexTests
     public function testIdenticalIndexValidation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $collectionId = 'identical_index_test';
 

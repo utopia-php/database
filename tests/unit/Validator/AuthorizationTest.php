@@ -9,11 +9,15 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Authorization\Input;
 
 class AuthorizationTest extends TestCase
 {
+    protected Authorization $authorization;
+
     public function setUp(): void
     {
+        $this->authorization = new Authorization();
     }
 
     public function tearDown(): void
@@ -22,7 +26,7 @@ class AuthorizationTest extends TestCase
 
     public function testValues(): void
     {
-        Authorization::setRole(Role::any()->toString());
+        $this->authorization->addRole(Role::any()->toString());
 
         $document = new Document([
             '$id' => ID::unique(),
@@ -35,88 +39,88 @@ class AuthorizationTest extends TestCase
                 Permission::delete(Role::any()),
             ],
         ]);
-        $object = new Authorization(Database::PERMISSION_READ);
 
-        $this->assertEquals($object->isValid($document->getRead()), false);
-        $this->assertEquals($object->isValid(''), false);
-        $this->assertEquals($object->isValid([]), false);
+        $object = $this->authorization;
+
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), false);
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, [])), false);
         $this->assertEquals($object->getDescription(), 'No permissions provided for action \'read\'');
 
-        Authorization::setRole(Role::user('456')->toString());
-        Authorization::setRole(Role::user('123')->toString());
+        $this->authorization->addRole(Role::user('456')->toString());
+        $this->authorization->addRole(Role::user('123')->toString());
 
-        $this->assertEquals(Authorization::isRole(Role::user('456')->toString()), true);
-        $this->assertEquals(Authorization::isRole(Role::user('457')->toString()), false);
-        $this->assertEquals(Authorization::isRole(''), false);
-        $this->assertEquals(Authorization::isRole(Role::any()->toString()), true);
+        $this->assertEquals($this->authorization->hasRole(Role::user('456')->toString()), true);
+        $this->assertEquals($this->authorization->hasRole(Role::user('457')->toString()), false);
+        $this->assertEquals($this->authorization->hasRole(''), false);
+        $this->assertEquals($this->authorization->hasRole(Role::any()->toString()), true);
 
-        $this->assertEquals($object->isValid($document->getRead()), true);
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), true);
 
-        Authorization::cleanRoles();
+        $this->authorization->cleanRoles();
 
-        $this->assertEquals($object->isValid($document->getRead()), false);
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), false);
 
-        Authorization::setRole(Role::team('123')->toString());
+        $this->authorization->addRole(Role::team('123')->toString());
 
-        $this->assertEquals($object->isValid($document->getRead()), true);
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), true);
 
-        Authorization::cleanRoles();
-        Authorization::disable();
+        $this->authorization->cleanRoles();
+        $this->authorization->disable();
 
-        $this->assertEquals($object->isValid($document->getRead()), true);
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), true);
 
-        Authorization::reset();
+        $this->authorization->reset();
 
-        $this->assertEquals($object->isValid($document->getRead()), false);
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), false);
 
-        Authorization::setDefaultStatus(false);
-        Authorization::disable();
+        $this->authorization->setDefaultStatus(false);
+        $this->authorization->disable();
 
-        $this->assertEquals($object->isValid($document->getRead()), true);
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), true);
 
-        Authorization::reset();
+        $this->authorization->reset();
 
-        $this->assertEquals($object->isValid($document->getRead()), true);
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), true);
 
-        Authorization::enable();
+        $this->authorization->enable();
 
-        $this->assertEquals($object->isValid($document->getRead()), false);
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), false);
 
-        Authorization::setRole('textX');
+        $this->authorization->addRole('textX');
 
-        $this->assertContains('textX', Authorization::getRoles());
+        $this->assertContains('textX', $this->authorization->getRoles());
 
-        Authorization::unsetRole('textX');
+        $this->authorization->removeRole('textX');
 
-        $this->assertNotContains('textX', Authorization::getRoles());
+        $this->assertNotContains('textX', $this->authorization->getRoles());
 
         // Test skip method
-        $this->assertEquals($object->isValid($document->getRead()), false);
-        $this->assertEquals(Authorization::skip(function () use ($object, $document) {
-            return $object->isValid($document->getRead());
+        $this->assertEquals($object->isValid(new Input(Database::PERMISSION_READ, $document->getRead())), false);
+        $this->assertEquals($this->authorization->skip(function () use ($object, $document) {
+            return $object->isValid(new Input(Database::PERMISSION_READ, $document->getRead()));
         }), true);
     }
 
     public function testNestedSkips(): void
     {
-        $this->assertEquals(true, Authorization::$status);
+        $this->assertEquals(true, $this->authorization->getStatus());
 
-        Authorization::skip(function () {
-            $this->assertEquals(false, Authorization::$status);
+        $this->authorization->skip(function () {
+            $this->assertEquals(false, $this->authorization->getStatus());
 
-            Authorization::skip(function () {
-                $this->assertEquals(false, Authorization::$status);
+            $this->authorization->skip(function () {
+                $this->assertEquals(false, $this->authorization->getStatus());
 
-                Authorization::skip(function () {
-                    $this->assertEquals(false, Authorization::$status);
+                $this->authorization->skip(function () {
+                    $this->assertEquals(false, $this->authorization->getStatus());
                 });
 
-                $this->assertEquals(false, Authorization::$status);
+                $this->assertEquals(false, $this->authorization->getStatus());
             });
 
-            $this->assertEquals(false, Authorization::$status);
+            $this->assertEquals(false, $this->authorization->getStatus());
         });
 
-        $this->assertEquals(true, Authorization::$status);
+        $this->assertEquals(true, $this->authorization->getStatus());
     }
 }

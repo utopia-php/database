@@ -1866,4 +1866,9 @@ class SQLite extends MariaDB
 
         return $stmt;
     }
+
+    public function getLockType(): string
+    {
+        return '';
+    }
 }

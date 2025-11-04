@@ -4534,15 +4534,17 @@ class Database
 
             $document = $this->encode($collection, $document);
 
-            $validator = new Structure(
-                $collection,
-                $this->adapter->getIdAttributeType(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
-            );
-            if (!$validator->isValid($document)) {
-                throw new StructureException($validator->getDescription());
+            if ($this->validate) {
+                $validator = new Structure(
+                    $collection,
+                    $this->adapter->getIdAttributeType(),
+                    $this->adapter->getMinDateTime(),
+                    $this->adapter->getMaxDateTime(),
+                    $this->adapter->getSupportForAttributes()
+                );
+                if (!$validator->isValid($document)) {
+                    throw new StructureException($validator->getDescription());
+                }
             }
 
             if ($this->resolveRelationships) {

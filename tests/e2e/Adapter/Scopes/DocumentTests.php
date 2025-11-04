@@ -6185,4 +6185,45 @@ trait DocumentTests
         $database->deleteCollection($colName);
     }
 
+    public function testBypassStructureWithSupportForAttributes(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        $collectionId = 'successive_update_single';
+        Authorization::cleanRoles();
+        Authorization::setRole(Role::any()->toString());
+
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'attrA', Database::VAR_STRING, 50, true);
+        $database->createAttribute($collectionId, 'attrB', Database::VAR_STRING, 50, true);
+
+        // bypass required
+        $database->disableValidation();
+
+        $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
+        $docs = $database->createDocuments($collectionId, [
+            new Document(['attrA' => null,'attrB' => 'B','$permissions' => $permissions])
+        ]);
+
+        $docs = $database->find($collectionId);
+        foreach ($docs as $doc) {
+            $this->assertArrayHasKey('attrA', $doc->getAttributes());
+            $this->assertNull($doc->getAttribute('attrA'));
+            $this->assertEquals('B', $doc->getAttribute('attrB'));
+        }
+        // reset
+        $database->enableValidation();
+
+        try {
+            $database->createDocuments($collectionId, [
+                new Document(['attrA' => null,'attrB' => 'B','$permissions' => $permissions])
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        $database->deleteCollection($collectionId);
+    }
 }

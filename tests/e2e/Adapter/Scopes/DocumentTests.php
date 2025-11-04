@@ -6229,4 +6229,138 @@ trait DocumentTests
 
         $database->deleteCollection($collectionId);
     }
+
+    public function testValidationGuardsWithNullRequired(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Base collection and attributes
+        $collection = 'validation_guard_all';
+        $database->createCollection($collection, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ], documentSecurity: true);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 32, true);
+        $database->createAttribute($collection, 'age', Database::VAR_INTEGER, 0, true);
+        $database->createAttribute($collection, 'value', Database::VAR_INTEGER, 0, false);
+
+        // 1) createDocument with null required should fail when validation enabled, pass when disabled
+        try {
+            $database->createDocument($collection, new Document([
+                '$permissions' => [Permission::read(Role::any()), Permission::create(Role::any())],
+                'name' => null,
+                'age' => null,
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        $database->disableValidation();
+        $doc = $database->createDocument($collection, new Document([
+            '$id' => 'created-null',
+            '$permissions' => [Permission::read(Role::any()), Permission::create(Role::any()), Permission::update(Role::any())],
+            'name' => null,
+            'age' => null,
+        ]));
+        $this->assertEquals('created-null', $doc->getId());
+        $database->enableValidation();
+
+        // Seed a valid document for updates
+        $valid = $database->createDocument($collection, new Document([
+            '$id' => 'valid',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'ok',
+            'age' => 10,
+        ]));
+        $this->assertEquals('valid', $valid->getId());
+
+        // 2) updateDocument set required to null should fail when validation enabled, pass when disabled
+        try {
+            $database->updateDocument($collection, 'valid', new Document([
+                'age' => null,
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(StructureException::class, $e);
+        }
+
+        $database->disableValidation();
+        $updated = $database->updateDocument($collection, 'valid', new Document([
+            'age' => null,
+        ]));
+        $this->assertNull($updated->getAttribute('age'));
+        $database->enableValidation();
+
+        // Seed a few valid docs for bulk update
+        for ($i = 0; $i < 2; $i++) {
+            $database->createDocument($collection, new Document([
+                '$id' => 'b' . $i,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'name' => 'ok',
+                'age' => 1,
+            ]));
+        }
+
+        // 3) updateDocuments setting required to null should fail when validation enabled, pass when disabled
+        if ($database->getAdapter()->getSupportForBatchOperations()) {
+            try {
+                $database->updateDocuments($collection, new Document([
+                    'name' => null,
+                ]));
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
+
+            $database->disableValidation();
+            $count = $database->updateDocuments($collection, new Document([
+                'name' => null,
+            ]));
+            $this->assertGreaterThanOrEqual(3, $count); // at least the seeded docs are updated
+            $database->enableValidation();
+        }
+
+        // 4) upsertDocumentsWithIncrease with null required should fail when validation enabled, pass when disabled
+        if ($database->getAdapter()->getSupportForUpserts()) {
+            try {
+                $database->upsertDocumentsWithIncrease(
+                    collection: $collection,
+                    attribute: 'value',
+                    documents: [new Document([
+                        '$id' => 'u1',
+                        'name' => null, // required null
+                        'value' => 1,
+                    ])]
+                );
+                $this->fail('Failed to throw exception');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
+
+            $database->disableValidation();
+            $ucount = $database->upsertDocumentsWithIncrease(
+                collection: $collection,
+                attribute: 'value',
+                documents: [new Document([
+                    '$id' => 'u1',
+                    'name' => null,
+                    'value' => 1,
+                ])]
+            );
+            $this->assertEquals(1, $ucount);
+            $database->enableValidation();
+        }
+
+        // Cleanup
+        $database->deleteCollection($collection);
+    }
 }

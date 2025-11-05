@@ -1159,7 +1159,7 @@ class Database
     public function enableLocks(bool $bool): static
     {
         if ($this->adapter->getSupportForAlterLocks()) {
-            $this->adapter->enableLocks($bool);
+            $this->adapter->enableAlterLocks($bool);
         }
 
         return $this;

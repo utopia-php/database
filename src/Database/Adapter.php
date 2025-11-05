@@ -1444,14 +1444,14 @@ abstract class Adapter
     abstract public function getSupportForAlterLocks(): bool;
 
     /**
-     * @param bool $bool
+     * @param bool $enable
      *
      * @return $this
      * @throws Exception
      */
-    public function enableLocks(bool $bool): self
+    public function enableAlterLocks(bool $enable): self
     {
-        $this->alterLocks = $bool;
+        $this->alterLocks = $enable;
 
         return $this;
     }

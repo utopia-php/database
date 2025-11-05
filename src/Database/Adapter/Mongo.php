@@ -3209,4 +3209,9 @@ class Mongo extends Adapter
     {
         return '';
     }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return false;
+    }
 }

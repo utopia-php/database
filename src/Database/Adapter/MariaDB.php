@@ -2215,8 +2215,8 @@ class MariaDB extends SQL
         return true;
     }
 
-    public function getLockType(): string
+    public function getSupportForAlterLocks(): bool
     {
-        return ',LOCK=SHARED';
+        return true;
     }
 }

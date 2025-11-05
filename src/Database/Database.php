@@ -1148,6 +1148,24 @@ class Database
     }
 
     /**
+     * Set lock mode
+     *
+     * Set lock mode when altering tables
+     *
+     * @param bool $bool
+     * @return static
+     * @throws Exception
+     */
+    public function enableLocks(bool $bool): static
+    {
+        if ($this->adapter->getSupportForAlterLocks()) {
+            $this->adapter->enableLocks($bool);
+        }
+
+        return $this;
+    }
+
+    /**
      * Set Tenant
      *
      * Set tenant to use if tables are shared

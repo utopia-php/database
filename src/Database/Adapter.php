@@ -31,6 +31,8 @@ abstract class Adapter
 
     protected int $inTransaction = 0;
 
+    protected bool $alterLocks = false;
+
     /**
      * @var array<string, mixed>
      */
@@ -1434,4 +1436,23 @@ abstract class Adapter
      */
     abstract public function getSupportForIntegerBooleans(): bool;
 
+    /**
+     * Does the adapter has support to change default lock mode?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForAlterLocks(): bool;
+
+    /**
+     * @param bool $bool
+     *
+     * @return $this
+     * @throws Exception
+     */
+    public function enableLocks(bool $bool): self
+    {
+        $this->alterLocks = $bool;
+
+        return $this;
+    }
 }

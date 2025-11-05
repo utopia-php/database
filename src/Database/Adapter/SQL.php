@@ -259,11 +259,6 @@ abstract class SQL extends Adapter
         }
     }
 
-    public function getLockType(): string
-    {
-        return '';
-    }
-
     /**
      * Create Attributes
      *
@@ -3518,5 +3513,19 @@ abstract class SQL extends Adapter
     public function setSupportForAttributes(bool $support): bool
     {
         return true;
+    }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return false;
+    }
+
+    public function getLockType(): string
+    {
+        if ($this->getSupportForAlterLocks() && $this->alterLocks) {
+            return ',LOCK=SHARED';
+        }
+
+        return '';
     }
 }

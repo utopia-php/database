@@ -55,7 +55,9 @@ class MySQLTest extends Base
             ->setDatabase('utopiaTests')
             ->setSharedTables(true)
             ->setTenant(999)
-            ->setNamespace(static::$namespace = '');
+            ->setNamespace(static::$namespace = '')
+            ->enableLocks(true)
+        ;
 
         if ($database->exists()) {
             $database->delete();

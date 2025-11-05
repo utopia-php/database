@@ -17,7 +17,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 abstract class SQL extends Adapter
 {
@@ -2958,7 +2957,7 @@ abstract class SQL extends Adapter
         $attributes = $collection->getAttribute('attributes', []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $orders = [];
         $alias = Query::DEFAULT_ALIAS;
@@ -3055,7 +3054,7 @@ abstract class SQL extends Adapter
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
 
@@ -3175,7 +3174,7 @@ abstract class SQL extends Adapter
         $attributes = $collection->getAttribute("attributes", []);
         $collection = $collection->getId();
         $name = $this->filter($collection);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $binds = [];
         $where = [];
         $alias = Query::DEFAULT_ALIAS;
@@ -3193,7 +3192,7 @@ abstract class SQL extends Adapter
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 
@@ -3251,7 +3250,7 @@ abstract class SQL extends Adapter
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $alias = Query::DEFAULT_ALIAS;
         $binds = [];
@@ -3269,7 +3268,7 @@ abstract class SQL extends Adapter
             $where[] = $conditions;
         }
 
-        if (Authorization::$status) {
+        if ($this->authorization->getStatus()) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
         }
 

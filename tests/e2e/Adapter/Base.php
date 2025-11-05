@@ -37,11 +37,15 @@ abstract class Base extends TestCase
 
     protected static string $namespace;
 
+    /**
+     * @var Authorization
+     */
+    protected static ?Authorization $authorization = null;
 
     /**
      * @return Database
      */
-    abstract protected static function getDatabase(): Database;
+    abstract protected function getDatabase(): Database;
 
     /**
      * @param string $collection
@@ -49,7 +53,7 @@ abstract class Base extends TestCase
      *
      * @return bool
      */
-    abstract protected static function deleteColumn(string $collection, string $column): bool;
+    abstract protected function deleteColumn(string $collection, string $column): bool;
 
     /**
      * @param string $collection
@@ -57,16 +61,21 @@ abstract class Base extends TestCase
      *
      * @return bool
      */
-    abstract protected static function deleteIndex(string $collection, string $index): bool;
+    abstract protected function deleteIndex(string $collection, string $index): bool;
 
     public function setUp(): void
     {
-        Authorization::setRole('any');
+        if (is_null(self::$authorization)) {
+            self::$authorization = new Authorization();
+        }
+
+        self::$authorization->addRole('any');
     }
 
     public function tearDown(): void
     {
-        Authorization::setDefaultStatus(true);
+        self::$authorization->setDefaultStatus(true);
+
     }
 
     protected string $testDatabase = 'utopiaTests';

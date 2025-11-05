@@ -1706,12 +1706,14 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenantFilters($collection);
         }
 
-        if ($max) {
-            $filters[$attribute] = ['$lte' => $max];
-        }
-
-        if ($min) {
-            $filters[$attribute] = ['$gte' => $min];
+        if ($max !== null || $min !== null) {
+            $filters[$attribute] = [];
+            if ($max !== null) {
+                $filters[$attribute]['$lte'] = $max;
+            }
+            if ($min !== null) {
+                $filters[$attribute]['$gte'] = $min;
+            }
         }
 
         $options = $this->getTransactionOptions();
@@ -1868,8 +1870,8 @@ class Mongo extends Adapter
         }
 
         // permissions
-        if (Authorization::$status) {
-            $roles = \implode('|', Authorization::getRoles());
+        if ($this->authorization->getStatus()) {
+            $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
@@ -2115,8 +2117,8 @@ class Mongo extends Adapter
         }
 
         // Add permissions filter if authorization is enabled
-        if (Authorization::$status) {
-            $roles = \implode('|', Authorization::getRoles());
+        if ($this->authorization->getStatus()) {
+            $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 
@@ -2205,8 +2207,8 @@ class Mongo extends Adapter
         }
 
         // permissions
-        if (Authorization::$status) { // skip if authorization is disabled
-            $roles = \implode('|', Authorization::getRoles());
+        if ($this->authorization->getStatus()) { // skip if authorization is disabled
+            $roles = \implode('|', $this->authorization->getRoles());
             $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
         }
 

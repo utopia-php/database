@@ -31,6 +31,8 @@ abstract class Adapter
 
     protected int $inTransaction = 0;
 
+    protected bool $alterLocks = false;
+
     /**
      * @var array<string, mixed>
      */
@@ -1434,4 +1436,25 @@ abstract class Adapter
      */
     abstract public function getSupportForIntegerBooleans(): bool;
 
+    /**
+     * Does the adapter have support for ALTER TABLE locking modes?
+     *
+     * When enabled, adapters can specify lock behavior (e.g., LOCK=SHARED)
+     * during ALTER TABLE operations to control concurrent access.
+     *
+     * @return bool
+     */
+    abstract public function getSupportForAlterLocks(): bool;
+
+    /**
+     * @param bool $enable
+     *
+     * @return $this
+     */
+    public function enableAlterLocks(bool $enable): self
+    {
+        $this->alterLocks = $enable;
+
+        return $this;
+    }
 }

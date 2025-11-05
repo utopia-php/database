@@ -632,4 +632,9 @@ class Pool extends Adapter
         $this->authorization = $authorization;
         return $this;
     }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
 }

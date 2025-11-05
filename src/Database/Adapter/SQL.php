@@ -247,7 +247,7 @@ abstract class SQL extends Adapter
     {
         $id = $this->quote($this->filter($id));
         $type = $this->getSQLType($type, $size, $signed, $array, $required);
-        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type};";
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$id} {$type} {$this->getLockType()};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         try {
@@ -284,7 +284,7 @@ abstract class SQL extends Adapter
 
         $columns = \implode(', ADD COLUMN ', $parts);
 
-        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$columns};";
+        $sql = "ALTER TABLE {$this->getSQLTable($collection)} ADD COLUMN {$columns} {$this->getLockType()};";
         $sql = $this->trigger(Database::EVENT_ATTRIBUTE_CREATE, $sql);
 
         try {
@@ -3513,5 +3513,19 @@ abstract class SQL extends Adapter
     public function setSupportForAttributes(bool $support): bool
     {
         return true;
+    }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return false;
+    }
+
+    public function getLockType(): string
+    {
+        if ($this->getSupportForAlterLocks() && $this->alterLocks) {
+            return ',LOCK=SHARED';
+        }
+
+        return '';
     }
 }

@@ -1706,12 +1706,14 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenantFilters($collection);
         }
 
-        if ($max) {
-            $filters[$attribute] = ['$lte' => $max];
-        }
-
-        if ($min) {
-            $filters[$attribute] = ['$gte' => $min];
+        if ($max !== null || $min !== null) {
+            $filters[$attribute] = [];
+            if ($max !== null) {
+                $filters[$attribute]['$lte'] = $max;
+            }
+            if ($min !== null) {
+                $filters[$attribute]['$gte'] = $min;
+            }
         }
 
         $options = $this->getTransactionOptions();

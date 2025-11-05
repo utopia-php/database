@@ -1862,16 +1862,29 @@ class Database
             }
         }
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        // Wrap metadata update in try-catch to ensure rollback on failure
+        try {
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->purgeCachedCollection($collection->getId());
+            $this->purgeCachedDocument(self::METADATA, $collection->getId());
+
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+
+            return true;
+        } catch (\Throwable $e) {
+            // Rollback: Remove the attribute that was created
+            try {
+                $this->adapter->deleteAttribute($collection->getId(), $id, $type, $size, $signed, $array);
+            } catch (\Throwable $rollbackException) {
+                // Log rollback failure but throw original exception
+                throw new DatabaseException('Failed to create attribute metadata and rollback failed: ' . $e->getMessage() . ' | Rollback error: ' . $rollbackException->getMessage(), previous: $e);
+            }
+
+            throw new DatabaseException('Failed to create attribute metadata: ' . $e->getMessage(), previous: $e);
         }
-
-        $this->purgeCachedCollection($collection->getId());
-        $this->purgeCachedDocument(self::METADATA, $collection->getId());
-
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
-
-        return true;
     }
 
     /**
@@ -2967,8 +2980,11 @@ class Database
         $collection->setAttribute('attributes', $relationship, Document::SET_TYPE_APPEND);
         $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
 
+        // Track junction collection name for rollback
+        $junctionCollection = null;
         if ($type === self::RELATION_MANY_TO_MANY) {
-            $this->silent(fn () => $this->createCollection('_' . $collection->getSequence() . '_' . $relatedCollection->getSequence(), [
+            $junctionCollection = '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence();
+            $this->silent(fn () => $this->createCollection($junctionCollection, [
                 new Document([
                     '$id' => $id,
                     'key' => $id,
@@ -3015,25 +3031,48 @@ class Database
         );
 
         if (!$created) {
+            // Rollback junction table if it was created
+            if ($junctionCollection !== null) {
+                try {
+                    $this->silent(fn () => $this->deleteCollection($junctionCollection));
+                } catch (\Throwable $e) {
+                    // Continue to throw the main error
+                }
+            }
             throw new DatabaseException('Failed to create relationship');
         }
 
-        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey) {
+        $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $junctionCollection) {
+            $indexesCreated = [];
             try {
                 $this->withTransaction(function () use ($collection, $relatedCollection) {
                     $this->updateDocument(self::METADATA, $collection->getId(), $collection);
                     $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                 });
             } catch (\Throwable $e) {
-                $this->adapter->deleteRelationship(
-                    $collection->getId(),
-                    $relatedCollection->getId(),
-                    $type,
-                    $twoWay,
-                    $id,
-                    $twoWayKey,
-                    Database::RELATION_SIDE_PARENT
-                );
+                // Rollback adapter relationship
+                try {
+                    $this->adapter->deleteRelationship(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $type,
+                        $twoWay,
+                        $id,
+                        $twoWayKey,
+                        Database::RELATION_SIDE_PARENT
+                    );
+                } catch (\Throwable $rollbackException) {
+                    // Continue to rollback junction table
+                }
+
+                // Rollback junction table if it was created
+                if ($junctionCollection !== null) {
+                    try {
+                        $this->deleteCollection($junctionCollection);
+                    } catch (\Throwable $rollbackException) {
+                        // Continue to throw original error
+                    }
+                }
 
                 throw new DatabaseException('Failed to create relationship: ' . $e->getMessage());
             }
@@ -3041,24 +3080,81 @@ class Database
             $indexKey = '_index_' . $id;
             $twoWayIndexKey = '_index_' . $twoWayKey;
 
-            switch ($type) {
-                case self::RELATION_ONE_TO_ONE:
-                    $this->createIndex($collection->getId(), $indexKey, self::INDEX_UNIQUE, [$id]);
-                    if ($twoWay) {
-                        $this->createIndex($relatedCollection->getId(), $twoWayIndexKey, self::INDEX_UNIQUE, [$twoWayKey]);
+            try {
+                switch ($type) {
+                    case self::RELATION_ONE_TO_ONE:
+                        $this->createIndex($collection->getId(), $indexKey, self::INDEX_UNIQUE, [$id]);
+                        $indexesCreated[] = ['collection' => $collection->getId(), 'index' => $indexKey];
+                        if ($twoWay) {
+                            $this->createIndex($relatedCollection->getId(), $twoWayIndexKey, self::INDEX_UNIQUE, [$twoWayKey]);
+                            $indexesCreated[] = ['collection' => $relatedCollection->getId(), 'index' => $twoWayIndexKey];
+                        }
+                        break;
+                    case self::RELATION_ONE_TO_MANY:
+                        $this->createIndex($relatedCollection->getId(), $twoWayIndexKey, self::INDEX_KEY, [$twoWayKey]);
+                        $indexesCreated[] = ['collection' => $relatedCollection->getId(), 'index' => $twoWayIndexKey];
+                        break;
+                    case self::RELATION_MANY_TO_ONE:
+                        $this->createIndex($collection->getId(), $indexKey, self::INDEX_KEY, [$id]);
+                        $indexesCreated[] = ['collection' => $collection->getId(), 'index' => $indexKey];
+                        break;
+                    case self::RELATION_MANY_TO_MANY:
+                        // Indexes created on junction collection creation
+                        break;
+                    default:
+                        throw new RelationshipException('Invalid relationship type.');
+                }
+            } catch (\Throwable $e) {
+                // Rollback any indexes that were successfully created
+                foreach ($indexesCreated as $indexInfo) {
+                    try {
+                        $this->deleteIndex($indexInfo['collection'], $indexInfo['index']);
+                    } catch (\Throwable $rollbackException) {
+                        // Continue rollback
                     }
-                    break;
-                case self::RELATION_ONE_TO_MANY:
-                    $this->createIndex($relatedCollection->getId(), $twoWayIndexKey, self::INDEX_KEY, [$twoWayKey]);
-                    break;
-                case self::RELATION_MANY_TO_ONE:
-                    $this->createIndex($collection->getId(), $indexKey, self::INDEX_KEY, [$id]);
-                    break;
-                case self::RELATION_MANY_TO_MANY:
-                    // Indexes created on junction collection creation
-                    break;
-                default:
-                    throw new RelationshipException('Invalid relationship type.');
+                }
+
+                // Rollback metadata updates via transaction
+                try {
+                    $this->withTransaction(function () use ($collection, $relatedCollection, $id, $twoWayKey) {
+                        // Remove relationship attributes from collections
+                        $attributes = $collection->getAttribute('attributes', []);
+                        $collection->setAttribute('attributes', array_filter($attributes, fn($attr) => $attr->getId() !== $id));
+                        $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+
+                        $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
+                        $relatedCollection->setAttribute('attributes', array_filter($relatedAttributes, fn($attr) => $attr->getId() !== $twoWayKey));
+                        $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
+                    });
+                } catch (\Throwable $rollbackException) {
+                    // Continue rollback
+                }
+
+                // Rollback adapter relationship
+                try {
+                    $this->adapter->deleteRelationship(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $type,
+                        $twoWay,
+                        $id,
+                        $twoWayKey,
+                        Database::RELATION_SIDE_PARENT
+                    );
+                } catch (\Throwable $rollbackException) {
+                    // Continue rollback
+                }
+
+                // Rollback junction table if it was created
+                if ($junctionCollection !== null) {
+                    try {
+                        $this->deleteCollection($junctionCollection);
+                    } catch (\Throwable $rollbackException) {
+                        // Continue to throw original error
+                    }
+                }
+
+                throw new DatabaseException('Failed to create relationship indexes: ' . $e->getMessage());
             }
         });
 
@@ -3606,13 +3702,26 @@ class Database
             }
         }
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        // Wrap metadata update in try-catch to ensure rollback on failure
+        try {
+            if ($collection->getId() !== self::METADATA) {
+                $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+            }
+
+            $this->trigger(self::EVENT_INDEX_CREATE, $index);
+
+            return true;
+        } catch (\Throwable $e) {
+            // Rollback: Remove the index that was created
+            try {
+                $this->adapter->deleteIndex($collection->getId(), $id);
+            } catch (\Throwable $rollbackException) {
+                // Log rollback failure but throw original exception
+                throw new DatabaseException('Failed to create index metadata and rollback failed: ' . $e->getMessage() . ' | Rollback error: ' . $rollbackException->getMessage(), previous: $e);
+            }
+
+            throw new DatabaseException('Failed to create index metadata: ' . $e->getMessage(), previous: $e);
         }
-
-        $this->trigger(self::EVENT_INDEX_CREATE, $index);
-
-        return true;
     }
 
     /**

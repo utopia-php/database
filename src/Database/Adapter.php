@@ -1447,7 +1447,6 @@ abstract class Adapter
      * @param bool $enable
      *
      * @return $this
-     * @throws Exception
      */
     public function enableAlterLocks(bool $enable): self
     {

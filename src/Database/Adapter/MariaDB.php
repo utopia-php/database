@@ -1312,12 +1312,12 @@ class MariaDB extends SQL
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
-        $sqlMax = $max ? " AND `{$attribute}` <= {$max}" : '';
-        $sqlMin = $min ? " AND `{$attribute}` >= {$min}" : '';
+        $sqlMax = $max !== null ? " AND `{$attribute}` <= :max" : '';
+        $sqlMin = $min !== null ? " AND `{$attribute}` >= :min" : '';
 
         $sql = "
-			UPDATE {$this->getSQLTable($name)} 
-			SET 
+			UPDATE {$this->getSQLTable($name)}
+			SET
 			    `{$attribute}` = `{$attribute}` + :val,
 			    `_updatedAt` = :updatedAt
 			WHERE _uid = :_uid
@@ -1333,6 +1333,12 @@ class MariaDB extends SQL
         $stmt->bindValue(':val', $value);
         $stmt->bindValue(':updatedAt', $updatedAt);
 
+        if ($max !== null) {
+            $stmt->bindValue(':max', $max);
+        }
+        if ($min !== null) {
+            $stmt->bindValue(':min', $min);
+        }
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }

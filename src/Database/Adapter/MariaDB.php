@@ -2220,4 +2220,9 @@ class MariaDB extends SQL
     {
         return true;
     }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return true;
+    }
 }

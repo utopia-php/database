@@ -1437,7 +1437,10 @@ abstract class Adapter
     abstract public function getSupportForIntegerBooleans(): bool;
 
     /**
-     * Does the adapter has support to change default lock mode?
+     * Does the adapter have support for ALTER TABLE locking modes?
+     *
+     * When enabled, adapters can specify lock behavior (e.g., LOCK=SHARED)
+     * during ALTER TABLE operations to control concurrent access.
      *
      * @return bool
      */

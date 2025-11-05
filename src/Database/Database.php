@@ -4482,15 +4482,17 @@ class Database
             }
         }
 
-        $structure = new Structure(
-            $collection,
-            $this->adapter->getIdAttributeType(),
-            $this->adapter->getMinDateTime(),
-            $this->adapter->getMaxDateTime(),
-            $this->adapter->getSupportForAttributes()
-        );
-        if (!$structure->isValid($document)) {
-            throw new StructureException($structure->getDescription());
+        if ($this->validate) {
+            $structure = new Structure(
+                $collection,
+                $this->adapter->getIdAttributeType(),
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes()
+            );
+            if (!$structure->isValid($document)) {
+                throw new StructureException($structure->getDescription());
+            }
         }
 
         $document = $this->adapter->castingBefore($collection, $document);
@@ -4583,15 +4585,17 @@ class Database
 
             $document = $this->encode($collection, $document);
 
-            $validator = new Structure(
-                $collection,
-                $this->adapter->getIdAttributeType(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
-            );
-            if (!$validator->isValid($document)) {
-                throw new StructureException($validator->getDescription());
+            if ($this->validate) {
+                $validator = new Structure(
+                    $collection,
+                    $this->adapter->getIdAttributeType(),
+                    $this->adapter->getMinDateTime(),
+                    $this->adapter->getMaxDateTime(),
+                    $this->adapter->getSupportForAttributes()
+                );
+                if (!$validator->isValid($document)) {
+                    throw new StructureException($validator->getDescription());
+                }
             }
 
             if ($this->resolveRelationships) {
@@ -5145,16 +5149,18 @@ class Database
 
             $document = $this->encode($collection, $document);
 
-            $structureValidator = new Structure(
-                $collection,
-                $this->adapter->getIdAttributeType(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes(),
-                $old
-            );
-            if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
-                throw new StructureException($structureValidator->getDescription());
+            if ($this->validate) {
+                $structureValidator = new Structure(
+                    $collection,
+                    $this->adapter->getIdAttributeType(),
+                    $this->adapter->getMinDateTime(),
+                    $this->adapter->getMaxDateTime(),
+                    $this->adapter->getSupportForAttributes(),
+                    $old
+                );
+                if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
+                    throw new StructureException($structureValidator->getDescription());
+                }
             }
 
             if ($this->resolveRelationships) {
@@ -5300,17 +5306,19 @@ class Database
             applyDefaults: false
         );
 
-        $validator = new PartialStructure(
-            $collection,
-            $this->adapter->getIdAttributeType(),
-            $this->adapter->getMinDateTime(),
-            $this->adapter->getMaxDateTime(),
-            $this->adapter->getSupportForAttributes(),
-            null // No old document available in bulk updates
-        );
+        if ($this->validate) {
+            $validator = new PartialStructure(
+                $collection,
+                $this->adapter->getIdAttributeType(),
+                $this->adapter->getMinDateTime(),
+                $this->adapter->getMaxDateTime(),
+                $this->adapter->getSupportForAttributes(),
+                null // No old document available in bulk updates
+            );
 
-        if (!$validator->isValid($updates)) {
-            throw new StructureException($validator->getDescription());
+            if (!$validator->isValid($updates)) {
+                throw new StructureException($validator->getDescription());
+            }
         }
 
         $originalLimit = $limit;
@@ -6064,17 +6072,19 @@ class Database
                 }
             }
 
-            $validator = new Structure(
-                $collection,
-                $this->adapter->getIdAttributeType(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes(),
-                $old->isEmpty() ? null : $old
-            );
+            if ($this->validate) {
+                $validator = new Structure(
+                    $collection,
+                    $this->adapter->getIdAttributeType(),
+                    $this->adapter->getMinDateTime(),
+                    $this->adapter->getMaxDateTime(),
+                    $this->adapter->getSupportForAttributes(),
+                    $old->isEmpty() ? null : $old
+                );
 
-            if (!$validator->isValid($document)) {
-                throw new StructureException($validator->getDescription());
+                if (!$validator->isValid($document)) {
+                    throw new StructureException($validator->getDescription());
+                }
             }
 
             $document = $this->encode($collection, $document);

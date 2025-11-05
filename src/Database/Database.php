@@ -1148,24 +1148,6 @@ class Database
     }
 
     /**
-     * Set lock mode
-     *
-     * Set lock mode when altering tables
-     *
-     * @param bool $bool
-     * @return static
-     * @throws Exception
-     */
-    public function enableLocks(bool $bool): static
-    {
-        if ($this->adapter->getSupportForAlterLocks()) {
-            $this->adapter->enableAlterLocks($bool);
-        }
-
-        return $this;
-    }
-
-    /**
      * Set Tenant
      *
      * Set tenant to use if tables are shared
@@ -1234,6 +1216,23 @@ class Database
     public function getTenantPerDocument(): bool
     {
         return $this->adapter->getTenantPerDocument();
+    }
+
+    /**
+     * Enable or disable LOCK=SHARED during ALTER TABLE operation
+     *
+     * Set lock mode when altering tables
+     *
+     * @param bool $enabled
+     * @return static
+     */
+    public function enableLocks(bool $enabled): static
+    {
+        if ($this->adapter->getSupportForAlterLocks()) {
+            $this->adapter->enableAlterLocks($enabled);
+        }
+
+        return $this;
     }
 
     public function getPreserveDates(): bool

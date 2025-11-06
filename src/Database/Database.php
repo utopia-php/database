@@ -68,6 +68,13 @@ class Database
         self::VAR_POLYGON
     ];
 
+    // All types which requires filters
+    public const ATTRIBUTE_FILTER_TYPES = [
+        ...self::SPATIAL_TYPES,
+        self::VAR_VECTOR,
+        self::VAR_OBJECT,
+    ];
+
     // Index Types
     public const INDEX_KEY = 'key';
     public const INDEX_FULLTEXT = 'fulltext';
@@ -606,6 +613,35 @@ class Database
                 }
 
                 return \json_encode(\array_map(\floatval(...), $value));
+            },
+            /**
+             * @param string|null $value
+             * @return array|null
+             */
+            function (?string $value) {
+                if (is_null($value)) {
+                    return null;
+                }
+                if (!is_string($value)) {
+                    return $value;
+                }
+                $decoded = json_decode($value, true);
+                return is_array($decoded) ? $decoded : $value;
+            }
+        );
+
+        self::addFilter(
+            Database::VAR_OBJECT,
+            /**
+             * @param mixed $value
+             * @return mixed
+             */
+            function (mixed $value) {
+                if (!\is_array($value)) {
+                    return $value;
+                }
+
+                return \json_encode($value);
             },
             /**
              * @param string|null $value
@@ -1438,7 +1474,7 @@ class Database
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
     {
         foreach ($attributes as &$attribute) {
-            if (in_array($attribute['type'], Database::SPATIAL_TYPES) || $attribute['type'] === Database::VAR_VECTOR) {
+            if (in_array($attribute['type'], self::ATTRIBUTE_FILTER_TYPES)) {
                 $existingFilters = $attribute['filters'] ?? [];
                 if (!is_array($existingFilters)) {
                     $existingFilters = [$existingFilters];
@@ -1811,11 +1847,8 @@ class Database
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
         }
-        if (in_array($type, Database::SPATIAL_TYPES)) {
-            $filters[] = $type;
-            $filters = array_unique($filters);
-        }
-        if ($type === Database::VAR_VECTOR) {
+
+        if (in_array($type, self::ATTRIBUTE_FILTER_TYPES)) {
             $filters[] = $type;
             $filters = array_unique($filters);
         }
@@ -2137,6 +2170,9 @@ class Database
                 }
                 if ($this->adapter->getSupportForSpatialAttributes()) {
                     \array_push($supportedTypes, ...self::SPATIAL_TYPES);
+                }
+                if ($this->adapter->getSupportForObject()) {
+                    $supportedTypes[] = self::VAR_OBJECT;
                 }
                 throw new DatabaseException('Unknown attribute type: ' . $type . '. Must be one of ' . implode(', ', $supportedTypes));
         }
@@ -7728,12 +7764,6 @@ class Database
                         break;
                     case self::VAR_FLOAT:
                         $node = (float)$node;
-                        break;
-                    case self::VAR_OBJECT:
-                        // Decode JSONB string to array
-                        if (is_string($node)) {
-                            $node = json_decode($node, true);
-                        }
                         break;
                     default:
                         break;

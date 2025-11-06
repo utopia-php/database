@@ -21,7 +21,14 @@ class ObjectValidator extends Validator
      */
     public function isValid(mixed $value): bool
     {
-        return empty($value) || is_array($value) && !array_is_list($value);
+        if (is_string($value)) {
+            // Check if it's valid JSON
+            json_decode($value);
+            return json_last_error() === JSON_ERROR_NONE;
+        }
+
+        // Allow empty or associative arrays (non-list)
+        return empty($value) || (is_array($value) && !array_is_list($value));
     }
 
     /**

@@ -925,4 +925,160 @@ trait ObjectAttributeTests
         // Clean up
         $database->deleteCollection($collectionId);
     }
+
+    public function testMetadataWithVector(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        // Skip if adapter doesn't support either vectors or object attributes
+        if (!$database->getAdapter()->getSupportForVectors() || !$database->getAdapter()->getSupportForObject()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+
+        // Attributes: 3D vector and nested metadata object
+        $database->createAttribute($collectionId, 'embedding', Database::VAR_VECTOR, 3, true);
+        $database->createAttribute($collectionId, 'metadata', Database::VAR_OBJECT, 0, false);
+
+        // Seed documents
+        $docA = $database->createDocument($collectionId, new Document([
+            '$id' => 'vecA',
+            '$permissions' => [Permission::read(Role::any())],
+            'embedding' => [0.1, 0.2, 0.9],
+            'metadata' => [
+                'profile' => [
+                    'user' => [
+                        'info' => [
+                            'country' => 'IN',
+                            'score' => 100
+                        ]
+                    ]
+                ],
+                'tags' => ['ai', 'ml', 'db'],
+                'settings' => [
+                    'prefs' => [
+                        'theme' => 'dark',
+                        'features' => [
+                            'experimental' => true
+                        ]
+                    ]
+                ]
+            ]
+        ]));
+
+        $docB = $database->createDocument($collectionId, new Document([
+            '$id' => 'vecB',
+            '$permissions' => [Permission::read(Role::any())],
+            'embedding' => [0.2, 0.9, 0.1],
+            'metadata' => [
+                'profile' => [
+                    'user' => [
+                        'info' => [
+                            'country' => 'US',
+                            'score' => 80
+                        ]
+                    ]
+                ],
+                'tags' => ['search', 'analytics'],
+                'settings' => [
+                    'prefs' => [
+                        'theme' => 'light'
+                    ]
+                ]
+            ]
+        ]));
+
+        $docC = $database->createDocument($collectionId, new Document([
+            '$id' => 'vecC',
+            '$permissions' => [Permission::read(Role::any())],
+            'embedding' => [0.9, 0.1, 0.2],
+            'metadata' => [
+                'profile' => [
+                    'user' => [
+                        'info' => [
+                            'country' => 'CA',
+                            'score' => 60
+                        ]
+                    ]
+                ],
+                'tags' => ['ml', 'cv'],
+                'settings' => [
+                    'prefs' => [
+                        'theme' => 'dark',
+                        'features' => [
+                            'experimental' => false
+                        ]
+                    ]
+                ]
+            ]
+        ]));
+
+        // 1) Vector similarity: closest to [0.0, 0.0, 1.0] should be vecA
+        $results = $database->find($collectionId, [
+            Query::vectorCosine('embedding', [0.0, 0.0, 1.0]),
+            Query::limit(1)
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('vecA', $results[0]->getId());
+
+        // 2) Complex nested metadata equal (partial object containment)
+        $results = $database->find($collectionId, [
+            Query::equal('metadata', [[
+                'profile' => [
+                    'user' => [
+                        'info' => [
+                            'country' => 'IN'
+                        ]
+                    ]
+                ]
+            ]])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('vecA', $results[0]->getId());
+
+        // 3) Contains on nested array inside metadata
+        $results = $database->find($collectionId, [
+            Query::contains('metadata', [[
+                'tags' => 'ml'
+            ]])
+        ]);
+        $this->assertCount(2, $results); // vecA, vecC both have 'ml' in tags
+
+        // 4) Combine vector query with nested metadata filters
+        $results = $database->find($collectionId, [
+            Query::vectorEuclidean('embedding', [0.0, 1.0, 0.0]),
+            Query::equal('metadata', [[
+                'settings' => [
+                    'prefs' => [
+                        'theme' => 'light'
+                    ]
+                ]
+            ]]),
+            Query::limit(1)
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('vecB', $results[0]->getId());
+
+        // 5) Deep partial containment with boolean nested value
+        $results = $database->find($collectionId, [
+            Query::equal('metadata', [[
+                'settings' => [
+                    'prefs' => [
+                        'features' => [
+                            'experimental' => true
+                        ]
+                    ]
+                ]
+            ]])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('vecA', $results[0]->getId());
+
+        // Cleanup
+        $database->deleteCollection($collectionId);
+    }
 }

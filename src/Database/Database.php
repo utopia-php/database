@@ -603,12 +603,12 @@ class Database
                 return \json_encode(\array_map(\floatval(...), $value));
             },
             /**
-             * @param mixed $value
+             * @param string|null $value
              * @return array|null
              */
-            function (mixed $value) {
+            function (?string $value) {
                 if (is_null($value)) {
-                    return;
+                    return null;
                 }
                 if (!is_string($value)) {
                     return $value;
@@ -6149,7 +6149,6 @@ class Database
 
                 if (!$old->isEmpty()) {
                     $old = $this->adapter->castingAfter($collection, $old);
-                    $old = $this->decode($collection, $old);
                 }
 
                 try {

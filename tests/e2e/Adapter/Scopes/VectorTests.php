@@ -2624,4 +2624,134 @@ trait VectorTests
         // Cleanup
         $database->deleteCollection('vectorNested');
     }
+
+    public function testVectorQueryCount(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForVectors()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('vectorCount');
+        $database->createAttribute('vectorCount', 'embedding', Database::VAR_VECTOR, 3, true);
+
+        $database->createDocument('vectorCount', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
+            'embedding' => [1.0, 0.0, 0.0],
+        ]));
+
+        $count = $database->count('vectorCount', [
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
+        ]);
+
+        $this->assertEquals(1, $count);
+
+        $database->deleteCollection('vectorCount');
+    }
+
+    public function testVectorQuerySum(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForVectors()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('vectorSum');
+        $database->createAttribute('vectorSum', 'embedding', Database::VAR_VECTOR, 3, true);
+        $database->createAttribute('vectorSum', 'value', Database::VAR_INTEGER, 0, true);
+
+        // Create documents with different values
+        $database->createDocument('vectorSum', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
+            'embedding' => [1.0, 0.0, 0.0],
+            'value' => 10
+        ]));
+
+        $database->createDocument('vectorSum', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
+            'embedding' => [0.0, 1.0, 0.0],
+            'value' => 20
+        ]));
+
+        $database->createDocument('vectorSum', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
+            'embedding' => [0.5, 0.5, 0.0],
+            'value' => 30
+        ]));
+
+        // Test sum with vector query - should sum all matching documents
+        $sum = $database->sum('vectorSum', 'value', [
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
+        ]);
+
+        $this->assertEquals(60, $sum);
+
+        // Test sum with vector query and filter combined
+        $sum = $database->sum('vectorSum', 'value', [
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
+            Query::greaterThan('value', 15),
+        ]);
+
+        $this->assertEquals(50, $sum);
+
+        $database->deleteCollection('vectorSum');
+    }
+
+    public function testVetorUpsert(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForVectors()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('vectorUpsert');
+        $database->createAttribute('vectorUpsert', 'embedding', Database::VAR_VECTOR, 3, true);
+
+        $insertedDoc = $database->upsertDocument('vectorUpsert', new Document([
+            '$id' => 'vectorUpsert',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any())
+            ],
+            'embedding' => [1.0, 0.0, 0.0],
+        ]));
+
+        $this->assertEquals([1.0, 0.0, 0.0], $insertedDoc->getAttribute('embedding'));
+
+        $insertedDoc = $database->getDocument('vectorUpsert', 'vectorUpsert');
+        $this->assertEquals([1.0, 0.0, 0.0], $insertedDoc->getAttribute('embedding'));
+
+        $updatedDoc = $database->upsertDocument('vectorUpsert', new Document([
+            '$id' => 'vectorUpsert',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any())
+            ],
+            'embedding' => [2.0, 0.0, 0.0],
+        ]));
+
+        $this->assertEquals([2.0, 0.0, 0.0], $updatedDoc->getAttribute('embedding'));
+
+        $updatedDoc = $database->getDocument('vectorUpsert', 'vectorUpsert');
+        $this->assertEquals([2.0, 0.0, 0.0], $updatedDoc->getAttribute('embedding'));
+
+        $database->deleteCollection('vectorUpsert');
+    }
 }

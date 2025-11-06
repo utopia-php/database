@@ -603,12 +603,12 @@ class Database
                 return \json_encode(\array_map(\floatval(...), $value));
             },
             /**
-             * @param string|null $value
+             * @param mixed $value
              * @return array|null
              */
-            function (?string $value) {
+            function (mixed $value) {
                 if (is_null($value)) {
-                    return null;
+                    return;
                 }
                 if (!is_string($value)) {
                     return $value;

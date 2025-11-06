@@ -400,6 +400,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForOperators(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForGetConnectionId(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -611,6 +616,16 @@ class Pool extends Adapter
     }
 
     public function setSupportForAttributes(bool $support): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForIntegerBooleans(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForAlterLocks(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

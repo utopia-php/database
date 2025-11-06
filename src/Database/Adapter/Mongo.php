@@ -1498,7 +1498,7 @@ class Mongo extends Adapter
                 $name,
                 $filters,
                 $updateQuery,
-                options: $options,
+                $options,
                 multi: true,
             );
         } catch (MongoException $e) {
@@ -1706,12 +1706,14 @@ class Mongo extends Adapter
             $filters['_tenant'] = $this->getTenantFilters($collection);
         }
 
-        if ($max) {
-            $filters[$attribute] = ['$lte' => $max];
-        }
-
-        if ($min) {
-            $filters[$attribute] = ['$gte' => $min];
+        if ($max !== null || $min !== null) {
+            $filters[$attribute] = [];
+            if ($max !== null) {
+                $filters[$attribute]['$lte'] = $max;
+            }
+            if ($min !== null) {
+                $filters[$attribute]['$gte'] = $min;
+            }
         }
 
         $options = $this->getTransactionOptions();
@@ -2895,6 +2897,26 @@ class Mongo extends Adapter
     }
 
     /**
+     * Does the adapter support operators?
+     *
+     * @return bool
+     */
+    public function getSupportForOperators(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Does the adapter require booleans to be converted to integers (0/1)?
+     *
+     * @return bool
+     */
+    public function getSupportForIntegerBooleans(): bool
+    {
+        return false;
+    }
+
+    /**
      * Does the adapter includes boundary during spatial contains?
      *
      * @return bool
@@ -3193,5 +3215,10 @@ class Mongo extends Adapter
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
         return '';
+    }
+
+    public function getSupportForAlterLocks(): bool
+    {
+        return false;
     }
 }

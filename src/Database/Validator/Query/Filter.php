@@ -34,7 +34,7 @@ class Filter extends Base
         private bool $supportForAttributes = true
     ) {
         foreach ($attributes as $attribute) {
-            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
+            $this->schema[$attribute->getAttribute('key', $attribute->getId())] = $attribute->getArrayCopy();
         }
     }
 

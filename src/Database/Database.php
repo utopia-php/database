@@ -1208,6 +1208,7 @@ class Database
 
         return $this;
     }
+
     /**
      * Set custom document class for a collection
      *

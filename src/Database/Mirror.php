@@ -1099,4 +1099,16 @@ class Mirror extends Database
             $callback($action, $err);
         }
     }
+
+    /**
+     * Set custom document class for a collection
+     *
+     * @param string $collection Collection ID
+     * @param class-string<Document> $className Fully qualified class name that extends Document
+     * @return static
+     */
+    public function setDocumentType(string $collection, string $className): static
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
 }

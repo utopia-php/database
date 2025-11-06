@@ -1109,6 +1109,7 @@ class Mirror extends Database
      */
     public function setDocumentType(string $collection, string $className): static
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        $this->delegate(__FUNCTION__, \func_get_args());
+        return $this;
     }
 }

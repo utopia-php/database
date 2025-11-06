@@ -1114,4 +1114,31 @@ class Mirror extends Database
         return $this;
     }
 
+    /**
+     * Clear document type mapping for a collection
+     *
+     * @param string $collection Collection ID
+     * @return static
+     */
+    public function clearDocumentType(string $collection): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+        unset($this->documentTypes[$collection]);
+
+        return $this;
+    }
+
+    /**
+     * Clear all document type mappings
+     *
+     * @return static
+     */
+    public function clearAllDocumentTypes(): static
+    {
+        $this->delegate(__FUNCTION__);
+        $this->documentTypes = [];
+
+        return $this;
+    }
+
 }

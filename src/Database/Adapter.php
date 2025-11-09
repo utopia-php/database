@@ -822,6 +822,7 @@ abstract class Adapter
      * @param array<Query> $selects
      * @param array<Query> $filters
      * @param array<Query> $joins
+     * @param array $vectors
      * @param array<Query> $orderQueries
      *
      * @return array<Document>
@@ -837,6 +838,7 @@ abstract class Adapter
         array $selects = [],
         array $filters = [],
         array $joins = [],
+        array $vectors = [],
         array $orderQueries = []
     ): array;
 

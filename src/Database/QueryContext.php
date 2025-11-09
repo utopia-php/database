@@ -72,9 +72,9 @@ class QueryContext
         $this->skipAuthCollections[$collection][$permission] = $skipAuth;
     }
 
-    public function skipAuth(string $collection, string $permission): bool
+    public function skipAuth(string $collection, string $permission, Authorization $authorization): bool
     {
-        if (!Authorization::$status) { // for Authorization::disable();
+        if (!$authorization->getStatus()) { // for Authorization::disable();
             return true;
         }
 

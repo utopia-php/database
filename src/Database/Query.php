@@ -1145,6 +1145,15 @@ class Query
     }
 
     /**
+     * @param  array<Query>  $queries
+     * @return array<Query>
+     */
+    public static function getVectorQueries(array $queries): array
+    {
+        return self::getByType($queries, self::VECTOR_TYPES);
+    }
+
+    /**
      * Iterates through queries are groups them by type
      *
      * @param array<Query> $queries

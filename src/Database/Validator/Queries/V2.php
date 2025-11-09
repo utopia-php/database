@@ -55,7 +55,9 @@ class V2 extends Validator
         \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
         int $maxLimit = PHP_INT_MAX,
-        int $maxOffset = PHP_INT_MAX
+        int $maxOffset = PHP_INT_MAX,
+        protected bool $supportForAttributes = true,
+        protected int $maxUIDLength = Database::MAX_UID_DEFAULT_LENGTH
     ) {
         $this->context = $context;
         $this->idAttributeType = $idAttributeType;
@@ -687,7 +689,7 @@ class V2 extends Validator
                         break;
                     case Query::TYPE_CURSOR_AFTER:
                     case Query::TYPE_CURSOR_BEFORE:
-                        $validator = new Cursor();
+                        $validator = new Cursor($this->maxUIDLength);
                         if (! $validator->isValid($query)) {
                             throw new \Exception($validator->getDescription());
                         }

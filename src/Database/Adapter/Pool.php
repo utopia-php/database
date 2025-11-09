@@ -279,6 +279,7 @@ class Pool extends Adapter
         array $selects = [],
         array $filters = [],
         array $joins = [],
+        array $vectors = [],
         array $orderQueries = []
     ): array
     {

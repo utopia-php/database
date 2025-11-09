@@ -2984,6 +2984,7 @@ var_dump($sql);
         array $selects = [],
         array $filters = [],
         array $joins = [],
+        array $vectors = [],
         array $orderQueries = []
     ): array {
         unset($queries); // remove this since we pass explicit queries
@@ -2994,24 +2995,11 @@ var_dump($sql);
         $name = $context->getCollections()[0]->getId();
         $name = $this->filter($name);
 
-        $roles = Authorization::getRoles();
+        $roles = $this->authorization->getRoles();
         $where = [];
         $orders = [];
 
         $filters = array_map(fn ($query) => clone $query, $filters);
-
-        // Extract vector queries for ORDER BY
-        $vectorQueries = [];
-        $otherQueries = [];
-        foreach ($queries as $query) {
-            if (in_array($query->getMethod(), Query::VECTOR_TYPES)) {
-                $vectorQueries[] = $query;
-            } else {
-                $otherQueries[] = $query;
-            }
-        }
-
-        $queries = $otherQueries;
 
         $cursorWhere = [];
 
@@ -3089,7 +3077,7 @@ var_dump($sql);
             $collection = $join->getCollection();
             $collection = $this->filter($collection);
 
-            $skipAuth = $context->skipAuth($collection, $forPermission);
+            $skipAuth = $context->skipAuth($collection, $forPermission, $this->authorization);
             if (! $skipAuth) {
                 $permissions = 'AND '.$this->getSQLPermissionsCondition($collection, $roles, $join->getAlias(), $forPermission);
             }
@@ -3106,7 +3094,7 @@ var_dump($sql);
             $where[] = $conditions;
         }
 
-        $skipAuth = $context->skipAuth($name, $forPermission);
+        $skipAuth = $context->skipAuth($name, $forPermission, $this->authorization);
         if (! $skipAuth) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
         }
@@ -3120,7 +3108,7 @@ var_dump($sql);
 
         // Add vector distance calculations to ORDER BY
         $vectorOrders = [];
-        foreach ($vectorQueries as $query) {
+        foreach ($vectors as $query) {
             $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
             if ($vectorOrder) {
                 $vectorOrders[] = $vectorOrder;

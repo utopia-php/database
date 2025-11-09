@@ -3708,10 +3708,10 @@ class Database
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = new DocumentValidator($attributes, $this->adapter->getSupportForAttributes());
             $validator = new DocumentsValidator(
                 $context,
-                $this->adapter->getIdAttributeType()
+                idAttributeType:$this->adapter->getIdAttributeType(),
+                supportForAttributes:$this->adapter->getSupportForAttributes(),
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -5280,15 +5280,12 @@ class Database
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes(),
+                idAttributeType: $this->adapter->getIdAttributeType(),
                 maxValuesCount: $this->maxQueryValues,
                 minAllowedDate: $this->adapter->getMinDateTime(),
-                maxAllowedDate: $this->adapter->getMaxDateTime()
+                maxAllowedDate: $this->adapter->getMaxDateTime(),
+                supportForAttributes: $this->adapter->getSupportForAttributes(),
+                maxUIDLength: $this->adapter->getMaxUIDLength()
             );
 
             if (!$validator->isValid($queries)) {
@@ -6925,15 +6922,12 @@ class Database
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes(),
+                idAttributeType: $this->adapter->getIdAttributeType(),
                 maxValuesCount: $this->maxQueryValues,
                 minAllowedDate: $this->adapter->getMinDateTime(),
-                maxAllowedDate: $this->adapter->getMaxDateTime()
+                maxAllowedDate: $this->adapter->getMaxDateTime(),
+                supportForAttributes: $this->adapter->getSupportForAttributes(),
+                maxUIDLength: $this->adapter->getMaxUIDLength()
             );
 
             if (!$validator->isValid($queries)) {
@@ -7161,15 +7155,12 @@ class Database
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes(),
+                idAttributeType: $this->adapter->getIdAttributeType(),
                 maxValuesCount: $this->maxQueryValues,
                 minAllowedDate: $this->adapter->getMinDateTime(),
-                maxAllowedDate: $this->adapter->getMaxDateTime()
+                maxAllowedDate: $this->adapter->getMaxDateTime(),
+                supportForAttributes: $this->adapter->getSupportForAttributes(),
+                maxUIDLength: $this->adapter->getMaxUIDLength()
             );
 
             if (!$validator->isValid($queries)) {
@@ -7261,6 +7252,7 @@ class Database
                 selects: $selects,
                 filters: $filters,
                 joins: $joins,
+                vectors: Query::getVectorQueries($queries),
                 orderQueries: $orders
             );
             }
@@ -7272,7 +7264,7 @@ class Database
         }
 
         foreach ($results as $index => $node) {
-            $node = $this->adapter->castingAfter($context, $node);
+            $node = $this->adapter->castingAfter($context->getCollectionByAlias(), $node);
             $node = $this->casting($context, $node, $selects);
             $node = $this->decode($context, $node, $selects);
 
@@ -7395,13 +7387,12 @@ class Database
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
+                idAttributeType: $this->adapter->getIdAttributeType(),
                 maxValuesCount: $this->maxQueryValues,
                 minAllowedDate: $this->adapter->getMinDateTime(),
-                maxAllowedDate: $this->adapter->getMaxDateTime()
+                maxAllowedDate: $this->adapter->getMaxDateTime(),
+                supportForAttributes: $this->adapter->getSupportForAttributes(),
+                maxUIDLength: $this->adapter->getMaxUIDLength()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -7457,15 +7448,12 @@ class Database
         if ($this->validate) {
             $validator = new DocumentsValidator(
                 $context,
-                $this->adapter->getIdAttributeType(),
-                $this->maxQueryValues,
-                $this->adapter->getMaxUIDLength(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes(),
+                idAttributeType: $this->adapter->getIdAttributeType(),
                 maxValuesCount: $this->maxQueryValues,
                 minAllowedDate: $this->adapter->getMinDateTime(),
-                maxAllowedDate: $this->adapter->getMaxDateTime()
+                maxAllowedDate: $this->adapter->getMaxDateTime(),
+                supportForAttributes: $this->adapter->getSupportForAttributes(),
+                maxUIDLength: $this->adapter->getMaxUIDLength()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());

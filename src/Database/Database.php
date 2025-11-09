@@ -4632,7 +4632,7 @@ class Database
             }
 
             foreach ($batch as $document) {
-                $document = $this->adapter->castingAfter($context, $document);
+                $document = $this->adapter->castingAfter($collection, $document);
                 $document = $this->casting($context, $document);
                 $document = $this->decode($context, $document);
 
@@ -6207,7 +6207,7 @@ class Database
 
                 if (!$old->isEmpty()) {
                     $old = $this->adapter->castingAfter($collection, $old);
-                    $old = $this->decode($collection, $old);
+                    $old = $this->decode($context, $old);
                 }
 
                 try {
@@ -7137,14 +7137,12 @@ class Database
             );
         }
 
-        $authorization = new Authorization($forPermission);
-
         foreach ($context->getCollections() as $_collection) {
             $documentSecurity = $_collection->getAttribute('documentSecurity', false);
-            $skipAuth = $authorization->isValid($_collection->getPermissionsByType($forPermission));
+            $skipAuth = $this->authorization->isValid(new Input($forPermission, $_collection->getPermissionsByType($forPermission)));
 
             if (!$skipAuth && !$documentSecurity && $_collection->getId() !== self::METADATA) {
-                throw new AuthorizationException($authorization->getDescription());
+                throw new AuthorizationException($this->authorization->getDescription());
             }
 
             $context->addSkipAuth($this->adapter->filter($_collection->getId()), $forPermission, $skipAuth);
@@ -7230,7 +7228,7 @@ class Database
         [$selects, $nestedSelections] = $this->processRelationshipQueries($relationships, $selects);
 
         // Convert relationship filter queries to SQL-level subqueries
-        $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries);
+        $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
 
         // If conversion returns null, it means no documents can match (relationship filter found no matches)
         if ($queriesOrNull === null) {
@@ -7264,7 +7262,7 @@ class Database
         }
 
         foreach ($results as $index => $node) {
-            $node = $this->adapter->castingAfter($context->getCollectionByAlias(), $node);
+            $node = $this->adapter->castingAfter($collection, $node);
             $node = $this->casting($context, $node, $selects);
             $node = $this->decode($context, $node, $selects);
 
@@ -7408,7 +7406,7 @@ class Database
         $queries = Query::groupByType($queries)['filters'];
         $queries = $this->convertQueries($context, $queries);
 
-        $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries);
+        $queriesOrNull = $this->convertRelationshipFiltersToSubqueries($relationships, $queries);
 
         if ($queriesOrNull === null) {
             return 0;
@@ -7970,7 +7968,7 @@ class Database
     /**
      * @throws Exception
      */
-    public static function convertQuery(QueryContext $context, Query $query): Query
+    public function convertQuery(QueryContext $context, Query $query): Query
     {
         if ($query->getMethod() == Query::TYPE_SELECT) {
             return $query;
@@ -8381,7 +8379,7 @@ class Database
      * @param array<Query> $queries
      * @return array<Query>|null Returns null if relationship filters cannot match any documents
      */
-    private function convertRelationshipQueries(
+    private function convertRelationshipFiltersToSubqueries(
         array $relationships,
         array $queries,
     ): ?array {

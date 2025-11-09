@@ -19,10 +19,11 @@ trait SpatialTests
     public function testSpatialCollection(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $collectionName = "test_spatial_Col";
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         };
         $attributes = [
             new Document([
@@ -93,9 +94,10 @@ trait SpatialTests
     public function testSpatialTypeDocuments(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_spatial_doc_';
@@ -245,7 +247,7 @@ trait SpatialTests
     public function testSpatialRelationshipOneToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
@@ -350,7 +352,7 @@ trait SpatialTests
     public function testSpatialAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -398,7 +400,7 @@ trait SpatialTests
     public function testSpatialOneToMany(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -510,7 +512,7 @@ trait SpatialTests
     public function testSpatialManyToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -615,7 +617,7 @@ trait SpatialTests
     public function testSpatialManyToMany(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -720,7 +722,7 @@ trait SpatialTests
     public function testSpatialIndex(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -917,9 +919,10 @@ trait SpatialTests
     public function testComplexGeometricShapes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'complex_shapes_';
@@ -1347,9 +1350,10 @@ trait SpatialTests
     public function testSpatialQueryCombinations(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_combinations_';
@@ -1477,9 +1481,10 @@ trait SpatialTests
     public function testSpatialBulkOperation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_spatial_bulk_ops';
@@ -1787,9 +1792,10 @@ trait SpatialTests
     public function testSptialAggregation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
         $collectionName = 'spatial_agg_';
         try {
@@ -1874,9 +1880,10 @@ trait SpatialTests
     public function testUpdateSpatialAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_update_attrs_';
@@ -1960,9 +1967,10 @@ trait SpatialTests
     public function testSpatialAttributeDefaults(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_defaults_';
@@ -2064,9 +2072,10 @@ trait SpatialTests
     public function testInvalidSpatialTypes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_invalid_spatial_types';
@@ -2169,9 +2178,10 @@ trait SpatialTests
     public function testSpatialDistanceInMeter(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'spatial_distance_meters_';
@@ -2239,13 +2249,15 @@ trait SpatialTests
     public function testSpatialDistanceInMeterForMultiDimensionGeometry(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         if (!$database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
-            $this->markTestSkipped('Adapter does not support spatial distance(in meter) for multidimension');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $multiCollection = 'spatial_distance_meters_multi_';
@@ -2369,13 +2381,15 @@ trait SpatialTests
     public function testSpatialDistanceInMeterError(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         if ($database->getAdapter()->getSupportForDistanceBetweenMultiDimensionGeometryInMeters()) {
-            $this->markTestSkipped('Adapter supports spatial distance (in meter) for multidimension geometries');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collection = 'spatial_distance_error_test';
@@ -2452,9 +2466,10 @@ trait SpatialTests
         ]);
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
         $point = "POINT(1 2)";
         $line = "LINESTRING(1 2, 1 2)";
@@ -2496,7 +2511,7 @@ trait SpatialTests
     public function testSpatialIndexSingleAttributeOnly(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2548,7 +2563,7 @@ trait SpatialTests
     public function testSpatialIndexRequiredToggling(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2583,7 +2598,7 @@ trait SpatialTests
     public function testSpatialIndexOnNonSpatial(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2645,9 +2660,10 @@ trait SpatialTests
     public function testSpatialDocOrder(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_spatial_order_axis';
@@ -2676,9 +2692,10 @@ trait SpatialTests
     public function testInvalidCoordinateDocuments(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
-            $this->markTestSkipped('Adapter does not support spatial attributes');
+            $this->expectNotToPerformAssertions();
+            return;
         }
 
         $collectionName = 'test_invalid_coord_';
@@ -2767,7 +2784,7 @@ trait SpatialTests
     public function testCreateSpatialColumnWithExistingData(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
@@ -2795,6 +2812,101 @@ trait SpatialTests
             }
         } finally {
             $database->deleteCollection($col);
+        }
+    }
+
+    /**
+     * Test that spatial arrays are properly converted to WKT in updateDocument
+     * Tests: Spatial attributes should use ST_GeomFromText with WKT conversion, not JSON encoding
+     */
+    public function testSpatialArrayWKTConversionInUpdateDocument(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionName = 'test_spatial_wkt_conversion';
+
+        try {
+            $database->createCollection($collectionName);
+            // Use required=true for spatial attributes to support spatial indexes (MariaDB requires this)
+            $database->createAttribute($collectionName, 'location', Database::VAR_POINT, 0, true);
+            $database->createAttribute($collectionName, 'route', Database::VAR_LINESTRING, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true);
+            $database->createAttribute($collectionName, 'area', Database::VAR_POLYGON, 0, $database->getAdapter()->getSupportForSpatialIndexNull() ? false : true);
+            $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 100, false);
+
+            // Create indexes for spatial queries
+            $database->createIndex($collectionName, 'location_idx', Database::INDEX_SPATIAL, ['location']);
+            $database->createIndex($collectionName, 'route_idx', Database::INDEX_SPATIAL, ['route']);
+            $database->createIndex($collectionName, 'area_idx', Database::INDEX_SPATIAL, ['area']);
+
+            // Create initial document with spatial arrays
+            $initialPoint = [10.0, 20.0];
+            $initialLine = [[0.0, 0.0], [5.0, 5.0]];
+            $initialPolygon = [[[0.0, 0.0], [0.0, 5.0], [5.0, 5.0], [5.0, 0.0], [0.0, 0.0]]];
+
+            $doc = $database->createDocument($collectionName, new Document([
+                '$id' => 'spatial_doc',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'location' => $initialPoint,
+                'route' => $initialLine,
+                'area' => $initialPolygon,
+                'name' => 'Original'
+            ]));
+
+            // Verify initial values
+            $this->assertEquals($initialPoint, $doc->getAttribute('location'));
+            $this->assertEquals($initialLine, $doc->getAttribute('route'));
+            $this->assertEquals($initialPolygon, $doc->getAttribute('area'));
+
+            // Update document with NEW spatial arrays (this triggers the WKT conversion path)
+            $newPoint = [30.0, 40.0];
+            $newLine = [[10.0, 10.0], [20.0, 20.0], [30.0, 30.0]];
+            $newPolygon = [[[10.0, 10.0], [10.0, 20.0], [20.0, 20.0], [20.0, 10.0], [10.0, 10.0]]];
+
+            $updated = $database->updateDocument($collectionName, 'spatial_doc', new Document([
+                'location' => $newPoint,
+                'route' => $newLine,
+                'area' => $newPolygon,
+                'name' => 'Updated'
+            ]));
+
+            // Verify updated spatial values are correctly stored and retrieved
+            $this->assertEquals($newPoint, $updated->getAttribute('location'), 'Point should be updated correctly via WKT conversion');
+            $this->assertEquals($newLine, $updated->getAttribute('route'), 'LineString should be updated correctly via WKT conversion');
+            $this->assertEquals($newPolygon, $updated->getAttribute('area'), 'Polygon should be updated correctly via WKT conversion');
+            $this->assertEquals('Updated', $updated->getAttribute('name'));
+
+            // Refetch from database to ensure data was persisted correctly
+            $refetched = $database->getDocument($collectionName, 'spatial_doc');
+            $this->assertEquals($newPoint, $refetched->getAttribute('location'), 'Point should persist correctly after WKT conversion');
+            $this->assertEquals($newLine, $refetched->getAttribute('route'), 'LineString should persist correctly after WKT conversion');
+            $this->assertEquals($newPolygon, $refetched->getAttribute('area'), 'Polygon should persist correctly after WKT conversion');
+
+            // Test spatial queries work with updated data
+            $results = $database->find($collectionName, [
+                Query::equal('location', [$newPoint])
+            ]);
+            $this->assertCount(1, $results, 'Should find document by exact point match');
+            $this->assertEquals('spatial_doc', $results[0]->getId());
+
+            // Test mixed update (spatial + non-spatial attributes)
+            $updated2 = $database->updateDocument($collectionName, 'spatial_doc', new Document([
+                'location' => [50.0, 60.0],
+                'name' => 'Mixed Update'
+            ]));
+            $this->assertEquals([50.0, 60.0], $updated2->getAttribute('location'));
+            $this->assertEquals('Mixed Update', $updated2->getAttribute('name'));
+            // Other spatial attributes should remain unchanged
+            $this->assertEquals($newLine, $updated2->getAttribute('route'));
+            $this->assertEquals($newPolygon, $updated2->getAttribute('area'));
+
+        } finally {
+            $database->deleteCollection($collectionName);
         }
     }
 }

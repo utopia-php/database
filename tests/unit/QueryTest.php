@@ -51,6 +51,24 @@ class QueryTest extends TestCase
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals(10, $query->getValues()[0]);
 
+        // Test vector queries
+        $vector = [0.1, 0.2, 0.3];
+
+        $query = Query::vectorDot('embedding', $vector);
+        $this->assertEquals(Query::TYPE_VECTOR_DOT, $query->getMethod());
+        $this->assertEquals('embedding', $query->getAttribute());
+        $this->assertEquals([$vector], $query->getValues());
+
+        $query = Query::vectorCosine('embedding', $vector);
+        $this->assertEquals(Query::TYPE_VECTOR_COSINE, $query->getMethod());
+        $this->assertEquals('embedding', $query->getAttribute());
+        $this->assertEquals([$vector], $query->getValues());
+
+        $query = Query::vectorEuclidean('embedding', $vector);
+        $this->assertEquals(Query::TYPE_VECTOR_EUCLIDEAN, $query->getMethod());
+        $this->assertEquals('embedding', $query->getAttribute());
+        $this->assertEquals([$vector], $query->getValues());
+
         $query = Query::search('search', 'John Doe');
 
         $this->assertEquals(Query::TYPE_SEARCH, $query->getMethod());
@@ -88,7 +106,6 @@ class QueryTest extends TestCase
         $this->assertEquals('title', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
 
-        // Test new NOT query types
         $query = Query::notContains('tags', ['test', 'example']);
 
         $this->assertEquals(Query::TYPE_NOT_CONTAINS, $query->getMethod());
@@ -213,7 +230,6 @@ class QueryTest extends TestCase
         $this->assertEquals('score', $query->getAttribute());
         $this->assertEquals(8.5, $query->getValues()[0]);
 
-        // Test new NOT query types parsing
         $query = Query::parse(Query::notContains('tags', ['unwanted', 'spam'])->toString());
         $this->assertEquals('notContains', $query->getMethod());
         $this->assertEquals('tags', $query->getAttribute());
@@ -448,7 +464,6 @@ class QueryTest extends TestCase
 
     public function testNewQueryTypesInTypesArray(): void
     {
-        // Test that all new query types are included in the TYPES array
         $this->assertContains(Query::TYPE_NOT_CONTAINS, Query::TYPES);
         $this->assertContains(Query::TYPE_NOT_SEARCH, Query::TYPES);
         $this->assertContains(Query::TYPE_NOT_STARTS_WITH, Query::TYPES);

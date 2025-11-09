@@ -18,7 +18,6 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 trait RelationshipTests
 {
@@ -30,7 +29,7 @@ trait RelationshipTests
     public function testZoo(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -396,7 +395,7 @@ trait RelationshipTests
     public function testSimpleRelationshipPopulation(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -468,7 +467,7 @@ trait RelationshipTests
     public function testDeleteRelatedCollection(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -634,7 +633,7 @@ trait RelationshipTests
     public function testVirtualRelationsAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1090,7 +1089,7 @@ trait RelationshipTests
     public function testStructureValidationAfterRelationsAttribute(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1124,7 +1123,7 @@ trait RelationshipTests
     public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1224,7 +1223,7 @@ trait RelationshipTests
     public function testUpdateAttributeRenameRelationshipTwoWay(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1283,7 +1282,7 @@ trait RelationshipTests
     public function testNoInvalidKeysWithRelationships(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1358,7 +1357,7 @@ trait RelationshipTests
     public function testSelectRelationshipAttributes(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1693,7 +1692,7 @@ var_dump($make);
     public function testInheritRelationshipPermissions(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1772,14 +1771,14 @@ var_dump($make);
     public function testEnforceRelationshipPermissions(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
             return;
         }
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
         $lawn1 = $database->getDocument('lawns', 'lawn1');
         $this->assertEquals('Lawn 1', $lawn1['name']);
 
@@ -1856,7 +1855,7 @@ var_dump($make);
             $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
         }
 
-        Authorization::setRole(Role::user('user1')->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::user('user1')->toString());
 
         $bird1 = $database->getDocument('birds', 'bird1');
 
@@ -1869,7 +1868,7 @@ var_dump($make);
 
         $this->assertEquals('Bird 1 Updated', $bird1['name']);
 
-        Authorization::setRole(Role::user('user2')->toString());
+        $this->getDatabase()->getAuthorization()->addRole(Role::user('user2')->toString());
 
         // Try delete multi-level nested document
         $deleted = $database->deleteDocument(
@@ -1931,7 +1930,7 @@ var_dump($make);
     public function testCreateRelationshipMissingCollection(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1952,7 +1951,7 @@ var_dump($make);
     public function testCreateRelationshipMissingRelatedCollection(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1975,7 +1974,7 @@ var_dump($make);
     public function testCreateDuplicateRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2006,7 +2005,7 @@ var_dump($make);
     public function testCreateInvalidRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2031,7 +2030,7 @@ var_dump($make);
     public function testDeleteMissingRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2049,7 +2048,7 @@ var_dump($make);
     public function testCreateInvalidIntValueRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2081,7 +2080,7 @@ var_dump($make);
     public function testCreateInvalidObjectValueRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2103,7 +2102,7 @@ var_dump($make);
     public function testCreateInvalidArrayIntValueRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2131,7 +2130,7 @@ var_dump($make);
     public function testCreateEmptyValueRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2233,7 +2232,7 @@ var_dump($make);
     public function testUpdateRelationshipToExistingKey(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2279,8 +2278,8 @@ var_dump($make);
             return;
         }
 
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         $this->getDatabase()->createCollection('testUpdateDocumentsRelationships1', attributes: [
             new Document([
@@ -2387,7 +2386,7 @@ var_dump($make);
     public function testUpdateDocumentWithRelationships(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2693,7 +2692,7 @@ var_dump($make);
     public function testMultiDocumentNestedRelationships(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2913,7 +2912,7 @@ var_dump($make);
     public function testNestedDocumentCreationWithDepthHandling(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3048,7 +3047,7 @@ var_dump($make);
     public function testRelationshipTypeQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3286,12 +3285,258 @@ var_dump($make);
     }
 
     /**
+     * Test querying parent documents by relationship document $id
+     */
+    public function testQueryByRelationshipId(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('usersRelId');
+        $database->createCollection('postsRelId');
+
+        $database->createAttribute('usersRelId', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('postsRelId', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'postsRelId',
+            relatedCollection: 'usersRelId',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'user',
+            twoWayKey: 'posts'
+        );
+
+        // Create test users
+        $user1 = $database->createDocument('usersRelId', new Document([
+            '$id' => 'user1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Alice',
+        ]));
+
+        $user2 = $database->createDocument('usersRelId', new Document([
+            '$id' => 'user2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Bob',
+        ]));
+
+        // Create posts related to users
+        $database->createDocument('postsRelId', new Document([
+            '$id' => 'post1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Alice Post 1',
+            'user' => 'user1',
+        ]));
+
+        $database->createDocument('postsRelId', new Document([
+            '$id' => 'post2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Alice Post 2',
+            'user' => 'user1',
+        ]));
+
+        $database->createDocument('postsRelId', new Document([
+            '$id' => 'post3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Bob Post',
+            'user' => 'user2',
+        ]));
+
+        // Query posts by user.$id - this is the key test
+        $posts = $database->find('postsRelId', [
+            Query::equal('user.$id', ['user1']),
+        ]);
+        $this->assertCount(2, $posts);
+        $this->assertEquals('post1', $posts[0]->getId());
+        $this->assertEquals('post2', $posts[1]->getId());
+
+        // Query posts by different user.$id
+        $posts = $database->find('postsRelId', [
+            Query::equal('user.$id', ['user2']),
+        ]);
+        $this->assertCount(1, $posts);
+        $this->assertEquals('post3', $posts[0]->getId());
+
+        // Query posts by multiple user.$id values
+        $posts = $database->find('postsRelId', [
+            Query::equal('user.$id', ['user1', 'user2']),
+        ]);
+        $this->assertCount(3, $posts);
+
+        // Query users by posts.$id (inverse direction)
+        $users = $database->find('usersRelId', [
+            Query::equal('posts.$id', ['post1']),
+        ]);
+        $this->assertCount(1, $users);
+        $this->assertEquals('user1', $users[0]->getId());
+
+        // Clean up MANY_TO_ONE test
+        $database->deleteCollection('usersRelId');
+        $database->deleteCollection('postsRelId');
+
+        // Test ONE_TO_ONE relationship - query profile by user.$id
+        $database->createCollection('usersOtoId');
+        $database->createCollection('profilesOtoId');
+
+        $database->createAttribute('usersOtoId', 'username', Database::VAR_STRING, 255, true);
+        $database->createAttribute('profilesOtoId', 'bio', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'usersOtoId',
+            relatedCollection: 'profilesOtoId',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'profile',
+            twoWayKey: 'user'
+        );
+
+        $userOto1 = $database->createDocument('usersOtoId', new Document([
+            '$id' => 'userOto1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'username' => 'alice',
+        ]));
+
+        $database->createDocument('profilesOtoId', new Document([
+            '$id' => 'profileOto1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'bio' => 'Software Engineer',
+            'user' => 'userOto1',
+        ]));
+
+        // Query profiles by user.$id
+        $profiles = $database->find('profilesOtoId', [
+            Query::equal('user.$id', ['userOto1']),
+        ]);
+        $this->assertCount(1, $profiles);
+        $this->assertEquals('profileOto1', $profiles[0]->getId());
+
+        // Query users by profile.$id (inverse)
+        $users = $database->find('usersOtoId', [
+            Query::equal('profile.$id', ['profileOto1']),
+        ]);
+        $this->assertCount(1, $users);
+        $this->assertEquals('userOto1', $users[0]->getId());
+
+        // Clean up ONE_TO_ONE test
+        $database->deleteCollection('usersOtoId');
+        $database->deleteCollection('profilesOtoId');
+
+        // Test MANY_TO_MANY relationship - query projects by developer.$id
+        $database->createCollection('developersMtmId');
+        $database->createCollection('projectsMtmId');
+
+        $database->createAttribute('developersMtmId', 'devName', Database::VAR_STRING, 255, true);
+        $database->createAttribute('projectsMtmId', 'projectName', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'developersMtmId',
+            relatedCollection: 'projectsMtmId',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'projects',
+            twoWayKey: 'developers'
+        );
+
+        $dev1 = $database->createDocument('developersMtmId', new Document([
+            '$id' => 'dev1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'devName' => 'Alice',
+        ]));
+
+        $dev2 = $database->createDocument('developersMtmId', new Document([
+            '$id' => 'dev2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'devName' => 'Bob',
+        ]));
+
+        $database->createDocument('projectsMtmId', new Document([
+            '$id' => 'project1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'projectName' => 'Project Alpha',
+            'developers' => ['dev1', 'dev2'],
+        ]));
+
+        $database->createDocument('projectsMtmId', new Document([
+            '$id' => 'project2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'projectName' => 'Project Beta',
+            'developers' => ['dev1'],
+        ]));
+
+        // Query projects by developer.$id
+        $projects = $database->find('projectsMtmId', [
+            Query::equal('developers.$id', ['dev1']),
+        ]);
+        $this->assertCount(2, $projects);
+
+        $projects = $database->find('projectsMtmId', [
+            Query::equal('developers.$id', ['dev2']),
+        ]);
+        $this->assertCount(1, $projects);
+        $this->assertEquals('project1', $projects[0]->getId());
+
+        // Query developers by project.$id (inverse)
+        $developers = $database->find('developersMtmId', [
+            Query::equal('projects.$id', ['project1']),
+        ]);
+        $this->assertCount(2, $developers);
+
+        $developers = $database->find('developersMtmId', [
+            Query::equal('projects.$id', ['project2']),
+        ]);
+        $this->assertCount(1, $developers);
+        $this->assertEquals('dev1', $developers[0]->getId());
+
+        // Clean up MANY_TO_MANY test
+        $database->deleteCollection('developersMtmId');
+        $database->deleteCollection('projectsMtmId');
+    }
+
+    /**
      * Comprehensive test for all query types on relationships
      */
     public function testRelationshipFilterQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3458,7 +3703,7 @@ var_dump($make);
     public function testRelationshipSpatialQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3712,7 +3957,7 @@ var_dump($make);
     public function testRelationshipVirtualQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3821,7 +4066,7 @@ var_dump($make);
     public function testRelationshipQueryEdgeCases(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -3926,7 +4171,7 @@ var_dump($make);
     public function testRelationshipManyToManyComplex(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -4027,7 +4272,7 @@ var_dump($make);
     public function testNestedRelationshipQueriesMultipleDepths(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -4283,7 +4528,7 @@ var_dump($make);
     public function testCountAndSumWithRelationshipQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -4444,7 +4689,7 @@ var_dump($make);
     public function testOrderAndCursorWithRelationshipQueries(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('authorsOrder');
         $database->createCollection('postsOrder');

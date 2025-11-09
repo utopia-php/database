@@ -20,7 +20,7 @@ trait OneToOneTests
     public function testOneToOneOneWayRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -448,7 +448,7 @@ trait OneToOneTests
     public function testOneToOneTwoWayRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1012,7 +1012,7 @@ trait OneToOneTests
     public function testIdenticalTwoWayKeyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1112,7 +1112,7 @@ trait OneToOneTests
     public function testNestedOneToOne_OneToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1204,7 +1204,7 @@ trait OneToOneTests
     public function testNestedOneToOne_OneToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1305,7 +1305,7 @@ trait OneToOneTests
     public function testNestedOneToOne_ManyToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1398,7 +1398,7 @@ trait OneToOneTests
     public function testNestedOneToOne_ManyToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1495,7 +1495,7 @@ trait OneToOneTests
     public function testExceedMaxDepthOneToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1577,7 +1577,7 @@ trait OneToOneTests
     public function testExceedMaxDepthOneToOneNull(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1660,7 +1660,7 @@ trait OneToOneTests
     public function testOneToOneRelationshipKeyWithSymbols(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1703,7 +1703,7 @@ trait OneToOneTests
     public function testRecreateOneToOneOneWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1769,7 +1769,7 @@ trait OneToOneTests
     public function testRecreateOneToOneTwoWayRelationshipFromParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1837,7 +1837,7 @@ trait OneToOneTests
     public function testRecreateOneToOneTwoWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1905,7 +1905,7 @@ trait OneToOneTests
     public function testRecreateOneToOneOneWayRelationshipFromParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1971,7 +1971,7 @@ trait OneToOneTests
     public function testDeleteBulkDocumentsOneToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
@@ -2170,7 +2170,7 @@ trait OneToOneTests
     public function testDeleteTwoWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2297,7 +2297,7 @@ trait OneToOneTests
     public function testUpdateParentAndChild_OneToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (
             !$database->getAdapter()->getSupportForRelationships() ||
@@ -2380,7 +2380,7 @@ trait OneToOneTests
     public function testDeleteDocumentsRelationshipErrorDoesNotDeleteParent_OneToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
@@ -2433,5 +2433,173 @@ trait OneToOneTests
         $this->assertFalse($childDoc->isEmpty(), 'Child should not be deleted');
         $database->deleteCollection($parentCollection);
         $database->deleteCollection($childCollection);
+    }
+
+    public function testPartialUpdateOneToOneWithRelationships(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Setup collections with relationships
+        $database->createCollection('cities_partial');
+        $database->createCollection('mayors_partial');
+
+        $database->createAttribute('cities_partial', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('cities_partial', 'population', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('mayors_partial', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'cities_partial',
+            relatedCollection: 'mayors_partial',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'mayor',
+            twoWayKey: 'city'
+        );
+
+        // Create a city with a mayor
+        $database->createDocument('cities_partial', new Document([
+            '$id' => 'city1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Test City',
+            'population' => 100000,
+            'mayor' => [
+                '$id' => 'mayor1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'name' => 'Test Mayor',
+            ],
+        ]));
+
+        // Verify initial state
+        $city = $database->getDocument('cities_partial', 'city1');
+        $this->assertEquals('Test City', $city->getAttribute('name'));
+        $this->assertEquals(100000, $city->getAttribute('population'));
+        $this->assertEquals('mayor1', $city->getAttribute('mayor')->getId());
+
+        $mayor = $database->getDocument('mayors_partial', 'mayor1');
+        $this->assertEquals('Test Mayor', $mayor->getAttribute('name'));
+        $this->assertEquals('city1', $mayor->getAttribute('city')->getId());
+
+        // Perform a partial update - ONLY update the city name, NOT the mayor relationship
+        $database->updateDocument('cities_partial', 'city1', new Document([
+            '$id' => 'city1',
+            '$collection' => 'cities_partial',
+            'name' => 'Updated City Name',
+            // NOTE: We deliberately do NOT include the 'mayor' field here - this is a partial update
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+
+        // Verify that the city name was updated but the mayor relationship was preserved
+        $cityAfterUpdate = $database->getDocument('cities_partial', 'city1');
+        $this->assertEquals('Updated City Name', $cityAfterUpdate->getAttribute('name'), 'City name should be updated');
+        $this->assertEquals(100000, $cityAfterUpdate->getAttribute('population'), 'Population should be preserved');
+
+        // This is the critical test - the mayor relationship should still exist
+        $mayorAfterUpdate = $cityAfterUpdate->getAttribute('mayor');
+        $this->assertNotNull($mayorAfterUpdate, 'Mayor relationship should be preserved after partial update');
+        $this->assertEquals('mayor1', $mayorAfterUpdate->getId(), 'Mayor ID should still be mayor1');
+
+        // Verify the bidirectional relationship is still intact
+        $mayor = $database->getDocument('mayors_partial', 'mayor1');
+        $this->assertEquals('city1', $mayor->getAttribute('city')->getId(), 'Reverse relationship should be preserved');
+        $this->assertEquals('Updated City Name', $mayor->getAttribute('city')->getAttribute('name'), 'Reverse relationship should reflect updated city name');
+
+        $database->deleteCollection('cities_partial');
+        $database->deleteCollection('mayors_partial');
+    }
+
+    public function testPartialUpdateOneToOneWithoutRelationshipField(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Recreate the exact scenario from testNestedOneToMany_OneToOneRelationship
+        $database->createCollection('cities_strict');
+        $database->createCollection('mayors_strict');
+
+        $database->createAttribute('cities_strict', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('mayors_strict', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'cities_strict',
+            relatedCollection: 'mayors_strict',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'mayor',
+            twoWayKey: 'city'
+        );
+
+        // Create city with mayor
+        $database->createDocument('cities_strict', new Document([
+            '$id' => 'city1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'City 1',
+            'mayor' => [
+                '$id' => 'mayor1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'name' => 'Mayor 1',
+            ],
+        ]));
+
+        // Get the current state to verify
+        $cityBefore = $database->getDocument('cities_strict', 'city1');
+        $this->assertEquals('City 1', $cityBefore->getAttribute('name'));
+        $this->assertEquals('mayor1', $cityBefore->getAttribute('mayor')->getId());
+
+        // Now do what the comment says we "don't support" - update WITHOUT including mayor field
+        // Creating a fresh Document object with only the fields we want to update
+        $partialUpdate = new Document([
+            '$id' => 'city1',
+            '$collection' => 'cities_strict',
+            'name' => 'City 1 updated',  // Update only name
+            // Deliberately NOT including 'mayor' at all
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]);
+
+        $database->updateDocument('cities_strict', 'city1', $partialUpdate);
+
+        // Now check if the mayor relationship was preserved
+        $cityAfter = $database->getDocument('cities_strict', 'city1');
+        $this->assertEquals('City 1 updated', $cityAfter->getAttribute('name'));
+
+        // The relationship should still exist
+        $mayorAttr = $cityAfter->getAttribute('mayor');
+        $this->assertNotNull($mayorAttr, 'Mayor should still be set after partial update without mayor field');
+        $this->assertEquals('mayor1', $mayorAttr->getId());
+
+        // Also verify the reverse relationship
+        $mayor = $database->getDocument('mayors_strict', 'mayor1');
+        $this->assertEquals('city1', $mayor->getAttribute('city')->getId());
+
+        $database->deleteCollection('cities_strict');
+        $database->deleteCollection('mayors_strict');
     }
 }

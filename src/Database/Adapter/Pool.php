@@ -7,6 +7,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\QueryContext;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
 class Pool extends Adapter
@@ -30,6 +31,11 @@ class Pool extends Adapter
             }
 
             // Run setters in case the pooled adapter has its own config
+            try {
+                $this->setAuthorization($resource->getAuthorization());
+            } catch (\Error $e) {
+                // Authorization not initialized yet, so skip it.
+            }
             $this->setDatabase($resource->getDatabase());
             $this->setNamespace($resource->getNamespace());
             $this->setSharedTables($resource->getSharedTables());
@@ -67,6 +73,7 @@ class Pool extends Adapter
             $adapter->setNamespace($this->getNamespace());
             $adapter->setSharedTables($this->getSharedTables());
             $adapter->setTenant($this->getTenant());
+            $adapter->setAuthorization($this->authorization);
 
             if ($this->getTimeout() > 0) {
                 $adapter->setTimeout($this->getTimeout());
@@ -323,6 +330,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getMaxUIDLength(): int
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getMinDateTime(): \DateTime
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
@@ -408,12 +420,22 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForOperators(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForGetConnectionId(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function getSupportForUpserts(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForVectors(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -537,32 +559,33 @@ class Pool extends Adapter
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
-    /**
-     * Does the adapter support calculating distance(in meters) between multidimension geometry(line, polygon,etc)?
-     *
-     * @return bool
-     */
+
     public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * Does the adapter support spatial axis order specification?
-     *
-     * @return bool
-     */
     public function getSupportForSpatialAxisOrder(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * Adapter supports optional spatial attributes with existing rows.
-     *
-     * @return bool
-     */
     public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForMultipleFulltextIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForIdenticalIndexes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForOrderRandom(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -578,6 +601,52 @@ class Pool extends Adapter
     }
 
     public function decodePolygon(string $wkb): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingBefore(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function castingAfter(Document $collection, Document $document): Document
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForInternalCasting(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForUTCCasting(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setUTCDatetime(string $value): mixed
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setSupportForAttributes(bool $support): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForIntegerBooleans(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+        return $this;
+    }
+
+    public function getSupportForAlterLocks(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

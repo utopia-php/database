@@ -24,7 +24,7 @@ class MySQLTest extends Base
      * @throws Exception
      * @throws Limit
      */
-    public static function getDatabase(): Database
+    public function getDatabase(): Database
     {
         if (!is_null(self::$database)) {
             return self::$database;
@@ -44,6 +44,7 @@ class MySQLTest extends Base
 
         $database = new Database(new MySQL($pdo), $cache);
         $database
+            ->setAuthorization(self::$authorization)
             ->setDatabase('utopiaTests')
             ->setNamespace(static::$namespace = 'myapp_' . uniqid());
 
@@ -57,9 +58,9 @@ class MySQLTest extends Base
         return self::$database = $database;
     }
 
-    protected static function deleteColumn(string $collection, string $column): bool
+    protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pdo->exec($sql);
@@ -67,9 +68,9 @@ class MySQLTest extends Base
         return true;
     }
 
-    protected static function deleteIndex(string $collection, string $index): bool
+    protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . self::getDatabase()->getDatabase() . "`.`" . self::getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pdo->exec($sql);

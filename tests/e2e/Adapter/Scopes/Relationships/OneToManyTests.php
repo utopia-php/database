@@ -17,7 +17,7 @@ trait OneToManyTests
     public function testOneToManyOneWayRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -391,7 +391,7 @@ trait OneToManyTests
     public function testOneToManyTwoWayRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -844,7 +844,7 @@ trait OneToManyTests
     public function testNestedOneToMany_OneToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -954,7 +954,7 @@ trait OneToManyTests
             '$id' => 'city1',
             '$collection' => 'cities',
             'name' => 'City 1 updated',
-            'mayor' => 'mayor1', // we don't support partial updates at the moment
+            'mayor' => 'mayor1',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
@@ -1005,7 +1005,7 @@ trait OneToManyTests
     public function testNestedOneToMany_OneToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1137,7 +1137,7 @@ trait OneToManyTests
     public function testNestedOneToMany_ManyToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1230,7 +1230,7 @@ trait OneToManyTests
     public function testNestedOneToMany_ManyToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1325,7 +1325,7 @@ trait OneToManyTests
     public function testExceedMaxDepthOneToMany(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1439,7 +1439,7 @@ trait OneToManyTests
     public function testExceedMaxDepthOneToManyChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1531,7 +1531,7 @@ trait OneToManyTests
     public function testOneToManyRelationshipKeyWithSymbols(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1574,7 +1574,7 @@ trait OneToManyTests
     public function testRecreateOneToManyOneWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1640,7 +1640,7 @@ trait OneToManyTests
     public function testRecreateOneToManyTwoWayRelationshipFromParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1708,7 +1708,7 @@ trait OneToManyTests
     public function testRecreateOneToManyTwoWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1776,7 +1776,7 @@ trait OneToManyTests
     public function testRecreateOneToManyOneWayRelationshipFromParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1842,7 +1842,7 @@ trait OneToManyTests
     public function testDeleteBulkDocumentsOneToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
@@ -2025,7 +2025,7 @@ trait OneToManyTests
     public function testOneToManyAndManyToOneDeleteRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -2082,7 +2082,7 @@ trait OneToManyTests
     public function testUpdateParentAndChild_OneToMany(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (
             !$database->getAdapter()->getSupportForRelationships() ||
@@ -2164,7 +2164,7 @@ trait OneToManyTests
     public function testDeleteDocumentsRelationshipErrorDoesNotDeleteParent_OneToMany(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
@@ -2219,5 +2219,467 @@ trait OneToManyTests
         $this->assertFalse($childDoc->isEmpty(), 'Child should not be deleted');
         $database->deleteCollection($parentCollection);
         $database->deleteCollection($childCollection);
+    }
+
+    public function testPartialBatchUpdateWithRelationships(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Setup collections with relationships
+        $database->createCollection('products');
+        $database->createCollection('categories');
+
+        $database->createAttribute('products', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('products', 'price', Database::VAR_FLOAT, 0, true);
+        $database->createAttribute('categories', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'categories',
+            relatedCollection: 'products',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'products',
+            twoWayKey: 'category'
+        );
+
+        // Create category with products
+        $database->createDocument('categories', new Document([
+            '$id' => 'electronics',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Electronics',
+            'products' => [
+                [
+                    '$id' => 'product1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'Laptop',
+                    'price' => 999.99,
+                ],
+                [
+                    '$id' => 'product2',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'Mouse',
+                    'price' => 25.50,
+                ],
+            ],
+        ]));
+
+        // Verify initial state
+        $product1 = $database->getDocument('products', 'product1');
+        $this->assertEquals('Laptop', $product1->getAttribute('name'));
+        $this->assertEquals(999.99, $product1->getAttribute('price'));
+        $this->assertEquals('electronics', $product1->getAttribute('category')->getId());
+
+        $product2 = $database->getDocument('products', 'product2');
+        $this->assertEquals('Mouse', $product2->getAttribute('name'));
+        $this->assertEquals(25.50, $product2->getAttribute('price'));
+        $this->assertEquals('electronics', $product2->getAttribute('category')->getId());
+
+        // Perform a BATCH partial update - ONLY update price, NOT the category relationship
+        // This is the critical test case - batch updates with relationships
+        $database->updateDocuments(
+            'products',
+            new Document([
+                'price' => 50.00, // Update price for all matching products
+                // NOTE: We deliberately do NOT include the 'category' field here - this is a partial update
+            ]),
+            [Query::equal('$id', ['product1', 'product2'])]
+        );
+
+        // Verify that prices were updated but category relationships were preserved
+        $product1After = $database->getDocument('products', 'product1');
+        $this->assertEquals('Laptop', $product1After->getAttribute('name'), 'Product name should be preserved');
+        $this->assertEquals(50.00, $product1After->getAttribute('price'), 'Price should be updated');
+
+        // This is the critical assertion - the category relationship should still exist after batch partial update
+        $categoryAfter = $product1After->getAttribute('category');
+        $this->assertNotNull($categoryAfter, 'Category relationship should be preserved after batch partial update');
+        $this->assertEquals('electronics', $categoryAfter->getId(), 'Category should still be electronics');
+
+        $product2After = $database->getDocument('products', 'product2');
+        $this->assertEquals('Mouse', $product2After->getAttribute('name'), 'Product name should be preserved');
+        $this->assertEquals(50.00, $product2After->getAttribute('price'), 'Price should be updated');
+        $this->assertEquals('electronics', $product2After->getAttribute('category')->getId(), 'Category should still be electronics');
+
+        // Verify the reverse relationship is still intact
+        $category = $database->getDocument('categories', 'electronics');
+        $products = $category->getAttribute('products');
+        $this->assertCount(2, $products, 'Category should still have 2 products');
+        $this->assertEquals('product1', $products[0]->getId());
+        $this->assertEquals('product2', $products[1]->getId());
+
+        $database->deleteCollection('products');
+        $database->deleteCollection('categories');
+    }
+
+    public function testPartialUpdateOnlyRelationship(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Setup collections
+        $database->createCollection('authors');
+        $database->createCollection('books');
+
+        $database->createAttribute('authors', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('authors', 'bio', Database::VAR_STRING, 1000, false);
+        $database->createAttribute('books', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'authors',
+            relatedCollection: 'books',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'books',
+            twoWayKey: 'author'
+        );
+
+        // Create author with one book
+        $database->createDocument('authors', new Document([
+            '$id' => 'author1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'John Doe',
+            'bio' => 'A great author',
+            'books' => [
+                [
+                    '$id' => 'book1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'title' => 'First Book',
+                ],
+            ],
+        ]));
+
+        // Create a second book independently
+        $database->createDocument('books', new Document([
+            '$id' => 'book2',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'title' => 'Second Book',
+        ]));
+
+        // Verify initial state
+        $author = $database->getDocument('authors', 'author1');
+        $this->assertEquals('John Doe', $author->getAttribute('name'));
+        $this->assertEquals('A great author', $author->getAttribute('bio'));
+        $this->assertCount(1, $author->getAttribute('books'));
+        $this->assertEquals('book1', $author->getAttribute('books')[0]->getId());
+
+        // Partial update that ONLY changes the relationship (adds book2 to the author)
+        // Do NOT update name or bio
+        $database->updateDocument('authors', 'author1', new Document([
+            '$id' => 'author1',
+            '$collection' => 'authors',
+            'books' => ['book1', 'book2'], // Update relationship
+            // NOTE: We deliberately do NOT include 'name' or 'bio'
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+
+        // Verify that the relationship was updated but other fields preserved
+        $authorAfter = $database->getDocument('authors', 'author1');
+        $this->assertEquals('John Doe', $authorAfter->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals('A great author', $authorAfter->getAttribute('bio'), 'Bio should be preserved');
+        $this->assertCount(2, $authorAfter->getAttribute('books'), 'Should now have 2 books');
+
+        $bookIds = array_map(fn ($book) => $book->getId(), $authorAfter->getAttribute('books'));
+        $this->assertContains('book1', $bookIds);
+        $this->assertContains('book2', $bookIds);
+
+        // Verify reverse relationships
+        $book1 = $database->getDocument('books', 'book1');
+        $this->assertEquals('author1', $book1->getAttribute('author')->getId());
+
+        $book2 = $database->getDocument('books', 'book2');
+        $this->assertEquals('author1', $book2->getAttribute('author')->getId());
+
+        $database->deleteCollection('authors');
+        $database->deleteCollection('books');
+    }
+
+    public function testPartialUpdateBothDataAndRelationship(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Setup collections
+        $database->createCollection('teams');
+        $database->createCollection('players');
+
+        $database->createAttribute('teams', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('teams', 'city', Database::VAR_STRING, 255, true);
+        $database->createAttribute('teams', 'founded', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('players', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'teams',
+            relatedCollection: 'players',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'players',
+            twoWayKey: 'team'
+        );
+
+        // Create team with players
+        $database->createDocument('teams', new Document([
+            '$id' => 'team1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'The Warriors',
+            'city' => 'San Francisco',
+            'founded' => 1946,
+            'players' => [
+                [
+                    '$id' => 'player1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'Player One',
+                ],
+                [
+                    '$id' => 'player2',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'Player Two',
+                ],
+            ],
+        ]));
+
+        // Create an additional player
+        $database->createDocument('players', new Document([
+            '$id' => 'player3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Player Three',
+        ]));
+
+        // Verify initial state
+        $team = $database->getDocument('teams', 'team1');
+        $this->assertEquals('The Warriors', $team->getAttribute('name'));
+        $this->assertEquals('San Francisco', $team->getAttribute('city'));
+        $this->assertEquals(1946, $team->getAttribute('founded'));
+        $this->assertCount(2, $team->getAttribute('players'));
+
+        // Partial update that changes BOTH flat data (city) AND relationship (players)
+        // Do NOT update name or founded
+        $database->updateDocument('teams', 'team1', new Document([
+            '$id' => 'team1',
+            '$collection' => 'teams',
+            'city' => 'Oakland', // Update flat data
+            'players' => ['player1', 'player3'], // Update relationship (replace player2 with player3)
+            // NOTE: We deliberately do NOT include 'name' or 'founded'
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+
+        // Verify that both updates worked and other fields preserved
+        $teamAfter = $database->getDocument('teams', 'team1');
+        $this->assertEquals('The Warriors', $teamAfter->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals('Oakland', $teamAfter->getAttribute('city'), 'City should be updated');
+        $this->assertEquals(1946, $teamAfter->getAttribute('founded'), 'Founded should be preserved');
+        $this->assertCount(2, $teamAfter->getAttribute('players'), 'Should still have 2 players');
+
+        $playerIds = array_map(fn ($player) => $player->getId(), $teamAfter->getAttribute('players'));
+        $this->assertContains('player1', $playerIds, 'Should still have player1');
+        $this->assertContains('player3', $playerIds, 'Should now have player3');
+        $this->assertNotContains('player2', $playerIds, 'Should no longer have player2');
+
+        // Verify reverse relationships
+        $player1 = $database->getDocument('players', 'player1');
+        $this->assertEquals('team1', $player1->getAttribute('team')->getId());
+
+        $player2 = $database->getDocument('players', 'player2');
+        $this->assertNull($player2->getAttribute('team'), 'Player2 should no longer have a team');
+
+        $player3 = $database->getDocument('players', 'player3');
+        $this->assertEquals('team1', $player3->getAttribute('team')->getId());
+
+        $database->deleteCollection('teams');
+        $database->deleteCollection('players');
+    }
+
+    public function testPartialUpdateOneToManyChildSide(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('blogs');
+        $database->createCollection('posts');
+
+        $database->createAttribute('blogs', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('blogs', 'description', Database::VAR_STRING, 1000, false);
+        $database->createAttribute('posts', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('posts', 'views', Database::VAR_INTEGER, 0, false);
+
+        $database->createRelationship(
+            collection: 'blogs',
+            relatedCollection: 'posts',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'posts',
+            twoWayKey: 'blog'
+        );
+
+        // Create blog with posts
+        $database->createDocument('blogs', new Document([
+            '$id' => 'blog1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'title' => 'Tech Blog',
+            'description' => 'A blog about technology',
+            'posts' => [
+                ['$id' => 'post1', '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())], 'title' => 'Post 1', 'views' => 100],
+            ],
+        ]));
+
+        // Partial update from child (post) side - update views only, preserve blog relationship
+        $database->updateDocument('posts', 'post1', new Document([
+            '$id' => 'post1',
+            '$collection' => 'posts',
+            'views' => 200,
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $post = $database->getDocument('posts', 'post1');
+        $this->assertEquals('Post 1', $post->getAttribute('title'), 'Title should be preserved');
+        $this->assertEquals(200, $post->getAttribute('views'), 'Views should be updated');
+        $this->assertEquals('blog1', $post->getAttribute('blog')->getId(), 'Blog relationship should be preserved');
+
+        $database->deleteCollection('blogs');
+        $database->deleteCollection('posts');
+    }
+
+    public function testPartialUpdateWithStringIdsVsDocuments(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('libraries');
+        $database->createCollection('books_lib');
+
+        $database->createAttribute('libraries', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('libraries', 'location', Database::VAR_STRING, 255, false);
+        $database->createAttribute('books_lib', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'libraries',
+            relatedCollection: 'books_lib',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'books',
+            twoWayKey: 'library'
+        );
+
+        // Create library with books
+        $database->createDocument('libraries', new Document([
+            '$id' => 'lib1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Central Library',
+            'location' => 'Downtown',
+            'books' => [
+                ['$id' => 'book1', '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())], 'title' => 'Book One'],
+            ],
+        ]));
+
+        // Create standalone book
+        $database->createDocument('books_lib', new Document([
+            '$id' => 'book2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'title' => 'Book Two',
+        ]));
+
+        // Partial update using STRING IDs for relationship
+        $database->updateDocument('libraries', 'lib1', new Document([
+            '$id' => 'lib1',
+            '$collection' => 'libraries',
+            'books' => ['book1', 'book2'], // Using string IDs
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $lib = $database->getDocument('libraries', 'lib1');
+        $this->assertEquals('Central Library', $lib->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals('Downtown', $lib->getAttribute('location'), 'Location should be preserved');
+        $this->assertCount(2, $lib->getAttribute('books'), 'Should have 2 books');
+
+        // Create another standalone book
+        $database->createDocument('books_lib', new Document([
+            '$id' => 'book3',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'title' => 'Book Three',
+        ]));
+
+        // Partial update using DOCUMENT OBJECTS for relationship
+        $database->updateDocument('libraries', 'lib1', new Document([
+            '$id' => 'lib1',
+            '$collection' => 'libraries',
+            'books' => [ // Using Document objects
+                new Document(['$id' => 'book1']),
+                new Document(['$id' => 'book3']),
+            ],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $lib = $database->getDocument('libraries', 'lib1');
+        $this->assertEquals('Central Library', $lib->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals('Downtown', $lib->getAttribute('location'), 'Location should be preserved');
+        $this->assertCount(2, $lib->getAttribute('books'), 'Should have 2 books');
+
+        $bookIds = array_map(fn ($book) => $book->getId(), $lib->getAttribute('books'));
+        $this->assertContains('book1', $bookIds);
+        $this->assertContains('book3', $bookIds);
+
+        $database->deleteCollection('libraries');
+        $database->deleteCollection('books_lib');
     }
 }

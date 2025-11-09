@@ -17,7 +17,7 @@ trait ManyToOneTests
     public function testManyToOneOneWayRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -354,7 +354,7 @@ trait ManyToOneTests
     public function testManyToOneTwoWayRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -824,7 +824,7 @@ trait ManyToOneTests
     public function testNestedManyToOne_OneToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -925,7 +925,7 @@ trait ManyToOneTests
     public function testNestedManyToOne_OneToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1036,7 +1036,7 @@ trait ManyToOneTests
     public function testNestedManyToOne_ManyToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1138,7 +1138,7 @@ trait ManyToOneTests
     public function testNestedManyToOne_ManyToManyRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1209,7 +1209,7 @@ trait ManyToOneTests
     public function testExceedMaxDepthManyToOneParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1292,7 +1292,7 @@ trait ManyToOneTests
     public function testManyToOneRelationshipKeyWithSymbols(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1336,7 +1336,7 @@ trait ManyToOneTests
     public function testRecreateManyToOneOneWayRelationshipFromParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1402,7 +1402,7 @@ trait ManyToOneTests
     public function testRecreateManyToOneOneWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1468,7 +1468,7 @@ trait ManyToOneTests
     public function testRecreateManyToOneTwoWayRelationshipFromParent(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1535,7 +1535,7 @@ trait ManyToOneTests
     public function testRecreateManyToOneTwoWayRelationshipFromChild(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
             $this->expectNotToPerformAssertions();
@@ -1603,7 +1603,7 @@ trait ManyToOneTests
     public function testDeleteBulkDocumentsManyToOneRelationship(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
@@ -1686,7 +1686,7 @@ trait ManyToOneTests
     public function testUpdateParentAndChild_ManyToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (
             !$database->getAdapter()->getSupportForRelationships() ||
@@ -1768,7 +1768,7 @@ trait ManyToOneTests
     public function testDeleteDocumentsRelationshipErrorDoesNotDeleteParent_ManyToOne(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
             $this->expectNotToPerformAssertions();
@@ -1823,5 +1823,138 @@ trait ManyToOneTests
         $this->assertFalse($childDoc->isEmpty(), 'Child should not be deleted');
         $database->deleteCollection($parentCollection);
         $database->deleteCollection($childCollection);
+    }
+
+    public function testPartialUpdateManyToOneParentSide(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('companies');
+        $database->createCollection('employees');
+
+        $database->createAttribute('companies', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('employees', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('employees', 'salary', Database::VAR_INTEGER, 0, false);
+
+        $database->createRelationship(
+            collection: 'employees',
+            relatedCollection: 'companies',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'company',
+            twoWayKey: 'employees'
+        );
+
+        // Create company
+        $database->createDocument('companies', new Document([
+            '$id' => 'company1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Tech Corp',
+        ]));
+
+        $database->createDocument('companies', new Document([
+            '$id' => 'company2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Design Inc',
+        ]));
+
+        // Create employee with company (MANY_TO_ONE from employee side)
+        $database->createDocument('employees', new Document([
+            '$id' => 'emp1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Alice',
+            'salary' => 100000,
+            'company' => 'company1',
+        ]));
+
+        // Partial update from child (employee) side - update only salary, preserve company
+        $database->updateDocument('employees', 'emp1', new Document([
+            '$id' => 'emp1',
+            '$collection' => 'employees',
+            'salary' => 120000,
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $emp = $database->getDocument('employees', 'emp1');
+        $this->assertEquals('Alice', $emp->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals(120000, $emp->getAttribute('salary'), 'Salary should be updated');
+        $this->assertEquals('company1', $emp->getAttribute('company')->getId(), 'Company relationship should be preserved');
+
+        // Partial update - change only company relationship
+        $database->updateDocument('employees', 'emp1', new Document([
+            '$id' => 'emp1',
+            '$collection' => 'employees',
+            'company' => 'company2',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $emp = $database->getDocument('employees', 'emp1');
+        $this->assertEquals('Alice', $emp->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals(120000, $emp->getAttribute('salary'), 'Salary should be preserved');
+        $this->assertEquals('company2', $emp->getAttribute('company')->getId(), 'Company should be updated');
+
+        $database->deleteCollection('companies');
+        $database->deleteCollection('employees');
+    }
+
+    public function testPartialUpdateManyToOneChildSide(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('departments');
+        $database->createCollection('staff');
+
+        $database->createAttribute('departments', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('departments', 'budget', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('staff', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'staff',
+            relatedCollection: 'departments',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'department',
+            twoWayKey: 'staff'
+        );
+
+        // Create department with staff
+        $database->createDocument('departments', new Document([
+            '$id' => 'dept1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'name' => 'Engineering',
+            'budget' => 1000000,
+            'staff' => [
+                ['$id' => 'staff1', '$permissions' => [Permission::read(Role::any())], 'name' => 'Bob'],
+                ['$id' => 'staff2', '$permissions' => [Permission::read(Role::any())], 'name' => 'Carol'],
+            ],
+        ]));
+
+        // Partial update from parent (department) side - update budget only, preserve staff
+        $database->updateDocument('departments', 'dept1', new Document([
+            '$id' => 'dept1',
+            '$collection' => 'departments',
+            'budget' => 1200000,
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $dept = $database->getDocument('departments', 'dept1');
+        $this->assertEquals('Engineering', $dept->getAttribute('name'), 'Name should be preserved');
+        $this->assertEquals(1200000, $dept->getAttribute('budget'), 'Budget should be updated');
+        $this->assertCount(2, $dept->getAttribute('staff'), 'Staff should be preserved');
+
+        $database->deleteCollection('departments');
+        $database->deleteCollection('staff');
     }
 }

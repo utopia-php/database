@@ -19,16 +19,12 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Authorization;
 
 trait GeneralTests
 {
     public function testPing(): void
     {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        $this->assertEquals(true, $database->ping());
+        $this->assertEquals(true, $this->getDatabase()->ping());
     }
 
     /**
@@ -47,7 +43,7 @@ trait GeneralTests
         }
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->createCollection('global-timeouts');
 
@@ -91,10 +87,15 @@ trait GeneralTests
 
     public function testPreserveDatesUpdate(): void
     {
-        Authorization::disable();
+        $this->getDatabase()->getAuthorization()->disable();
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $database->setPreserveDates(true);
 
@@ -181,15 +182,20 @@ trait GeneralTests
 
         $database->setPreserveDates(false);
 
-        Authorization::reset();
+        $this->getDatabase()->getAuthorization()->reset();
     }
 
     public function testPreserveDatesCreate(): void
     {
-        Authorization::disable();
+        $this->getDatabase()->getAuthorization()->disable();
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $database->setPreserveDates(true);
 
@@ -286,7 +292,7 @@ trait GeneralTests
 
         $database->setPreserveDates(false);
 
-        Authorization::reset();
+        $this->getDatabase()->getAuthorization()->reset();
     }
 
     public function testGetAttributeLimit(): void
@@ -311,7 +317,7 @@ trait GeneralTests
 
     public function testSharedTablesUpdateTenant(): void
     {
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
@@ -370,7 +376,7 @@ trait GeneralTests
         $this->expectException(Exception::class);
 
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $database->find('movies', [
             Query::limit(2),
@@ -425,7 +431,7 @@ trait GeneralTests
     public function testSharedTablesTenantPerDocument(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         $sharedTables = $database->getSharedTables();
         $tenantPerDocument = $database->getTenantPerDocument();
@@ -625,16 +631,15 @@ trait GeneralTests
     public function testCacheFallback(): void
     {
         /** @var Database $database */
-        $database = static::getDatabase();
+        $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForCacheSkipOnFailure()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        Authorization::cleanRoles();
-        Authorization::setRole(Role::any()->toString());
-        $database = static::getDatabase();
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         // Write mock data
         $database->createCollection('testRedisFallback', attributes: [

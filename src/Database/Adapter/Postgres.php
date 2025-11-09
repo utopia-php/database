@@ -5,30 +5,33 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDO;
 use PDOException;
+use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\QueryContext;
 use Utopia\Database\Validator\Authorization;
 
+/**
+ * Differences between MariaDB and Postgres
+ *
+ * 1. Need to use CASCADE to DROP schema
+ * 2. Quotes are different ` vs "
+ * 3. DATETIME is TIMESTAMP
+ * 4. Full-text search is different - to_tsvector() and to_tsquery()
+ */
 class Postgres extends SQL
 {
-    /**
-     * Differences between MariaDB and Postgres
-     *
-     * 1. Need to use CASCADE to DROP schema
-     * 2. Quotes are different ` vs "
-     * 3. DATETIME is TIMESTAMP
-     * 4. Full-text search is different - to_tsvector() and to_tsquery()
-     */
-
     /**
      * @inheritDoc
      */
@@ -149,15 +152,16 @@ class Postgres extends SQL
             ->prepare($sql)
             ->execute();
 
-        // extension for supporting spatial types
-        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis;')->execute();
+        // Enable extensions
+        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS postgis')->execute();
+        $this->getPDO()->prepare('CREATE EXTENSION IF NOT EXISTS vector')->execute();
 
         $collation = "
-            CREATE COLLATION IF NOT EXISTS utf8_ci (
+            CREATE COLLATION IF NOT EXISTS utf8_ci_ai (
             provider = icu,
-            locale   = 'und-u-ks-primary',
+            locale = 'und-u-ks-level1',
             deterministic = false
-            );
+            )
         ";
         $this->getPDO()->prepare($collation)->execute();
         return $dbCreation;
@@ -194,9 +198,6 @@ class Postgres extends SQL
     {
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
-
-        /** @var array<string> $attributeStrings */
-        $attributeStrings = [];
 
         /** @var array<string> $attributeStrings */
         $attributeStrings = [];
@@ -246,14 +247,14 @@ class Postgres extends SQL
 
         if ($this->sharedTables) {
             $collection .= "
-				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\", \"_tenant\");
+				CREATE UNIQUE INDEX \"{$namespace}_{$this->tenant}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai, \"_tenant\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_created\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_updated\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
             	CREATE INDEX \"{$namespace}_{$this->tenant}_{$id}_tenant_id\" ON {$this->getSQLTable($id)} (_tenant, _id);
 			";
         } else {
             $collection .= "
-				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\");
+				CREATE UNIQUE INDEX \"{$namespace}_{$id}_uid\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai);
             	CREATE INDEX \"{$namespace}_{$id}_created\" ON {$this->getSQLTable($id)} (\"_createdAt\");
             	CREATE INDEX \"{$namespace}_{$id}_updated\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
 			";
@@ -281,7 +282,7 @@ class Postgres extends SQL
         } else {
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$namespace}_{$id}_ukey\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission);
                 CREATE INDEX \"{$namespace}_{$id}_permission\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_permission,_type); 
             ";
@@ -445,6 +446,16 @@ class Postgres extends SQL
      */
     public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
     {
+        // Ensure pgvector extension is installed for vector types
+        if ($type === Database::VAR_VECTOR) {
+            if ($size <= 0) {
+                throw new DatabaseException('Vector dimensions must be a positive integer');
+            }
+            if ($size > Database::MAX_VECTOR_DIMENSIONS) {
+                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::MAX_VECTOR_DIMENSIONS);
+            }
+        }
+
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $type = $this->getSQLType($type, $size, $signed, $array, $required);
@@ -545,7 +556,23 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $id = $this->filter($id);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
-        $type = $this->getSQLType($type, $size, $signed, $array, $required);
+
+        if ($type === Database::VAR_VECTOR) {
+            if ($size <= 0) {
+                throw new DatabaseException('Vector dimensions must be a positive integer');
+            }
+            if ($size > Database::MAX_VECTOR_DIMENSIONS) {
+                throw new DatabaseException('Vector dimensions cannot exceed ' . Database::MAX_VECTOR_DIMENSIONS);
+            }
+        }
+
+        $type = $this->getSQLType(
+            $type,
+            $size,
+            $signed,
+            $array,
+            $required,
+        );
 
         if ($type == 'TIMESTAMP(3)') {
             $type = "TIMESTAMP(3) without time zone USING TO_TIMESTAMP(\"$id\", 'YYYY-MM-DD HH24:MI:SS.MS')";
@@ -843,7 +870,6 @@ class Postgres extends SQL
         $collection = $this->filter($collection);
         $id = $this->filter($id);
 
-
         foreach ($attributes as $i => $attr) {
             $order = empty($orders[$i]) || Database::INDEX_FULLTEXT === $type ? '' : $orders[$i];
 
@@ -854,42 +880,38 @@ class Postgres extends SQL
                 default => $this->filter($attr),
             };
 
-            if (Database::INDEX_UNIQUE === $type) {
-                if (isset($indexAttributeTypes[$attr]) && $indexAttributeTypes[$attr] === Database::VAR_STRING) {
-                    $attributes[$i] = "\"{$attr}\" COLLATE utf8_ci {$order}";
-                } else {
-                    $attributes[$i] = "\"{$attr}\" {$order}";
-                }
-            } else {
-                $attributes[$i] = "\"{$attr}\" {$order}";
-            }
+            $attributes[$i] = "\"{$attr}\" {$order}";
         }
 
         $sqlType = match ($type) {
             Database::INDEX_KEY,
-            Database::INDEX_FULLTEXT => 'INDEX',
+            Database::INDEX_FULLTEXT,
+            Database::INDEX_SPATIAL,
+            Database::INDEX_HNSW_EUCLIDEAN,
+            Database::INDEX_HNSW_COSINE,
+            Database::INDEX_HNSW_DOT => 'INDEX',
             Database::INDEX_UNIQUE => 'UNIQUE INDEX',
-            Database::INDEX_SPATIAL => 'INDEX',
-            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL),
+            default => throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT . ', ' . Database::INDEX_SPATIAL . ', ' . Database::INDEX_HNSW_EUCLIDEAN . ', ' . Database::INDEX_HNSW_COSINE . ', ' . Database::INDEX_HNSW_DOT),
         };
 
         $key = "\"{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}\"";
         $attributes = \implode(', ', $attributes);
 
-        // Spatial indexes can't include _tenant because GIST indexes require all columns to have compatible operator classes
-        if ($this->sharedTables && $type !== Database::INDEX_FULLTEXT && $type !== Database::INDEX_SPATIAL) {
+        if ($this->sharedTables && \in_array($type, [Database::INDEX_KEY, Database::INDEX_UNIQUE])) {
             // Add tenant as first index column for best performance
             $attributes = "_tenant, {$attributes}";
         }
 
         $sql = "CREATE {$sqlType} {$key} ON {$this->getSQLTable($collection)}";
 
-        // Add USING GIST for spatial indexes
-        if ($type === Database::INDEX_SPATIAL) {
-            $sql .= " USING GIST";
-        }
-
-        $sql .= " ({$attributes});";
+        // Add USING clause for special index types
+        $sql .= match ($type) {
+            Database::INDEX_SPATIAL => " USING GIST ({$attributes})",
+            Database::INDEX_HNSW_EUCLIDEAN => " USING HNSW ({$attributes} vector_l2_ops)",
+            Database::INDEX_HNSW_COSINE => " USING HNSW ({$attributes} vector_cosine_ops)",
+            Database::INDEX_HNSW_DOT => " USING HNSW ({$attributes} vector_ip_ops)",
+            default => " ({$attributes})",
+        };
 
         $sql = $this->trigger(Database::EVENT_INDEX_CREATE, $sql);
 
@@ -910,7 +932,7 @@ class Postgres extends SQL
      */
     public function deleteIndex(string $collection, string $id): bool
     {
-        $name = $this->filter($collection);
+        $collection = $this->filter($collection);
         $id = $this->filter($id);
         $schemaName = $this->getDatabase();
 
@@ -1011,7 +1033,6 @@ class Postgres extends SQL
             }
 
             $bindKey = 'key_' . $attributeIndex;
-            $value = (\is_bool($value)) ? ($value ? "true" : "false") : $value;
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $attributeIndex++;
         }
@@ -1073,6 +1094,7 @@ class Postgres extends SQL
      */
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
+        $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1220,12 +1242,33 @@ class Postgres extends SQL
          * Update Attributes
          */
 
-        $bindIndex = 0;
+        $keyIndex = 0;
+        $opIndex = 0;
+        $operators = [];
+
+        // Separate regular attributes from operators
+        foreach ($attributes as $attribute => $value) {
+            if (Operator::isOperator($value)) {
+                $operators[$attribute] = $value;
+            }
+        }
+
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
-            $bindKey = 'key_' . $bindIndex;
-            $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
-            $bindIndex++;
+
+            // Check if this is an operator, spatial attribute, or regular attribute
+            if (isset($operators[$attribute])) {
+                $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
+                $columns .= $operatorSQL . ',';
+            } elseif (\in_array($attribute, $spatialAttributes, true)) {
+                $bindKey = 'key_' . $keyIndex;
+                $columns .= "\"{$column}\" = " . $this->getSpatialGeomFromText(':' . $bindKey) . ',';
+                $keyIndex++;
+            } else {
+                $bindKey = 'key_' . $keyIndex;
+                $columns .= "\"{$column}\"" . '=:' . $bindKey . ',';
+                $keyIndex++;
+            }
         }
 
         $sql = "
@@ -1246,16 +1289,26 @@ class Postgres extends SQL
             $stmt->bindValue(':_tenant', $this->tenant);
         }
 
-        $attributeIndex = 0;
+        $keyIndex = 0;
+        $opIndexForBinding = 0;
         foreach ($attributes as $attribute => $value) {
-            if (is_array($value)) {
-                $value = json_encode($value);
-            }
+            // Handle operators separately
+            if (isset($operators[$attribute])) {
+                $this->bindOperatorParams($stmt, $operators[$attribute], $opIndexForBinding);
+            } else {
+                // Convert spatial arrays to WKT, json_encode non-spatial arrays
+                if (\in_array($attribute, $spatialAttributes, true)) {
+                    if (\is_array($value)) {
+                        $value = $this->convertArrayToWKT($value);
+                    }
+                } elseif (is_array($value)) {
+                    $value = json_encode($value);
+                }
 
-            $bindKey = 'key_' . $attributeIndex;
-            $value = (is_bool($value)) ? ($value == true ? "true" : "false") : $value;
-            $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-            $attributeIndex++;
+                $bindKey = 'key_' . $keyIndex;
+                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                $keyIndex++;
+            }
         }
 
         try {
@@ -1280,6 +1333,7 @@ class Postgres extends SQL
      * @param array<string> $attributes
      * @param array<mixed> $bindValues
      * @param string $attribute
+     * @param array<Operator> $operators
      * @return mixed
      */
     protected function getUpsertStatement(
@@ -1289,6 +1343,7 @@ class Postgres extends SQL
         array $attributes,
         array $bindValues,
         string $attribute = '',
+        array $operators = [],
     ): mixed {
         $getUpdateClause = function (string $attribute, bool $increment = false): string {
             $attribute = $this->quote($this->filter($attribute));
@@ -1304,6 +1359,9 @@ class Postgres extends SQL
 
             return "{$attribute} = {$new}";
         };
+
+        $opIndex = 0;
+
         if (!empty($attribute)) {
             // Increment specific column by its new value in place
             $updateColumns = [
@@ -1311,13 +1369,25 @@ class Postgres extends SQL
                 $getUpdateClause('_updatedAt'),
             ];
         } else {
-            // Update all columns
+            // Update all columns and apply operators
             $updateColumns = [];
             foreach (array_keys($attributes) as $attr) {
                 /**
                  * @var string $attr
                  */
-                $updateColumns[] = $getUpdateClause($this->filter($attr));
+                $filteredAttr = $this->filter($attr);
+
+                // Check if this attribute has an operator
+                if (isset($operators[$attr])) {
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $opIndex, useTargetPrefix: true);
+                    if ($operatorSQL !== null) {
+                        $updateColumns[] = $operatorSQL;
+                    }
+                } else {
+                    if (!in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
+                        $updateColumns[] = $getUpdateClause($filteredAttr);
+                    }
+                }
             }
         }
 
@@ -1334,6 +1404,16 @@ class Postgres extends SQL
         foreach ($bindValues as $key => $binding) {
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
+
+        $opIndexForBinding = 0;
+
+        // Bind operator parameters in the same order used to build SQL
+        foreach (array_keys($attributes) as $attr) {
+            if (isset($operators[$attr])) {
+                $this->bindOperatorParams($stmt, $operators[$attr], $opIndexForBinding);
+            }
+        }
+
         return $stmt;
     }
 
@@ -1355,12 +1435,12 @@ class Postgres extends SQL
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
 
-        $sqlMax = $max ? " AND \"{$attribute}\" <= {$max}" : "";
-        $sqlMin = $min ? " AND \"{$attribute}\" >= {$min}" : "";
+        $sqlMax = $max !== null ? " AND \"{$attribute}\" <= :max" : "";
+        $sqlMin = $min !== null ? " AND \"{$attribute}\" >= :min" : "";
 
         $sql = "
-			UPDATE {$this->getSQLTable($name)} 
-			SET 
+			UPDATE {$this->getSQLTable($name)}
+			SET
 			    \"{$attribute}\" = \"{$attribute}\" + :val,
                 \"_updatedAt\" = :updatedAt
 			WHERE _uid = :_uid
@@ -1376,6 +1456,12 @@ class Postgres extends SQL
         $stmt->bindValue(':val', $value);
         $stmt->bindValue(':updatedAt', $updatedAt);
 
+        if ($max !== null) {
+            $stmt->bindValue(':max', $max);
+        }
+        if ($min !== null) {
+            $stmt->bindValue(':min', $min);
+        }
         if ($this->sharedTables) {
             $stmt->bindValue(':_tenant', $this->tenant);
         }
@@ -1490,7 +1576,7 @@ class Postgres extends SQL
 
         if ($meters) {
             $attr = "({$alias}.{$attribute}::geography)";
-            $geom = "ST_SetSRID(" . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ", " . Database::SRID . ")::geography";
+            $geom = "ST_SetSRID(" . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ", " . Database::DEFAULT_SRID . ")::geography";
             return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
         }
 
@@ -1618,6 +1704,11 @@ class Postgres extends SQL
                 $binds[":{$placeholder}_0"] = $this->getFulltextValue($query->getValue());
                 return "NOT (to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0))";
 
+            case Query::TYPE_VECTOR_DOT:
+            case Query::TYPE_VECTOR_COSINE:
+            case Query::TYPE_VECTOR_EUCLIDEAN:
+                return ''; // Handled in ORDER BY clause
+
             case Query::TYPE_BETWEEN:
                 $binds[":{$placeholder}_0"] = $query->getValues()[0];
                 $binds[":{$placeholder}_1"] = $query->getValues()[1];
@@ -1642,8 +1733,6 @@ class Postgres extends SQL
             case Query::TYPE_NOT_CONTAINS:
                 if ($query->onArray()) {
                     $operator = '@>';
-                } else {
-                    $operator = null;
                 }
 
                 // no break
@@ -1683,6 +1772,37 @@ class Postgres extends SQL
                 $separator = $isNotQuery ? ' AND ' : ' OR ';
                 return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
         }
+    }
+
+    /**
+     * Get vector distance calculation for ORDER BY clause
+     *
+     * @param Query $query
+     * @param array<string, mixed> $binds
+     * @param string $alias
+     * @return string|null
+     * @throws DatabaseException
+     */
+    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    {
+        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
+
+        $attribute = $this->filter($query->getAttribute());
+        $attribute = $this->quote($attribute);
+        $alias = $this->quote($alias);
+        $placeholder = ID::unique();
+
+        $values = $query->getValues();
+        $vectorArray = $values[0] ?? [];
+        $vector = \json_encode(\array_map(\floatval(...), $vectorArray));
+        $binds[":vector_{$placeholder}"] = $vector;
+
+        return match ($query->getMethod()) {
+            Query::TYPE_VECTOR_DOT => "({$alias}.{$attribute} <#> :vector_{$placeholder}::vector)",
+            Query::TYPE_VECTOR_COSINE => "({$alias}.{$attribute} <=> :vector_{$placeholder}::vector)",
+            Query::TYPE_VECTOR_EUCLIDEAN => "({$alias}.{$attribute} <-> :vector_{$placeholder}::vector)",
+            default => null,
+        };
     }
 
     /**
@@ -1752,15 +1872,17 @@ class Postgres extends SQL
             case Database::VAR_DATETIME:
                 return 'TIMESTAMP(3)';
 
-                // in all other DB engines, 4326 is the default SRID
             case Database::VAR_POINT:
-                return 'GEOMETRY(POINT,' . Database::SRID . ')';
+                return 'GEOMETRY(POINT,' . Database::DEFAULT_SRID . ')';
 
             case Database::VAR_LINESTRING:
-                return 'GEOMETRY(LINESTRING,' . Database::SRID . ')';
+                return 'GEOMETRY(LINESTRING,' . Database::DEFAULT_SRID . ')';
 
             case Database::VAR_POLYGON:
-                return 'GEOMETRY(POLYGON,' . Database::SRID . ')';
+                return 'GEOMETRY(POLYGON,' . Database::DEFAULT_SRID . ')';
+
+            case Database::VAR_VECTOR:
+                return "VECTOR({$size})";
 
             default:
                 throw new DatabaseException('Unknown Type: ' . $type . '. Must be one of ' . Database::VAR_STRING . ', ' . Database::VAR_INTEGER .  ', ' . Database::VAR_FLOAT . ', ' . Database::VAR_BOOLEAN . ', ' . Database::VAR_DATETIME . ', ' . Database::VAR_RELATIONSHIP . ', ' . Database::VAR_POINT . ', ' . Database::VAR_LINESTRING . ', ' . Database::VAR_POLYGON);
@@ -1894,6 +2016,11 @@ class Postgres extends SQL
         return false;
     }
 
+    public function getSupportForIntegerBooleans(): bool
+    {
+        return false; // Postgres has native boolean type
+    }
+
     /**
      * Is get schema attributes supported?
      *
@@ -1905,6 +2032,16 @@ class Postgres extends SQL
     }
 
     public function getSupportForUpserts(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is vector type supported?
+     *
+     * @return bool
+     */
+    public function getSupportForVectors(): bool
     {
         return true;
     }
@@ -1942,6 +2079,16 @@ class Postgres extends SQL
         // Data is too big for column resize
         if ($e->getCode() === '22001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new TruncateException('Resize would result in data truncation', $e->getCode(), $e);
+        }
+
+        // Numeric value out of range (overflow/underflow from operators)
+        if ($e->getCode() === '22003' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new LimitException('Numeric value out of range', $e->getCode(), $e);
+        }
+
+        // Datetime field overflow
+        if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new LimitException('Datetime field overflow', $e->getCode(), $e);
         }
 
         // Unknown column
@@ -2267,5 +2414,265 @@ class Postgres extends SQL
         }
 
         return $rings; // array of rings, each ring is array of [x,y]
+    }
+
+    /**
+     * Get SQL expression for operator
+     *
+     * @param string $column
+     * @param Operator $operator
+     * @param int &$bindIndex
+     * @return ?string
+     */
+    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex, bool $useTargetPrefix = false): ?string
+    {
+        $quotedColumn = $this->quote($column);
+        $columnRef = $useTargetPrefix ? "target.{$quotedColumn}" : $quotedColumn;
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            // Numeric operators
+            case Operator::TYPE_INCREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$columnRef}, 0) >= CAST(:$maxKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        WHEN COALESCE({$columnRef}, 0) > CAST(:$maxKey AS NUMERIC) - CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        ELSE COALESCE({$columnRef}, 0) + CAST(:$bindKey AS NUMERIC)
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$columnRef}, 0) + :$bindKey";
+
+            case Operator::TYPE_DECREMENT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$columnRef}, 0) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        WHEN COALESCE({$columnRef}, 0) < CAST(:$minKey AS NUMERIC) + CAST(:$bindKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        ELSE COALESCE({$columnRef}, 0) - CAST(:$bindKey AS NUMERIC)
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$columnRef}, 0) - :$bindKey";
+
+            case Operator::TYPE_MULTIPLY:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$columnRef}, 0) >= CAST(:$maxKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        WHEN CAST(:$bindKey AS NUMERIC) > 0 AND COALESCE({$columnRef}, 0) > CAST(:$maxKey AS NUMERIC) / CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        WHEN CAST(:$bindKey AS NUMERIC) < 0 AND COALESCE({$columnRef}, 0) < CAST(:$maxKey AS NUMERIC) / CAST(:$bindKey AS NUMERIC) THEN CAST(:$maxKey AS NUMERIC)
+                        ELSE COALESCE({$columnRef}, 0) * CAST(:$bindKey AS NUMERIC)
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$columnRef}, 0) * :$bindKey";
+
+            case Operator::TYPE_DIVIDE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $minKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN CAST(:$bindKey AS NUMERIC) != 0 AND COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC) <= CAST(:$minKey AS NUMERIC) THEN CAST(:$minKey AS NUMERIC)
+                        ELSE COALESCE({$columnRef}, 0) / CAST(:$bindKey AS NUMERIC)
+                    END";
+                }
+                return "{$quotedColumn} = COALESCE({$columnRef}, 0) / :$bindKey";
+
+            case Operator::TYPE_MODULO:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = MOD(COALESCE({$columnRef}::numeric, 0), :$bindKey::numeric)";
+
+            case Operator::TYPE_POWER:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                if (isset($values[1])) {
+                    $maxKey = "op_{$bindIndex}";
+                    $bindIndex++;
+                    return "{$quotedColumn} = CASE
+                        WHEN COALESCE({$columnRef}, 0) >= :$maxKey THEN :$maxKey
+                        WHEN COALESCE({$columnRef}, 0) <= 1 THEN COALESCE({$columnRef}, 0)
+                        WHEN :$bindKey * LN(COALESCE({$columnRef}, 1)) > LN(:$maxKey) THEN :$maxKey
+                        ELSE POWER(COALESCE({$columnRef}, 0), :$bindKey)
+                    END";
+                }
+                return "{$quotedColumn} = POWER(COALESCE({$columnRef}, 0), :$bindKey)";
+
+                // String operators
+            case Operator::TYPE_STRING_CONCAT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = CONCAT(COALESCE({$columnRef}, ''), :$bindKey)";
+
+            case Operator::TYPE_STRING_REPLACE:
+                $searchKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $replaceKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = REPLACE(COALESCE({$columnRef}, ''), :$searchKey, :$replaceKey)";
+
+                // Boolean operators
+            case Operator::TYPE_TOGGLE:
+                return "{$quotedColumn} = NOT COALESCE({$columnRef}, FALSE)";
+
+                // Array operators
+            case Operator::TYPE_ARRAY_APPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE({$columnRef}, '[]'::jsonb) || :$bindKey::jsonb";
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = :$bindKey::jsonb || COALESCE({$columnRef}, '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(DISTINCT value)
+                    FROM jsonb_array_elements({$columnRef}) AS value
+                ), '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$columnRef}) AS value
+                    WHERE value != :$bindKey::jsonb
+                ), '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_INSERT:
+                $indexKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = (
+                    SELECT jsonb_agg(value ORDER BY idx)
+                    FROM (
+                        SELECT value, idx
+                        FROM jsonb_array_elements({$columnRef}) WITH ORDINALITY AS t(value, idx)
+                        WHERE idx - 1 < :$indexKey
+                        UNION ALL
+                        SELECT :$valueKey::jsonb AS value, :$indexKey + 1 AS idx
+                        UNION ALL
+                        SELECT value, idx + 1
+                        FROM jsonb_array_elements({$columnRef}) WITH ORDINALITY AS t(value, idx)
+                        WHERE idx - 1 >= :$indexKey
+                    ) AS combined
+                )";
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$columnRef}) AS value
+                    WHERE value IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
+                ), '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_DIFF:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$columnRef}) AS value
+                    WHERE value NOT IN (SELECT jsonb_array_elements(:$bindKey::jsonb))
+                ), '[]'::jsonb)";
+
+            case Operator::TYPE_ARRAY_FILTER:
+                $conditionKey = "op_{$bindIndex}";
+                $bindIndex++;
+                $valueKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = COALESCE((
+                    SELECT jsonb_agg(value)
+                    FROM jsonb_array_elements({$columnRef}) AS value
+                    WHERE CASE :$conditionKey
+                        WHEN 'equal' THEN value = :$valueKey::jsonb
+                        WHEN 'notEqual' THEN value != :$valueKey::jsonb
+                        WHEN 'greaterThan' THEN (value::text)::numeric > trim(both '\"' from :$valueKey::text)::numeric
+                        WHEN 'greaterThanEqual' THEN (value::text)::numeric >= trim(both '\"' from :$valueKey::text)::numeric
+                        WHEN 'lessThan' THEN (value::text)::numeric < trim(both '\"' from :$valueKey::text)::numeric
+                        WHEN 'lessThanEqual' THEN (value::text)::numeric <= trim(both '\"' from :$valueKey::text)::numeric
+                        WHEN 'isNull' THEN value = 'null'::jsonb
+                        WHEN 'isNotNull' THEN value != 'null'::jsonb
+                        ELSE TRUE
+                    END
+                ), '[]'::jsonb)";
+
+                // Date operators
+            case Operator::TYPE_DATE_ADD_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = {$columnRef} + (:$bindKey || ' days')::INTERVAL";
+
+            case Operator::TYPE_DATE_SUB_DAYS:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = {$columnRef} - (:$bindKey || ' days')::INTERVAL";
+
+            case Operator::TYPE_DATE_SET_NOW:
+                return "{$quotedColumn} = NOW()";
+
+            default:
+                throw new OperatorException("Invalid operator: {$method}");
+        }
+    }
+
+    /**
+     * Bind operator parameters to statement
+     * Override to handle PostgreSQL-specific JSON binding
+     *
+     * @param \PDOStatement|PDOStatementProxy $stmt
+     * @param Operator $operator
+     * @param int &$bindIndex
+     * @return void
+     */
+    protected function bindOperatorParams(\PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    {
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            case Operator::TYPE_ARRAY_APPEND:
+            case Operator::TYPE_ARRAY_PREPEND:
+                $arrayValue = json_encode($values);
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                $value = $values[0] ?? null;
+                $bindKey = "op_{$bindIndex}";
+                // Always JSON encode for PostgreSQL jsonb comparison
+                $stmt->bindValue(':' . $bindKey, json_encode($value), \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+            case Operator::TYPE_ARRAY_DIFF:
+                $arrayValue = json_encode($values);
+                $bindKey = "op_{$bindIndex}";
+                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
+                $bindIndex++;
+                break;
+
+            default:
+                // Use parent implementation for other operators
+                parent::bindOperatorParams($stmt, $operator, $bindIndex);
+                break;
+        }
     }
 }

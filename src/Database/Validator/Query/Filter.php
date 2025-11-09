@@ -28,12 +28,13 @@
 //    public function __construct(
 //        array $attributes,
 //        private readonly string $idAttributeType,
-//        private readonly int $maxValuesCount = 100,
+//        private readonly int $maxValuesCount = 5000,
 //        private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
 //        private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+//        private bool $supportForAttributes = true
 //    ) {
 //        foreach ($attributes as $attribute) {
-//            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
+//            $this->schema[$attribute->getAttribute('key', $attribute->getId())] = $attribute->getArrayCopy();
 //        }
 //    }
 //
@@ -59,15 +60,10 @@
 //            // For relationships, just validate the top level.
 //            // will validate each nested level during the recursive calls.
 //            $attribute = \explode('.', $attribute)[0];
-//
-//            if (isset($this->schema[$attribute])) {
-//                $this->message = 'Cannot query nested attribute on: ' . $attribute;
-//                return false;
-//            }
 //        }
 //
 //        // Search for attribute in schema
-//        if (!isset($this->schema[$attribute])) {
+//        if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
 //            $this->message = 'Attribute not found in schema: ' . $attribute;
 //            return false;
 //        }
@@ -87,6 +83,7 @@
 //            return false;
 //        }
 //
+//        $originalAttribute = $attribute;
 //        // isset check if for special symbols "." in the attribute name
 //        if (\str_contains($attribute, '.') && !isset($this->schema[$attribute])) {
 //            // For relationships, just validate the top level.
@@ -94,12 +91,32 @@
 //            $attribute = \explode('.', $attribute)[0];
 //        }
 //
+//        if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
+//            // First check maxValuesCount guard for any IN-style value arrays
+//            if (count($values) > $this->maxValuesCount) {
+//                $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
+//                return false;
+//            }
+//
+//            return true;
+//        }
 //        $attributeSchema = $this->schema[$attribute];
+//
+//        // Skip value validation for nested relationship queries (e.g., author.age)
+//        // The values will be validated when querying the related collection
+//        if ($attributeSchema['type'] === Database::VAR_RELATIONSHIP && $originalAttribute !== $attribute) {
+//            return true;
+//        }
 //
 //        if (count($values) > $this->maxValuesCount) {
 //            $this->message = 'Query on attribute has greater than ' . $this->maxValuesCount . ' values: ' . $attribute;
 //            return false;
 //        }
+//
+//        if (!$this->supportForAttributes && !isset($this->schema[$attribute])) {
+//            return true;
+//        }
+//        $attributeSchema = $this->schema[$attribute];
 //
 //        $attributeType = $attributeSchema['type'];
 //
@@ -154,6 +171,25 @@
 //                    }
 //                    continue 2;
 //
+//                case Database::VAR_VECTOR:
+//                    // For vector queries, validate that the value is an array of floats
+//                    if (!is_array($value)) {
+//                        $this->message = 'Vector query value must be an array';
+//                        return false;
+//                    }
+//                    foreach ($value as $component) {
+//                        if (!is_numeric($component)) {
+//                            $this->message = 'Vector query value must contain only numeric values';
+//                            return false;
+//                        }
+//                    }
+//                    // Check size match
+//                    $expectedSize = $attributeSchema['size'] ?? 0;
+//                    if (count($value) !== $expectedSize) {
+//                        $this->message = "Vector query value must have {$expectedSize} elements";
+//                        return false;
+//                    }
+//                    continue 2;
 //                default:
 //                    $this->message = 'Unknown Data type';
 //                    return false;
@@ -212,6 +248,18 @@
 //        ) {
 //            $this->message = 'Cannot query '. $method .' on attribute "' . $attribute . '" because it is an array.';
 //            return false;
+//        }
+//
+//        // Vector queries can only be used on vector attributes (not arrays)
+//        if (\in_array($method, Query::VECTOR_TYPES)) {
+//            if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
+//                $this->message = 'Vector queries can only be used on vector attributes';
+//                return false;
+//            }
+//            if ($array) {
+//                $this->message = 'Vector queries cannot be used on array attributes';
+//                return false;
+//            }
 //        }
 //
 //        return true;
@@ -300,6 +348,32 @@
 //            case Query::TYPE_IS_NOT_NULL:
 //                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 //
+//            case Query::TYPE_VECTOR_DOT:
+//            case Query::TYPE_VECTOR_COSINE:
+//            case Query::TYPE_VECTOR_EUCLIDEAN:
+//                // Validate that the attribute is a vector type
+//                if (!$this->isValidAttribute($attribute)) {
+//                    return false;
+//                }
+//
+//                // Handle dotted attributes (relationships)
+//                $attributeKey = $attribute;
+//                if (\str_contains($attributeKey, '.') && !isset($this->schema[$attributeKey])) {
+//                    $attributeKey = \explode('.', $attributeKey)[0];
+//                }
+//
+//                $attributeSchema = $this->schema[$attributeKey];
+//                if ($attributeSchema['type'] !== Database::VAR_VECTOR) {
+//                    $this->message = 'Vector queries can only be used on vector attributes';
+//                    return false;
+//                }
+//
+//                if (count($value->getValues()) != 1) {
+//                    $this->message = \ucfirst($method) . ' queries require exactly one vector value.';
+//                    return false;
+//                }
+//
+//                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
 //            case Query::TYPE_OR:
 //            case Query::TYPE_AND:
 //                $filters = Query::groupByType($value->getValues())['filters'];
@@ -328,6 +402,11 @@
 //
 //                return false;
 //        }
+//    }
+//
+//    public function getMaxValuesCount(): int
+//    {
+//        return $this->maxValuesCount;
 //    }
 //
 //    public function getMethodType(): string

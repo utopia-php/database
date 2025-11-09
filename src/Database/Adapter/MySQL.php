@@ -8,6 +8,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
 class MySQL extends MariaDB
@@ -117,7 +118,7 @@ class MySQL extends MariaDB
         }
 
         if ($useMeters) {
-            $attr = "ST_SRID({$alias}.{$attribute}, " . Database::SRID . ")";
+            $attr = "ST_SRID({$alias}.{$attribute}, " . Database::DEFAULT_SRID . ")";
             $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", null);
             return "ST_Distance({$attr}, {$geom}, 'metre') {$operator} :{$placeholder}_1";
         }
@@ -263,5 +264,44 @@ class MySQL extends MariaDB
     public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
     {
         return false;
+    }
+
+    /**
+     * Get SQL expression for operator
+     * Override for MySQL-specific operator implementations
+     *
+     * @param string $column
+     * @param \Utopia\Database\Operator $operator
+     * @param int &$bindIndex
+     * @return ?string
+     */
+    protected function getOperatorSQL(string $column, \Utopia\Database\Operator $operator, int &$bindIndex): ?string
+    {
+        $quotedColumn = $this->quote($column);
+        $method = $operator->getMethod();
+
+        switch ($method) {
+            case Operator::TYPE_ARRAY_APPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                $bindKey = "op_{$bindIndex}";
+                $bindIndex++;
+                return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                return "{$quotedColumn} = IFNULL((
+                    SELECT JSON_ARRAYAGG(value)
+                    FROM (
+                        SELECT DISTINCT value
+                        FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
+                    ) AS distinct_values
+                ), JSON_ARRAY())";
+        }
+
+        // For all other operators, use parent implementation
+        return parent::getOperatorSQL($column, $operator, $bindIndex);
     }
 }

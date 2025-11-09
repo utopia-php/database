@@ -8,6 +8,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Operator;
 use Utopia\Database\Validator\Structure;
 
 class StructureTest extends TestCase
@@ -716,7 +717,7 @@ class StructureTest extends TestCase
         );
 
         $sqlId = '1000';
-        $mongoId = '507f1f77bcf86cd799439011';
+        $mongoId = '0198fffb-d664-710a-9765-f922b3e81e3d';
 
         $this->assertEquals(true, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -748,7 +749,7 @@ class StructureTest extends TestCase
 
         $validator = new Structure(
             new Document($this->collection),
-            Database::VAR_OBJECT_ID
+            Database::VAR_UUID7
         );
 
         $this->assertEquals(true, $validator->isValid(new Document([
@@ -778,6 +779,74 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
             'id' => $mongoId,
         ])));
+    }
+
+    public function testOperatorsSkippedDuringValidation(): void
+    {
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_INTEGER
+        );
+
+        // Operators should be skipped during structure validation
+        $this->assertTrue($validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'My Title',
+            'description' => 'Demo description',
+            'rating' => Operator::increment(1), // Operator on required field
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])), $validator->getDescription());
+    }
+
+    public function testMultipleOperatorsSkippedDuringValidation(): void
+    {
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_INTEGER
+        );
+
+        // Multiple operators should all be skipped
+        $this->assertTrue($validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => Operator::stringConcat(' - Updated'),
+            'description' => 'Demo description',
+            'rating' => Operator::increment(1),
+            'price' => Operator::multiply(2),
+            'published' => Operator::toggle(),
+            'tags' => Operator::arrayAppend(['new']),
+            'feedback' => 'team@appwrite.io',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])), $validator->getDescription());
+    }
+
+    public function testMissingRequiredFieldWithoutOperator(): void
+    {
+        $validator = new Structure(
+            new Document($this->collection),
+            Database::VAR_INTEGER
+        );
+
+        // Missing required field (not replaced by operator) should still fail
+        $this->assertFalse($validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'My Title',
+            'description' => 'Demo description',
+            // 'rating' is missing entirely - should fail
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        $this->assertEquals('Invalid document structure: Missing required attribute "rating"', $validator->getDescription());
     }
 
 }

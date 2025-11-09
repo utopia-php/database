@@ -1,5 +1,4 @@
 <?php
-
 //
 //namespace Utopia\Database\Validator\Query;
 //
@@ -30,8 +29,9 @@
 //
 //    /**
 //     * @param array<Document> $attributes
+//     * @param bool $supportForAttributes
 //     */
-//    public function __construct(array $attributes = [])
+//    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
 //    {
 //        foreach ($attributes as $attribute) {
 //            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
@@ -63,6 +63,16 @@
 //            Database::INTERNAL_ATTRIBUTES
 //        );
 //
+//        if (\count($value->getValues()) === 0) {
+//            $this->message = 'No attributes selected';
+//            return false;
+//        }
+//
+//        if (\count($value->getValues()) !== \count(\array_unique($value->getValues()))) {
+//            $this->message = 'Duplicate attributes selected';
+//            return false;
+//
+//        }
 //        foreach ($value->getValues() as $attribute) {
 //            if (\str_contains($attribute, '.')) {
 //                //special symbols with `dots`
@@ -80,7 +90,7 @@
 //                continue;
 //            }
 //
-//            if (!isset($this->schema[$attribute]) && $attribute !== '*') {
+//            if ($this->supportForAttributes && !isset($this->schema[$attribute]) && $attribute !== '*') {
 //                $this->message = 'Attribute not found in schema: ' . $attribute;
 //                return false;
 //            }

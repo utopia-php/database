@@ -85,7 +85,8 @@
 //                Query::TYPE_CURSOR_AFTER,
 //                Query::TYPE_CURSOR_BEFORE => Base::METHOD_TYPE_CURSOR,
 //                Query::TYPE_ORDER_ASC,
-//                Query::TYPE_ORDER_DESC => Base::METHOD_TYPE_ORDER,
+//                Query::TYPE_ORDER_DESC,
+//                Query::TYPE_ORDER_RANDOM => Base::METHOD_TYPE_ORDER,
 //                Query::TYPE_EQUAL,
 //                Query::TYPE_NOT_EQUAL,
 //                Query::TYPE_LESSER,
@@ -93,29 +94,42 @@
 //                Query::TYPE_GREATER,
 //                Query::TYPE_GREATER_EQUAL,
 //                Query::TYPE_SEARCH,
+//                Query::TYPE_NOT_SEARCH,
 //                Query::TYPE_IS_NULL,
 //                Query::TYPE_IS_NOT_NULL,
 //                Query::TYPE_BETWEEN,
+//                Query::TYPE_NOT_BETWEEN,
 //                Query::TYPE_STARTS_WITH,
-//                Query::TYPE_CONTAINS,
+//                Query::TYPE_NOT_STARTS_WITH,
 //                Query::TYPE_ENDS_WITH,
+//                Query::TYPE_NOT_ENDS_WITH,
+//                Query::TYPE_CONTAINS,
+//                Query::TYPE_NOT_CONTAINS,
 //                Query::TYPE_AND,
-//                Query::TYPE_OR => Base::METHOD_TYPE_FILTER,
-//                Query::TYPE_JOIN => Base::METHOD_TYPE_JOIN,
+//                Query::TYPE_OR,
+//                Query::TYPE_CROSSES,
+//                Query::TYPE_NOT_CROSSES,
+//                Query::TYPE_DISTANCE_EQUAL,
+//                Query::TYPE_DISTANCE_NOT_EQUAL,
+//                Query::TYPE_DISTANCE_GREATER_THAN,
+//                Query::TYPE_DISTANCE_LESS_THAN,
+//                Query::TYPE_INTERSECTS,
+//                Query::TYPE_NOT_INTERSECTS,
+//                Query::TYPE_OVERLAPS,
+//                Query::TYPE_NOT_OVERLAPS,
+//                Query::TYPE_TOUCHES,
+//                Query::TYPE_NOT_TOUCHES,
+//                Query::TYPE_VECTOR_DOT,
+//                Query::TYPE_VECTOR_COSINE,
+//                Query::TYPE_VECTOR_EUCLIDEAN => Base::METHOD_TYPE_FILTER,
 //                default => '',
 //            };
-//            var_dump('____________________________________');
+//
 //            $methodIsValid = false;
 //            foreach ($this->validators as $validator) {
-//                var_dump('---');
-//                var_dump($method);
-//                var_dump($methodType);
-//                var_dump($validator->getMethodType());
-//                var_dump('---');
 //                if ($validator->getMethodType() !== $methodType) {
 //                    continue;
 //                }
-//
 //                if (!$validator->isValid($query)) {
 //                    $this->message = 'Invalid query: ' . $validator->getDescription();
 //                    return false;

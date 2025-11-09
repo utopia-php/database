@@ -26,7 +26,7 @@ A list of the utopia/php concepts and their relevant equivalent using the differ
 - **Document** - A simple JSON object that will be stored in one of the utopia/database collections. For SQL-based adapters, this will be equivalent to a row. For a No-SQL adapter, this will equivalent to a native document.
 - **Attribute** - A simple document attribute. For SQL-based adapters, this will be equivalent to a column. For a No-SQL adapter, this will equivalent to a native document field.
 - **Index** - A simple collection index used to improve the performance of your database queries.
-- **Permissions** - Using permissions, you can decide which roles have read, create, update and delete access for a specific document. The special attribute `$permissions` is used to store permission metadata for each document in the collection. A permission role can be any string you want. You can use `Authorization::setRole()` to delegate new roles to your users, once obtained a new role a user would gain read, create, update or delete access to a relevant document.
+- **Permissions** - Using permissions, you can decide which roles have read, create, update and delete access for a specific document. The special attribute `$permissions` is used to store permission metadata for each document in the collection. A permission role can be any string you want. You can use `$authorization->addRole()` to delegate new roles to your users, once obtained a new role a user would gain read, create, update or delete access to a relevant document.
 
 ### Filters
 

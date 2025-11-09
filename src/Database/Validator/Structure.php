@@ -7,7 +7,9 @@ use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Operator;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Operator as OperatorValidator;
 use Utopia\Validator;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\FloatValidator;
@@ -106,6 +108,8 @@ class Structure extends Validator
         private readonly string $idAttributeType,
         private readonly \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         private readonly \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
+        private bool $supportForAttributes = true,
+        private readonly ?Document $currentDocument = null
     ) {
     }
 
@@ -251,7 +255,11 @@ class Structure extends Validator
      */
     protected function checkForAllRequiredValues(array $structure, array $attributes, array &$keys): bool
     {
-        foreach ($attributes as $key => $attribute) { // Check all required attributes are set
+        if (!$this->supportForAttributes) {
+            return true;
+        }
+
+        foreach ($attributes as $attribute) { // Check all required attributes are set
             $name = $attribute['$id'] ?? '';
             $required = $attribute['required'] ?? false;
 
@@ -276,6 +284,9 @@ class Structure extends Validator
      */
     protected function checkForUnknownAttributes(array $structure, array $keys): bool
     {
+        if (!$this->supportForAttributes) {
+            return true;
+        }
         foreach ($structure as $key => $value) {
             if (!array_key_exists($key, $keys)) { // Check no unknown attributes are set
                 $this->message = 'Unknown attribute: "'.$key.'"';
@@ -297,6 +308,18 @@ class Structure extends Validator
     protected function checkForInvalidAttributeValues(array $structure, array $keys): bool
     {
         foreach ($structure as $key => $value) {
+            if (Operator::isOperator($value)) {
+                // Set the attribute name on the operator for validation
+                $value->setAttribute($key);
+
+                $operatorValidator = new OperatorValidator($this->collection, $this->currentDocument);
+                if (!$operatorValidator->isValid($value)) {
+                    $this->message = $operatorValidator->getDescription();
+                    return false;
+                }
+                continue;
+            }
+
             $attribute = $keys[$key] ?? [];
             $type = $attribute['type'] ?? '';
             $array = $attribute['array'] ?? false;
@@ -327,7 +350,7 @@ class Structure extends Validator
                 case Database::VAR_INTEGER:
                     // We need both Integer and Range because Range implicitly casts non-numeric values
                     $validators[] = new Integer();
-                    $max = $size >= 8 ? Database::BIG_INT_MAX : Database::INT_MAX;
+                    $max = $size >= 8 ? Database::MAX_BIG_INT : Database::MAX_INT;
                     $min = $signed ? -$max : 0;
                     $validators[] = new Range($min, $max, Database::VAR_INTEGER);
                     break;
@@ -335,8 +358,8 @@ class Structure extends Validator
                 case Database::VAR_FLOAT:
                     // We need both Float and Range because Range implicitly casts non-numeric values
                     $validators[] = new FloatValidator();
-                    $min = $signed ? -Database::DOUBLE_MAX : 0;
-                    $validators[] =  new Range($min, Database::DOUBLE_MAX, Database::VAR_FLOAT);
+                    $min = $signed ? -Database::MAX_DOUBLE : 0;
+                    $validators[] =  new Range($min, Database::MAX_DOUBLE, Database::VAR_FLOAT);
                     break;
 
                 case Database::VAR_BOOLEAN:
@@ -356,9 +379,15 @@ class Structure extends Validator
                     $validators[] = new Spatial($type);
                     break;
 
+                case Database::VAR_VECTOR:
+                    $validators[] = new Vector($attribute['size'] ?? 0);
+                    break;
+
                 default:
-                    $this->message = 'Unknown attribute type "'.$type.'"';
-                    return false;
+                    if ($this->supportForAttributes) {
+                        $this->message = 'Unknown attribute type "'.$type.'"';
+                        return false;
+                    }
             }
 
             /** Error message label, either 'format' or 'type' */

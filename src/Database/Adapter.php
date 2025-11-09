@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Validator\Authorization;
 
 abstract class Adapter
 {
@@ -30,6 +31,8 @@ abstract class Adapter
 
     protected int $inTransaction = 0;
 
+    protected bool $alterLocks = false;
+
     /**
      * @var array<string, mixed>
      */
@@ -47,6 +50,27 @@ abstract class Adapter
      */
     protected array $metadata = [];
 
+    /**
+     * @var Authorization
+     */
+    protected Authorization $authorization;
+
+    /**
+     * @param Authorization $authorization
+     *
+     * @return $this
+     */
+    public function setAuthorization(Authorization $authorization): self
+    {
+        $this->authorization = $authorization;
+
+        return $this;
+    }
+
+    public function getAuthorization(): Authorization
+    {
+        return $this->authorization;
+    }
     /**
      * @param string $key
      * @param mixed $value
@@ -891,6 +915,13 @@ abstract class Adapter
     abstract public function getMaxIndexLength(): int;
 
     /**
+     * Get the maximum UID length for this adapter
+     *
+     * @return int
+     */
+    abstract public function getMaxUIDLength(): int;
+
+    /**
      * Get the minimum supported DateTime value
      *
      * @return \DateTime
@@ -1037,6 +1068,13 @@ abstract class Adapter
     abstract public function getSupportForUpserts(): bool;
 
     /**
+     * Is vector type supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForVectors(): bool;
+
+    /**
      * Is Cache Fallback supported?
      *
      * @return bool
@@ -1079,6 +1117,13 @@ abstract class Adapter
     abstract public function getSupportForSpatialIndexNull(): bool;
 
     /**
+     * Does the adapter support operators?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOperators(): bool;
+
+    /**
      * Adapter supports optional spatial attributes with existing rows.
      *
      * @return bool
@@ -1112,6 +1157,28 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool;
+
+    /**
+     * Does the adapter support multiple fulltext indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForMultipleFulltextIndexes(): bool;
+
+
+    /**
+     * Does the adapter support identical indexes?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForIdenticalIndexes(): bool;
+
+    /**
+     * Does the adapter support random order by?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForOrderRandom(): bool;
 
     /**
      * Get current attribute count from collection document
@@ -1304,4 +1371,79 @@ abstract class Adapter
      * @return float[][][] Array of rings, each ring is an array of points [x, y]
      */
     abstract public function decodePolygon(string $wkb): array;
+
+    /**
+        * Returns the document after casting
+        * @param Document $collection
+        * @param Document $document
+        * @return Document
+        */
+    abstract public function castingBefore(Document $collection, Document $document): Document;
+
+    /**
+     * Returns the document after casting
+     * @param Document $collection
+     * @param Document $document
+     * @return Document
+     */
+    abstract public function castingAfter(Document $collection, Document $document): Document;
+
+    /**
+     * Is internal casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForInternalCasting(): bool;
+
+    /**
+     * Is UTC casting supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUTCCasting(): bool;
+
+    /**
+    * Set UTC Datetime
+    *
+    * @param string $value
+    * @return mixed
+    */
+    abstract public function setUTCDatetime(string $value): mixed;
+
+    /**
+    * Set support for attributes
+    *
+    * @param bool $support
+    * @return bool
+    */
+    abstract public function setSupportForAttributes(bool $support): bool;
+
+    /**
+     * Does the adapter require booleans to be converted to integers (0/1)?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForIntegerBooleans(): bool;
+
+    /**
+     * Does the adapter have support for ALTER TABLE locking modes?
+     *
+     * When enabled, adapters can specify lock behavior (e.g., LOCK=SHARED)
+     * during ALTER TABLE operations to control concurrent access.
+     *
+     * @return bool
+     */
+    abstract public function getSupportForAlterLocks(): bool;
+
+    /**
+     * @param bool $enable
+     *
+     * @return $this
+     */
+    public function enableAlterLocks(bool $enable): self
+    {
+        $this->alterLocks = $enable;
+
+        return $this;
+    }
 }

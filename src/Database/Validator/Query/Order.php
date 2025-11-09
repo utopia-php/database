@@ -1,5 +1,4 @@
 <?php
-
 //
 //namespace Utopia\Database\Validator\Query;
 //
@@ -15,8 +14,9 @@
 //
 //    /**
 //     * @param array<Document> $attributes
+//     * @param bool $supportForAttributes
 //     */
-//    public function __construct(array $attributes = [])
+//    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
 //    {
 //        foreach ($attributes as $attribute) {
 //            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
@@ -29,8 +29,24 @@
 //     */
 //    protected function isValidAttribute(string $attribute): bool
 //    {
+//        if (\str_contains($attribute, '.')) {
+//            // Check for special symbol `.`
+//            if (isset($this->schema[$attribute])) {
+//                return true;
+//            }
+//
+//            // For relationships, just validate the top level.
+//            // Will validate each nested level during the recursive calls.
+//            $attribute = \explode('.', $attribute)[0];
+//
+//            if (isset($this->schema[$attribute])) {
+//                $this->message = 'Cannot order by nested attribute: ' . $attribute;
+//                return false;
+//            }
+//        }
+//
 //        // Search for attribute in schema
-//        if (!isset($this->schema[$attribute])) {
+//        if ($this->supportForAttributes && !isset($this->schema[$attribute])) {
 //            $this->message = 'Attribute not found in schema: ' . $attribute;
 //            return false;
 //        }
@@ -58,10 +74,11 @@
 //        $attribute = $value->getAttribute();
 //
 //        if ($method === Query::TYPE_ORDER_ASC || $method === Query::TYPE_ORDER_DESC) {
-//            if ($attribute === '') {
-//                return true;
-//            }
 //            return $this->isValidAttribute($attribute);
+//        }
+//
+//        if ($method === Query::TYPE_ORDER_RANDOM) {
+//            return true; // orderRandom doesn't need an attribute
 //        }
 //
 //        return false;

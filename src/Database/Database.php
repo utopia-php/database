@@ -7862,14 +7862,14 @@ class Database
             // Now walk backwards from the deepest collection to the starting collection
             $leafQueries = [];
             foreach ($queryGroup as $q) {
-                $leafQueries[] = new Query($q['method'], $q['attribute'], $q['values']);
+                $leafQueries[] = Query::parseQuery($q);
             }
 
             // Query the deepest collection
             $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
                 $currentCollection,
                 \array_merge($leafQueries, [
-                    Query::select(['$id']),
+                    Query::select('$id'),
                     Query::limit(PHP_INT_MAX),
                 ])
             )));
@@ -7899,7 +7899,8 @@ class Database
                         $link['toCollection'],
                         [
                             Query::equal('$id', $matchingIds),
-                            Query::select(['$id', $link['twoWayKey']]),
+                            Query::select('$id'),
+                            Query::select($link['twoWayKey']),
                             Query::limit(PHP_INT_MAX),
                         ]
                     )));
@@ -7932,7 +7933,7 @@ class Database
                         $link['fromCollection'],
                         [
                             Query::equal($link['key'], $matchingIds),
-                            Query::select(['$id']),
+                            Query::select('$id'),
                             Query::limit(PHP_INT_MAX),
                         ]
                     )));
@@ -8049,11 +8050,7 @@ class Database
             // Build combined queries for the related collection
             $relatedQueries = [];
             foreach ($group['queries'] as $queryData) {
-                $relatedQueries[] = new Query(
-                    $queryData['method'],
-                    $queryData['attribute'],
-                    $queryData['values']
-                );
+                $relatedQueries[] = Query::parseQuery($queryData);
             }
 
             try {
@@ -8111,7 +8108,7 @@ class Database
                     $matchingDocs = $this->silent(fn () => $this->skipRelationships(fn () => $this->find(
                         $relatedCollection,
                         \array_merge($relatedQueries, [
-                            Query::select(['$id']),
+                            Query::select('$id'),
                             Query::limit(PHP_INT_MAX),
                         ])
                     )));

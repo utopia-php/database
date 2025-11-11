@@ -1375,7 +1375,11 @@ class Database
 
         $this->silent(fn () => $this->createCollection(self::METADATA, $attributes));
 
-        $this->trigger(self::EVENT_DATABASE_CREATE, $database);
+        try {
+            $this->trigger(self::EVENT_DATABASE_CREATE, $database);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return true;
     }
@@ -1405,7 +1409,11 @@ class Database
     {
         $databases = $this->adapter->list();
 
-        $this->trigger(self::EVENT_DATABASE_LIST, $databases);
+        try {
+            $this->trigger(self::EVENT_DATABASE_LIST, $databases);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return $databases;
     }
@@ -1423,10 +1431,14 @@ class Database
 
         $deleted = $this->adapter->delete($database);
 
-        $this->trigger(self::EVENT_DATABASE_DELETE, [
-            'name' => $database,
-            'deleted' => $deleted
-        ]);
+        try {
+            $this->trigger(self::EVENT_DATABASE_DELETE, [
+                'name' => $database,
+                'deleted' => $deleted
+            ]);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         $this->cache->flush();
 
@@ -1595,7 +1607,11 @@ class Database
             throw new DatabaseException("Failed to create collection metadata for '{$id}': " . $e->getMessage(), previous: $e);
         }
 
-        $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
+        try {
+            $this->trigger(self::EVENT_COLLECTION_CREATE, $createdCollection);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return $createdCollection;
     }
@@ -1639,7 +1655,11 @@ class Database
 
         $collection = $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
-        $this->trigger(self::EVENT_COLLECTION_UPDATE, $collection);
+        try {
+            $this->trigger(self::EVENT_COLLECTION_UPDATE, $collection);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return $collection;
     }
@@ -1665,7 +1685,11 @@ class Database
             return new Document();
         }
 
-        $this->trigger(self::EVENT_COLLECTION_READ, $collection);
+        try {
+            $this->trigger(self::EVENT_COLLECTION_READ, $collection);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return $collection;
     }
@@ -1686,7 +1710,11 @@ class Database
             Query::offset($offset)
         ]));
 
-        $this->trigger(self::EVENT_COLLECTION_LIST, $result);
+        try {
+            $this->trigger(self::EVENT_COLLECTION_LIST, $result);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return $result;
     }
@@ -1796,7 +1824,11 @@ class Database
         }
 
         if ($deleted) {
-            $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+            try {
+                $this->trigger(self::EVENT_COLLECTION_DELETE, $collection);
+            } catch (\Throwable $e) {
+                // Log but don't throw - event failures shouldn't fail the operation
+            }
         }
 
         $this->purgeCachedCollection($id);
@@ -1885,11 +1917,20 @@ class Database
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
-        $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
-            '$id' => $collection->getId(),
-            '$collection' => self::METADATA
-        ]));
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+        try {
+            $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
+                '$id' => $collection->getId(),
+                '$collection' => self::METADATA
+            ]));
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
+
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attribute);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return true;
     }
@@ -2001,11 +2042,20 @@ class Database
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
-        $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
-            '$id' => $collection->getId(),
-            '$collection' => self::METADATA
-        ]));
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+        try {
+            $this->trigger(self::EVENT_DOCUMENT_PURGE, new Document([
+                '$id' => $collection->getId(),
+                '$collection' => self::METADATA
+            ]));
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
+
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $attributeDocuments);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return true;
     }
@@ -2759,6 +2809,11 @@ class Database
                 '$id' => $collection,
                 '$collection' => self::METADATA
             ]));
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
+
+        try {
             $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
         } catch (\Throwable $e) {
             // Log but don't throw - event failures shouldn't fail the operation
@@ -2872,9 +2927,21 @@ class Database
             $success = false;
         }
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: fn () => $this->adapter->createAttribute(
+                $collection->getId(),
+                $id,
+                $attribute['type'],
+                $attribute['size'],
+                $attribute['signed'] ?? false,
+                $attribute['array'] ?? false,
+                $attribute['required'] ?? false
+            ),
+            shouldRollback: $success,
+            operationDescription: "attribute deletion '{$id}'",
+            silentRollback: true
+        );
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
@@ -2884,6 +2951,11 @@ class Database
                 '$id' => $collection->getId(),
                 '$collection' => self::METADATA
             ]));
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
+
+        try {
             $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
         } catch (\Throwable $e) {
             // Log but don't throw - event failures shouldn't fail the operation
@@ -2957,16 +3029,31 @@ class Database
             $index->setAttribute('attributes', $indexAttributes);
         }
 
-        $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+        $renamed = false;
+        try {
+            $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+            if (!$renamed) {
+                throw new DatabaseException('Failed to rename attribute');
+            }
+        } catch (\Throwable $e) {
+            throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
+        }
 
         $collection->setAttribute('attributes', $attributes);
         $collection->setAttribute('indexes', $indexes);
 
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
-        }
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: fn () => $this->adapter->renameAttribute($collection->getId(), $new, $old),
+            shouldRollback: $renamed,
+            operationDescription: "attribute rename '{$old}' to '{$new}'"
+        );
 
-        $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_UPDATE, $attribute);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return $renamed;
     }
@@ -3294,7 +3381,11 @@ class Database
             }
         });
 
-        $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
+        try {
+            $this->trigger(self::EVENT_ATTRIBUTE_CREATE, $relationship);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return true;
     }
@@ -3352,83 +3443,107 @@ class Database
         $relatedCollectionId = $attribute['options']['relatedCollection'];
         $relatedCollection = $this->getCollection($relatedCollectionId);
 
-        $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($collection, $id, $newKey, $newTwoWayKey, $twoWay, $onDelete, $type, $side) {
-            $altering = (!\is_null($newKey) && $newKey !== $id)
-                || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $attribute['options']['twoWayKey']);
+        // Determine if we need to alter the database (rename columns/indexes)
+        $oldAttribute = $attributes[$attributeIndex];
+        $oldTwoWayKey = $oldAttribute['options']['twoWayKey'];
+        $altering = (!\is_null($newKey) && $newKey !== $id)
+            || (!\is_null($newTwoWayKey) && $newTwoWayKey !== $oldTwoWayKey);
 
-            $relatedCollectionId = $attribute['options']['relatedCollection'];
-            $relatedCollection = $this->getCollection($relatedCollectionId);
-            $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
+        // Validate new keys don't already exist
+        if (
+            !\is_null($newTwoWayKey)
+            && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedCollection->getAttribute('attributes', [])))
+        ) {
+            throw new DuplicateException('Related attribute already exists');
+        }
 
-            if (
-                !\is_null($newTwoWayKey)
-                && \in_array($newTwoWayKey, \array_map(fn ($attribute) => $attribute['key'], $relatedAttributes))
-            ) {
-                throw new DuplicateException('Related attribute already exists');
+        $actualNewKey = $newKey ?? $id;
+        $actualNewTwoWayKey = $newTwoWayKey ?? $oldTwoWayKey;
+        $actualTwoWay = $twoWay ?? $oldAttribute['options']['twoWay'];
+        $actualOnDelete = $onDelete ?? $oldAttribute['options']['onDelete'];
+
+        $adapterUpdated = false;
+        if ($altering) {
+            try {
+                $adapterUpdated = $this->adapter->updateRelationship(
+                    $collection->getId(),
+                    $relatedCollection->getId(),
+                    $type,
+                    $actualTwoWay,
+                    $id,
+                    $oldTwoWayKey,
+                    $side,
+                    $actualNewKey,
+                    $actualNewTwoWayKey
+                );
+
+                if (!$adapterUpdated) {
+                    throw new DatabaseException('Failed to update relationship');
+                }
+            } catch (\Throwable $e) {
+                throw new DatabaseException("Failed to update relationship '{$id}': " . $e->getMessage(), previous: $e);
             }
+        }
 
-            $newKey ??= $attribute['key'];
-            $twoWayKey = $attribute['options']['twoWayKey'];
-            $newTwoWayKey ??= $attribute['options']['twoWayKey'];
-            $twoWay ??= $attribute['options']['twoWay'];
-            $onDelete ??= $attribute['options']['onDelete'];
+        try {
+            $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete, $relatedCollection, $type, $side) {
+                $attribute->setAttribute('$id', $actualNewKey);
+                $attribute->setAttribute('key', $actualNewKey);
+                $attribute->setAttribute('options', [
+                    'relatedCollection' => $relatedCollection->getId(),
+                    'relationType' => $type,
+                    'twoWay' => $actualTwoWay,
+                    'twoWayKey' => $actualNewTwoWayKey,
+                    'onDelete' => $actualOnDelete,
+                    'side' => $side,
+                ]);
+            });
 
-            $attribute->setAttribute('$id', $newKey);
-            $attribute->setAttribute('key', $newKey);
-            $attribute->setAttribute('options', [
-                'relatedCollection' => $relatedCollection->getId(),
-                'relationType' => $type,
-                'twoWay' => $twoWay,
-                'twoWayKey' => $newTwoWayKey,
-                'onDelete' => $onDelete,
-                'side' => $side,
-            ]);
-
-
-            $this->updateAttributeMeta($relatedCollection->getId(), $twoWayKey, function ($twoWayAttribute) use ($newKey, $newTwoWayKey, $twoWay, $onDelete) {
+            $this->updateAttributeMeta($relatedCollection->getId(), $oldTwoWayKey, function ($twoWayAttribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete) {
                 $options = $twoWayAttribute->getAttribute('options', []);
-                $options['twoWayKey'] = $newKey;
-                $options['twoWay'] = $twoWay;
-                $options['onDelete'] = $onDelete;
+                $options['twoWayKey'] = $actualNewKey;
+                $options['twoWay'] = $actualTwoWay;
+                $options['onDelete'] = $actualOnDelete;
 
-                $twoWayAttribute->setAttribute('$id', $newTwoWayKey);
-                $twoWayAttribute->setAttribute('key', $newTwoWayKey);
+                $twoWayAttribute->setAttribute('$id', $actualNewTwoWayKey);
+                $twoWayAttribute->setAttribute('key', $actualNewTwoWayKey);
                 $twoWayAttribute->setAttribute('options', $options);
             });
 
             if ($type === self::RELATION_MANY_TO_MANY) {
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($newKey) {
-                    $junctionAttribute->setAttribute('$id', $newKey);
-                    $junctionAttribute->setAttribute('key', $newKey);
+                $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($actualNewKey) {
+                    $junctionAttribute->setAttribute('$id', $actualNewKey);
+                    $junctionAttribute->setAttribute('key', $actualNewKey);
                 });
-                $this->updateAttributeMeta($junction, $twoWayKey, function ($junctionAttribute) use ($newTwoWayKey) {
-                    $junctionAttribute->setAttribute('$id', $newTwoWayKey);
-                    $junctionAttribute->setAttribute('key', $newTwoWayKey);
+                $this->updateAttributeMeta($junction, $oldTwoWayKey, function ($junctionAttribute) use ($actualNewTwoWayKey) {
+                    $junctionAttribute->setAttribute('$id', $actualNewTwoWayKey);
+                    $junctionAttribute->setAttribute('key', $actualNewTwoWayKey);
                 });
 
                 $this->withRetries(fn () => $this->purgeCachedCollection($junction));
             }
-
-            if ($altering) {
-                $updated = $this->adapter->updateRelationship(
-                    $collection->getId(),
-                    $relatedCollection->getId(),
-                    $type,
-                    $twoWay,
-                    $id,
-                    $twoWayKey,
-                    $side,
-                    $newKey,
-                    $newTwoWayKey
-                );
-
-                if (!$updated) {
-                    throw new DatabaseException('Failed to update relationship');
+        } catch (\Throwable $e) {
+            if ($adapterUpdated) {
+                try {
+                    $this->adapter->updateRelationship(
+                        $collection->getId(),
+                        $relatedCollection->getId(),
+                        $type,
+                        $actualTwoWay,
+                        $actualNewKey,
+                        $actualNewTwoWayKey,
+                        $side,
+                        $id,
+                        $oldTwoWayKey
+                    );
+                } catch (\Throwable $rollbackError) {
+                    // Log rollback failure but continue throwing original error
                 }
             }
-        });
+            throw $e;
+        }
 
         // Update Indexes
         $renameIndex = function (string $collection, string $key, string $newKey) {
@@ -3444,51 +3559,45 @@ class Database
             );
         };
 
-        $newKey ??= $attribute['key'];
-        $twoWayKey = $attribute['options']['twoWayKey'];
-        $newTwoWayKey ??= $attribute['options']['twoWayKey'];
-        $twoWay ??= $attribute['options']['twoWay'];
-        $onDelete ??= $attribute['options']['onDelete'];
-
         switch ($type) {
             case self::RELATION_ONE_TO_ONE:
-                if ($id !== $newKey) {
-                    $renameIndex($collection->getId(), $id, $newKey);
+                if ($id !== $actualNewKey) {
+                    $renameIndex($collection->getId(), $id, $actualNewKey);
                 }
-                if ($twoWay && $twoWayKey !== $newTwoWayKey) {
-                    $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                if ($actualTwoWay && $oldTwoWayKey !== $actualNewTwoWayKey) {
+                    $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
                 }
                 break;
             case self::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                    if ($oldTwoWayKey !== $actualNewTwoWayKey) {
+                        $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
                     }
                 } else {
-                    if ($id !== $newKey) {
-                        $renameIndex($collection->getId(), $id, $newKey);
+                    if ($id !== $actualNewKey) {
+                        $renameIndex($collection->getId(), $id, $actualNewKey);
                     }
                 }
                 break;
             case self::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_PARENT) {
-                    if ($id !== $newKey) {
-                        $renameIndex($collection->getId(), $id, $newKey);
+                    if ($id !== $actualNewKey) {
+                        $renameIndex($collection->getId(), $id, $actualNewKey);
                     }
                 } else {
-                    if ($twoWayKey !== $newTwoWayKey) {
-                        $renameIndex($relatedCollection->getId(), $twoWayKey, $newTwoWayKey);
+                    if ($oldTwoWayKey !== $actualNewTwoWayKey) {
+                        $renameIndex($relatedCollection->getId(), $oldTwoWayKey, $actualNewTwoWayKey);
                     }
                 }
                 break;
             case self::RELATION_MANY_TO_MANY:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-                if ($id !== $newKey) {
-                    $renameIndex($junction, $id, $newKey);
+                if ($id !== $actualNewKey) {
+                    $renameIndex($junction, $id, $actualNewKey);
                 }
-                if ($twoWayKey !== $newTwoWayKey) {
-                    $renameIndex($junction, $twoWayKey, $newTwoWayKey);
+                if ($oldTwoWayKey !== $actualNewTwoWayKey) {
+                    $renameIndex($junction, $oldTwoWayKey, $actualNewTwoWayKey);
                 }
                 break;
             default:
@@ -3701,13 +3810,28 @@ class Database
 
         $collection->setAttribute('indexes', $indexes);
 
-        $this->adapter->renameIndex($collection->getId(), $old, $new);
-
-        if ($collection->getId() !== self::METADATA) {
-            $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
+        $renamed = false;
+        try {
+            $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
+            if (!$renamed) {
+                throw new DatabaseException('Failed to rename index');
+            }
+        } catch (\Throwable $e) {
+            throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': " . $e->getMessage(), previous: $e);
         }
 
-        $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
+        $this->updateMetadata(
+            collection: $collection,
+            rollbackOperation: fn () => $this->adapter->renameIndex($collection->getId(), $new, $old),
+            shouldRollback: $renamed,
+            operationDescription: "index rename '{$old}' to '{$new}'"
+        );
+
+        try {
+            $this->trigger(self::EVENT_INDEX_RENAME, $indexNew);
+        } catch (\Throwable $e) {
+            // Log but don't throw - event failures shouldn't fail the operation
+        }
 
         return true;
     }
